@@ -44,7 +44,7 @@ app = FastAPI(
 )
 
 def _initialiser_donnees_demo():
-    """Crée un utilisateur et un macrocycle de démo si la base est vide."""
+    """Crée un utilisateur et 2 macrocycles (Module 1 + Module 2) si la base est vide."""
     from datetime import date, timedelta
     from models import Utilisateur, SemaineEntrainement
     from periodization_rules import BLUEPRINT_MACROCYCLE, generer_dates_semaines
@@ -54,22 +54,31 @@ def _initialiser_donnees_demo():
             user = Utilisateur(email="coach@perso.fr", nom="Athlète EPC")
             db.add(user)
             db.flush()
-            debut = date.today()
-            mc = Macrocycle(utilisateur_id=user.id, numero_cycle=1, date_debut=debut, date_fin=debut + timedelta(weeks=8))
-            db.add(mc)
-            db.flush()
-            dates = generer_dates_semaines(debut)
-            for regle, date_sem in zip(BLUEPRINT_MACROCYCLE, dates):
-                sem = SemaineEntrainement(
-                    macrocycle_id=mc.id,
-                    numero_semaine=regle.numero,
-                    macrophase=regle.macrophase,
-                    date_debut=date_sem,
-                    multiplicateur_volume=regle.multiplicateur_volume,
-                    objectif_km_course=regle.objectif_km_course,
-                    objectif_amrap_min=regle.objectif_amrap_min,
+
+            debut_mc1 = date.today()
+            debut_mc2 = debut_mc1 + timedelta(weeks=8)
+
+            for numero_cycle, debut in ((1, debut_mc1), (2, debut_mc2)):
+                mc = Macrocycle(
+                    utilisateur_id=user.id,
+                    numero_cycle=numero_cycle,
+                    date_debut=debut,
+                    date_fin=debut + timedelta(weeks=8),
                 )
-                db.add(sem)
+                db.add(mc)
+                db.flush()
+                dates = generer_dates_semaines(debut)
+                for regle, date_sem in zip(BLUEPRINT_MACROCYCLE, dates):
+                    sem = SemaineEntrainement(
+                        macrocycle_id=mc.id,
+                        numero_semaine=regle.numero,
+                        macrophase=regle.macrophase,
+                        date_debut=date_sem,
+                        multiplicateur_volume=regle.multiplicateur_volume,
+                        objectif_km_course=regle.objectif_km_course,
+                        objectif_amrap_min=regle.objectif_amrap_min,
+                    )
+                    db.add(sem)
             db.commit()
     except Exception:
         db.rollback()
@@ -409,14 +418,30 @@ SLUGS_EVALUATION = [
     "pistol-squat-droit",
 ]
 
-@app.post("/api/admin/seed-seances", summary="Génère toutes les séances des 8 semaines EPC")
+@app.get("/api/macrocycles", summary="Liste tous les macrocycles de l'utilisateur")
+def lister_macrocycles(utilisateur_id: int = Query(1), db: Session = Depends(obtenir_session)):
+    mcs = db.query(Macrocycle).filter(Macrocycle.utilisateur_id == utilisateur_id).order_by(Macrocycle.numero_cycle).all()
+    return [
+        {
+            "id": mc.id,
+            "numero_cycle": mc.numero_cycle,
+            "date_debut": str(mc.date_debut),
+            "date_fin": str(mc.date_fin),
+            "nom": f"Module {mc.numero_cycle} — {'Adaptation' if mc.numero_cycle == 1 else 'Révélation'}",
+        }
+        for mc in mcs
+    ]
+
+
+@app.post("/api/admin/seed-seances", summary="Génère toutes les séances des 16 semaines EPC (2 macrocycles)")
 def seed_seances_route(db: Session = Depends(obtenir_session)):
-    from seed_seances import seed_seances
+    from seed_seances import seed_module1, seed_module2
     import io, sys
     buf = io.StringIO()
     sys.stdout = buf
     try:
-        seed_seances()
+        seed_module1()
+        seed_module2()
     finally:
         sys.stdout = sys.__stdout__
     return {"message": buf.getvalue().strip()}
