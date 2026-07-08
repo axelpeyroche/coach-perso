@@ -58,35 +58,23 @@ def tendances_physiologiques(db: Session, utilisateur_id: int) -> dict[str, Any]
     """
     # --- Historique VMA ---
     biometries = (
-        db.execute(
-            select(BiometrieUtilisateur, Macrocycle.numero_cycle)
-            .join(
-                JournalEvaluationSeance,
-                ResultatDemiCooper.id_biometrie_instantanee == BiometrieUtilisateur.id,
-                isouter=True,
-            )
-            .join(
-                Macrocycle,
-                JournalEvaluationSeance.macrocycle_id == Macrocycle.id,
-                isouter=True,
-            )
-            .where(BiometrieUtilisateur.utilisateur_id == utilisateur_id)
-            .order_by(BiometrieUtilisateur.enregistre_le)
-        )
+        db.query(BiometrieUtilisateur)
+        .filter(BiometrieUtilisateur.utilisateur_id == utilisateur_id)
+        .order_by(BiometrieUtilisateur.enregistre_le)
         .all()
     )
 
     historique_vma = [
         {
-            "date": str(b.BiometrieUtilisateur.enregistre_le.date()),
-            "valeur": b.BiometrieUtilisateur.vma_kmh,
-            "numero_cycle": b.numero_cycle,
+            "date": str(b.enregistre_le.date()),
+            "valeur": b.vma_kmh,
+            "numero_cycle": None,
             "zones": {
-                "Z1": [b.BiometrieUtilisateur.z1_min_kmh, b.BiometrieUtilisateur.z1_max_kmh],
-                "Z2": [b.BiometrieUtilisateur.z2_min_kmh, b.BiometrieUtilisateur.z2_max_kmh],
-                "Z3": [b.BiometrieUtilisateur.z3_min_kmh, b.BiometrieUtilisateur.z3_max_kmh],
-                "Z4": [b.BiometrieUtilisateur.z4_min_kmh, b.BiometrieUtilisateur.z4_max_kmh],
-                "Z5": [b.BiometrieUtilisateur.z5_min_kmh, b.BiometrieUtilisateur.z5_max_kmh],
+                "Z1": [b.z1_min_kmh, b.z1_max_kmh],
+                "Z2": [b.z2_min_kmh, b.z2_max_kmh],
+                "Z3": [b.z3_min_kmh, b.z3_max_kmh],
+                "Z4": [b.z4_min_kmh, b.z4_max_kmh],
+                "Z5": [b.z5_min_kmh, b.z5_max_kmh],
             },
         }
         for b in biometries
@@ -94,31 +82,22 @@ def tendances_physiologiques(db: Session, utilisateur_id: int) -> dict[str, Any]
 
     # --- Historique Max 1 min par mouvement ---
     resultats_1min = (
-        db.execute(
-            select(
-                ResultatMax1Min,
-                VariationExercice.slug,
-                VariationExercice.nom,
-                JournalEvaluationSeance.evalue_le,
-                Macrocycle.numero_cycle,
-            )
-            .join(VariationExercice, ResultatMax1Min.exercice_id == VariationExercice.id)
-            .join(JournalEvaluationSeance, ResultatMax1Min.evaluation_id == JournalEvaluationSeance.id)
-            .join(Macrocycle, JournalEvaluationSeance.macrocycle_id == Macrocycle.id, isouter=True)
-            .where(JournalEvaluationSeance.utilisateur_id == utilisateur_id)
-            .order_by(JournalEvaluationSeance.evalue_le)
-        )
+        db.query(ResultatMax1Min, VariationExercice, JournalEvaluationSeance)
+        .join(VariationExercice, ResultatMax1Min.exercice_id == VariationExercice.id)
+        .join(JournalEvaluationSeance, ResultatMax1Min.evaluation_id == JournalEvaluationSeance.id)
+        .filter(JournalEvaluationSeance.utilisateur_id == utilisateur_id)
+        .order_by(JournalEvaluationSeance.evalue_le)
         .all()
     )
 
     historique_1min: dict[str, list] = defaultdict(list)
-    for r in resultats_1min:
-        historique_1min[r.slug].append(
+    for r, ex, ev in resultats_1min:
+        historique_1min[ex.slug].append(
             {
-                "date": str(r.evalue_le.date()),
-                "repetitions": r.ResultatMax1Min.repetitions_realisees,
-                "numero_cycle": r.numero_cycle,
-                "mouvement": r.nom,
+                "date": str(ev.evalue_le.date()),
+                "repetitions": r.repetitions_realisees,
+                "numero_cycle": None,
+                "mouvement": ex.nom,
             }
         )
 
