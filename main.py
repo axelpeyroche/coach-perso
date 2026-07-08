@@ -447,6 +447,49 @@ def seed_seances_route(db: Session = Depends(obtenir_session)):
     return {"message": buf.getvalue().strip()}
 
 
+@app.post("/api/admin/init-macrocycles", summary="Crée les 2 macrocycles si absents (pour utilisateurs existants)")
+def init_macrocycles(utilisateur_id: int = Query(1), db: Session = Depends(obtenir_session)):
+    from datetime import date, timedelta
+    from models import Utilisateur, SemaineEntrainement
+    from periodization_rules import BLUEPRINT_MACROCYCLE, generer_dates_semaines
+
+    user = db.query(Utilisateur).filter(Utilisateur.id == utilisateur_id).first()
+    if not user:
+        return {"erreur": f"Utilisateur {utilisateur_id} introuvable"}
+
+    existants = {mc.numero_cycle for mc in db.query(Macrocycle).filter(Macrocycle.utilisateur_id == utilisateur_id).all()}
+    crees = []
+    debut_mc1 = date.today()
+    debuts = {1: debut_mc1, 2: debut_mc1 + timedelta(weeks=8)}
+
+    for numero_cycle in [1, 2]:
+        if numero_cycle in existants:
+            continue
+        debut = debuts[numero_cycle]
+        mc = Macrocycle(
+            utilisateur_id=user.id,
+            numero_cycle=numero_cycle,
+            date_debut=debut,
+            date_fin=debut + timedelta(weeks=8),
+        )
+        db.add(mc)
+        db.flush()
+        for regle, date_sem in zip(BLUEPRINT_MACROCYCLE, generer_dates_semaines(debut)):
+            db.add(SemaineEntrainement(
+                macrocycle_id=mc.id,
+                numero_semaine=regle.numero,
+                macrophase=regle.macrophase,
+                date_debut=date_sem,
+                multiplicateur_volume=regle.multiplicateur_volume,
+                objectif_km_course=regle.objectif_km_course,
+                objectif_amrap_min=regle.objectif_amrap_min,
+            ))
+        crees.append(numero_cycle)
+
+    db.commit()
+    return {"macrocycles_crees": crees, "deja_existants": list(existants)}
+
+
 @app.post("/api/admin/reseed", summary="Réinsère les exercices par défaut")
 def reseed(db: Session = Depends(obtenir_session)):
     from models import VariationExercice
