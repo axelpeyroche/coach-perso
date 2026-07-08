@@ -409,6 +409,19 @@ SLUGS_EVALUATION = [
     "pistol-squat-droit",
 ]
 
+@app.post("/api/admin/seed-seances", summary="Génère toutes les séances des 8 semaines EPC")
+def seed_seances_route(db: Session = Depends(obtenir_session)):
+    from seed_seances import seed_seances
+    import io, sys
+    buf = io.StringIO()
+    sys.stdout = buf
+    try:
+        seed_seances()
+    finally:
+        sys.stdout = sys.__stdout__
+    return {"message": buf.getvalue().strip()}
+
+
 @app.post("/api/admin/reseed", summary="Réinsère les exercices par défaut")
 def reseed(db: Session = Depends(obtenir_session)):
     from models import VariationExercice
