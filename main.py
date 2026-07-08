@@ -43,6 +43,40 @@ app = FastAPI(
     version="1.0.0",
 )
 
+def _initialiser_donnees_demo():
+    """Crée un utilisateur et un macrocycle de démo si la base est vide."""
+    from datetime import date, timedelta
+    from models import Utilisateur, SemaineEntrainement
+    from periodization_rules import BLUEPRINT_MACROCYCLE, generer_dates_semaines
+    db = next(obtenir_session())
+    try:
+        if db.query(Utilisateur).count() == 0:
+            user = Utilisateur(email="coach@perso.fr", nom="Athlète EPC")
+            db.add(user)
+            db.flush()
+            debut = date.today()
+            mc = Macrocycle(utilisateur_id=user.id, numero_cycle=1, date_debut=debut, date_fin=debut + timedelta(weeks=8))
+            db.add(mc)
+            db.flush()
+            dates = generer_dates_semaines(debut)
+            for regle, date_sem in zip(BLUEPRINT_MACROCYCLE, dates):
+                sem = SemaineEntrainement(
+                    macrocycle_id=mc.id,
+                    numero_semaine=regle.numero,
+                    macrophase=regle.macrophase,
+                    date_debut=date_sem,
+                    multiplicateur_volume=regle.multiplicateur_volume,
+                    objectif_km_course=regle.objectif_km_course,
+                    objectif_amrap_min=regle.objectif_amrap_min,
+                )
+                db.add(sem)
+            db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -55,6 +89,7 @@ app.add_middleware(
 @app.on_event("startup")
 def demarrage():
     creer_tables()
+    _initialiser_donnees_demo()
 
 
 # ---------------------------------------------------------------------------
