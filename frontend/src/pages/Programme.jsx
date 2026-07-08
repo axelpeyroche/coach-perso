@@ -35,13 +35,10 @@ export default function Programme() {
   const { data: macrocycles = [], isLoading: loadingMC } = useQuery({
     queryKey: ["macrocycles"],
     queryFn: () => getMacrocycles(1),
-    onSuccess: (data) => {
-      if (data.length > 0 && macrocycleId === null) setMacrocycleId(data[0].id);
-    },
   });
 
-  const mcSelectionne = macrocycles.find((mc) => mc.id === macrocycleId) ?? macrocycles[0];
-  const mcId = mcSelectionne?.id ?? null;
+  const mcId = macrocycleId ?? macrocycles[0]?.id ?? null;
+  const mcSelectionne = macrocycles.find((mc) => mc.id === mcId) ?? macrocycles[0];
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["macrocycle", mcId],
