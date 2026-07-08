@@ -84,7 +84,7 @@ BLUEPRINT_MACROCYCLE: list[RegleSemaine] = [
         objectif_amrap_min=28,
         objectif_km_course=21.0,
         description="Pic de surcharge — volume maximal de la phase, sollicitation Z3/Z4 en course",
-        types_seances=[TypeSeance.COURSE, TypeSeance.AMRAP, TypeSeance.COURSE, TypeSeance.EMOM, TypeSeance.COURS],
+        types_seances=[TypeSeance.COURSE, TypeSeance.AMRAP, TypeSeance.COURSE, TypeSeance.EMOM, TypeSeance.COURSE],
     ),
     RegleSemaine(
         numero=5,
