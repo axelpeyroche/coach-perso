@@ -409,6 +409,31 @@ SLUGS_EVALUATION = [
     "pistol-squat-droit",
 ]
 
+@app.post("/api/admin/reseed", summary="Réinsère les exercices par défaut")
+def reseed(db: Session = Depends(obtenir_session)):
+    from models import VariationExercice
+    from periodization_rules import EXERCICES_DEFAUT
+    existants = {e.slug for e in db.query(VariationExercice).all()}
+    nouveaux = 0
+    for data in EXERCICES_DEFAUT:
+        if data["slug"] in existants:
+            continue
+        e = VariationExercice(
+            nom=data["nom"], slug=data["slug"],
+            categorie_musculaire=data["categorie_musculaire"],
+            niveau_progression=data["niveau_progression"],
+            tempo=data.get("tempo"),
+            pause_isometrique_sec=data.get("pause_isometrique_sec"),
+            muscles_principaux=data.get("muscles_principaux"),
+            est_mouvement_evaluation=data.get("est_mouvement_evaluation", False),
+        )
+        db.add(e)
+        nouveaux += 1
+    db.commit()
+    total = db.query(VariationExercice).count()
+    return {"inseres": nouveaux, "total_en_base": total}
+
+
 @app.get("/api/exercices/evaluation", summary="Liste des exercices du protocole Max 1 min")
 def exercices_evaluation(db: Session = Depends(obtenir_session)):
     from models import VariationExercice
