@@ -131,17 +131,35 @@ export default function Evaluation() {
       {etape === "max_1min" && (
         <Card title="💪 Max Répétitions — 1 minute par mouvement">
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">3 minutes de récupération entre chaque mouvement.</p>
-          <div className="space-y-3">
-            {mouvements.map((m) => (
-              <div key={m.slug} className="flex items-center justify-between gap-4">
-                <span className="text-sm font-medium text-gray-800 dark:text-gray-200 w-28">{m.nom}</span>
-                <input type="number" min={0} value={reps[m.slug] || ""} onChange={(e) => setReps((r) => ({ ...r, [m.slug]: e.target.value }))} placeholder="reps" className="w-24 px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-center focus:outline-none focus:ring-2 focus:ring-brand" />
-              </div>
-            ))}
-          </div>
-          <button onClick={valider1Min} disabled={max1MinMut.isPending} className="mt-5 w-full py-3 rounded-xl bg-brand text-white font-semibold text-sm hover:bg-brand-dark transition-colors disabled:opacity-50">
-            {max1MinMut.isPending ? "Enregistrement..." : "Valider"}
-          </button>
+          {mouvements.length === 0 ? (
+            <p className="text-sm text-amber-500 py-4 text-center animate-pulse">Chargement des exercices...</p>
+          ) : (
+            <div className="space-y-3">
+              {mouvements.map((m) => (
+                <div key={m.slug} className="flex items-center justify-between gap-4">
+                  <span className="text-sm font-medium text-gray-800 dark:text-gray-200 w-28">{m.nom}</span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={reps[m.slug] || ""}
+                    onChange={(e) => setReps((r) => ({ ...r, [m.slug]: e.target.value }))}
+                    placeholder="reps"
+                    className="w-24 px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-center focus:outline-none focus:ring-2 focus:ring-brand"
+                  />
+                </div>
+              ))}
+              <button
+                onClick={valider1Min}
+                disabled={max1MinMut.isPending || mouvements.some((m) => !reps[m.slug])}
+                className="mt-5 w-full py-3 rounded-xl bg-brand text-white font-semibold text-sm hover:bg-brand-dark transition-colors disabled:opacity-50"
+              >
+                {max1MinMut.isPending ? "Enregistrement..." : "Valider"}
+              </button>
+              {mouvements.some((m) => !reps[m.slug]) && (
+                <p className="text-xs text-gray-400 text-center">Remplis tous les champs avant de valider.</p>
+              )}
+            </div>
+          )}
         </Card>
       )}
 
