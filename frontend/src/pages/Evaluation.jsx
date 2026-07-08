@@ -1,20 +1,10 @@
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
-import { creerEvaluation, enregistrerDemiCooper, enregistrerMax1Min, enregistrerAmrapBenchmark } from "../api";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { creerEvaluation, enregistrerDemiCooper, enregistrerMax1Min, enregistrerAmrapBenchmark, getExercicesEvaluation } from "../api";
 import Card from "../components/Card";
 import clsx from "clsx";
 
 const USER_ID = 1;
-
-const MOUVEMENTS_1MIN = [
-  { slug: "traction-stricte", nom: "Tractions", id: 1 },
-  { slug: "dip-parallettes", nom: "Dips", id: 4 },
-  { slug: "pompe-standard", nom: "Pompes", id: 3 },
-  { slug: "abdominal-crunch", nom: "Abdominaux", id: 9 },
-  { slug: "squat-bw", nom: "Squats", id: 6 },
-  { slug: "pistol-squat-gauche", nom: "Pistol G", id: 7 },
-  { slug: "pistol-squat-droit", nom: "Pistol D", id: 8 },
-];
 
 const ETAPES = ["intro", "demi_cooper", "max_1min", "amrap", "resultats"];
 
@@ -33,6 +23,11 @@ export default function Evaluation() {
 
   // AMRAP
   const [tours, setTours] = useState("");
+
+  const { data: mouvements = [] } = useQuery({
+    queryKey: ["exercices-evaluation"],
+    queryFn: getExercicesEvaluation,
+  });
 
   const creerMut = useMutation({ mutationFn: creerEvaluation });
   const cooperMut = useMutation({ mutationFn: ({ id, data }) => enregistrerDemiCooper(id, data) });
@@ -56,7 +51,7 @@ export default function Evaluation() {
   }
 
   async function valider1Min() {
-    const payload = MOUVEMENTS_1MIN.map((m) => ({
+    const payload = mouvements.map((m) => ({
       exercice_id: m.id,
       repetitions_realisees: parseInt(reps[m.slug] || 0),
     }));
@@ -137,7 +132,7 @@ export default function Evaluation() {
         <Card title="💪 Max Répétitions — 1 minute par mouvement">
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">3 minutes de récupération entre chaque mouvement.</p>
           <div className="space-y-3">
-            {MOUVEMENTS_1MIN.map((m) => (
+            {mouvements.map((m) => (
               <div key={m.slug} className="flex items-center justify-between gap-4">
                 <span className="text-sm font-medium text-gray-800 dark:text-gray-200 w-28">{m.nom}</span>
                 <input type="number" min={0} value={reps[m.slug] || ""} onChange={(e) => setReps((r) => ({ ...r, [m.slug]: e.target.value }))} placeholder="reps" className="w-24 px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-center focus:outline-none focus:ring-2 focus:ring-brand" />
@@ -187,10 +182,10 @@ export default function Evaluation() {
               <div className="pt-2">
                 <p className="text-gray-500 dark:text-gray-400 mb-2">Max 1 minute :</p>
                 <div className="grid grid-cols-2 gap-2">
-                  {MOUVEMENTS_1MIN.map((m) => (
+                  {mouvements.map((m) => (
                     <div key={m.slug} className="flex justify-between bg-gray-50 dark:bg-gray-800 px-3 py-2 rounded-lg">
                       <span className="text-gray-600 dark:text-gray-400">{m.nom}</span>
-                      <span className="font-semibold text-gray-900 dark:text-white">{resultats.max1min[m.slug] || 0}</span>
+                      <span className="font-semibold text-gray-900 dark:text-white">{resultats.max1min?.[m.slug] || 0}</span>
                     </div>
                   ))}
                 </div>

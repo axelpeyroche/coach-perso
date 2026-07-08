@@ -36,4 +36,7 @@ export const enregistrerMax1Min = (evaluation_id, payload) =>
 export const enregistrerAmrapBenchmark = (evaluation_id, payload) =>
   api.post(`/evaluations/${evaluation_id}/amrap-benchmark`, payload).then((r) => r.data);
 
+export const getExercicesEvaluation = () =>
+  api.get("/exercices/evaluation").then((r) => r.data);
+
 export default api;

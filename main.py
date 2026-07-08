@@ -396,6 +396,25 @@ def biometrie_recuperation(
 
 
 # ---------------------------------------------------------------------------
+# Exercices
+# ---------------------------------------------------------------------------
+
+@app.get("/api/exercices/evaluation", summary="Liste des exercices du protocole Max 1 min")
+def exercices_evaluation(db: Session = Depends(obtenir_session)):
+    from models import VariationExercice
+    exercices = (
+        db.query(VariationExercice)
+        .filter(VariationExercice.est_mouvement_evaluation == True)
+        .order_by(VariationExercice.id)
+        .all()
+    )
+    return [
+        {"id": e.id, "nom": e.nom, "slug": e.slug}
+        for e in exercices
+    ]
+
+
+# ---------------------------------------------------------------------------
 # Santé
 # ---------------------------------------------------------------------------
 
