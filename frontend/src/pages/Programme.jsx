@@ -46,8 +46,11 @@ export default function Programme() {
     enabled: !!mcId,
   });
 
-  if (loadingMC || isLoading) return <PageLoader />;
-  if (error) return <ErreurAPI />;
+  if (loadingMC) return <PageLoader />;
+  if (!loadingMC && macrocycles.length === 0)
+    return <ErreurAPI message="Aucun macrocycle trouvé. L'API est-elle démarrée ? Appelez /api/admin/reseed puis /api/admin/seed-seances via Swagger." />;
+  if (isLoading) return <PageLoader />;
+  if (error) return <ErreurAPI message={`Erreur chargement semaines : ${error.message}`} />;
 
   const semaines = data?.semaines ?? [];
   const idxSel = semaineSel !== null ? semaineSel : 0;
@@ -218,10 +221,11 @@ function PageLoader() {
   );
 }
 
-function ErreurAPI() {
+function ErreurAPI({ message }) {
   return (
-    <div className="p-8">
-      <p className="text-sm text-red-500">Impossible de charger le programme. L'API est-elle connectée ?</p>
+    <div className="p-8 space-y-2">
+      <p className="text-sm text-red-500 font-semibold">Erreur de chargement</p>
+      <p className="text-xs text-gray-400">{message ?? "Impossible de charger le programme. L'API est-elle connectée ?"}</p>
     </div>
   );
 }
