@@ -1,10 +1,8 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getSemainesMacrocycle } from "../api";
+import { getMacrocycles, getSemainesMacrocycle } from "../api";
 import Card from "../components/Card";
 import clsx from "clsx";
-
-const MACROCYCLE_ID = 1;
 
 const PHASE_COLORS = {
   surcharge: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
@@ -21,38 +19,93 @@ const TYPE_ICONS = {
   REPOS: "😴",
 };
 
-export default function Programme() {
-  const [semaineSel, setSemaineSel] = useState(null);
+const ZONE_COLORS = {
+  Z1: "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400",
+  Z2: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+  Z3: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
+  Z4: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
+  Z5: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+};
 
-  const { data, isLoading, error } = useQuery({
-    queryKey: ["macrocycle", MACROCYCLE_ID],
-    queryFn: () => getSemainesMacrocycle(MACROCYCLE_ID),
+export default function Programme() {
+  const [macrocycleId, setMacrocycleId] = useState(null);
+  const [semaineSel, setSemaineSel] = useState(null);
+  const [seanceOuverte, setSeanceOuverte] = useState(null);
+
+  const { data: macrocycles = [], isLoading: loadingMC } = useQuery({
+    queryKey: ["macrocycles"],
+    queryFn: () => getMacrocycles(1),
+    onSuccess: (data) => {
+      if (data.length > 0 && macrocycleId === null) setMacrocycleId(data[0].id);
+    },
   });
 
-  if (isLoading) return <PageLoader />;
+  const mcSelectionne = macrocycles.find((mc) => mc.id === macrocycleId) ?? macrocycles[0];
+  const mcId = mcSelectionne?.id ?? null;
+
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["macrocycle", mcId],
+    queryFn: () => getSemainesMacrocycle(mcId),
+    enabled: !!mcId,
+  });
+
+  if (loadingMC || isLoading) return <PageLoader />;
   if (error) return <ErreurAPI />;
 
   const semaines = data?.semaines ?? [];
-  const semaine = semaineSel !== null ? semaines[semaineSel] : semaines[0];
+  const idxSel = semaineSel !== null ? semaineSel : 0;
+  const semaine = semaines[idxSel];
+
+  function handleMacrocycle(id) {
+    setMacrocycleId(id);
+    setSemaineSel(null);
+    setSeanceOuverte(null);
+  }
 
   return (
     <div className="p-4 md:p-8 max-w-4xl mx-auto space-y-6">
       <div>
         <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Programme</h2>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-          Macrocycle {data?.numero_cycle} — {data?.date_debut} → {data?.date_fin}
+          EPC — 2 macrocycles × 8 semaines
         </p>
       </div>
+
+      {/* Sélecteur macrocycle */}
+      {macrocycles.length > 1 && (
+        <div className="flex gap-2">
+          {macrocycles.map((mc) => (
+            <button
+              key={mc.id}
+              onClick={() => handleMacrocycle(mc.id)}
+              className={clsx(
+                "px-4 py-2 rounded-xl text-sm font-semibold border transition-colors",
+                mc.id === mcId
+                  ? "border-brand bg-brand/10 text-brand dark:bg-brand/20"
+                  : "border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-300"
+              )}
+            >
+              {mc.nom}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {mcSelectionne && (
+        <p className="text-xs text-gray-400 dark:text-gray-500">
+          {mcSelectionne.date_debut} → {mcSelectionne.date_fin}
+        </p>
+      )}
 
       {/* Sélecteur semaines */}
       <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-1">
         {semaines.map((s, i) => (
           <button
             key={s.numero_semaine}
-            onClick={() => setSemaineSel(i)}
+            onClick={() => { setSemaineSel(i); setSeanceOuverte(null); }}
             className={clsx(
               "shrink-0 flex flex-col items-center px-3 py-2 rounded-xl border text-xs font-medium transition-colors",
-              (semaineSel === null && i === 0) || semaineSel === i
+              idxSel === i
                 ? "border-brand bg-brand/10 text-brand dark:bg-brand/20"
                 : "border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600"
             )}
@@ -67,7 +120,7 @@ export default function Programme() {
 
       {semaine && (
         <div className="space-y-4">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <span className={clsx("px-3 py-1 rounded-full text-xs font-semibold capitalize", PHASE_COLORS[semaine.macrophase])}>
               {semaine.macrophase}
             </span>
@@ -82,28 +135,73 @@ export default function Programme() {
           <div className="grid gap-3 md:grid-cols-2">
             {semaine.seances?.length ? (
               semaine.seances.map((s) => (
-                <Card key={s.id} title="">
-                  <div className="flex items-start gap-3">
-                    <span className="text-2xl leading-none">{TYPE_ICONS[s.type] ?? "📌"}</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{s.titre || s.type}</p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{s.date}</p>
-                      <div className="flex flex-wrap gap-2 mt-2">
-                        {s.zone_cible && (
-                          <span className="px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-xs font-mono text-gray-600 dark:text-gray-400">
-                            {s.zone_cible}
-                          </span>
-                        )}
-                        {s.distance_cible_km && (
-                          <span className="text-xs text-gray-500">{s.distance_cible_km} km</span>
-                        )}
-                        {s.temps_limite_min && (
-                          <span className="text-xs text-gray-500">{s.temps_limite_min} min</span>
-                        )}
+                <div key={s.id}>
+                  <button
+                    className="w-full text-left"
+                    onClick={() => setSeanceOuverte(seanceOuverte === s.id ? null : s.id)}
+                  >
+                    <Card title="">
+                      <div className="flex items-start gap-3">
+                        <span className="text-2xl leading-none">{TYPE_ICONS[s.type] ?? "📌"}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-gray-900 dark:text-white">{s.titre || s.type}</p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{s.date}</p>
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {s.zone_cible && (
+                              <span className={clsx("px-2 py-0.5 rounded text-xs font-mono font-semibold", ZONE_COLORS[s.zone_cible] ?? "bg-gray-100 text-gray-600")}>
+                                {s.zone_cible}
+                              </span>
+                            )}
+                            {s.duree_cible_min && (
+                              <span className="px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-xs text-gray-600 dark:text-gray-400">
+                                ⏱ {s.duree_cible_min >= 60
+                                  ? `${Math.floor(s.duree_cible_min / 60)}h${s.duree_cible_min % 60 ? String(s.duree_cible_min % 60).padStart(2, "0") : ""}`
+                                  : `${s.duree_cible_min} min`}
+                              </span>
+                            )}
+                            {s.dplus_cible_m > 0 && (
+                              <span className="px-2 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-xs text-gray-600 dark:text-gray-400">
+                                ↑ {s.dplus_cible_m} m
+                              </span>
+                            )}
+                            {s.temps_limite_min && (
+                              <span className="px-2 py-0.5 rounded bg-brand/10 text-brand text-xs font-semibold">
+                                {s.temps_limite_min} min chrono
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <span className={clsx("text-gray-400 transition-transform text-xs mt-1", seanceOuverte === s.id ? "rotate-180" : "")}>▼</span>
                       </div>
+                    </Card>
+                  </button>
+
+                  {seanceOuverte === s.id && (
+                    <div className="mt-1 mx-1 rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-100 dark:border-gray-700 p-4 space-y-3">
+                      {s.description && (
+                        <pre className="text-xs text-gray-600 dark:text-gray-300 whitespace-pre-wrap font-sans leading-relaxed">
+                          {s.description}
+                        </pre>
+                      )}
+                      {s.exercices?.length > 0 && (
+                        <div>
+                          <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Exercices</p>
+                          <div className="space-y-1">
+                            {s.exercices.map((ex, idx) => (
+                              <div key={idx} className="flex items-center justify-between text-xs">
+                                <span className="text-gray-700 dark:text-gray-300 font-medium">{ex.nom || ex.slug}</span>
+                                <div className="flex gap-3 text-gray-500 dark:text-gray-400">
+                                  {ex.repetitions && <span>{ex.repetitions} reps</span>}
+                                  {ex.tempo && <span className="font-mono">{ex.tempo}</span>}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                </Card>
+                  )}
+                </div>
               ))
             ) : (
               <p className="text-sm text-gray-400 dark:text-gray-600 col-span-2">Aucune séance planifiée pour cette semaine.</p>

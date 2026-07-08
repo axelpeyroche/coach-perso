@@ -16,6 +16,9 @@ export const getBiometrieRecuperation = (utilisateur_id, macrocycle_id) =>
   api.get("/analytics/biometrie-recuperation", { params: { utilisateur_id, macrocycle_id } }).then((r) => r.data);
 
 // --- Macrocycles ---
+export const getMacrocycles = (utilisateur_id = 1) =>
+  api.get("/macrocycles", { params: { utilisateur_id } }).then((r) => r.data);
+
 export const getSemainesMacrocycle = (macrocycle_id) =>
   api.get(`/macrocycles/${macrocycle_id}/semaines`).then((r) => r.data);
 
