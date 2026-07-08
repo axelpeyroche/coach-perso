@@ -1,19 +1,11 @@
 services:
   - type: web
-    name: coach-epc-api
+    name: coach-perso
     runtime: python
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: DATABASE_URL
-        fromDatabase:
-          name: coach-epc-db
-          property: connectionString
+        sync: false
       - key: PYTHON_VERSION
         value: "3.12.0"
-
-databases:
-  - name: coach-epc-db
-    databaseName: coach_epc
-    user: coach_epc_user
-    plan: free
