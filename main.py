@@ -360,6 +360,76 @@ def journaliser_seance(
     return {"id": journal.id, "enregistre_le": str(journal.enregistre_le)}
 
 
+class PrefillSeanceSchema(BaseModel):
+    utilisateur_id: int = 1
+    duree_reelle_min: Optional[int] = None
+    distance_reelle_km: Optional[float] = None
+    dplus_reel_m: Optional[int] = None
+    fc_moyenne_bpm: Optional[int] = None
+    fc_max_bpm: Optional[int] = None
+
+
+@app.post(
+    "/api/seances/{seance_id}/journal/prefill",
+    summary="Pré-remplit les métriques physiques — en attente du RPE",
+)
+def prefill_seance(
+    seance_id: int,
+    payload: PrefillSeanceSchema,
+    db: Session = Depends(obtenir_session),
+):
+    seance = db.get(SeanceEntrainement, seance_id)
+    if not seance:
+        raise HTTPException(404, "Séance introuvable")
+
+    existing = seance.journal
+    if existing:
+        existing.duree_reelle_min = payload.duree_reelle_min
+        existing.distance_reelle_km = payload.distance_reelle_km
+        existing.dplus_reel_m = payload.dplus_reel_m
+        existing.fc_moyenne_bpm = payload.fc_moyenne_bpm
+        existing.fc_max_bpm = payload.fc_max_bpm
+        existing.completee = False
+    else:
+        journal = JournalSeance(
+            utilisateur_id=payload.utilisateur_id,
+            seance_id=seance_id,
+            completee=False,
+            duree_reelle_min=payload.duree_reelle_min,
+            distance_reelle_km=payload.distance_reelle_km,
+            dplus_reel_m=payload.dplus_reel_m,
+            fc_moyenne_bpm=payload.fc_moyenne_bpm,
+            fc_max_bpm=payload.fc_max_bpm,
+        )
+        db.add(journal)
+    db.commit()
+    return {"ok": True}
+
+
+class ValiderRPESchema(BaseModel):
+    rpe: float = Field(..., ge=1, le=10)
+    notes: Optional[str] = None
+
+
+@app.patch(
+    "/api/seances/{seance_id}/journal/valider",
+    summary="Finalise la séance avec le RPE — marque completee=True",
+)
+def valider_rpe(
+    seance_id: int,
+    payload: ValiderRPESchema,
+    db: Session = Depends(obtenir_session),
+):
+    seance = db.get(SeanceEntrainement, seance_id)
+    if not seance or not seance.journal:
+        raise HTTPException(404, "Journal introuvable — lance d'abord un prefill")
+    seance.journal.rpe = payload.rpe
+    seance.journal.notes = payload.notes
+    seance.journal.completee = True
+    db.commit()
+    return {"ok": True}
+
+
 # ---------------------------------------------------------------------------
 # Routes — Semaine courante
 # ---------------------------------------------------------------------------
@@ -594,6 +664,11 @@ def toutes_semaines_programme(utilisateur_id: int = Query(1), db: Session = Depe
                             "completee": seance.journal.completee,
                             "rpe": seance.journal.rpe,
                             "notes": seance.journal.notes,
+                            "duree_reelle_min": seance.journal.duree_reelle_min,
+                            "distance_reelle_km": seance.journal.distance_reelle_km,
+                            "dplus_reel_m": seance.journal.dplus_reel_m,
+                            "fc_moyenne_bpm": seance.journal.fc_moyenne_bpm,
+                            "fc_max_bpm": seance.journal.fc_max_bpm,
                         } if seance.journal else None,
                     }
                     for seance in s.seances

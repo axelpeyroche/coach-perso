@@ -52,6 +52,12 @@ export const getSemainesMacrocycle = (macrocycle_id) =>
 export const journaliserSeance = (seance_id, payload) =>
   api.post(`/seances/${seance_id}/journal`, payload).then((r) => r.data);
 
+export const prefillSeance = (seance_id, metriques) =>
+  api.post(`/seances/${seance_id}/journal/prefill`, metriques).then((r) => r.data);
+
+export const validerRPE = (seance_id, rpe, notes) =>
+  api.patch(`/seances/${seance_id}/journal/valider`, { rpe, notes }).then((r) => r.data);
+
 // --- Évaluations ---
 export const getHistoriqueEvaluations = (utilisateur_id = 1) =>
   api.get("/evaluations/historique", { params: { utilisateur_id } }).then((r) => r.data);

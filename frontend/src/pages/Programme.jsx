@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getToutesSemaines, journaliserSeance } from "../api";
+import { getToutesSemaines, journaliserSeance, validerRPE } from "../api";
 import clsx from "clsx";
 
 const USER_ID = 1;
@@ -36,6 +36,7 @@ function fmt(min) {
 
 function FormulaireLog({ seance, onClose, onDone }) {
   const qc = useQueryClient();
+  const prefill = seance.journal && !seance.journal.completee;
   const [rpe, setRpe]     = useState(7);
   const [champs, set_]    = useState({});
   const [notes, setNotes] = useState("");
@@ -43,12 +44,13 @@ function FormulaireLog({ seance, onClose, onDone }) {
 
   const mut = useMutation({
     mutationFn: () => {
+      if (prefill) return validerRPE(seance.id, rpe, notes || undefined);
       const nums = Object.fromEntries(
         Object.entries(champs).filter(([,v]) => v !== "").map(([k,v]) => [k, Number(v)])
       );
       return journaliserSeance(seance.id, { utilisateur_id: USER_ID, rpe, notes: notes || undefined, ...nums });
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["semaines"] }); onDone(); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["toutes-semaines"] }); onDone(); },
   });
 
   const isCourse = seance.type === "COURSE";
@@ -58,8 +60,22 @@ function FormulaireLog({ seance, onClose, onDone }) {
   return (
     <div className="border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40 px-4 py-4 space-y-4">
 
+      {/* Métriques pré-remplies (mode prefill) */}
+      {prefill && (
+        <div className="rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 px-4 py-3 space-y-2">
+          <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wide">Métriques importées</p>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+            {seance.journal.duree_reelle_min && <span className="text-gray-500 dark:text-gray-400">Durée <strong className="text-gray-900 dark:text-white">{seance.journal.duree_reelle_min} min</strong></span>}
+            {seance.journal.distance_reelle_km && <span className="text-gray-500 dark:text-gray-400">Distance <strong className="text-gray-900 dark:text-white">{seance.journal.distance_reelle_km} km</strong></span>}
+            {seance.journal.dplus_reel_m != null && <span className="text-gray-500 dark:text-gray-400">D+ <strong className="text-gray-900 dark:text-white">{seance.journal.dplus_reel_m} m</strong></span>}
+            {seance.journal.fc_moyenne_bpm && <span className="text-gray-500 dark:text-gray-400">FC moy <strong className="text-gray-900 dark:text-white">{seance.journal.fc_moyenne_bpm} bpm</strong></span>}
+            {seance.journal.fc_max_bpm && <span className="text-gray-500 dark:text-gray-400">FC max <strong className="text-gray-900 dark:text-white">{seance.journal.fc_max_bpm} bpm</strong></span>}
+          </div>
+        </div>
+      )}
+
       {/* Champs course */}
-      {isCourse && (
+      {isCourse && !prefill && (
         <div className="grid grid-cols-2 gap-3">
           {[
             { k: "duree_reelle_min",   label: "Durée réelle (min)",  ph: seance.duree_cible_min ?? "60" },
@@ -79,7 +95,7 @@ function FormulaireLog({ seance, onClose, onDone }) {
       )}
 
       {/* Champs AMRAP */}
-      {isAMRAP && (
+      {isAMRAP && !prefill && (
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Tours complétés</label>
@@ -97,7 +113,7 @@ function FormulaireLog({ seance, onClose, onDone }) {
       )}
 
       {/* Champs EMOM */}
-      {isEMOM && (
+      {isEMOM && !prefill && (
         <div>
           <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Total reps réalisées</label>
           <input type="number" placeholder="160" value={champs.total_reps_enregistrees ?? ""}
@@ -153,6 +169,7 @@ function CarteSeance({ seance }) {
   const [valide, setValide]   = useState(false);
 
   const fait = valide || seance.journal?.completee;
+  const prefillEnAttente = !fait && seance.journal && !seance.journal.completee;
 
   return (
     <div className={clsx(
@@ -196,6 +213,11 @@ function CarteSeance({ seance }) {
         <div className="flex items-center gap-2 shrink-0">
           {fait ? (
             <span className="text-sm text-green-600 dark:text-green-400 font-bold">✓</span>
+          ) : prefillEnAttente ? (
+            <button onClick={() => { setLogOpen(v => !v); setOuvert(false); }}
+              className="px-3 py-1.5 rounded-xl bg-orange-500 text-white text-xs font-semibold hover:bg-orange-600 transition-colors">
+              RPE ?
+            </button>
           ) : (
             <button onClick={() => { setLogOpen(v => !v); setOuvert(false); }}
               className="px-3 py-1.5 rounded-xl bg-brand text-white text-xs font-semibold hover:bg-brand-dark transition-colors">
