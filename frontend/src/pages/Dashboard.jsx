@@ -90,11 +90,34 @@ function FormulaireObjectif({ onClose }) {
   );
 }
 
+// ─── Helpers allures ────────────────────────────────────────────────────────
+
+function kmhToPace(kmh) {
+  if (!kmh || kmh <= 0) return "—";
+  const totalSec = 3600 / kmh;
+  const min = Math.floor(totalSec / 60);
+  const sec = Math.round(totalSec % 60);
+  return `${min}:${String(sec).padStart(2, "0")}/km`;
+}
+
+// Milieu de zone → allure représentative
+const ALLURES_VMA = {
+  z2: 0.70,   // milieu Z2 (65–75%)
+  z4: 0.90,   // milieu Z4 (85–95%)
+  z5: 0.975,  // milieu Z5 (95–100%)
+};
+
 // ─── Bloc objectif course ───────────────────────────────────────────────────
 
-function BlocObjectif() {
+function BlocObjectif({ vma }) {
   const [edit, setEdit] = useState(false);
   const { data: obj, isLoading } = useQuery({ queryKey: ["objectif-course"], queryFn: () => getObjectifCourse(USER_ID) });
+
+  const alluresVMA = vma ? {
+    z2: kmhToPace(vma * ALLURES_VMA.z2),
+    z4: kmhToPace(vma * ALLURES_VMA.z4),
+    z5: kmhToPace(vma * ALLURES_VMA.z5),
+  } : null;
 
   if (isLoading) return null;
 
@@ -143,9 +166,9 @@ function BlocObjectif() {
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Allures d'entraînement</p>
           <div className="grid grid-cols-3 gap-2">
             {[
-              { label: "EF / Z2", val: obj.allures.z2, color: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
-              { label: "Seuil / Z4", val: obj.allures.z4, color: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400" },
-              { label: "Fraco / Z5", val: obj.allures.z5, color: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" },
+              { label: "EF / Z2", val: alluresVMA?.z2 ?? obj.allures.z2, color: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
+              { label: "Seuil / Z4", val: alluresVMA?.z4 ?? obj.allures.z4, color: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400" },
+              { label: "Fraco / Z5", val: alluresVMA?.z5 ?? obj.allures.z5, color: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" },
             ].map(({ label, val, color }) => (
               <div key={label} className={clsx("rounded-xl px-3 py-2 text-center", color)}>
                 <p className="text-xs font-medium opacity-80">{label}</p>
@@ -445,7 +468,7 @@ export default function Dashboard() {
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Bienvenue</h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Configure ton programme d'entraînement EPC pour commencer.</p>
         </div>
-        <BlocObjectif />
+        <BlocObjectif vma={null} />
         <SetupProgramme objectifCourse={objectifCourse} onDone={() => qc.invalidateQueries({ queryKey: ["statut-programme"] })} />
       </div>
     );
@@ -472,7 +495,7 @@ export default function Dashboard() {
       )}
 
       {/* Objectif course */}
-      <BlocObjectif />
+      <BlocObjectif vma={derniereVMA?.valeur ?? null} />
 
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
