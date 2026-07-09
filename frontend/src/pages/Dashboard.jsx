@@ -214,23 +214,42 @@ export default function Dashboard() {
       {/* Zones */}
       {zones && (
         <Card title="Zones de vitesse actuelles">
-          <div className="space-y-2">
+          <div className="space-y-1">
+            {/* En-tête colonnes */}
+            <div className="flex items-center gap-2 pb-1 border-b border-gray-100 dark:border-gray-800">
+              <span className="w-2 shrink-0" />
+              <span className="w-6 shrink-0" />
+              <span className="text-xs text-gray-400 w-24 shrink-0">Zone</span>
+              <span className="text-xs text-gray-400 flex-1 text-center font-mono">km/h</span>
+              <span className="text-xs text-gray-400 flex-1 text-center font-mono">min/km</span>
+              <span className="text-xs text-gray-400 flex-1 text-center font-mono">bpm</span>
+            </div>
             {[
               { z: "Z1", label: "Récupération" },
-              { z: "Z2", label: "Base aérobie" },
+              { z: "Z2", label: "Aérobie" },
               { z: "Z3", label: "Tempo" },
               { z: "Z4", label: "Seuil" },
               { z: "Z5", label: "VO2max" },
-            ].map(({ z, label }) => (
-              <div key={z} className="flex items-center gap-3">
-                <span className={`w-2 h-2 rounded-full ${ZONE_COLORS[z]}`} />
-                <span className="w-6 text-xs font-semibold text-gray-700 dark:text-gray-300">{z}</span>
-                <span className="text-xs text-gray-500 dark:text-gray-400 w-28">{label}</span>
-                <span className="text-xs font-mono text-gray-800 dark:text-gray-200">
-                  {zones[z][0]} – {zones[z][1]} km/h
-                </span>
-              </div>
-            ))}
+            ].map(({ z, label }) => {
+              const pace = derniereVMA?.zones_pace?.[z];
+              const fc   = derniereVMA?.zones_fc?.[z];
+              return (
+                <div key={z} className="flex items-center gap-2 py-1">
+                  <span className={`w-2 h-2 rounded-full shrink-0 ${ZONE_COLORS[z]}`} />
+                  <span className="w-6 text-xs font-bold text-gray-700 dark:text-gray-300 shrink-0">{z}</span>
+                  <span className="text-xs text-gray-500 dark:text-gray-400 w-24 shrink-0">{label}</span>
+                  <span className="text-xs font-mono text-gray-800 dark:text-gray-200 flex-1 text-center">
+                    {zones[z][0]}–{zones[z][1]}
+                  </span>
+                  <span className="text-xs font-mono text-gray-700 dark:text-gray-300 flex-1 text-center">
+                    {pace ? `${pace[0]}–${pace[1]}` : "—"}
+                  </span>
+                  <span className="text-xs font-mono text-gray-700 dark:text-gray-300 flex-1 text-center">
+                    {fc?.[0] && fc?.[1] ? `${fc[0]}–${fc[1]}` : "—"}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </Card>
       )}

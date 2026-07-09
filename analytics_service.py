@@ -64,6 +64,14 @@ def tendances_physiologiques(db: Session, utilisateur_id: int) -> dict[str, Any]
         .all()
     )
 
+    def _kmh_to_pace(kmh: float) -> str:
+        if kmh <= 0:
+            return "—"
+        total_sec = 3600 / kmh
+        mins = int(total_sec // 60)
+        secs = int(total_sec % 60)
+        return f"{mins}:{secs:02d}"
+
     historique_vma = [
         {
             "date": str(b.enregistre_le.date()),
@@ -76,6 +84,21 @@ def tendances_physiologiques(db: Session, utilisateur_id: int) -> dict[str, Any]
                 "Z4": [b.z4_min_kmh, b.z4_max_kmh],
                 "Z5": [b.z5_min_kmh, b.z5_max_kmh],
             },
+            "zones_pace": {
+                "Z1": [_kmh_to_pace(b.z1_max_kmh), _kmh_to_pace(b.z1_min_kmh)],
+                "Z2": [_kmh_to_pace(b.z2_max_kmh), _kmh_to_pace(b.z2_min_kmh)],
+                "Z3": [_kmh_to_pace(b.z3_max_kmh), _kmh_to_pace(b.z3_min_kmh)],
+                "Z4": [_kmh_to_pace(b.z4_max_kmh), _kmh_to_pace(b.z4_min_kmh)],
+                "Z5": [_kmh_to_pace(b.z5_max_kmh), _kmh_to_pace(b.z5_min_kmh)],
+            },
+            "zones_fc": {
+                "Z1": [b.z1_fc_min, b.z1_fc_max],
+                "Z2": [b.z2_fc_min, b.z2_fc_max],
+                "Z3": [b.z3_fc_min, b.z3_fc_max],
+                "Z4": [b.z4_fc_min, b.z4_fc_max],
+                "Z5": [b.z5_fc_min, b.z5_fc_max],
+            },
+            "fc_max": b.fc_max,
         }
         for b in biometries
     ]
