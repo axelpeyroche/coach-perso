@@ -826,7 +826,10 @@ def initialiser_programme(payload: InitProgrammePayload, db: Session = Depends(o
     from periodization_rules import (
         BLUEPRINT_MACROCYCLE, generer_dates_semaines, generer_blueprint_course,
     )
-    from seed_seances import seed_module1, seed_module2, seed_module3, seed_programme_course
+    from seed_seances import (
+        MODULE1, MODULE2, MODULE3,
+        _POOL_SURCHARGE, _semaine_course, _inserer_seances_en_session,
+    )
 
     try:
         debut_mc1 = datetime.strptime(payload.date_debut, "%d/%m/%Y").date()
@@ -844,99 +847,97 @@ def initialiser_programme(payload: InitProgrammePayload, db: Session = Depends(o
         ObjectifCourse.utilisateur_id == payload.utilisateur_id
     ).order_by(ObjectifCourse.id.desc()).first()
 
-    # Suppression des macrocycles existants (cascade ORM)
-    for mc in db.query(Macrocycle).filter(Macrocycle.utilisateur_id == payload.utilisateur_id).all():
-        db.delete(mc)
+    # Suppression des macrocycles existants (cascade ORM — même session)
+    for mc_old in db.query(Macrocycle).filter(Macrocycle.utilisateur_id == payload.utilisateur_id).all():
+        db.delete(mc_old)
     db.flush()
 
-    crees = []
+    try:
+        # ── CAS 1 : course planifiée → programme adaptatif N semaines ───────
+        if obj:
+            n_semaines = (obj.date_course - debut_mc1).days // 7
+            if n_semaines < 4:
+                raise HTTPException(400, f"La course est dans {n_semaines} semaine(s) — trop proche (minimum 4 semaines).")
 
-    # ── CAS 1 : course planifiée → programme adaptatif N semaines ───────────
-    if obj:
-        n_semaines = (obj.date_course - debut_mc1).days // 7
-        if n_semaines < 4:
-            raise HTTPException(400, f"La course est dans {n_semaines} semaine(s) — trop proche (minimum 4 semaines).")
+            n_surcharge = n_semaines - 3
+            blueprint = generer_blueprint_course(n_semaines)
+            dates = [debut_mc1 + timedelta(weeks=i) for i in range(n_semaines)]
 
-        blueprint = generer_blueprint_course(n_semaines)
-        dates = [debut_mc1 + timedelta(weeks=i) for i in range(n_semaines)]
-
-        mc = Macrocycle(
-            utilisateur_id=user.id,
-            numero_cycle=1,
-            date_debut=debut_mc1,
-            date_fin=debut_mc1 + timedelta(weeks=n_semaines),
-        )
-        db.add(mc)
-        db.flush()
-        for regle, date_sem in zip(blueprint, dates):
-            db.add(SemaineEntrainement(
-                macrocycle_id=mc.id,
-                numero_semaine=regle.numero,
-                macrophase=regle.macrophase,
-                date_debut=date_sem,
-                multiplicateur_volume=regle.multiplicateur_volume,
-                objectif_km_course=regle.objectif_km_course,
-                objectif_amrap_min=regle.objectif_amrap_min,
-            ))
-        crees.append({"numero_cycle": 1, "debut": debut_mc1.strftime("%d/%m/%Y"), "semaines": n_semaines})
-        db.commit()
-
-        try:
-            seed_programme_course(
-                n_semaines=n_semaines,
-                date_course=obj.date_course,
-                course_nom=obj.nom,
+            mc = Macrocycle(
+                utilisateur_id=user.id,
+                numero_cycle=1,
+                date_debut=debut_mc1,
+                date_fin=debut_mc1 + timedelta(weeks=n_semaines),
             )
-        except Exception as exc:
-            raise HTTPException(500, f"Erreur seed course : {exc}")
+            db.add(mc)
+            db.flush()
+            for regle, date_sem in zip(blueprint, dates):
+                db.add(SemaineEntrainement(
+                    macrocycle_id=mc.id,
+                    numero_semaine=regle.numero,
+                    macrophase=regle.macrophase,
+                    date_debut=date_sem,
+                    multiplicateur_volume=regle.multiplicateur_volume,
+                    objectif_km_course=regle.objectif_km_course,
+                    objectif_amrap_min=regle.objectif_amrap_min,
+                ))
+            db.flush()
 
-        n_surcharge = n_semaines - 3
+            # Contenu : pool surcharge + décharge M1S6 + affûtage M1S7 + semaine course
+            content: dict = {}
+            for i in range(1, n_surcharge + 1):
+                content[i] = _POOL_SURCHARGE[min(i, 15)]
+            content[n_surcharge + 1] = MODULE1[6]
+            content[n_surcharge + 2] = MODULE1[7]
+            content[n_semaines]      = _semaine_course(obj.date_course, obj.nom)
+
+            _inserer_seances_en_session(db, mc, content)
+            db.commit()
+
+            return {
+                "message": f"Programme orienté course généré : {n_semaines} semaines ({n_surcharge} de build + 2 de taper + semaine course).",
+                "semaines_totales": n_semaines,
+                "course": obj.nom,
+            }
+
+        # ── CAS 2 : pas de course → programme standard 3 × 8 semaines ───────
+        mcs_crees = []
+        for numero_cycle in range(1, 4):
+            debut = debut_mc1 + timedelta(weeks=8 * (numero_cycle - 1))
+            mc = Macrocycle(
+                utilisateur_id=user.id,
+                numero_cycle=numero_cycle,
+                date_debut=debut,
+                date_fin=debut + timedelta(weeks=8),
+            )
+            db.add(mc)
+            db.flush()
+            for regle, date_sem in zip(BLUEPRINT_MACROCYCLE, generer_dates_semaines(debut)):
+                db.add(SemaineEntrainement(
+                    macrocycle_id=mc.id,
+                    numero_semaine=regle.numero,
+                    macrophase=regle.macrophase,
+                    date_debut=date_sem,
+                    multiplicateur_volume=regle.multiplicateur_volume,
+                    objectif_km_course=regle.objectif_km_course,
+                    objectif_amrap_min=regle.objectif_amrap_min,
+                ))
+            db.flush()
+            module_data = {1: MODULE1, 2: MODULE2, 3: MODULE3}[numero_cycle]
+            _inserer_seances_en_session(db, mc, module_data)
+            mcs_crees.append(numero_cycle)
+
+        db.commit()
         return {
-            "message": f"Programme orienté course généré : {n_semaines} semaines ({n_surcharge} de build + 2 de taper + semaine course).",
-            "nb_modules": 1,
-            "semaines_totales": n_semaines,
-            "course": obj.nom,
-            "macrocycles": crees,
+            "message": "Programme performance générale généré : 3 modules × 8 semaines.",
+            "semaines_totales": 24,
         }
 
-    # ── CAS 2 : pas de course → programme standard 3 modules × 8 semaines ───
-    nb_modules = 3
-    for numero_cycle in range(1, nb_modules + 1):
-        debut = debut_mc1 + timedelta(weeks=8 * (numero_cycle - 1))
-        mc = Macrocycle(
-            utilisateur_id=user.id,
-            numero_cycle=numero_cycle,
-            date_debut=debut,
-            date_fin=debut + timedelta(weeks=8),
-        )
-        db.add(mc)
-        db.flush()
-        for regle, date_sem in zip(BLUEPRINT_MACROCYCLE, generer_dates_semaines(debut)):
-            db.add(SemaineEntrainement(
-                macrocycle_id=mc.id,
-                numero_semaine=regle.numero,
-                macrophase=regle.macrophase,
-                date_debut=date_sem,
-                multiplicateur_volume=regle.multiplicateur_volume,
-                objectif_km_course=regle.objectif_km_course,
-                objectif_amrap_min=regle.objectif_amrap_min,
-            ))
-        crees.append({"numero_cycle": numero_cycle, "debut": debut.strftime("%d/%m/%Y"), "semaines": 8})
-    db.commit()
-
-    try:
-        seed_module1()
-        seed_module2()
-        seed_module3()
+    except HTTPException:
+        raise
     except Exception as exc:
-        raise HTTPException(500, f"Erreur seed standard : {exc}")
-
-    return {
-        "message": "Programme performance générale généré : 3 modules × 8 semaines.",
-        "nb_modules": 3,
-        "semaines_totales": 24,
-        "macrocycles": crees,
-    }
+        db.rollback()
+        raise HTTPException(500, detail=f"Erreur génération : {type(exc).__name__}: {exc}")
 
 
 # ---------------------------------------------------------------------------

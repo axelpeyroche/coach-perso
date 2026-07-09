@@ -307,7 +307,12 @@ function SetupProgramme({ objectifCourse, onDone }) {
         )}
 
         {mut.isError && (
-          <p className="text-xs text-red-500">{mut.error?.response?.data?.detail ?? "Erreur lors de la génération"}</p>
+          <p className="text-xs text-red-500">
+            {mut.error?.response?.data?.detail
+              || (mut.error?.code === "ECONNABORTED" ? "Timeout — le serveur met trop longtemps à répondre. Réessaie." : null)
+              || mut.error?.message
+              || "Erreur inconnue"}
+          </p>
         )}
         {mut.isSuccess && (
           <p className="text-xs text-green-600 dark:text-green-400">{mut.data?.avertissement ?? "Programme généré !"}</p>

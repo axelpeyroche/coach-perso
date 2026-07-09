@@ -1540,7 +1540,63 @@ MODULE3 = {
 # Fonctions de seed
 # ============================================================================
 
+def _inserer_seances_en_session(db, mc, module_data: dict):
+    """Insère les séances d'un module dans une session SQLAlchemy existante (sans commit)."""
+    semaines = {s.numero_semaine: s for s in mc.semaines}
+    exercices_map = {e.slug: e for e in db.query(VariationExercice).all()}
+    total_seances = 0
+    slugs_manquants = set()
+
+    for num_sem, seances in module_data.items():
+        semaine = semaines.get(num_sem)
+        if not semaine:
+            continue
+
+        for s_ex in list(semaine.seances):
+            for ex in list(s_ex.exercices):
+                db.delete(ex)
+            db.delete(s_ex)
+        db.flush()
+
+        for ordre, s in enumerate(seances, 1):
+            seance = SeanceEntrainement(
+                semaine_id=semaine.id,
+                date_seance=semaine.date_debut + timedelta(days=s["jour"] - 1),
+                type_seance=s["type"],
+                titre=s["titre"],
+                description=s.get("description"),
+                ordre_dans_semaine=ordre,
+                zone_cible=s.get("zone"),
+                duree_cible_min=s.get("duree_min"),
+                dplus_cible_m=s.get("dplus_m"),
+                temps_limite_min=s.get("temps_limite"),
+            )
+            db.add(seance)
+            db.flush()
+            total_seances += 1
+
+            for pos, ex_data in enumerate(s.get("exercices", []), 1):
+                exercice = exercices_map.get(ex_data["slug"])
+                if not exercice:
+                    slugs_manquants.add(ex_data["slug"])
+                    continue
+                db.add(ExerciceSeance(
+                    seance_id=seance.id,
+                    exercice_id=exercice.id,
+                    ordre=pos,
+                    repetitions=ex_data.get("reps"),
+                    tempo_override=ex_data.get("tempo"),
+                    pause_isometrique_override_sec=ex_data.get("pause_iso"),
+                    duree_bloc_min=ex_data.get("duree_min"),
+                ))
+
+    if slugs_manquants:
+        print(f"  Slugs manquants : {slugs_manquants}")
+    return total_seances
+
+
 def _inserer_semaines(numero_cycle: int, module_data: dict):
+    """Ouvre sa propre session (utilisé pour les seeds autonomes)."""
     creer_tables()
     db = SessionLocal()
     try:
@@ -1551,64 +1607,10 @@ def _inserer_semaines(numero_cycle: int, module_data: dict):
         if not mc:
             print(f"Macrocycle numero_cycle={numero_cycle} introuvable.")
             return
-
-        semaines = {s.numero_semaine: s for s in mc.semaines}
-        exercices_map = {e.slug: e for e in db.query(VariationExercice).all()}
-        total_seances = 0
-        total_exercices = 0
-        slugs_manquants = set()
-
-        for num_sem, seances in module_data.items():
-            semaine = semaines.get(num_sem)
-            if not semaine:
-                print(f"  Semaine {num_sem} introuvable (MC {macrocycle_id}).")
-                continue
-
-            for s_ex in semaine.seances:
-                for ex in s_ex.exercices:
-                    db.delete(ex)
-                db.delete(s_ex)
-            db.flush()
-
-            for ordre, s in enumerate(seances, 1):
-                seance = SeanceEntrainement(
-                    semaine_id=semaine.id,
-                    date_seance=semaine.date_debut + timedelta(days=s["jour"] - 1),
-                    type_seance=s["type"],
-                    titre=s["titre"],
-                    description=s.get("description"),
-                    ordre_dans_semaine=ordre,
-                    zone_cible=s.get("zone"),
-                    duree_cible_min=s.get("duree_min"),
-                    dplus_cible_m=s.get("dplus_m"),
-                    temps_limite_min=s.get("temps_limite"),
-                )
-                db.add(seance)
-                db.flush()
-                total_seances += 1
-
-                for pos, ex_data in enumerate(s.get("exercices", []), 1):
-                    exercice = exercices_map.get(ex_data["slug"])
-                    if not exercice:
-                        slugs_manquants.add(ex_data["slug"])
-                        continue
-                    db.add(ExerciceSeance(
-                        seance_id=seance.id,
-                        exercice_id=exercice.id,
-                        ordre=pos,
-                        repetitions=ex_data.get("reps"),
-                        tempo_override=ex_data.get("tempo"),
-                        pause_isometrique_override_sec=ex_data.get("pause_iso"),
-                        duree_bloc_min=ex_data.get("duree_min"),
-                    ))
-                    total_exercices += 1
-
+        _inserer_seances_en_session(db, mc, module_data)
         db.commit()
         noms = {1: "Module 1 - Adaptation", 2: "Module 2 - Révélation", 3: "Module 3 - Confirmation"}
-        nom = noms.get(numero_cycle, f"Macrocycle {numero_cycle}")
-        print(f"MC{numero_cycle} ({nom}) : {total_seances} séances, {total_exercices} exercices.")
-        if slugs_manquants:
-            print(f"  Slugs manquants : {slugs_manquants}")
+        print(f"MC{numero_cycle} ({noms.get(numero_cycle, str(numero_cycle))}) : seed OK.")
     except Exception as e:
         db.rollback()
         print(f"Erreur MC{numero_cycle} : {e}")

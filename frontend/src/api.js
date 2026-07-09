@@ -29,7 +29,7 @@ export const getStatutProgramme = (utilisateur_id = 1) =>
   api.get("/programme/statut", { params: { utilisateur_id } }).then((r) => r.data);
 
 export const initialiserProgramme = (date_debut, utilisateur_id = 1) =>
-  api.post("/programme/initialiser", { date_debut, utilisateur_id }).then((r) => r.data);
+  api.post("/programme/initialiser", { date_debut, utilisateur_id }, { timeout: 120000 }).then((r) => r.data);
 
 export const supprimerProgramme = (utilisateur_id = 1) =>
   api.delete("/programme", { params: { utilisateur_id } }).then((r) => r.data);
