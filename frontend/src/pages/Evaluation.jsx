@@ -132,9 +132,8 @@ export default function Evaluation() {
     setEtape("intro");
   }
 
-  async function demarrer() {
-    const eval_ = await creerMut.mutateAsync({ utilisateur_id: USER_ID, est_induction: true });
-    setEvaluationId(eval_.id);
+  function demarrer() {
+    // Ne crée rien en DB — l'évaluation est créée lors de la première sauvegarde
     setEtape("demi_cooper");
   }
 
@@ -146,8 +145,15 @@ export default function Evaluation() {
   }
 
   async function validerCooper(quitter = false) {
+    // Crée l'évaluation en DB au moment de la première sauvegarde réelle
+    let id = evaluationId;
+    if (!id) {
+      const eval_ = await creerMut.mutateAsync({ utilisateur_id: USER_ID, est_induction: true });
+      id = eval_.id;
+      setEvaluationId(id);
+    }
     const res = await cooperMut.mutateAsync({
-      id: evaluationId,
+      id,
       data: { distance_metres: parseFloat(distance), fc_max: fcMax ? parseInt(fcMax) : undefined },
     });
     setVmaResultat(res);
