@@ -159,6 +159,18 @@ class JournalSeanceSchema(BaseModel):
 # Routes — Évaluations
 # ---------------------------------------------------------------------------
 
+@app.delete("/api/evaluations/incompletes", summary="Supprime les évaluations sans AMRAP ET sans Max 1 min")
+def supprimer_evaluations_incompletes(utilisateur_id: int = Query(1), db: Session = Depends(obtenir_session)):
+    evals = db.query(JournalEvaluationSeance).filter(JournalEvaluationSeance.utilisateur_id == utilisateur_id).all()
+    supprimes = 0
+    for ev in evals:
+        if ev.benchmark_amrap is None and len(ev.resultats_max_1min) == 0:
+            db.delete(ev)
+            supprimes += 1
+    db.commit()
+    return {"supprimes": supprimes}
+
+
 @app.get("/api/evaluations/historique", summary="Historique des évaluations passées")
 def historique_evaluations(utilisateur_id: int = Query(1), db: Session = Depends(obtenir_session)):
     evals = (

@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { creerEvaluation, enregistrerDemiCooper, enregistrerMax1Min, enregistrerAmrapBenchmark, getExercicesEvaluation, getHistoriqueEvaluations } from "../api";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { creerEvaluation, enregistrerDemiCooper, enregistrerMax1Min, enregistrerAmrapBenchmark, getExercicesEvaluation, getHistoriqueEvaluations, supprimerEvaluationsIncompletes } from "../api";
 import Card from "../components/Card";
 import clsx from "clsx";
 
@@ -35,7 +35,12 @@ export default function Evaluation() {
   });
   const historique = historiqueData?.evaluations ?? [];
 
+  const qc = useQueryClient();
   const creerMut = useMutation({ mutationFn: creerEvaluation });
+  const nettoyerMut = useMutation({
+    mutationFn: () => supprimerEvaluationsIncompletes(USER_ID),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["evaluations-historique"] }),
+  });
   const cooperMut = useMutation({ mutationFn: ({ id, data }) => enregistrerDemiCooper(id, data) });
   const max1MinMut = useMutation({ mutationFn: ({ id, data }) => enregistrerMax1Min(id, data) });
   const amrapMut = useMutation({ mutationFn: ({ id, data }) => enregistrerAmrapBenchmark(id, data) });
@@ -116,7 +121,17 @@ export default function Evaluation() {
 
       {etape === "intro" && historique.length > 0 && (
         <div className="space-y-3">
-          <h3 className="text-base font-semibold text-gray-800 dark:text-white">Historique</h3>
+          <div className="flex items-center justify-between">
+            <h3 className="text-base font-semibold text-gray-800 dark:text-white">Historique</h3>
+            {historique.some(ev => ev.amrap_tours == null && ev.max_1min.length === 0) && (
+              <button
+                onClick={() => { if (window.confirm("Supprimer toutes les évaluations incomplètes ?")) nettoyerMut.mutate(); }}
+                disabled={nettoyerMut.isPending}
+                className="text-xs text-red-500 hover:text-red-600 dark:text-red-400 font-medium disabled:opacity-50">
+                {nettoyerMut.isPending ? "Suppression..." : "Nettoyer les incomplets"}
+              </button>
+            )}
+          </div>
           {historique.map((ev, i) => (
             <div key={ev.id} className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 overflow-hidden">
               {/* En-tête éval */}

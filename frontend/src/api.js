@@ -56,6 +56,9 @@ export const journaliserSeance = (seance_id, payload) =>
 export const getHistoriqueEvaluations = (utilisateur_id = 1) =>
   api.get("/evaluations/historique", { params: { utilisateur_id } }).then((r) => r.data);
 
+export const supprimerEvaluationsIncompletes = (utilisateur_id = 1) =>
+  api.delete("/evaluations/incompletes", { params: { utilisateur_id } }).then((r) => r.data);
+
 export const creerEvaluation = (payload) =>
   api.post("/evaluations/", payload).then((r) => r.data);
 
