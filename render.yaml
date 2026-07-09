@@ -3,12 +3,14 @@ services:
     name: coach-perso-api
     runtime: python
     buildCommand: pip install -r requirements.txt
-    startCommand: alembic upgrade head && python seed.py && uvicorn main:app --host 0.0.0.0 --port $PORT
+    startCommand: python startup.py && uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: DATABASE_URL
         sync: false
       - key: PYTHON_VERSION
         value: "3.12.0"
+      - key: PROGRAMME_DATE_DEBUT
+        value: "14/07/2026"
 
   - type: web
     name: coach-perso-frontend
