@@ -57,11 +57,11 @@ MODULE1 = {
                 "      8 reps / 20 sec hollow (alternés)"
             ),
             "exercices": [
-                {"slug": "traction-stricte",     "reps": 3,    "tempo": "X/1/2/0"},
-                {"slug": "dip-parallettes",      "reps": 4,    "tempo": None},
-                {"slug": "traction-australienne","reps": 10,   "tempo": "X/1/2/0"},
-                {"slug": "curl-biceps-traction", "reps": 8,    "tempo": "X/1/2/0"},
-                {"slug": "hollow-actif",         "reps": None, "tempo": None},
+                {"slug": "traction-stricte",     "reps": 3,    "tempo": "X/1/2/0", "duree_min": 9},
+                {"slug": "dip-parallettes",      "reps": 4,    "tempo": None,       "duree_min": 9},
+                {"slug": "traction-australienne","reps": 10,   "tempo": "X/1/2/0", "duree_min": 5},
+                {"slug": "curl-biceps-traction", "reps": 8,    "tempo": "X/1/2/0", "duree_min": 9},
+                {"slug": "hollow-actif",         "reps": None, "tempo": None,       "duree_min": 9},
             ]
         },
         {
@@ -137,10 +137,10 @@ MODULE1 = {
                 "      Sit ups libres / Hollow actif 20 sec"
             ),
             "exercices": [
-                {"slug": "pompe-standard",    "reps": 4,    "tempo": "3/1/X/0"},
-                {"slug": "planche-dynamique", "reps": 12,   "tempo": "X/0/X/0"},
-                {"slug": "sit-up",            "reps": 15,   "tempo": "X/0/2/0"},
-                {"slug": "hollow-actif",      "reps": None, "tempo": None},
+                {"slug": "pompe-standard",    "reps": 4,    "tempo": "3/1/X/0", "duree_min": 18},
+                {"slug": "planche-dynamique", "reps": 12,   "tempo": "X/0/X/0", "duree_min": 5},
+                {"slug": "sit-up",            "reps": 15,   "tempo": "X/0/2/0", "duree_min": 9},
+                {"slug": "hollow-actif",      "reps": None, "tempo": None,       "duree_min": 9},
             ]
         },
         {
@@ -215,10 +215,10 @@ MODULE1 = {
                 "      9 reps / 25 sec position tenue (alternés)"
             ),
             "exercices": [
-                {"slug": "dip-parallettes",       "reps": 11, "tempo": "2/1/X/0", "pause_iso": 1.0},
-                {"slug": "traction-stricte",      "reps": 11, "tempo": "X/1/2/0", "pause_iso": 1.0},
-                {"slug": "pompe-standard",        "reps": 10, "tempo": "2/0/X/0"},
-                {"slug": "triceps-extension-dips","reps": 9,  "tempo": "2/1/X/0"},
+                {"slug": "dip-parallettes",       "reps": 11, "tempo": "2/1/X/0", "pause_iso": 1.0, "duree_min": 5},
+                {"slug": "traction-stricte",      "reps": 11, "tempo": "X/1/2/0", "pause_iso": 1.0, "duree_min": 9},
+                {"slug": "pompe-standard",        "reps": 10, "tempo": "2/0/X/0",                   "duree_min": 9},
+                {"slug": "triceps-extension-dips","reps": 9,  "tempo": "2/1/X/0",                   "duree_min": 9},
             ]
         },
         {
@@ -290,9 +290,9 @@ MODULE1 = {
                 "      12 reps / 30 sec en position haute (alternés)"
             ),
             "exercices": [
-                {"slug": "dip-parallettes",       "reps": 8,  "tempo": "2/1/X/0"},
-                {"slug": "traction-australienne",  "reps": 5,  "tempo": "X/1/2/0"},
-                {"slug": "traction-stricte",      "reps": 12, "tempo": "X/1/2/0", "pause_iso": 1.0},
+                {"slug": "dip-parallettes",       "reps": 8,  "tempo": "2/1/X/0",                   "duree_min": 9},
+                {"slug": "traction-australienne",  "reps": 5,  "tempo": "X/1/2/0",                   "duree_min": 9},
+                {"slug": "traction-stricte",      "reps": 12, "tempo": "X/1/2/0", "pause_iso": 1.0, "duree_min": 9},
             ]
         },
         {
@@ -366,9 +366,9 @@ MODULE1 = {
                 "      13 reps / 35 sec position haute (alternés)"
             ),
             "exercices": [
-                {"slug": "traction-australienne","reps": 5,  "tempo": None},
-                {"slug": "dip-parallettes",      "reps": 13, "tempo": "2/1/X/0"},
-                {"slug": "pompe-standard",       "reps": 13, "tempo": "2/1/X/0"},
+                {"slug": "traction-australienne","reps": 5,  "tempo": None,       "duree_min": 9},
+                {"slug": "dip-parallettes",      "reps": 13, "tempo": "2/1/X/0", "duree_min": 5},
+                {"slug": "pompe-standard",       "reps": 13, "tempo": "2/1/X/0", "duree_min": 9},
             ]
         },
         {
@@ -435,8 +435,8 @@ MODULE1 = {
                 "      14 reps / 35 sec position haute (alternés)"
             ),
             "exercices": [
-                {"slug": "dip-parallettes", "reps": 14, "tempo": "2/1/X/0"},
-                {"slug": "pompe-standard",  "reps": 14, "tempo": "2/0/X/0"},
+                {"slug": "dip-parallettes", "reps": 14, "tempo": "2/1/X/0", "duree_min": 5},
+                {"slug": "pompe-standard",  "reps": 14, "tempo": "2/0/X/0", "duree_min": 9},
             ]
         },
         {
@@ -546,11 +546,11 @@ MODULE2 = {
                 "      10 reps triceps (min 1,4,7) / 10 reps rotateur long (min 2,5,8) / repos"
             ),
             "exercices": [
-                {"slug": "dip-parallettes",       "reps": 3,  "tempo": "2/1/X/0"},
-                {"slug": "traction-australienne",  "reps": 3,  "tempo": "X/1/2/0"},
-                {"slug": "dip-partiel",            "reps": 5,  "tempo": "2/1/X/0"},
-                {"slug": "triceps-extension-dips", "reps": 10, "tempo": "2/1/X/0"},
-                {"slug": "rotateur-long",          "reps": 10, "tempo": "2/1/X/0"},
+                {"slug": "dip-parallettes",       "reps": 3,  "tempo": "2/1/X/0", "duree_min": 10},
+                {"slug": "traction-australienne",  "reps": 3,  "tempo": "X/1/2/0", "duree_min": 9},
+                {"slug": "dip-partiel",            "reps": 5,  "tempo": "2/1/X/0", "duree_min": 6},
+                {"slug": "triceps-extension-dips", "reps": 10, "tempo": "2/1/X/0", "duree_min": 9},
+                {"slug": "rotateur-long",          "reps": 10, "tempo": "2/1/X/0", "duree_min": 9},
             ]
         },
         {
@@ -620,11 +620,11 @@ MODULE2 = {
                 "  • Bloc D — 10 min : Traction australienne — 10D3/4/5"
             ),
             "exercices": [
-                {"slug": "traction-stricte",     "reps": 2,  "tempo": "X/1/2/0", "pause_iso": 1.0},
-                {"slug": "traction-partielle",   "reps": 10, "tempo": "X/1/2/0"},
-                {"slug": "curl-biceps-traction", "reps": 10, "tempo": "X/1/2/0"},
-                {"slug": "le-y",                 "reps": 10, "tempo": "2/1/X/0"},
-                {"slug": "traction-australienne","reps": 4,  "tempo": "X/1/2/0"},
+                {"slug": "traction-stricte",     "reps": 2,  "tempo": "X/1/2/0", "pause_iso": 1.0, "duree_min": 10},
+                {"slug": "traction-partielle",   "reps": 10, "tempo": "X/1/2/0",                   "duree_min": 9},
+                {"slug": "curl-biceps-traction", "reps": 10, "tempo": "X/1/2/0",                   "duree_min": 9},
+                {"slug": "le-y",                 "reps": 10, "tempo": "2/1/X/0",                   "duree_min": 9},
+                {"slug": "traction-australienne","reps": 4,  "tempo": "X/1/2/0",                   "duree_min": 10},
             ]
         },
         {
@@ -696,11 +696,11 @@ MODULE2 = {
                 "      12 reps / 12 reps / 12 reps (cycle × 3)"
             ),
             "exercices": [
-                {"slug": "dip-parallettes",       "reps": 4,  "tempo": "X/1/X/0", "pause_iso": 1.0},
-                {"slug": "dip-partiel",            "reps": 6,  "tempo": "2/1/X/0"},
-                {"slug": "triceps-extension-dips", "reps": 12, "tempo": "2/1/X/0"},
-                {"slug": "pompe-large",            "reps": 12, "tempo": "2/1/X/0"},
-                {"slug": "sit-up",                 "reps": 12, "tempo": "X/0/2/0"},
+                {"slug": "dip-parallettes",       "reps": 4,  "tempo": "X/1/X/0", "pause_iso": 1.0, "duree_min": 10},
+                {"slug": "dip-partiel",            "reps": 6,  "tempo": "2/1/X/0",                   "duree_min": 6},
+                {"slug": "triceps-extension-dips", "reps": 12, "tempo": "2/1/X/0",                   "duree_min": 9},
+                {"slug": "pompe-large",            "reps": 12, "tempo": "2/1/X/0",                   "duree_min": 9},
+                {"slug": "sit-up",                 "reps": 12, "tempo": "X/0/2/0",                   "duree_min": 9},
             ]
         },
         {
@@ -769,11 +769,11 @@ MODULE2 = {
                 "      13 reps / 13 reps / 30 sec hold (cycle × 3)"
             ),
             "exercices": [
-                {"slug": "pompe-standard",         "reps": 10, "tempo": "2/1/X/0"},
-                {"slug": "traction-australienne",  "reps": 10, "tempo": "X/1/2/0"},
-                {"slug": "dip-partiel",            "reps": 7,  "tempo": "2/1/X/0"},
-                {"slug": "triceps-extension-dips", "reps": 13, "tempo": "2/1/X/0"},
-                {"slug": "rotateur-long",          "reps": 13, "tempo": "2/1/X/0"},
+                {"slug": "pompe-standard",         "reps": 10, "tempo": "2/1/X/0", "duree_min": 9},
+                {"slug": "traction-australienne",  "reps": 10, "tempo": "X/1/2/0", "duree_min": 9},
+                {"slug": "dip-partiel",            "reps": 7,  "tempo": "2/1/X/0", "duree_min": 6},
+                {"slug": "triceps-extension-dips", "reps": 13, "tempo": "2/1/X/0", "duree_min": 9},
+                {"slug": "rotateur-long",          "reps": 13, "tempo": "2/1/X/0", "duree_min": 9},
             ]
         },
         {
@@ -839,10 +839,10 @@ MODULE2 = {
                 "      14 reps / 14 reps / 30 sec (cycle × 3)"
             ),
             "exercices": [
-                {"slug": "traction-australienne","reps": 5,    "tempo": None},
-                {"slug": "curl-biceps-traction", "reps": 14,   "tempo": "X/1/2/0"},
-                {"slug": "le-y",                 "reps": 14,   "tempo": "2/1/X/0"},
-                {"slug": "traction-partielle",   "reps": None, "tempo": "X/1/2/0"},
+                {"slug": "traction-australienne","reps": 5,    "tempo": None,        "duree_min": 9},
+                {"slug": "curl-biceps-traction", "reps": 14,   "tempo": "X/1/2/0",  "duree_min": 9},
+                {"slug": "le-y",                 "reps": 14,   "tempo": "2/1/X/0",  "duree_min": 9},
+                {"slug": "traction-partielle",   "reps": None, "tempo": "X/1/2/0",  "duree_min": 9},
             ]
         },
         {
@@ -897,10 +897,10 @@ MODULE2 = {
                 "  • Bloc B — 9 min : Triceps ext / Rotateur long — 10 reps / 10 reps / 30 sec"
             ),
             "exercices": [
-                {"slug": "dip-parallettes",       "reps": 10, "tempo": "2/1/X/0"},
-                {"slug": "pompe-standard",        "reps": 10, "tempo": "2/0/X/0"},
-                {"slug": "triceps-extension-dips","reps": 10, "tempo": "2/1/X/0"},
-                {"slug": "rotateur-long",         "reps": 10, "tempo": "2/1/X/0"},
+                {"slug": "dip-parallettes",       "reps": 10, "tempo": "2/1/X/0", "duree_min": 6},
+                {"slug": "pompe-standard",        "reps": 10, "tempo": "2/0/X/0", "duree_min": 6},
+                {"slug": "triceps-extension-dips","reps": 10, "tempo": "2/1/X/0", "duree_min": 9},
+                {"slug": "rotateur-long",         "reps": 10, "tempo": "2/1/X/0", "duree_min": 9},
             ]
         },
         {
@@ -939,11 +939,11 @@ MODULE2 = {
                 "  10 Burpees contrôlés / 10 Mountain climbers lents"
             ),
             "exercices": [
-                {"slug": "traction-australienne","reps": 10, "tempo": "X/1/3/0"},
-                {"slug": "pompe-standard",       "reps": 10, "tempo": "3/1/3/0"},
-                {"slug": "squat-bw",             "reps": 10, "tempo": "3/1/X/0"},
-                {"slug": "burpee",               "reps": 10, "tempo": "X/0/X/0"},
-                {"slug": "mountain-climber",     "reps": 10, "tempo": "X/0/X/0"},
+                {"slug": "traction-australienne","reps": 10, "tempo": "X/1/3/0", "duree_min": 3},
+                {"slug": "pompe-standard",       "reps": 10, "tempo": "3/1/3/0", "duree_min": 3},
+                {"slug": "squat-bw",             "reps": 10, "tempo": "3/1/X/0", "duree_min": 3},
+                {"slug": "burpee",               "reps": 10, "tempo": "X/0/X/0", "duree_min": 3},
+                {"slug": "mountain-climber",     "reps": 10, "tempo": "X/0/X/0", "duree_min": 3},
             ]
         },
         {
@@ -1037,13 +1037,13 @@ MODULE3 = {
                 "      10 reps / 10 reps / 30 sec hold (cycle × 3)"
             ),
             "exercices": [
-                {"slug": "dip-parallettes",       "reps": 3,  "tempo": "2/1/X/0"},
-                {"slug": "traction-australienne",  "reps": 10, "tempo": "X/1/2/0"},
-                {"slug": "curl-biceps-traction",   "reps": 10, "tempo": "X/1/2/0"},
-                {"slug": "le-y",                   "reps": 10, "tempo": "2/1/X/0"},
-                {"slug": "triceps-extension-dips", "reps": 10, "tempo": "2/1/X/0"},
-                {"slug": "rotateur-long",          "reps": 10, "tempo": "2/1/X/0"},
-                {"slug": "sit-up",                 "reps": 10, "tempo": "X/0/2/0"},
+                {"slug": "dip-parallettes",       "reps": 3,  "tempo": "2/1/X/0", "duree_min": 10},
+                {"slug": "traction-australienne",  "reps": 10, "tempo": "X/1/2/0", "duree_min": 9},
+                {"slug": "curl-biceps-traction",   "reps": 10, "tempo": "X/1/2/0", "duree_min": 9},
+                {"slug": "le-y",                   "reps": 10, "tempo": "2/1/X/0", "duree_min": 9},
+                {"slug": "triceps-extension-dips", "reps": 10, "tempo": "2/1/X/0", "duree_min": 9},
+                {"slug": "rotateur-long",          "reps": 10, "tempo": "2/1/X/0", "duree_min": 9},
+                {"slug": "sit-up",                 "reps": 10, "tempo": "X/0/2/0", "duree_min": 9},
             ]
         },
         {
@@ -1114,13 +1114,13 @@ MODULE3 = {
                 "      11 reps / 11 reps / 30 sec"
             ),
             "exercices": [
-                {"slug": "dip-parallettes",       "reps": 4,  "tempo": "2/1/X/0"},
-                {"slug": "traction-australienne",  "reps": 11, "tempo": "X/1/2/0"},
-                {"slug": "curl-biceps-traction",   "reps": 11, "tempo": "X/1/2/0"},
-                {"slug": "le-y",                   "reps": 11, "tempo": "2/1/X/0"},
-                {"slug": "pompe-large",            "reps": 11, "tempo": "2/1/X/0"},
-                {"slug": "triceps-extension-dips", "reps": 11, "tempo": "2/1/X/0"},
-                {"slug": "sit-up",                 "reps": 11, "tempo": "X/0/2/0"},
+                {"slug": "dip-parallettes",       "reps": 4,  "tempo": "2/1/X/0", "duree_min": 10},
+                {"slug": "traction-australienne",  "reps": 11, "tempo": "X/1/2/0", "duree_min": 9},
+                {"slug": "curl-biceps-traction",   "reps": 11, "tempo": "X/1/2/0", "duree_min": 9},
+                {"slug": "le-y",                   "reps": 11, "tempo": "2/1/X/0", "duree_min": 9},
+                {"slug": "pompe-large",            "reps": 11, "tempo": "2/1/X/0", "duree_min": 12},
+                {"slug": "triceps-extension-dips", "reps": 11, "tempo": "2/1/X/0", "duree_min": 12},
+                {"slug": "sit-up",                 "reps": 11, "tempo": "X/0/2/0", "duree_min": 12},
             ]
         },
         {
@@ -1190,13 +1190,13 @@ MODULE3 = {
                 "      12 reps / 12 reps / 12 reps"
             ),
             "exercices": [
-                {"slug": "dip-parallettes",       "reps": 5,  "tempo": "2/2/X/0", "pause_iso": 2.0},
-                {"slug": "traction-australienne",  "reps": 12, "tempo": "X/1/2/0"},
-                {"slug": "curl-biceps-traction",   "reps": 12, "tempo": "X/1/2/0"},
-                {"slug": "le-y",                   "reps": 12, "tempo": "2/1/X/0"},
-                {"slug": "pompe-large",            "reps": 12, "tempo": "2/1/X/0"},
-                {"slug": "triceps-extension-dips", "reps": 12, "tempo": "2/1/X/0"},
-                {"slug": "extension-hanche",       "reps": 12, "tempo": "2/1/X/0"},
+                {"slug": "dip-parallettes",       "reps": 5,  "tempo": "2/2/X/0", "pause_iso": 2.0, "duree_min": 10},
+                {"slug": "traction-australienne",  "reps": 12, "tempo": "X/1/2/0",                   "duree_min": 12},
+                {"slug": "curl-biceps-traction",   "reps": 12, "tempo": "X/1/2/0",                   "duree_min": 12},
+                {"slug": "le-y",                   "reps": 12, "tempo": "2/1/X/0",                   "duree_min": 12},
+                {"slug": "pompe-large",            "reps": 12, "tempo": "2/1/X/0",                   "duree_min": 12},
+                {"slug": "triceps-extension-dips", "reps": 12, "tempo": "2/1/X/0",                   "duree_min": 12},
+                {"slug": "extension-hanche",       "reps": 12, "tempo": "2/1/X/0",                   "duree_min": 12},
             ]
         },
         {
@@ -1267,13 +1267,13 @@ MODULE3 = {
                 "      13 reps / 13 reps / 13 reps"
             ),
             "exercices": [
-                {"slug": "dip-parallettes",       "reps": 6,  "tempo": "2/2/X/0", "pause_iso": 2.0},
-                {"slug": "traction-australienne",  "reps": 13, "tempo": "X/1/2/0"},
-                {"slug": "curl-biceps-traction",   "reps": 13, "tempo": "X/1/2/0"},
-                {"slug": "le-y",                   "reps": 13, "tempo": "2/1/X/0"},
-                {"slug": "pompe-large",            "reps": 13, "tempo": "2/1/X/0"},
-                {"slug": "triceps-extension-dips", "reps": 13, "tempo": "2/1/X/0"},
-                {"slug": "extension-hanche",       "reps": 13, "tempo": "2/1/X/0"},
+                {"slug": "dip-parallettes",       "reps": 6,  "tempo": "2/2/X/0", "pause_iso": 2.0, "duree_min": 12},
+                {"slug": "traction-australienne",  "reps": 13, "tempo": "X/1/2/0",                   "duree_min": 12},
+                {"slug": "curl-biceps-traction",   "reps": 13, "tempo": "X/1/2/0",                   "duree_min": 12},
+                {"slug": "le-y",                   "reps": 13, "tempo": "2/1/X/0",                   "duree_min": 12},
+                {"slug": "pompe-large",            "reps": 13, "tempo": "2/1/X/0",                   "duree_min": 13},
+                {"slug": "triceps-extension-dips", "reps": 13, "tempo": "2/1/X/0",                   "duree_min": 13},
+                {"slug": "extension-hanche",       "reps": 13, "tempo": "2/1/X/0",                   "duree_min": 13},
             ]
         },
         {
@@ -1350,12 +1350,12 @@ MODULE3 = {
                 "      12 reps / 12 reps × 4"
             ),
             "exercices": [
-                {"slug": "dip-parallettes",      "reps": 5,  "tempo": "2/1/X/0"},
-                {"slug": "traction-australienne", "reps": 12, "tempo": "X/1/2/0"},
-                {"slug": "curl-biceps-traction",  "reps": 12, "tempo": "X/1/2/0"},
-                {"slug": "le-y",                  "reps": 12, "tempo": "2/1/X/0"},
-                {"slug": "pompe-large",           "reps": 12, "tempo": "2/1/X/0"},
-                {"slug": "extension-hanche",      "reps": 12, "tempo": "2/1/X/0"},
+                {"slug": "dip-parallettes",      "reps": 5,  "tempo": "2/1/X/0", "duree_min": 9},
+                {"slug": "traction-australienne", "reps": 12, "tempo": "X/1/2/0", "duree_min": 9},
+                {"slug": "curl-biceps-traction",  "reps": 12, "tempo": "X/1/2/0", "duree_min": 9},
+                {"slug": "le-y",                  "reps": 12, "tempo": "2/1/X/0", "duree_min": 9},
+                {"slug": "pompe-large",           "reps": 12, "tempo": "2/1/X/0", "duree_min": 8},
+                {"slug": "extension-hanche",      "reps": 12, "tempo": "2/1/X/0", "duree_min": 8},
             ]
         },
         {
@@ -1413,10 +1413,10 @@ MODULE3 = {
                 "  • Bloc B — 9 min : Curl / Le Y / Repos (triplet × 3) — 10 reps / 10 reps / repos"
             ),
             "exercices": [
-                {"slug": "dip-parallettes",     "reps": 10, "tempo": "2/1/X/0"},
-                {"slug": "pompe-standard",      "reps": 10, "tempo": "2/0/X/0"},
-                {"slug": "curl-biceps-traction","reps": 10, "tempo": "X/1/2/0"},
-                {"slug": "le-y",                "reps": 10, "tempo": "2/1/X/0"},
+                {"slug": "dip-parallettes",     "reps": 10, "tempo": "2/1/X/0", "duree_min": 9},
+                {"slug": "pompe-standard",      "reps": 10, "tempo": "2/0/X/0", "duree_min": 9},
+                {"slug": "curl-biceps-traction","reps": 10, "tempo": "X/1/2/0", "duree_min": 9},
+                {"slug": "le-y",                "reps": 10, "tempo": "2/1/X/0", "duree_min": 9},
             ]
         },
         {
@@ -1467,11 +1467,11 @@ MODULE3 = {
                 "  10 Squats profonds / 5 Burpees contrôlés"
             ),
             "exercices": [
-                {"slug": "traction-australienne","reps": 5,  "tempo": "3/1/3/0"},
-                {"slug": "dip-parallettes",      "reps": 5,  "tempo": "3/1/3/0"},
-                {"slug": "pompe-standard",       "reps": 10, "tempo": "3/1/3/0"},
-                {"slug": "squat-bw",             "reps": 10, "tempo": "3/1/X/0"},
-                {"slug": "burpee",               "reps": 5,  "tempo": "X/0/X/0"},
+                {"slug": "traction-australienne","reps": 5,  "tempo": "3/1/3/0", "duree_min": 3},
+                {"slug": "dip-parallettes",      "reps": 5,  "tempo": "3/1/3/0", "duree_min": 3},
+                {"slug": "pompe-standard",       "reps": 10, "tempo": "3/1/3/0", "duree_min": 3},
+                {"slug": "squat-bw",             "reps": 10, "tempo": "3/1/X/0", "duree_min": 3},
+                {"slug": "burpee",               "reps": 5,  "tempo": "X/0/X/0", "duree_min": 3},
             ]
         },
         {
@@ -1596,6 +1596,7 @@ def _inserer_semaines(macrocycle_id: int, module_data: dict):
                         repetitions=ex_data.get("reps"),
                         tempo_override=ex_data.get("tempo"),
                         pause_isometrique_override_sec=ex_data.get("pause_iso"),
+                        duree_bloc_min=ex_data.get("duree_min"),
                     ))
                     total_exercices += 1
 

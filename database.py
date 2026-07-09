@@ -4,7 +4,7 @@ Configuration de la connexion SQLAlchemy et utilitaires de session.
 
 import os
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 from models import Base
@@ -26,8 +26,18 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 def creer_tables() -> None:
-    """Crée toutes les tables si elles n'existent pas encore."""
+    """Crée toutes les tables si elles n'existent pas encore, et applique les migrations."""
     Base.metadata.create_all(bind=engine)
+    # Migrations manuelles pour les colonnes ajoutées après la création initiale
+    _migrations = [
+        "ALTER TABLE exercices_seance ADD COLUMN IF NOT EXISTS duree_bloc_min INTEGER",
+    ]
+    with engine.begin() as conn:
+        for stmt in _migrations:
+            try:
+                conn.execute(text(stmt))
+            except Exception:
+                pass
 
 
 def obtenir_session():

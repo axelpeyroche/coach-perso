@@ -463,6 +463,10 @@ class ExerciceSeance(Base):
     recuperation_sec: Mapped[Optional[int]] = mapped_column(Integer)
 
     # Modulation de l'intensité (leviers EPC — remplace l'ajout de charge pour les athlètes au poids du corps)
+    duree_bloc_min: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        comment="Durée du bloc EMOM en minutes pour cet exercice (ex. 9 pour un bloc de 9 min)"
+    )
     tempo_override: Mapped[Optional[str]] = mapped_column(
         String(20),
         comment="Tempo spécifique à la séance, remplace le tempo par défaut de l'exercice, ex. '3/2/X/0'"

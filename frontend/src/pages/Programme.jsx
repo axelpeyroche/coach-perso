@@ -236,6 +236,11 @@ function CarteSeance({ seance }) {
                       <span className="font-medium text-gray-800 dark:text-gray-200">{ex.nom}</span>
                     </div>
                     <div className="flex items-center gap-2">
+                      {ex.duree_bloc_min && seance.type === "EMOM" && (
+                        <span className="px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-xs font-bold">
+                          {ex.duree_bloc_min} min
+                        </span>
+                      )}
                       {ex.repetitions && (
                         <span className="px-2 py-0.5 rounded bg-brand/10 text-brand text-xs font-bold">
                           {ex.repetitions} reps
@@ -256,15 +261,9 @@ function CarteSeance({ seance }) {
 
           {/* Instructions */}
           {seance.description && (
-            <details className="group">
-              <summary className="text-xs font-semibold text-gray-400 uppercase tracking-wide cursor-pointer select-none list-none flex items-center gap-1">
-                <span className="group-open:rotate-90 inline-block transition-transform text-gray-400">▶</span>
-                Instructions détaillées
-              </summary>
-              <pre className="mt-2 text-xs text-gray-600 dark:text-gray-300 whitespace-pre-wrap font-sans leading-relaxed">
-                {seance.description}
-              </pre>
-            </details>
+            <pre className="text-xs text-gray-600 dark:text-gray-300 whitespace-pre-wrap font-sans leading-relaxed">
+              {seance.description}
+            </pre>
           )}
         </div>
       )}

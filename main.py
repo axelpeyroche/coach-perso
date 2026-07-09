@@ -383,6 +383,7 @@ def semaine_courante(utilisateur_id: int = Query(1), db: Session = Depends(obten
                         "repetitions": ex.repetitions,
                         "duree_sec": ex.duree_sec,
                         "tempo": ex.tempo_effectif,
+                        "duree_bloc_min": ex.duree_bloc_min,
                     }
                     for ex in s.exercices
                 ],
@@ -445,6 +446,7 @@ def obtenir_semaines_macrocycle(
                                 "repetitions": ex.repetitions,
                                 "duree_sec": ex.duree_sec,
                                 "tempo": ex.tempo_effectif,
+                                "duree_bloc_min": ex.duree_bloc_min,
                             }
                             for ex in seance.exercices
                         ],
