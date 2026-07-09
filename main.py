@@ -530,16 +530,13 @@ def lister_macrocycles(utilisateur_id: int = Query(1), db: Session = Depends(obt
 @app.post("/api/admin/seed-seances", summary="Génère toutes les séances des 16 semaines EPC (2 macrocycles)")
 def seed_seances_route(db: Session = Depends(obtenir_session)):
     from seed_seances import seed_module1, seed_module2, seed_module3
-    import io, sys
-    buf = io.StringIO()
-    sys.stdout = buf
     try:
         seed_module1()
         seed_module2()
         seed_module3()
-    finally:
-        sys.stdout = sys.__stdout__
-    return {"message": buf.getvalue().strip()}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Erreur seed : {exc}")
+    return {"message": "Seed terminé."}
 
 
 @app.post("/api/admin/init-macrocycles", summary="Crée les 2 macrocycles si absents (pour utilisateurs existants)")
@@ -818,7 +815,6 @@ def initialiser_programme(payload: InitProgrammePayload, db: Session = Depends(o
     from models import SemaineEntrainement
     from periodization_rules import BLUEPRINT_MACROCYCLE, generer_dates_semaines
     from seed_seances import seed_module1, seed_module2, seed_module3
-    import io, sys
 
     try:
         debut_mc1 = datetime.strptime(payload.date_debut, "%d/%m/%Y").date()
@@ -882,8 +878,6 @@ def initialiser_programme(payload: InitProgrammePayload, db: Session = Depends(o
     db.commit()
 
     # Seed des séances pour chaque module créé
-    buf = io.StringIO()
-    sys.stdout = buf
     try:
         if nb_modules >= 1:
             seed_module1()
@@ -891,15 +885,14 @@ def initialiser_programme(payload: InitProgrammePayload, db: Session = Depends(o
             seed_module2()
         if nb_modules >= 3:
             seed_module3()
-    finally:
-        sys.stdout = sys.__stdout__
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Erreur lors du seed des séances : {exc}")
 
     return {
         "message": "Programme généré avec succès.",
         "avertissement": avertissement,
         "nb_modules": nb_modules,
         "macrocycles": crees,
-        "seed_log": buf.getvalue().strip(),
     }
 
 
