@@ -4,10 +4,12 @@ import Dashboard from "./pages/Dashboard";
 import Programme from "./pages/Programme";
 import Evaluation from "./pages/Evaluation";
 import Analytics from "./pages/Analytics";
+import Calendrier from "./pages/Calendrier";
 
 const NAV = [
   { to: "/", label: "Dashboard", icon: "⚡" },
   { to: "/programme", label: "Programme", icon: "📅" },
+  { to: "/calendrier", label: "Calendrier", icon: "🗓️" },
   { to: "/evaluation", label: "Évaluation", icon: "🎯" },
   { to: "/analytics", label: "Stats", icon: "📊" },
 ];
@@ -70,6 +72,7 @@ export default function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/programme" element={<Programme />} />
           <Route path="/evaluation" element={<Evaluation />} />
+          <Route path="/calendrier" element={<Calendrier />} />
           <Route path="/analytics" element={<Analytics />} />
         </Routes>
       </main>
