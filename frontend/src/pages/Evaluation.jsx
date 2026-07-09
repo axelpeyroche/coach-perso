@@ -140,9 +140,6 @@ export default function Evaluation() {
                   <span className="text-sm font-semibold text-gray-900 dark:text-white">
                     {ev.date.split("-").reverse().join("/")}
                   </span>
-                  {ev.est_induction && (
-                    <span className="px-2 py-0.5 rounded-full text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 font-medium">Induction</span>
-                  )}
                   {i === 0 && (
                     <span className="px-2 py-0.5 rounded-full text-xs bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 font-medium">Dernière</span>
                   )}
