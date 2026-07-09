@@ -127,39 +127,54 @@ export default function Evaluation() {
   const max1MinMut = useMutation({ mutationFn: ({ id, data }) => enregistrerMax1Min(id, data) });
   const amrapMut = useMutation({ mutationFn: ({ id, data }) => enregistrerAmrapBenchmark(id, data) });
 
+  function annuler() {
+    qc.invalidateQueries({ queryKey: ["evaluations-historique"] });
+    setEtape("intro");
+  }
+
   async function demarrer() {
     const eval_ = await creerMut.mutateAsync({ utilisateur_id: USER_ID, est_induction: true });
     setEvaluationId(eval_.id);
     setEtape("demi_cooper");
   }
 
-  async function validerCooper() {
+  function reprendreEval(ev) {
+    setEvaluationId(ev.id);
+    if (!ev.distance_m) setEtape("demi_cooper");
+    else if (ev.max_1min.length === 0) setEtape("max_1min");
+    else setEtape("amrap");
+  }
+
+  async function validerCooper(quitter = false) {
     const res = await cooperMut.mutateAsync({
       id: evaluationId,
       data: { distance_metres: parseFloat(distance), fc_max: fcMax ? parseInt(fcMax) : undefined },
     });
     setVmaResultat(res);
     setResultats((r) => ({ ...r, cooper: res }));
-    setEtape("max_1min");
+    if (quitter) { qc.invalidateQueries({ queryKey: ["evaluations-historique"] }); setEtape("intro"); }
+    else setEtape("max_1min");
   }
 
-  async function valider1Min() {
+  async function valider1Min(quitter = false) {
     const payload = mouvements.map((m) => ({
       exercice_id: m.id,
       repetitions_realisees: parseInt(reps[m.slug] || 0),
     }));
     await max1MinMut.mutateAsync({ id: evaluationId, data: payload });
     setResultats((r) => ({ ...r, max1min: reps }));
-    setEtape("amrap");
+    if (quitter) { qc.invalidateQueries({ queryKey: ["evaluations-historique"] }); setEtape("intro"); }
+    else setEtape("amrap");
   }
 
-  async function validerAmrap() {
+  async function validerAmrap(quitter = false) {
     await amrapMut.mutateAsync({
       id: evaluationId,
       data: { tours_completes: parseFloat(tours) },
     });
     setResultats((r) => ({ ...r, amrap: tours }));
-    setEtape("resultats");
+    if (quitter) { qc.invalidateQueries({ queryKey: ["evaluations-historique"] }); setEtape("intro"); }
+    else setEtape("resultats");
   }
 
   return (
@@ -236,6 +251,12 @@ export default function Evaluation() {
                       {historique[i - 1].vma_kmh > ev.vma_kmh ? "▼" : "▲"} {Math.abs(historique[i - 1].vma_kmh - ev.vma_kmh).toFixed(1)} km/h
                     </span>
                   )}
+                  {(ev.distance_m == null || ev.max_1min.length === 0 || ev.amrap_tours == null) && (
+                    <button onClick={() => reprendreEval(ev)}
+                      className="text-xs font-semibold text-brand border border-brand/30 hover:bg-brand/10 px-2.5 py-1 rounded-lg transition-colors">
+                      Reprendre →
+                    </button>
+                  )}
                   <button onClick={() => setEvalEnEdition(ev)}
                     className="text-gray-400 hover:text-brand transition-colors p-1 rounded-lg hover:bg-brand/10"
                     title="Modifier">
@@ -288,9 +309,19 @@ export default function Evaluation() {
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">FC max (optionnel)</label>
               <input type="number" value={fcMax} onChange={(e) => setFcMax(e.target.value)} placeholder="ex. 192" className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
             </div>
-            <button onClick={validerCooper} disabled={!distance || cooperMut.isPending} className="w-full py-3 rounded-xl bg-brand text-white font-semibold text-sm hover:bg-brand-dark transition-colors disabled:opacity-50">
-              {cooperMut.isPending ? "Enregistrement..." : "Valider & calculer les zones"}
-            </button>
+            <div className="flex gap-2 pt-1">
+              <button onClick={annuler} className="px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                Annuler
+              </button>
+              <button onClick={() => validerCooper(true)} disabled={!distance || cooperMut.isPending}
+                className="flex-1 py-2.5 rounded-xl border border-brand text-brand text-sm font-semibold hover:bg-brand/5 transition-colors disabled:opacity-50">
+                {cooperMut.isPending ? "…" : "Enregistrer & quitter"}
+              </button>
+              <button onClick={() => validerCooper(false)} disabled={!distance || cooperMut.isPending}
+                className="flex-1 py-2.5 rounded-xl bg-brand text-white text-sm font-semibold hover:bg-brand-dark transition-colors disabled:opacity-50">
+                {cooperMut.isPending ? "…" : "Étape suivante →"}
+              </button>
+            </div>
           </div>
         </Card>
       )}
@@ -315,13 +346,19 @@ export default function Evaluation() {
                   />
                 </div>
               ))}
-              <button
-                onClick={valider1Min}
-                disabled={max1MinMut.isPending || mouvements.some((m) => !reps[m.slug])}
-                className="mt-5 w-full py-3 rounded-xl bg-brand text-white font-semibold text-sm hover:bg-brand-dark transition-colors disabled:opacity-50"
-              >
-                {max1MinMut.isPending ? "Enregistrement..." : "Valider"}
-              </button>
+              <div className="flex gap-2 mt-5">
+                <button onClick={annuler} className="px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                  Annuler
+                </button>
+                <button onClick={() => valider1Min(true)} disabled={max1MinMut.isPending || mouvements.some((m) => !reps[m.slug])}
+                  className="flex-1 py-2.5 rounded-xl border border-brand text-brand text-sm font-semibold hover:bg-brand/5 transition-colors disabled:opacity-50">
+                  {max1MinMut.isPending ? "…" : "Enregistrer & quitter"}
+                </button>
+                <button onClick={() => valider1Min(false)} disabled={max1MinMut.isPending || mouvements.some((m) => !reps[m.slug])}
+                  className="flex-1 py-2.5 rounded-xl bg-brand text-white text-sm font-semibold hover:bg-brand-dark transition-colors disabled:opacity-50">
+                  {max1MinMut.isPending ? "…" : "Étape suivante →"}
+                </button>
+              </div>
               {mouvements.some((m) => !reps[m.slug]) && (
                 <p className="text-xs text-gray-400 text-center">Remplis tous les champs avant de valider.</p>
               )}
@@ -342,9 +379,19 @@ export default function Evaluation() {
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Score (tours) — ex. 2.9</label>
             <input type="number" step="0.1" value={tours} onChange={(e) => setTours(e.target.value)} placeholder="2.9" className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
           </div>
-          <button onClick={validerAmrap} disabled={!tours || amrapMut.isPending} className="mt-5 w-full py-3 rounded-xl bg-brand text-white font-semibold text-sm hover:bg-brand-dark transition-colors disabled:opacity-50">
-            {amrapMut.isPending ? "Enregistrement..." : "Terminer l'évaluation"}
-          </button>
+          <div className="flex gap-2 mt-5">
+            <button onClick={annuler} className="px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+              Annuler
+            </button>
+            <button onClick={() => validerAmrap(true)} disabled={!tours || amrapMut.isPending}
+              className="flex-1 py-2.5 rounded-xl border border-brand text-brand text-sm font-semibold hover:bg-brand/5 transition-colors disabled:opacity-50">
+              {amrapMut.isPending ? "…" : "Enregistrer & quitter"}
+            </button>
+            <button onClick={() => validerAmrap(false)} disabled={!tours || amrapMut.isPending}
+              className="flex-1 py-2.5 rounded-xl bg-brand text-white text-sm font-semibold hover:bg-brand-dark transition-colors disabled:opacity-50">
+              {amrapMut.isPending ? "…" : "Terminer →"}
+            </button>
+          </div>
         </Card>
       )}
 
