@@ -86,8 +86,6 @@ function FormRegister({ onSwitch, onSuccess }) {
   const [email, setEmail]         = useState("");
   const [password, setPassword]   = useState("");
   const [dateNaissance, setDN]    = useState("");
-  const [sexe, setSexe]           = useState("homme");
-  const [poids, setPoids]         = useState("");
   const [err, setErr]             = useState("");
   const [loading, setLoading]     = useState(false);
 
@@ -96,9 +94,8 @@ function FormRegister({ onSwitch, onSuccess }) {
     setErr(""); setLoading(true);
     try {
       const payload = {
-        prenom, nom, email, password, sexe,
+        prenom, nom, email, password,
         date_naissance: dateNaissance || null,
-        poids_kg: poids ? parseFloat(poids) : null,
       };
       const r = await api.post("/auth/register", payload);
       onSuccess(r.data.access_token);
@@ -117,15 +114,7 @@ function FormRegister({ onSwitch, onSuccess }) {
       </div>
       <Input label="Email" type="email" value={email} onChange={setEmail} placeholder="toi@exemple.fr" required />
       <Input label="Mot de passe" type="password" value={password} onChange={setPassword} placeholder="••••••••" required />
-      <div className="grid grid-cols-2 gap-3">
-        <Input label="Date de naissance" type="date" value={dateNaissance} onChange={setDN} />
-        <Input label="Poids (kg)" type="number" value={poids} onChange={setPoids} placeholder="75" />
-      </div>
-      <Select label="Sexe" value={sexe} onChange={setSexe} options={[
-        { value: "homme", label: "Homme" },
-        { value: "femme", label: "Femme" },
-        { value: "autre", label: "Autre / Non précisé" },
-      ]} />
+      <Input label="Date de naissance" type="date" value={dateNaissance} onChange={setDN} />
       {err && <p className="text-sm text-red-500">{err}</p>}
       <button type="submit" disabled={loading}
         className="w-full py-3 rounded-xl bg-brand text-white font-semibold hover:bg-brand-dark transition-colors disabled:opacity-50">

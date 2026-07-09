@@ -1524,3 +1524,70 @@ def racine():
 @app.get("/health", include_in_schema=False)
 def sante():
     return {"statut": "ok", "timestamp": datetime.utcnow().isoformat()}
+
+
+# ---------------------------------------------------------------------------
+# Migration données historiques → nouveau compte
+# ---------------------------------------------------------------------------
+
+class MigrationSchema(BaseModel):
+    ancien_user_id: int = 1
+
+@app.post("/api/admin/migrer-donnees", summary="Réaffecte les données d'un ancien compte vers le compte connecté")
+def migrer_donnees(
+    payload: MigrationSchema,
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(obtenir_session),
+):
+    ancien_id = payload.ancien_user_id
+    nouveau_id = current_user.id
+
+    if ancien_id == nouveau_id:
+        raise HTTPException(400, "Les deux utilisateurs sont identiques")
+
+    ancien = db.get(Utilisateur, ancien_id)
+    if not ancien:
+        raise HTTPException(404, f"Utilisateur source {ancien_id} introuvable")
+
+    stats = {}
+
+    # Macrocycles (cascade : SemaineEntrainement → SeanceEntrainement)
+    mcs = db.query(Macrocycle).filter(Macrocycle.utilisateur_id == ancien_id).all()
+    for mc in mcs:
+        mc.utilisateur_id = nouveau_id
+    stats["macrocycles"] = len(mcs)
+
+    # JournalSeance
+    journaux = db.query(JournalSeance).filter(JournalSeance.utilisateur_id == ancien_id).all()
+    for j in journaux:
+        j.utilisateur_id = nouveau_id
+    stats["journaux_seances"] = len(journaux)
+
+    # JournalEvaluationSeance
+    evals = db.query(JournalEvaluationSeance).filter(JournalEvaluationSeance.utilisateur_id == ancien_id).all()
+    for ev in evals:
+        ev.utilisateur_id = nouveau_id
+    stats["evaluations"] = len(evals)
+
+    # BiometrieUtilisateur
+    bios = db.query(BiometrieUtilisateur).filter(BiometrieUtilisateur.utilisateur_id == ancien_id).all()
+    for b in bios:
+        b.utilisateur_id = nouveau_id
+    stats["biometries"] = len(bios)
+
+    # ObjectifCourse
+    objs = db.query(ObjectifCourse).filter(ObjectifCourse.utilisateur_id == ancien_id).all()
+    for o in objs:
+        o.utilisateur_id = nouveau_id
+    stats["objectifs_course"] = len(objs)
+
+    # Copier fc_max / fc_repos / poids_kg si le nouveau compte n'en a pas
+    if not current_user.fc_max and ancien.fc_max:
+        current_user.fc_max = ancien.fc_max
+    if not current_user.fc_repos and ancien.fc_repos:
+        current_user.fc_repos = ancien.fc_repos
+    if not current_user.poids_kg and ancien.poids_kg:
+        current_user.poids_kg = ancien.poids_kg
+
+    db.commit()
+    return {"ok": True, "migre": stats, "vers": nouveau_id}
