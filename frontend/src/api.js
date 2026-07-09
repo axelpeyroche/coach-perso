@@ -58,8 +58,9 @@ export const prefillSeance = (seance_id, metriques) =>
 export const analyserScreenshot = (seance_id, file, utilisateur_id = 1) => {
   const form = new FormData();
   form.append("file", file);
-  return api.post(`/seances/${seance_id}/journal/analyse-screenshot?utilisateur_id=${utilisateur_id}`, form)
-    .then((r) => r.data);
+  return api.post(`/seances/${seance_id}/journal/analyse-screenshot?utilisateur_id=${utilisateur_id}`, form, {
+    timeout: 30000,
+  }).then((r) => r.data);
 };
 
 export const validerRPE = (seance_id, rpe, notes) =>

@@ -43,6 +43,7 @@ function FormulaireLog({ seance, onClose, onDone }) {
   const [imgPreview, setImg]   = useState(null);
   const [analysing, setAnal]   = useState(false);
   const [analyseErr, setErr]   = useState(null);
+  const [manuelMode, setManuel] = useState(false);
   const setC = (k, v) => set_(c => ({ ...c, [k]: v }));
 
   const isCourse = seance.type === "COURSE";
@@ -63,6 +64,7 @@ function FormulaireLog({ seance, onClose, onDone }) {
       qc.invalidateQueries({ queryKey: ["toutes-semaines"] });
     } catch (e) {
       setErr(e?.response?.data?.detail || e?.message || "Analyse échouée");
+      setManuel(true);
     } finally {
       setAnal(false);
     }
@@ -70,7 +72,7 @@ function FormulaireLog({ seance, onClose, onDone }) {
 
   const mut = useMutation({
     mutationFn: () => {
-      if (prefill) return validerRPE(seance.id, rpe, notes || undefined);
+      if (prefill && !manuelMode) return validerRPE(seance.id, rpe, notes || undefined);
       const nums = Object.fromEntries(
         Object.entries(champs).filter(([,v]) => v !== "").map(([k,v]) => [k, Number(v)])
       );
@@ -95,34 +97,58 @@ function FormulaireLog({ seance, onClose, onDone }) {
               {seance.journal.fc_max_bpm         && <span className="text-gray-500 dark:text-gray-400">FC max <strong className="text-gray-900 dark:text-white">{seance.journal.fc_max_bpm} bpm</strong></span>}
             </div>
           </div>
+        ) : manuelMode ? (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Métriques manuelles</p>
+              {analyseErr && <p className="text-xs text-red-400">{analyseErr}</p>}
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                { key: "duree_reelle_min",   label: "Durée (min)",    ph: "40" },
+                { key: "distance_reelle_km", label: "Distance (km)",  ph: "6.2" },
+                { key: "dplus_reel_m",       label: "D+ (m)",         ph: "50" },
+                { key: "fc_moyenne_bpm",     label: "FC moy (bpm)",   ph: "153" },
+                { key: "fc_max_bpm",         label: "FC max (bpm)",   ph: "165" },
+              ].map(({ key, label, ph }) => (
+                <div key={key}>
+                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">{label}</label>
+                  <input type="number" placeholder={ph} value={champs[key] ?? ""}
+                    onChange={e => setC(key, e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
+                </div>
+              ))}
+            </div>
+          </div>
         ) : (
           <div>
             <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Screenshot activité</label>
-            <label className={clsx(
-              "flex flex-col items-center justify-center w-full rounded-xl border-2 border-dashed cursor-pointer transition-colors overflow-hidden",
-              imgPreview ? "border-brand/40 p-0" : "border-gray-200 dark:border-gray-700 hover:border-brand/50 py-5"
-            )}>
-              {imgPreview ? (
-                <div className="relative w-full">
+            {analysing && (
+              <div className="w-full rounded-xl border border-gray-200 dark:border-gray-700 py-4 flex flex-col items-center gap-2 text-gray-400 bg-gray-50 dark:bg-gray-800/40">
+                <span className="animate-spin text-xl">⏳</span>
+                <span className="text-xs animate-pulse">Analyse OCR en cours… (peut prendre 20–30 s)</span>
+              </div>
+            )}
+            {!analysing && (
+              <label className={clsx(
+                "flex flex-col items-center justify-center w-full rounded-xl border-2 border-dashed cursor-pointer transition-colors overflow-hidden",
+                imgPreview ? "border-brand/40 p-0" : "border-gray-200 dark:border-gray-700 hover:border-brand/50 py-5"
+              )}>
+                {imgPreview ? (
                   <img src={imgPreview} alt="aperçu" className="w-full max-h-48 object-cover" />
-                  {analysing && (
-                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                      <span className="text-white text-xs font-semibold animate-pulse">Analyse en cours…</span>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="flex flex-col items-center gap-2 text-gray-400">
-                  <span className="text-2xl">📷</span>
-                  <span className="text-xs">{analysing ? "Analyse…" : "Ajouter un screenshot"}</span>
-                </div>
-              )}
-              <input type="file" accept="image/*" className="sr-only" onChange={onFileChange} disabled={analysing} />
-            </label>
+                ) : (
+                  <div className="flex flex-col items-center gap-2 text-gray-400">
+                    <span className="text-2xl">📷</span>
+                    <span className="text-xs">Ajouter un screenshot</span>
+                  </div>
+                )}
+                <input type="file" accept="image/*" className="sr-only" onChange={onFileChange} />
+              </label>
+            )}
             {analyseErr && <p className="mt-1 text-xs text-red-500">{analyseErr}</p>}
-            {imgPreview && !analysing && (
-              <button onClick={() => setImg(null)} className="mt-1 text-xs text-gray-400 hover:text-red-400 transition-colors">
-                Supprimer
+            {!analysing && (
+              <button onClick={() => setManuel(true)} className="mt-2 text-xs text-gray-400 hover:text-brand transition-colors">
+                Saisir manuellement →
               </button>
             )}
           </div>
