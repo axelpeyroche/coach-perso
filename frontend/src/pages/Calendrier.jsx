@@ -31,10 +31,11 @@ export default function Calendrier() {
   const [annee,  setAnnee]  = useState(today.getFullYear());
   const [moisIdx, setMoisIdx] = useState(today.getMonth());
 
-  const { data: semaines = [] } = useQuery({
+  const { data: raw } = useQuery({
     queryKey: ["toutes-semaines", USER_ID],
     queryFn:  () => getToutesSemaines(USER_ID),
   });
+  const semaines = raw?.semaines ?? [];
 
   // Indexe les séances validées par date "YYYY-MM-DD"
   const seancesParDate = useMemo(() => {
