@@ -53,6 +53,9 @@ export const journaliserSeance = (seance_id, payload) =>
   api.post(`/seances/${seance_id}/journal`, payload).then((r) => r.data);
 
 // --- Évaluations ---
+export const getHistoriqueEvaluations = (utilisateur_id = 1) =>
+  api.get("/evaluations/historique", { params: { utilisateur_id } }).then((r) => r.data);
+
 export const creerEvaluation = (payload) =>
   api.post("/evaluations/", payload).then((r) => r.data);
 

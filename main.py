@@ -159,6 +159,34 @@ class JournalSeanceSchema(BaseModel):
 # Routes — Évaluations
 # ---------------------------------------------------------------------------
 
+@app.get("/api/evaluations/historique", summary="Historique des évaluations passées")
+def historique_evaluations(utilisateur_id: int = Query(1), db: Session = Depends(obtenir_session)):
+    evals = (
+        db.query(JournalEvaluationSeance)
+        .filter(JournalEvaluationSeance.utilisateur_id == utilisateur_id)
+        .order_by(JournalEvaluationSeance.evalue_le.desc())
+        .all()
+    )
+    result = []
+    for ev in evals:
+        cooper = ev.demi_cooper
+        amrap = ev.benchmark_amrap
+        max1min = ev.resultats_max_1min
+        result.append({
+            "id": ev.id,
+            "date": str(ev.evalue_le)[:10],
+            "est_induction": ev.est_induction,
+            "vma_kmh": cooper.vma_calculee_kmh if cooper else None,
+            "distance_m": cooper.distance_metres if cooper else None,
+            "amrap_tours": amrap.tours_completes if amrap else None,
+            "max_1min": [
+                {"nom": r.exercice.nom, "reps": r.repetitions_realisees}
+                for r in sorted(max1min, key=lambda x: x.exercice_id)
+            ],
+        })
+    return {"evaluations": result}
+
+
 @app.post("/api/evaluations/", summary="Créer une session d'évaluation")
 def creer_evaluation(payload: CreerEvaluationSchema, db: Session = Depends(obtenir_session)):
     evaluation = JournalEvaluationSeance(

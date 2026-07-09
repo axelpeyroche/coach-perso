@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { creerEvaluation, enregistrerDemiCooper, enregistrerMax1Min, enregistrerAmrapBenchmark, getExercicesEvaluation } from "../api";
+import { creerEvaluation, enregistrerDemiCooper, enregistrerMax1Min, enregistrerAmrapBenchmark, getExercicesEvaluation, getHistoriqueEvaluations } from "../api";
 import Card from "../components/Card";
 import clsx from "clsx";
 
@@ -28,6 +28,12 @@ export default function Evaluation() {
     queryKey: ["exercices-evaluation"],
     queryFn: getExercicesEvaluation,
   });
+
+  const { data: historiqueData } = useQuery({
+    queryKey: ["evaluations-historique"],
+    queryFn: () => getHistoriqueEvaluations(USER_ID),
+  });
+  const historique = historiqueData?.evaluations ?? [];
 
   const creerMut = useMutation({ mutationFn: creerEvaluation });
   const cooperMut = useMutation({ mutationFn: ({ id, data }) => enregistrerDemiCooper(id, data) });
@@ -106,6 +112,62 @@ export default function Evaluation() {
             {creerMut.isPending ? "Création..." : "Démarrer l'évaluation"}
           </button>
         </Card>
+      )}
+
+      {etape === "intro" && historique.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="text-base font-semibold text-gray-800 dark:text-white">Historique</h3>
+          {historique.map((ev, i) => (
+            <div key={ev.id} className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 overflow-hidden">
+              {/* En-tête éval */}
+              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                    {ev.date.split("-").reverse().join("/")}
+                  </span>
+                  {ev.est_induction && (
+                    <span className="px-2 py-0.5 rounded-full text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 font-medium">Induction</span>
+                  )}
+                  {i === 0 && (
+                    <span className="px-2 py-0.5 rounded-full text-xs bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 font-medium">Dernière</span>
+                  )}
+                </div>
+                {i > 0 && historique[i - 1].vma_kmh && ev.vma_kmh && (
+                  <span className={clsx("text-xs font-semibold", historique[i - 1].vma_kmh > ev.vma_kmh ? "text-red-500" : "text-green-500")}>
+                    {historique[i - 1].vma_kmh > ev.vma_kmh ? "▼" : "▲"} {Math.abs(historique[i - 1].vma_kmh - ev.vma_kmh).toFixed(1)} km/h
+                  </span>
+                )}
+              </div>
+              {/* Métriques principales */}
+              <div className="grid grid-cols-3 divide-x divide-gray-100 dark:divide-gray-800">
+                <div className="px-4 py-3 text-center">
+                  <p className="text-xs text-gray-400 mb-1">VMA</p>
+                  <p className="text-lg font-bold text-brand">{ev.vma_kmh != null ? `${ev.vma_kmh} km/h` : "—"}</p>
+                  {ev.distance_m && <p className="text-xs text-gray-400">{ev.distance_m} m</p>}
+                </div>
+                <div className="px-4 py-3 text-center">
+                  <p className="text-xs text-gray-400 mb-1">AMRAP 10'</p>
+                  <p className="text-lg font-bold text-orange-500">{ev.amrap_tours != null ? `${ev.amrap_tours} tours` : "—"}</p>
+                </div>
+                <div className="px-4 py-3 text-center">
+                  <p className="text-xs text-gray-400 mb-1">Max 1 min</p>
+                  <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">{ev.max_1min.length > 0 ? `${ev.max_1min.length} mvts` : "—"}</p>
+                </div>
+              </div>
+              {/* Détail Max 1 min */}
+              {ev.max_1min.length > 0 && (
+                <div className="px-4 py-3 border-t border-gray-100 dark:border-gray-800 grid grid-cols-2 gap-x-4 gap-y-1.5">
+                  {ev.max_1min.map((m) => (
+                    <div key={m.nom} className="flex justify-between text-xs">
+                      <span className="text-gray-500 dark:text-gray-400 truncate">{m.nom}</span>
+                      <span className="font-semibold text-gray-800 dark:text-gray-200 ml-2 shrink-0">{m.reps} reps</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
       )}
 
       {etape === "demi_cooper" && (
