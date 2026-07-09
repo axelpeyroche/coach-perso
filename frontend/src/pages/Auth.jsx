@@ -100,7 +100,17 @@ function FormRegister({ onSwitch, onSuccess }) {
       const r = await api.post("/auth/register", payload);
       onSuccess(r.data.access_token);
     } catch (e) {
-      setErr(e?.response?.data?.detail ?? "Erreur lors de l'inscription");
+      const status = e?.response?.status;
+      const detail = e?.response?.data?.detail;
+      if (!e?.response) {
+        setErr("Impossible de contacter le serveur — vérifie ta connexion");
+      } else if (status === 422) {
+        setErr("Données invalides — vérifie les champs");
+      } else if (typeof detail === "string") {
+        setErr(detail);
+      } else {
+        setErr(`Erreur ${status ?? "?"} lors de l'inscription`);
+      }
     } finally {
       setLoading(false);
     }
