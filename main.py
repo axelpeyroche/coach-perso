@@ -117,7 +117,7 @@ SECRET_KEY = os.getenv("JWT_SECRET", "change-me-in-production-super-secret-key-3
 ALGORITHM  = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 30  # 30 jours
 
-pwd_ctx    = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_ctx    = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__truncate_error=False)
 http_bearer = HTTPBearer(auto_error=False)
 
 
