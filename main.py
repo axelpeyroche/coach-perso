@@ -117,15 +117,19 @@ SECRET_KEY = os.getenv("JWT_SECRET", "change-me-in-production-super-secret-key-3
 ALGORITHM  = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 30  # 30 jours
 
-pwd_ctx    = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__truncate_error=False)
+pwd_ctx     = CryptContext(schemes=["bcrypt"], deprecated="auto")
 http_bearer = HTTPBearer(auto_error=False)
 
 
+def _pw_prepare(password: str) -> str:
+    import hashlib, base64
+    return base64.b64encode(hashlib.sha256(password.encode()).digest()).decode()
+
 def _hash_password(password: str) -> str:
-    return pwd_ctx.hash(password)
+    return pwd_ctx.hash(_pw_prepare(password))
 
 def _verify_password(plain: str, hashed: str) -> bool:
-    return pwd_ctx.verify(plain, hashed)
+    return pwd_ctx.verify(_pw_prepare(plain), hashed)
 
 def _create_token(user_id: int) -> str:
     return jwt.encode({"sub": str(user_id)}, SECRET_KEY, algorithm=ALGORITHM)
