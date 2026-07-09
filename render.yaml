@@ -9,8 +9,6 @@ services:
         sync: false
       - key: PYTHON_VERSION
         value: "3.12.0"
-      - key: PROGRAMME_DATE_DEBUT
-        value: "14/07/2026"
 
   - type: web
     name: coach-perso-frontend

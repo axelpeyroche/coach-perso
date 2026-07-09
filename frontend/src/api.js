@@ -24,6 +24,13 @@ export const getObjectifCourse = (utilisateur_id = 1) =>
 export const setObjectifCourse = (payload, utilisateur_id = 1) =>
   api.post("/objectif-course", payload, { params: { utilisateur_id } }).then((r) => r.data);
 
+// --- Programme ---
+export const getStatutProgramme = (utilisateur_id = 1) =>
+  api.get("/programme/statut", { params: { utilisateur_id } }).then((r) => r.data);
+
+export const initialiserProgramme = (date_debut, utilisateur_id = 1) =>
+  api.post("/programme/initialiser", { date_debut, utilisateur_id }).then((r) => r.data);
+
 // --- Semaine courante ---
 export const getSemaineCourante = (utilisateur_id = 1) =>
   api.get("/semaine-courante", { params: { utilisateur_id } }).then((r) => r.data);

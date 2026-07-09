@@ -780,6 +780,130 @@ def reset_macrocycles(
 
 
 # ---------------------------------------------------------------------------
+# Programme — initialisation depuis l'UI
+# ---------------------------------------------------------------------------
+
+class InitProgrammePayload(BaseModel):
+    date_debut: str = Field(..., description="Date début du programme (lundi) au format jj/mm/aaaa")
+    utilisateur_id: int = 1
+
+
+@app.get("/api/programme/statut", summary="Statut du programme : existe-t-il ? quelle date de début ?")
+def statut_programme(utilisateur_id: int = Query(1), db: Session = Depends(obtenir_session)):
+    mcs = db.query(Macrocycle).filter(Macrocycle.utilisateur_id == utilisateur_id).order_by(Macrocycle.numero_cycle).all()
+    if not mcs:
+        return {"programme_existe": False}
+
+    mc1 = mcs[0]
+    mc_last = mcs[-1]
+    obj = db.query(ObjectifCourse).filter(ObjectifCourse.utilisateur_id == utilisateur_id).order_by(ObjectifCourse.id.desc()).first()
+
+    semaines_totales = sum(len(mc.semaines) for mc in mcs)
+    return {
+        "programme_existe": True,
+        "date_debut": mc1.date_debut.strftime("%d/%m/%Y"),
+        "date_fin": mc_last.date_fin.strftime("%d/%m/%Y"),
+        "nb_modules": len(mcs),
+        "semaines_totales": semaines_totales,
+        "objectif_course": {
+            "nom": obj.nom,
+            "date_course": obj.date_course.strftime("%d/%m/%Y"),
+            "distance_km": obj.distance_km,
+        } if obj else None,
+    }
+
+
+@app.post("/api/programme/initialiser", summary="Génère le programme depuis la date choisie dans l'UI")
+def initialiser_programme(payload: InitProgrammePayload, db: Session = Depends(obtenir_session)):
+    from models import SemaineEntrainement
+    from periodization_rules import BLUEPRINT_MACROCYCLE, generer_dates_semaines
+    from seed_seances import seed_module1, seed_module2, seed_module3
+    import io, sys
+
+    try:
+        debut_mc1 = datetime.strptime(payload.date_debut, "%d/%m/%Y").date()
+    except ValueError:
+        raise HTTPException(400, "Format de date invalide — attendu jj/mm/aaaa")
+
+    if debut_mc1.weekday() != 0:
+        raise HTTPException(400, "La date de début doit être un lundi")
+
+    user = db.query(Utilisateur).filter(Utilisateur.id == payload.utilisateur_id).first()
+    if not user:
+        raise HTTPException(404, f"Utilisateur {payload.utilisateur_id} introuvable")
+
+    # Récupérer la course éventuelle pour calculer le nb de modules
+    obj = db.query(ObjectifCourse).filter(ObjectifCourse.utilisateur_id == payload.utilisateur_id).order_by(ObjectifCourse.id.desc()).first()
+
+    # Calcul du nombre de modules selon la distance jusqu'à la course
+    nb_modules = 3  # par défaut (programme complet 24 semaines)
+    avertissement = None
+    if obj:
+        semaines_avant_course = (obj.date_course - debut_mc1).days // 7
+        if semaines_avant_course < 8:
+            raise HTTPException(400, f"La course est dans {semaines_avant_course} semaine(s) — trop proche pour générer un programme (minimum 8 semaines).")
+        elif semaines_avant_course < 16:
+            nb_modules = 1
+            avertissement = f"Course dans {semaines_avant_course} semaines — programme adapté à 1 module (8 semaines)."
+        elif semaines_avant_course < 24:
+            nb_modules = 2
+            avertissement = f"Course dans {semaines_avant_course} semaines — programme adapté à 2 modules (16 semaines)."
+        else:
+            nb_modules = 3
+
+    # Suppression des macrocycles existants (cascade)
+    db.query(Macrocycle).filter(Macrocycle.utilisateur_id == payload.utilisateur_id).delete()
+    db.flush()
+
+    debuts = {i: debut_mc1 + timedelta(weeks=8 * (i - 1)) for i in range(1, nb_modules + 1)}
+    crees = []
+    for numero_cycle in range(1, nb_modules + 1):
+        debut = debuts[numero_cycle]
+        mc = Macrocycle(
+            utilisateur_id=user.id,
+            numero_cycle=numero_cycle,
+            date_debut=debut,
+            date_fin=debut + timedelta(weeks=8),
+        )
+        db.add(mc)
+        db.flush()
+        for regle, date_sem in zip(BLUEPRINT_MACROCYCLE, generer_dates_semaines(debut)):
+            db.add(SemaineEntrainement(
+                macrocycle_id=mc.id,
+                numero_semaine=regle.numero,
+                macrophase=regle.macrophase,
+                date_debut=date_sem,
+                multiplicateur_volume=regle.multiplicateur_volume,
+                objectif_km_course=regle.objectif_km_course,
+                objectif_amrap_min=regle.objectif_amrap_min,
+            ))
+        crees.append({"numero_cycle": numero_cycle, "debut": debut.strftime("%d/%m/%Y")})
+
+    db.commit()
+
+    # Seed des séances pour chaque module créé
+    buf = io.StringIO()
+    sys.stdout = buf
+    try:
+        if nb_modules >= 1:
+            seed_module1()
+        if nb_modules >= 2:
+            seed_module2()
+        if nb_modules >= 3:
+            seed_module3()
+    finally:
+        sys.stdout = sys.__stdout__
+
+    return {
+        "message": "Programme généré avec succès.",
+        "avertissement": avertissement,
+        "nb_modules": nb_modules,
+        "macrocycles": crees,
+        "seed_log": buf.getvalue().strip(),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Santé
 # ---------------------------------------------------------------------------
 

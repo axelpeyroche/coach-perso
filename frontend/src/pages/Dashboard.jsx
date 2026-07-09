@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getBiometrieRecuperation, getTendancesPhysiologiques, getObjectifCourse, setObjectifCourse } from "../api";
+import { getBiometrieRecuperation, getTendancesPhysiologiques, getObjectifCourse, setObjectifCourse, getStatutProgramme, initialiserProgramme } from "../api";
 import Card from "../components/Card";
 import StatTile from "../components/StatTile";
 import clsx from "clsx";
@@ -166,9 +166,152 @@ function BlocObjectif() {
   );
 }
 
+// ─── Setup programme ────────────────────────────────────────────────────────
+
+function prochainLundis(n = 16) {
+  const lundis = [];
+  const today = new Date();
+  const diff = (1 - today.getDay() + 7) % 7 || 7; // jours jusqu'au prochain lundi
+  let d = new Date(today);
+  d.setDate(d.getDate() + diff);
+  d.setHours(0, 0, 0, 0);
+  for (let i = 0; i < n; i++) {
+    lundis.push(new Date(d));
+    d.setDate(d.getDate() + 7);
+  }
+  return lundis;
+}
+
+function formatDate(d) {
+  return d.toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" });
+}
+
+function toApiDate(d) {
+  return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+}
+
+function SetupProgramme({ objectifCourse, onDone }) {
+  const qc = useQueryClient();
+  const lundis = useMemo(() => prochainLundis(16), []);
+  const [selectedIdx, setSelectedIdx] = useState(0);
+
+  const dateSelectionnee = lundis[selectedIdx];
+
+  // Calcul semaines avant la course depuis la date choisie
+  const semainesAvantCourse = useMemo(() => {
+    if (!objectifCourse?.date_course) return null;
+    const [j, m, a] = objectifCourse.date_course.split("/");
+    const dateCourse = new Date(a, m - 1, j);
+    return Math.floor((dateCourse - dateSelectionnee) / (7 * 24 * 3600 * 1000));
+  }, [objectifCourse, dateSelectionnee]);
+
+  const nbModules = semainesAvantCourse === null ? 3
+    : semainesAvantCourse < 16 ? 1
+    : semainesAvantCourse < 24 ? 2
+    : 3;
+
+  const labelModules = { 1: "1 module — 8 semaines", 2: "2 modules — 16 semaines", 3: "3 modules — 24 semaines" };
+
+  const tooClose = semainesAvantCourse !== null && semainesAvantCourse < 8;
+
+  const mut = useMutation({
+    mutationFn: () => initialiserProgramme(toApiDate(dateSelectionnee), USER_ID),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["statut-programme"] });
+      qc.invalidateQueries({ queryKey: ["macrocycles"] });
+      onDone?.();
+    },
+  });
+
+  return (
+    <Card title="Démarrer le programme">
+      <div className="space-y-5">
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          Choisis le lundi de début du programme. Les séances seront générées automatiquement.
+        </p>
+
+        {/* Sélecteur de lundi */}
+        <div>
+          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Date de début (lundi)</label>
+          <select
+            value={selectedIdx}
+            onChange={e => setSelectedIdx(Number(e.target.value))}
+            className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand"
+          >
+            {lundis.map((d, i) => (
+              <option key={i} value={i}>{formatDate(d)}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Info course */}
+        {objectifCourse ? (
+          <div className={clsx(
+            "rounded-xl px-4 py-3 border text-sm",
+            tooClose
+              ? "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 text-red-700 dark:text-red-400"
+              : "bg-brand/5 dark:bg-brand/10 border-brand/20"
+          )}>
+            <p className="font-semibold">{objectifCourse.nom}</p>
+            <p className="text-xs mt-0.5 text-gray-500 dark:text-gray-400">
+              {objectifCourse.date_course} · {objectifCourse.distance_km} km
+            </p>
+            {tooClose ? (
+              <p className="text-xs mt-1 font-medium">
+                Course dans {semainesAvantCourse} semaine(s) depuis cette date — trop proche (minimum 8 semaines).
+              </p>
+            ) : (
+              <p className="text-xs mt-1 text-gray-600 dark:text-gray-300">
+                Course dans <strong>{semainesAvantCourse} semaines</strong> — programme adapté : <strong>{labelModules[nbModules]}</strong>
+              </p>
+            )}
+          </div>
+        ) : (
+          <div className="rounded-xl px-4 py-3 border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 text-sm text-gray-600 dark:text-gray-300">
+            Aucune course planifiée — programme performance générale sur <strong>24 semaines (3 modules)</strong>.
+            <p className="text-xs mt-1 text-gray-400">Tu peux ajouter une course dans "Prochain objectif" pour adapter la durée.</p>
+          </div>
+        )}
+
+        {/* Résumé */}
+        {!tooClose && (
+          <div className="grid grid-cols-3 gap-2 text-center">
+            {[
+              { label: "Début", val: toApiDate(dateSelectionnee).replace(/\//g, " / ") },
+              { label: "Modules", val: nbModules },
+              { label: "Semaines", val: nbModules * 8 },
+            ].map(({ label, val }) => (
+              <div key={label} className="rounded-xl bg-gray-50 dark:bg-gray-800 py-2 px-3">
+                <p className="text-xs text-gray-400">{label}</p>
+                <p className="text-sm font-bold text-gray-900 dark:text-white mt-0.5">{val}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {mut.isError && (
+          <p className="text-xs text-red-500">{mut.error?.response?.data?.detail ?? "Erreur lors de la génération"}</p>
+        )}
+        {mut.isSuccess && (
+          <p className="text-xs text-green-600 dark:text-green-400">{mut.data?.avertissement ?? "Programme généré !"}</p>
+        )}
+
+        <button
+          onClick={() => mut.mutate()}
+          disabled={mut.isPending || tooClose}
+          className="w-full py-3 rounded-xl bg-brand text-white font-bold text-sm disabled:opacity-40"
+        >
+          {mut.isPending ? "Génération en cours…" : "Générer le programme"}
+        </button>
+      </div>
+    </Card>
+  );
+}
+
 // ─── Dashboard ──────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
+  const qc = useQueryClient();
   const { data: physio } = useQuery({
     queryKey: ["tendances", USER_ID],
     queryFn: () => getTendancesPhysiologiques(USER_ID),
@@ -177,17 +320,51 @@ export default function Dashboard() {
     queryKey: ["recuperation", USER_ID],
     queryFn: () => getBiometrieRecuperation(USER_ID),
   });
+  const { data: statut, isLoading: loadingStatut } = useQuery({
+    queryKey: ["statut-programme", USER_ID],
+    queryFn: () => getStatutProgramme(USER_ID),
+  });
+  const { data: objectifCourse } = useQuery({
+    queryKey: ["objectif-course", USER_ID],
+    queryFn: () => getObjectifCourse(USER_ID),
+  });
 
   const derniereVMA  = physio?.vma?.at(-1);
   const derniereACWA = recup?.acwa?.at(-1);
   const alerteActive = recup?.alerte_active;
   const zones        = derniereVMA?.zones;
+  const programmExiste = statut?.programme_existe;
+
+  if (loadingStatut) return null;
+
+  // Si aucun programme → afficher uniquement le setup
+  if (!programmExiste) {
+    return (
+      <div className="p-4 md:p-8 max-w-2xl mx-auto space-y-6">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Bienvenue</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Configure ton programme d'entraînement EPC pour commencer.</p>
+        </div>
+        <BlocObjectif />
+        <SetupProgramme objectifCourse={objectifCourse} onDone={() => qc.invalidateQueries({ queryKey: ["statut-programme"] })} />
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 md:p-8 max-w-4xl mx-auto space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Dashboard</h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Vue d'ensemble de ta progression EPC</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Dashboard</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Vue d'ensemble de ta progression EPC</p>
+        </div>
+        <button
+          onClick={() => qc.setQueryData(["statut-programme", USER_ID], { programme_existe: false })}
+          className="text-xs text-gray-400 hover:text-brand transition-colors mt-1"
+          title="Reconfigurer le programme"
+        >
+          Reconfigurer →
+        </button>
       </div>
 
       {alerteActive && (
