@@ -52,19 +52,24 @@ function FormulaireLog({ seance, onClose, onDone }) {
   async function onFileChange(e) {
     const file = e.target.files[0];
     if (!file) return;
-    // aperçu
     const reader = new FileReader();
     reader.onload = ev => setImg(ev.target.result);
     reader.readAsDataURL(file);
-    // analyse OCR
     setAnal(true);
     setErr(null);
     try {
-      await analyserScreenshot(seance.id, file, USER_ID);
-      qc.invalidateQueries({ queryKey: ["toutes-semaines"] });
-    } catch (e) {
-      setErr(e?.response?.data?.detail || e?.message || "Analyse échouée");
-      setManuel(true);
+      const data = await analyserScreenshot(seance.id, file, USER_ID);
+      // pré-remplir les champs avec les métriques OCR
+      const mapping = {
+        duree_reelle_min:   data?.duree_reelle_min,
+        distance_reelle_km: data?.distance_reelle_km,
+        dplus_reel_m:       data?.dplus_reel_m,
+        fc_moyenne_bpm:     data?.fc_moyenne_bpm,
+        fc_max_bpm:         data?.fc_max_bpm,
+      };
+      Object.entries(mapping).forEach(([k, v]) => { if (v != null) setC(k, String(v)); });
+    } catch (err) {
+      setErr(err?.response?.data?.detail || err?.message || "Analyse échouée");
     } finally {
       setAnal(false);
     }
@@ -97,19 +102,39 @@ function FormulaireLog({ seance, onClose, onDone }) {
               {seance.journal.fc_max_bpm         && <span className="text-gray-500 dark:text-gray-400">FC max <strong className="text-gray-900 dark:text-white">{seance.journal.fc_max_bpm} bpm</strong></span>}
             </div>
           </div>
-        ) : manuelMode ? (
+        ) : (
           <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Métriques manuelles</p>
-              {analyseErr && <p className="text-xs text-red-400">{analyseErr}</p>}
+            {/* Zone upload — toujours visible, jamais masquée */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
+                Screenshot activité {analysing && <span className="text-brand normal-case font-normal">(analyse en cours…)</span>}
+              </label>
+              <label className={clsx(
+                "flex flex-col items-center justify-center w-full rounded-xl border-2 border-dashed cursor-pointer transition-colors overflow-hidden",
+                imgPreview ? "border-brand/40 p-0" : "border-gray-200 dark:border-gray-700 hover:border-brand/50 py-5"
+              )}>
+                {imgPreview
+                  ? <img src={imgPreview} alt="aperçu" className="w-full max-h-48 object-cover" />
+                  : <div className="flex flex-col items-center gap-2 text-gray-400">
+                      <span className="text-2xl">📷</span>
+                      <span className="text-xs">Ajouter un screenshot</span>
+                    </div>
+                }
+                <input type="file" accept="image/*" className="sr-only" onChange={onFileChange} />
+              </label>
+              {analyseErr && (
+                <p className="mt-1 text-xs text-red-500">{analyseErr} — saisis les valeurs ci-dessous.</p>
+              )}
             </div>
+
+            {/* Champs manuels — toujours affichés pour les courses */}
             <div className="grid grid-cols-2 gap-3">
               {[
-                { key: "duree_reelle_min",   label: "Durée (min)",    ph: "40" },
-                { key: "distance_reelle_km", label: "Distance (km)",  ph: "6.2" },
-                { key: "dplus_reel_m",       label: "D+ (m)",         ph: "50" },
-                { key: "fc_moyenne_bpm",     label: "FC moy (bpm)",   ph: "153" },
-                { key: "fc_max_bpm",         label: "FC max (bpm)",   ph: "165" },
+                { key: "duree_reelle_min",   label: "Durée (min)",   ph: "40" },
+                { key: "distance_reelle_km", label: "Distance (km)", ph: "6.2" },
+                { key: "dplus_reel_m",       label: "D+ (m)",        ph: "50" },
+                { key: "fc_moyenne_bpm",     label: "FC moy (bpm)",  ph: "153" },
+                { key: "fc_max_bpm",         label: "FC max (bpm)",  ph: "165" },
               ].map(({ key, label, ph }) => (
                 <div key={key}>
                   <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">{label}</label>
@@ -119,38 +144,6 @@ function FormulaireLog({ seance, onClose, onDone }) {
                 </div>
               ))}
             </div>
-          </div>
-        ) : (
-          <div>
-            <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Screenshot activité</label>
-            {analysing && (
-              <div className="w-full rounded-xl border border-gray-200 dark:border-gray-700 py-4 flex flex-col items-center gap-2 text-gray-400 bg-gray-50 dark:bg-gray-800/40">
-                <span className="animate-spin text-xl">⏳</span>
-                <span className="text-xs animate-pulse">Analyse OCR en cours… (peut prendre 20–30 s)</span>
-              </div>
-            )}
-            {!analysing && (
-              <label className={clsx(
-                "flex flex-col items-center justify-center w-full rounded-xl border-2 border-dashed cursor-pointer transition-colors overflow-hidden",
-                imgPreview ? "border-brand/40 p-0" : "border-gray-200 dark:border-gray-700 hover:border-brand/50 py-5"
-              )}>
-                {imgPreview ? (
-                  <img src={imgPreview} alt="aperçu" className="w-full max-h-48 object-cover" />
-                ) : (
-                  <div className="flex flex-col items-center gap-2 text-gray-400">
-                    <span className="text-2xl">📷</span>
-                    <span className="text-xs">Ajouter un screenshot</span>
-                  </div>
-                )}
-                <input type="file" accept="image/*" className="sr-only" onChange={onFileChange} />
-              </label>
-            )}
-            {analyseErr && <p className="mt-1 text-xs text-red-500">{analyseErr}</p>}
-            {!analysing && (
-              <button onClick={() => setManuel(true)} className="mt-2 text-xs text-gray-400 hover:text-brand transition-colors">
-                Saisir manuellement →
-              </button>
-            )}
           </div>
         )
       )}
