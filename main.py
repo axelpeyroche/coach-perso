@@ -183,6 +183,7 @@ class JournalSeanceSchema(BaseModel):
     tours_amrap_completes: Optional[float] = None
     total_reps_enregistrees: Optional[int] = None
     notes: Optional[str] = None
+    details_intervalles: Optional[str] = None  # JSON string
 
 
 # ---------------------------------------------------------------------------
@@ -428,6 +429,7 @@ def journaliser_seance(
         tours_amrap_completes=payload.tours_amrap_completes,
         total_reps_enregistrees=payload.total_reps_enregistrees,
         notes=payload.notes,
+        details_intervalles=payload.details_intervalles,
     )
     db.add(journal)
     db.commit()
@@ -831,6 +833,7 @@ def toutes_semaines_programme(utilisateur_id: int = Query(1), db: Session = Depe
                             "dplus_reel_m": seance.journal.dplus_reel_m,
                             "fc_moyenne_bpm": seance.journal.fc_moyenne_bpm,
                             "fc_max_bpm": seance.journal.fc_max_bpm,
+                            "details_intervalles": seance.journal.details_intervalles,
                         } if seance.journal else None,
                     }
                     for seance in s.seances

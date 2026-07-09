@@ -538,6 +538,9 @@ class JournalSeance(Base):
     total_reps_enregistrees: Mapped[Optional[int]] = mapped_column(Integer)
 
     notes: Mapped[Optional[str]] = mapped_column(Text)
+    details_intervalles: Mapped[Optional[str]] = mapped_column(
+        Text, comment="JSON — liste de blocs {distance_km, fc_moyenne_bpm, vitesse_kmh} pour séances seuil/fractionné"
+    )
 
     utilisateur: Mapped["Utilisateur"] = relationship(back_populates="journaux_seances")
     seance: Mapped["SeanceEntrainement"] = relationship(back_populates="journal")

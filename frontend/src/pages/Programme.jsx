@@ -21,10 +21,10 @@ const ZONE_PILL = {
   Z4: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
   Z5: "bg-red-100    text-red-700   dark:bg-red-900/30  dark:text-red-400",
 };
-const RPE_COLOR = ["","text-blue-400","text-blue-500","text-green-400","text-green-500",
-  "text-yellow-400","text-yellow-500","text-orange-400","text-orange-500","text-red-400","text-red-500"];
-const RPE_LABEL = ["","Très facile","Facile","Modéré","Confortable",
-  "Un peu difficile","Difficile","Très difficile","Très dur","Extrême","Maximum"];
+const RPE_COLOR = ["","text-green-400","text-green-500","text-green-600","text-yellow-400",
+  "text-yellow-500","text-yellow-600","text-orange-400","text-orange-500","text-red-400","text-red-500"];
+const RPE_LABEL = ["","Facile","Facile","Facile","Modéré",
+  "Modéré","Modéré","Difficile","Difficile","Maximum","Maximum"];
 
 function fmt(min) {
   if (!min) return null;
@@ -71,13 +71,37 @@ function FormulaireLog({ seance, onClose, onDone }) {
   const isCourse = seance.type === "COURSE";
   const isMuscu  = seance.type === "AMRAP" || seance.type === "EMOM";
 
+  // Détection séance seuil/fractionné : COURSE en Z4 ou Z5 avec pattern N×D min
+  const mIntervalles = seance.titre?.match(/(\d+)\s*[×x\*]\s*(\d+)\s*min/i);
+  const isIntervalles = isCourse && (seance.zone_cible === "Z4" || seance.zone_cible === "Z5") && !!mIntervalles;
+  const nbBlocs = isIntervalles ? parseInt(mIntervalles[1]) : 0;
+  const dureeBloc = isIntervalles ? parseInt(mIntervalles[2]) : 0;
+
+  // Blocs intervalles : [{distance_km, fc_moyenne_bpm}]
+  const [blocs, setBlocs] = useState(() => Array.from({ length: nbBlocs }, () => ({ distance_km: "", fc_moyenne_bpm: "" })));
+  const [distRepos, setDistRepos] = useState("");
+  const setBloc = (i, k, v) => setBlocs(b => b.map((bloc, idx) => idx === i ? { ...bloc, [k]: v } : bloc));
+
   const mut = useMutation({
     mutationFn: () => {
       if (prefill) return validerRPE(seance.id, rpe, notes || undefined);
       const nums = Object.fromEntries(
         Object.entries(champs).filter(([,v]) => v !== "").map(([k,v]) => [k, Number(v)])
       );
-      return journaliserSeance(seance.id, { utilisateur_id: USER_ID, rpe, notes: notes || undefined, ...nums });
+      let detailsIntervalles = undefined;
+      if (isIntervalles) {
+        detailsIntervalles = JSON.stringify(blocs.map(b => {
+          const distKm = parseFloat(b.distance_km) || 0;
+          const vitesse = dureeBloc > 0 && distKm > 0 ? distKm / (dureeBloc / 60) : null;
+          return {
+            distance_km: distKm || null,
+            fc_moyenne_bpm: parseInt(b.fc_moyenne_bpm) || null,
+            vitesse_kmh: vitesse ? Math.round(vitesse * 10) / 10 : null,
+          };
+        }));
+        if (distRepos) nums.distance_repos_km = parseFloat(distRepos);
+      }
+      return journaliserSeance(seance.id, { utilisateur_id: USER_ID, rpe, notes: notes || undefined, ...nums, details_intervalles: detailsIntervalles });
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["toutes-semaines"] }); onDone(); },
   });
@@ -85,8 +109,49 @@ function FormulaireLog({ seance, onClose, onDone }) {
   return (
     <div className="border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40 px-4 py-4 space-y-4">
 
-      {/* COURSE : métriques manuelles */}
-      {isCourse && (
+      {/* COURSE SEUIL / FRACTIONNÉ : blocs par répétition */}
+      {isIntervalles && (
+        <div className="space-y-3">
+          {blocs.map((bloc, i) => {
+            const distKm = parseFloat(bloc.distance_km);
+            const vitesse = dureeBloc > 0 && distKm > 0 ? Math.round((distKm / (dureeBloc / 60)) * 10) / 10 : null;
+            return (
+              <div key={i} className="rounded-xl border border-gray-200 dark:border-gray-700 p-3 space-y-2">
+                <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
+                  Répétition {i + 1} / {nbBlocs}
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Distance (km)</label>
+                    <input type="number" step="0.01" placeholder="2.1"
+                      value={bloc.distance_km}
+                      onChange={e => setBloc(i, "distance_km", e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
+                    {vitesse && <p className="text-xs text-brand mt-1">→ {vitesse} km/h</p>}
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">FC moy (bpm)</label>
+                    <input type="number" placeholder="160"
+                      value={bloc.fc_moyenne_bpm}
+                      onChange={e => setBloc(i, "fc_moyenne_bpm", e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          <div>
+            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Distance récupération totale (km)</label>
+            <input type="number" step="0.01" placeholder="0.8"
+              value={distRepos}
+              onChange={e => setDistRepos(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
+          </div>
+        </div>
+      )}
+
+      {/* COURSE CLASSIQUE : métriques manuelles */}
+      {isCourse && !isIntervalles && (
         <div className="grid grid-cols-2 gap-3">
           {[
             { key: "duree_reelle_min",   label: "Durée (min)",   ph: "40" },
