@@ -363,6 +363,15 @@ function karvonen(fcMax, fcRepos, pct) {
   return Math.round((fcMax - fcRepos) * pct + fcRepos);
 }
 
+// Formule Excel : TEMPS(0; 60/(VMA*pct); (60/(VMA*pct) - ENT(60/(VMA*pct)))*60)
+function vmaToAllure(vma, pct) {
+  if (!vma || !pct) return "—";
+  const minKm = 60 / (vma * pct);
+  const min = Math.floor(minKm);
+  const sec = Math.round((minKm - min) * 60);
+  return `${min}:${String(sec).padStart(2, "0")}`;
+}
+
 // ─── Modal config FC ────────────────────────────────────────────────────────
 
 function ModalFC({ profil, onClose }) {
@@ -522,7 +531,6 @@ export default function Dashboard() {
               <span className="w-2 shrink-0" />
               <span className="w-6 shrink-0" />
               <span className="text-xs text-gray-400 w-24 shrink-0">Zone</span>
-              <span className="text-xs text-gray-400 flex-1 text-center font-mono">km/h</span>
               <span className="text-xs text-gray-400 flex-1 text-center font-mono">min/km</span>
               <span className="text-xs text-gray-400 flex-1 text-center font-mono">bpm</span>
             </div>
@@ -533,18 +541,19 @@ export default function Dashboard() {
               { z: "Z4", label: "Seuil" },
               { z: "Z5", label: "VO2max" },
             ].map(({ z, label }) => {
-              const pace = derniereVMA?.zones_pace?.[z];
-              const fc   = zonesFCKarvonen?.[z] ?? derniereVMA?.zones_fc?.[z];
+              const [pMin, pMax] = BORNES_VMA[z];
+              const vma = derniereVMA?.valeur;
+              // allure max (la plus lente) = %VMA min ; allure min (la plus rapide) = %VMA max
+              const allureMax = vmaToAllure(vma, pMin);
+              const allureMin = vmaToAllure(vma, pMax);
+              const fc = zonesFCKarvonen?.[z] ?? derniereVMA?.zones_fc?.[z];
               return (
                 <div key={z} className="flex items-center gap-2 py-1">
                   <span className={`w-2 h-2 rounded-full shrink-0 ${ZONE_COLORS[z]}`} />
                   <span className="w-6 text-xs font-bold text-gray-700 dark:text-gray-300 shrink-0">{z}</span>
                   <span className="text-xs text-gray-500 dark:text-gray-400 w-24 shrink-0">{label}</span>
-                  <span className="text-xs font-mono text-gray-800 dark:text-gray-200 flex-1 text-center">
-                    {zones[z][0]}–{zones[z][1]}
-                  </span>
                   <span className="text-xs font-mono text-gray-700 dark:text-gray-300 flex-1 text-center">
-                    {pace ? `${pace[0]}–${pace[1]}` : "—"}
+                    {allureMin}–{allureMax}
                   </span>
                   <span className="text-xs font-mono text-gray-700 dark:text-gray-300 flex-1 text-center">
                     {fc?.[0] && fc?.[1] ? `${fc[0]}–${fc[1]}` : "—"}
