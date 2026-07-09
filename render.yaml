@@ -2,7 +2,7 @@ services:
   - type: web
     name: coach-perso-api
     runtime: python
-    buildCommand: pip install -r requirements.txt
+    buildCommand: apt-get install -y tesseract-ocr && pip install -r requirements.txt
     startCommand: python startup.py && uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: DATABASE_URL

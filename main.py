@@ -18,7 +18,10 @@ from __future__ import annotations
 from datetime import datetime, date, timedelta
 from typing import Optional
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+import io
+import re
+
+from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -428,6 +431,89 @@ def valider_rpe(
     seance.journal.completee = True
     db.commit()
     return {"ok": True}
+
+
+def _extraire_metriques_forme(texte: str) -> dict:
+    """Parse le texte OCR d'un screenshot de l'app Forme (Apple Watch)."""
+    metriques = {}
+
+    # Durée — ex. "40:00" ou "1:05:30"
+    m = re.search(r"\b(\d{1,2}):(\d{2})(?::(\d{2}))?\b", texte)
+    if m:
+        if m.group(3):
+            metriques["duree_reelle_min"] = int(m.group(1)) * 60 + int(m.group(2))
+        else:
+            metriques["duree_reelle_min"] = int(m.group(1)) * 60 + int(m.group(2))
+            # Si format MM:SS et durée < 10 min, probablement des secondes
+            if metriques["duree_reelle_min"] < 10:
+                metriques["duree_reelle_min"] = int(m.group(1))
+
+    # Distance — ex. "6,19 KM" ou "6.19 KM"
+    m = re.search(r"([\d][,\.][\d]+|\d+)\s*K[Mm]", texte)
+    if m:
+        metriques["distance_reelle_km"] = float(m.group(1).replace(",", "."))
+
+    # Dénivelé — ex. "Dénivelé : 19 M" ou "19 m"
+    m = re.search(r"[Dd][ée]niv[eé]l[eé]\s*:?\s*(\d+)\s*[Mm]", texte)
+    if m:
+        metriques["dplus_reel_m"] = int(m.group(1))
+
+    # FC moyenne — ex. "Moyenne : 153 BPM" (la première occurrence)
+    matches_bpm = re.findall(r"[Mm]oyenne\s*:?\s*(\d+)\s*[Bb][Pp][Mm]", texte)
+    if matches_bpm:
+        metriques["fc_moyenne_bpm"] = int(matches_bpm[0])
+
+    # FC max — ex. "89–165 BPM" ou "89-165 BPM"
+    m = re.search(r"(\d+)\s*[–-]\s*(\d+)\s*[Bb][Pp][Mm]", texte)
+    if m:
+        metriques["fc_max_bpm"] = int(m.group(2))
+
+    return metriques
+
+
+@app.post(
+    "/api/seances/{seance_id}/journal/analyse-screenshot",
+    summary="Analyse un screenshot Forme via OCR et pré-remplit les métriques",
+)
+async def analyser_screenshot(
+    seance_id: int,
+    utilisateur_id: int = Query(1),
+    file: UploadFile = File(...),
+    db: Session = Depends(obtenir_session),
+):
+    try:
+        import pytesseract
+        from PIL import Image
+    except ImportError:
+        raise HTTPException(500, "pytesseract / Pillow non installés sur ce serveur")
+
+    seance = db.get(SeanceEntrainement, seance_id)
+    if not seance:
+        raise HTTPException(404, "Séance introuvable")
+
+    contenu = await file.read()
+    image = Image.open(io.BytesIO(contenu))
+    texte = pytesseract.image_to_string(image, lang="fra+eng")
+
+    metriques = _extraire_metriques_forme(texte)
+    if not metriques:
+        raise HTTPException(422, "Aucune métrique détectée — vérifie que l'image est un screenshot Forme")
+
+    existing = seance.journal
+    if existing:
+        for k, v in metriques.items():
+            setattr(existing, k, v)
+        existing.completee = False
+    else:
+        journal = JournalSeance(
+            utilisateur_id=utilisateur_id,
+            seance_id=seance_id,
+            completee=False,
+            **metriques,
+        )
+        db.add(journal)
+    db.commit()
+    return {"ok": True, "metriques": metriques}
 
 
 # ---------------------------------------------------------------------------

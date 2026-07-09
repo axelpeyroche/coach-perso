@@ -55,6 +55,14 @@ export const journaliserSeance = (seance_id, payload) =>
 export const prefillSeance = (seance_id, metriques) =>
   api.post(`/seances/${seance_id}/journal/prefill`, metriques).then((r) => r.data);
 
+export const analyserScreenshot = (seance_id, file, utilisateur_id = 1) => {
+  const form = new FormData();
+  form.append("file", file);
+  return api.post(`/seances/${seance_id}/journal/analyse-screenshot?utilisateur_id=${utilisateur_id}`, form, {
+    headers: { "Content-Type": "multipart/form-data" },
+  }).then((r) => r.data);
+};
+
 export const validerRPE = (seance_id, rpe, notes) =>
   api.patch(`/seances/${seance_id}/journal/valider`, { rpe, notes }).then((r) => r.data);
 

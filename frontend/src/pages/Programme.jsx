@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getToutesSemaines, journaliserSeance, validerRPE } from "../api";
+import { getToutesSemaines, journaliserSeance, validerRPE, analyserScreenshot } from "../api";
 import clsx from "clsx";
 
 const USER_ID = 1;
@@ -40,18 +40,32 @@ function FormulaireLog({ seance, onClose, onDone }) {
   const [rpe, setRpe]       = useState(7);
   const [notes, setNotes]   = useState("");
   const [champs, set_]      = useState({});
-  const [imgPreview, setImg] = useState(null);
+  const [imgPreview, setImg]   = useState(null);
+  const [analysing, setAnal]   = useState(false);
+  const [analyseErr, setErr]   = useState(null);
   const setC = (k, v) => set_(c => ({ ...c, [k]: v }));
 
   const isAMRAP = seance.type === "AMRAP";
   const isEMOM  = seance.type === "EMOM";
 
-  function onFileChange(e) {
+  async function onFileChange(e) {
     const file = e.target.files[0];
     if (!file) return;
+    // aperçu
     const reader = new FileReader();
     reader.onload = ev => setImg(ev.target.result);
     reader.readAsDataURL(file);
+    // analyse OCR
+    setAnal(true);
+    setErr(null);
+    try {
+      await analyserScreenshot(seance.id, file, USER_ID);
+      qc.invalidateQueries({ queryKey: ["toutes-semaines"] });
+    } catch {
+      setErr("Analyse échouée — métriques à saisir manuellement.");
+    } finally {
+      setAnal(false);
+    }
   }
 
   const mut = useMutation({
@@ -90,16 +104,24 @@ function FormulaireLog({ seance, onClose, onDone }) {
             imgPreview ? "border-brand/40 p-0" : "border-gray-200 dark:border-gray-700 hover:border-brand/50 py-5"
           )}>
             {imgPreview ? (
-              <img src={imgPreview} alt="aperçu" className="w-full max-h-48 object-cover" />
+              <div className="relative w-full">
+                <img src={imgPreview} alt="aperçu" className="w-full max-h-48 object-cover" />
+                {analysing && (
+                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                    <span className="text-white text-xs font-semibold animate-pulse">Analyse en cours…</span>
+                  </div>
+                )}
+              </div>
             ) : (
               <div className="flex flex-col items-center gap-2 text-gray-400">
                 <span className="text-2xl">📷</span>
-                <span className="text-xs">Ajouter un screenshot</span>
+                <span className="text-xs">{analysing ? "Analyse…" : "Ajouter un screenshot"}</span>
               </div>
             )}
-            <input type="file" accept="image/*" className="sr-only" onChange={onFileChange} />
+            <input type="file" accept="image/*" className="sr-only" onChange={onFileChange} disabled={analysing} />
           </label>
-          {imgPreview && (
+          {analyseErr && <p className="mt-1 text-xs text-red-500">{analyseErr}</p>}
+          {imgPreview && !analysing && (
             <button onClick={() => setImg(null)} className="mt-1 text-xs text-gray-400 hover:text-red-400 transition-colors">
               Supprimer
             </button>
