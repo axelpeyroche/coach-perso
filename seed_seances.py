@@ -1540,13 +1540,16 @@ MODULE3 = {
 # Fonctions de seed
 # ============================================================================
 
-def _inserer_semaines(macrocycle_id: int, module_data: dict):
+def _inserer_semaines(numero_cycle: int, module_data: dict):
     creer_tables()
     db = SessionLocal()
     try:
-        mc = db.query(Macrocycle).filter(Macrocycle.id == macrocycle_id).first()
+        mc = db.query(Macrocycle).filter(
+            Macrocycle.numero_cycle == numero_cycle,
+            Macrocycle.utilisateur_id == 1,
+        ).order_by(Macrocycle.id.desc()).first()
         if not mc:
-            print(f"Macrocycle {macrocycle_id} introuvable.")
+            print(f"Macrocycle numero_cycle={numero_cycle} introuvable.")
             return
 
         semaines = {s.numero_semaine: s for s in mc.semaines}
@@ -1602,13 +1605,13 @@ def _inserer_semaines(macrocycle_id: int, module_data: dict):
 
         db.commit()
         noms = {1: "Module 1 - Adaptation", 2: "Module 2 - Révélation", 3: "Module 3 - Confirmation"}
-        nom = noms.get(macrocycle_id, f"Macrocycle {macrocycle_id}")
-        print(f"MC{macrocycle_id} ({nom}) : {total_seances} séances, {total_exercices} exercices.")
+        nom = noms.get(numero_cycle, f"Macrocycle {numero_cycle}")
+        print(f"MC{numero_cycle} ({nom}) : {total_seances} séances, {total_exercices} exercices.")
         if slugs_manquants:
             print(f"  Slugs manquants : {slugs_manquants}")
     except Exception as e:
         db.rollback()
-        print(f"Erreur MC{macrocycle_id} : {e}")
+        print(f"Erreur MC{numero_cycle} : {e}")
         raise
     finally:
         db.close()
