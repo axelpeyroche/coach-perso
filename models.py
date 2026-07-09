@@ -96,6 +96,7 @@ class Utilisateur(Base):
     cree_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     fc_max: Mapped[Optional[int]] = mapped_column(Integer, comment="FC max mesurée (bpm)")
     fc_repos: Mapped[Optional[int]] = mapped_column(Integer, comment="FC de repos (bpm)")
+    poids_kg: Mapped[Optional[float]] = mapped_column(Float, comment="Poids corporel (kg)")
 
     # Relations
     biometries: Mapped[list["BiometrieUtilisateur"]] = relationship(

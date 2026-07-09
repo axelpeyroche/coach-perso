@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getToutesSemaines, journaliserSeance, validerRPE } from "../api";
+import { getToutesSemaines, journaliserSeance, validerRPE, getProfilFC } from "../api";
 import clsx from "clsx";
 
 const USER_ID = 1;
@@ -30,6 +30,32 @@ function fmt(min) {
   if (!min) return null;
   const h = Math.floor(min / 60), m = min % 60;
   return h ? `${h}h${m ? String(m).padStart(2,"0") : ""}` : `${min} min`;
+}
+
+// ─── Zones FC (Karvonen) ───────────────────────────────────────────────────
+const BORNES_PCT = {
+  Z1: [0.60, 0.65], Z2: [0.65, 0.75], Z3: [0.75, 0.85],
+  Z4: [0.85, 0.95], Z5: [0.95, 1.00],
+};
+
+function calcZonesFC(fcMax, fcRepos) {
+  if (!fcMax || !fcRepos) return null;
+  return Object.fromEntries(
+    Object.entries(BORNES_PCT).map(([z, [lo, hi]]) => [
+      z,
+      [Math.round((fcMax - fcRepos) * lo + fcRepos), Math.round((fcMax - fcRepos) * hi + fcRepos)],
+    ])
+  );
+}
+
+function signalCorrelationRPEFC(rpe, fcMoy, zone, zonesFC) {
+  if (!rpe || !fcMoy || !zone || !zonesFC?.[zone]) return null;
+  const [fcMin, fcMax] = zonesFC[zone];
+  const ratio = fcMoy / ((fcMin + fcMax) / 2); // rapport FC réelle / FC cible milieu zone
+  if (rpe <= 4 && ratio > 1.08) return { label: "FC élevée pour RPE bas", color: "text-orange-500" };
+  if (rpe >= 7 && ratio < 0.92) return { label: "FC basse pour RPE élevé", color: "text-blue-500" };
+  if (fcMoy > fcMax + 5)        return { label: "FC au-dessus de la zone", color: "text-red-500" };
+  return null;
 }
 
 // ─── Formulaire de journalisation ──────────────────────────────────────────
@@ -139,7 +165,7 @@ function FormulaireLog({ seance, onClose, onDone }) {
 
 // ─── Carte séance ───────────────────────────────────────────────────────────
 
-function CarteSeance({ seance }) {
+function CarteSeance({ seance, zonesFC }) {
   const [ouvert, setOuvert]   = useState(false);
   const [logOpen, setLogOpen] = useState(false);
   const [valide, setValide]   = useState(false);
@@ -209,9 +235,17 @@ function CarteSeance({ seance }) {
 
       {/* ── Résumé si loggé ── */}
       {fait && seance.journal && (
-        <div className="px-4 py-1.5 border-t border-green-100 dark:border-green-900/20 flex gap-4 text-xs text-gray-500 bg-green-50/50 dark:bg-green-900/5">
+        <div className="px-4 py-1.5 border-t border-green-100 dark:border-green-900/20 flex flex-wrap gap-3 text-xs text-gray-500 bg-green-50/50 dark:bg-green-900/5">
           {seance.journal.rpe && <span>RPE {seance.journal.rpe}/10</span>}
-          {seance.journal.notes && <span className="truncate italic">{seance.journal.notes}</span>}
+          {seance.journal.fc_moyenne_bpm && <span>FC {seance.journal.fc_moyenne_bpm} bpm</span>}
+          {(() => {
+            const sig = signalCorrelationRPEFC(
+              seance.journal.rpe, seance.journal.fc_moyenne_bpm,
+              seance.zone_cible, zonesFC
+            );
+            return sig ? <span className={clsx("font-semibold", sig.color)}>⚡ {sig.label}</span> : null;
+          })()}
+          {seance.journal.notes && <span className="truncate italic w-full">{seance.journal.notes}</span>}
         </div>
       )}
 
@@ -278,6 +312,22 @@ function CarteSeance({ seance }) {
 
 // ─── Page principale ────────────────────────────────────────────────────────
 
+function idxSemaineCourante(semaines) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  for (let i = 0; i < semaines.length; i++) {
+    if (!semaines[i].date_debut) continue;
+    const debut = new Date(semaines[i].date_debut);
+    const fin   = new Date(debut);
+    fin.setDate(fin.getDate() + 7);
+    if (today >= debut && today < fin) return i;
+  }
+  // Pas encore commencé → première semaine ; terminé → dernière
+  const premiere = semaines[0]?.date_debut ? new Date(semaines[0].date_debut) : null;
+  if (premiere && today < premiere) return 0;
+  return semaines.length - 1;
+}
+
 export default function Programme() {
   const [semIdx, setSemIdx] = useState(null);
 
@@ -285,6 +335,11 @@ export default function Programme() {
     queryKey: ["toutes-semaines"],
     queryFn: () => getToutesSemaines(1),
   });
+  const { data: profilFC } = useQuery({
+    queryKey: ["profil-fc", USER_ID],
+    queryFn: () => getProfilFC(USER_ID),
+  });
+  const zonesFC = calcZonesFC(profilFC?.fc_max, profilFC?.fc_repos);
 
   if (isLoading) return <Loader />;
   if (error) return <Erreur msg={`Erreur : ${error.message}`} />;
@@ -293,7 +348,8 @@ export default function Programme() {
   if (semaines.length === 0)
     return <Erreur msg="Aucun programme. Génère-en un depuis le tableau de bord." />;
 
-  const idx = semIdx !== null ? semIdx : 0;
+  const idxCourant = idxSemaineCourante(semaines);
+  const idx = semIdx !== null ? semIdx : idxCourant;
   const semaine = semaines[idx];
 
   const seancesVisibles = semaine?.seances?.filter(s => s.type !== "REPOS") ?? [];
@@ -316,18 +372,24 @@ export default function Programme() {
           const nbFait = (s.seances ?? []).filter(x => x.journal?.completee).length;
           const nbTotal = (s.seances ?? []).filter(x => x.type !== "REPOS").length;
           const complet = nbFait === nbTotal && nbTotal > 0;
+          const estCourante = i === idxCourant;
+          const selectionne = i === idx;
           return (
             <button key={s.semaine_globale} onClick={() => setSemIdx(i)}
               className={clsx(
                 "shrink-0 flex flex-col items-center px-3 py-2 rounded-xl border text-xs font-medium transition-colors",
-                idx === i
+                selectionne
                   ? "border-brand bg-brand/10 text-brand dark:bg-brand/20"
                   : complet
                   ? "border-green-200 dark:border-green-900/50 bg-green-50 dark:bg-green-900/10 text-green-600 dark:text-green-400"
+                  : estCourante
+                  ? "border-brand/40 text-brand dark:text-brand ring-1 ring-brand/30"
                   : "border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-300"
               )}>
               <span className="font-bold">S{s.semaine_globale}</span>
-              <span className="opacity-70 mt-0.5">{complet ? "✓" : s.macrophase === "surcharge" ? "↑" : s.macrophase === "decharge" ? "↓" : "★"}</span>
+              <span className="opacity-70 mt-0.5">
+                {complet ? "✓" : estCourante && !selectionne ? "●" : s.macrophase === "surcharge" ? "↑" : s.macrophase === "decharge" ? "↓" : "★"}
+              </span>
             </button>
           );
         })}
@@ -349,7 +411,7 @@ export default function Programme() {
           {/* Séances */}
           <div className="space-y-3">
             {seancesVisibles.length > 0
-              ? seancesVisibles.map(s => <CarteSeance key={s.id} seance={s} />)
+              ? seancesVisibles.map(s => <CarteSeance key={s.id} seance={s} zonesFC={zonesFC} />)
               : <p className="text-sm text-gray-400 text-center py-8">Aucune séance cette semaine.</p>
             }
           </div>

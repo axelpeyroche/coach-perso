@@ -113,15 +113,16 @@ def demarrage():
 class ProfilFCSchema(BaseModel):
     fc_max: Optional[int] = Field(None, gt=0, lt=250)
     fc_repos: Optional[int] = Field(None, gt=0, lt=150)
+    poids_kg: Optional[float] = Field(None, gt=0, lt=300)
 
-@app.get("/api/utilisateur/profil-fc", summary="Récupère fc_max et fc_repos de l'utilisateur")
+@app.get("/api/utilisateur/profil-fc", summary="Récupère fc_max, fc_repos et poids_kg de l'utilisateur")
 def get_profil_fc(utilisateur_id: int = 1, db: Session = Depends(obtenir_session)):
     u = db.query(Utilisateur).filter(Utilisateur.id == utilisateur_id).first()
     if not u:
         raise HTTPException(404, "Utilisateur non trouvé")
-    return {"fc_max": u.fc_max, "fc_repos": u.fc_repos}
+    return {"fc_max": u.fc_max, "fc_repos": u.fc_repos, "poids_kg": u.poids_kg}
 
-@app.patch("/api/utilisateur/profil-fc", summary="Met à jour fc_max et/ou fc_repos")
+@app.patch("/api/utilisateur/profil-fc", summary="Met à jour fc_max, fc_repos et/ou poids_kg")
 def patch_profil_fc(payload: ProfilFCSchema, utilisateur_id: int = 1, db: Session = Depends(obtenir_session)):
     u = db.query(Utilisateur).filter(Utilisateur.id == utilisateur_id).first()
     if not u:
@@ -130,8 +131,10 @@ def patch_profil_fc(payload: ProfilFCSchema, utilisateur_id: int = 1, db: Sessio
         u.fc_max = payload.fc_max
     if payload.fc_repos is not None:
         u.fc_repos = payload.fc_repos
+    if payload.poids_kg is not None:
+        u.poids_kg = payload.poids_kg
     db.commit()
-    return {"fc_max": u.fc_max, "fc_repos": u.fc_repos}
+    return {"fc_max": u.fc_max, "fc_repos": u.fc_repos, "poids_kg": u.poids_kg}
 
 
 class CreerEvaluationSchema(BaseModel):

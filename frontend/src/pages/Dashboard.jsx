@@ -378,11 +378,13 @@ function ModalFC({ profil, onClose }) {
   const qc = useQueryClient();
   const [fcMax, setFcMax]     = useState(profil?.fc_max ?? "");
   const [fcRepos, setFcRepos] = useState(profil?.fc_repos ?? "");
+  const [poids, setPoids]     = useState(profil?.poids_kg ?? "");
 
   const mut = useMutation({
     mutationFn: () => patchProfilFC({
       fc_max:   fcMax   ? parseInt(fcMax)   : undefined,
       fc_repos: fcRepos ? parseInt(fcRepos) : undefined,
+      poids_kg: poids   ? parseFloat(poids) : undefined,
     }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["profil-fc"] }); onClose(); },
   });
@@ -390,25 +392,37 @@ function ModalFC({ profil, onClose }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={onClose}>
       <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4" onClick={e => e.stopPropagation()}>
-        <h3 className="text-base font-bold text-gray-900 dark:text-white">Paramètres cardiaques</h3>
-        <p className="text-xs text-gray-400">Utilisés pour calculer les zones FC via la méthode Karvonen.</p>
-        <div className="grid grid-cols-2 gap-3">
-          {[
-            { label: "FC max (bpm)", val: fcMax, set: setFcMax, ph: "192" },
-            { label: "FC repos (bpm)", val: fcRepos, set: setFcRepos, ph: "55" },
-          ].map(({ label, val, set, ph }) => (
-            <div key={label}>
-              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">{label}</label>
-              <input type="number" placeholder={ph} value={val} onChange={e => set(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
-            </div>
-          ))}
+        <h3 className="text-base font-bold text-gray-900 dark:text-white">Profil physiologique</h3>
+
+        <div>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Cardio</p>
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              { label: "FC max (bpm)", val: fcMax, set: setFcMax, ph: "192" },
+              { label: "FC repos (bpm)", val: fcRepos, set: setFcRepos, ph: "55" },
+            ].map(({ label, val, set, ph }) => (
+              <div key={label}>
+                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">{label}</label>
+                <input type="number" placeholder={ph} value={val} onChange={e => set(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
+              </div>
+            ))}
+          </div>
+          {fcMax && fcRepos && (
+            <p className="text-xs text-gray-400 mt-2">
+              Réserve cardiaque : <strong className="text-gray-700 dark:text-gray-200">{parseInt(fcMax) - parseInt(fcRepos)} bpm</strong>
+            </p>
+          )}
         </div>
-        {fcMax && fcRepos && (
-          <p className="text-xs text-gray-400">
-            Réserve cardiaque : <strong className="text-gray-700 dark:text-gray-200">{parseInt(fcMax) - parseInt(fcRepos)} bpm</strong>
-          </p>
-        )}
+
+        <div>
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Corps</p>
+          <div>
+            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Poids (kg)</label>
+            <input type="number" step="0.1" placeholder="70.0" value={poids} onChange={e => setPoids(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
+          </div>
+        </div>
         <div className="flex justify-end gap-2 pt-1">
           <button onClick={onClose} className="px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-sm text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800">Annuler</button>
           <button onClick={() => mut.mutate()} disabled={mut.isPending}
@@ -509,9 +523,9 @@ export default function Dashboard() {
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <StatTile label="VMA actuelle"    value={derniereVMA ? `${derniereVMA.valeur} km/h` : "—"} sub="Demi-Cooper"   color="green" />
-        <StatTile label="Ratio ACWA"      value={derniereACWA?.ratio ?? "—"} sub={derniereACWA?.alerte_risque ? "⚠️ Élevé" : "Normal"} color={derniereACWA?.alerte_risque ? "red" : "blue"} />
+        <StatTile label="Poids"           value={profilFC?.poids_kg ? `${profilFC.poids_kg} kg` : "—"} sub={<button onClick={() => setShowModalFC(true)} className="text-brand hover:underline">Mettre à jour</button>} color="blue" />
         <StatTile label="Km cette semaine" value={derniereACWA ? `${derniereACWA.charge_aigue_km} km` : "—"} sub="Charge aiguë"    color="orange" />
-        <StatTile label="Moy. 4 semaines"  value={derniereACWA ? `${derniereACWA.charge_chronique_km} km` : "—"} sub="Charge chronique" color="purple" />
+        <StatTile label="Ratio ACWA"      value={derniereACWA?.ratio ?? "—"} sub={derniereACWA?.alerte_risque ? "⚠️ Élevé" : "Normal"} color={derniereACWA?.alerte_risque ? "red" : "purple"} />
       </div>
 
       {/* Zones */}
@@ -521,7 +535,7 @@ export default function Dashboard() {
             <span>Zones de vitesse actuelles</span>
             <button onClick={() => setShowModalFC(true)}
               className="text-xs text-brand border border-brand/30 hover:bg-brand/10 px-2.5 py-1 rounded-lg transition-colors font-medium">
-              ⚙ FC {profilFC?.fc_max ? `${profilFC.fc_max}/${profilFC.fc_repos ?? "?"}` : "configurer"}
+              ⚙ Profil {profilFC?.fc_max ? `${profilFC.fc_max}/${profilFC.fc_repos ?? "?"}` : "configurer"}
             </button>
           </div>
         }>
