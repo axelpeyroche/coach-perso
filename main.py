@@ -190,19 +190,27 @@ def register(payload: RegisterSchema, db: Session = Depends(obtenir_session)):
             dn = date.fromisoformat(payload.date_naissance)
         except ValueError:
             raise HTTPException(400, "Format date_naissance invalide — attendu YYYY-MM-DD")
-    user = Utilisateur(
-        email=payload.email,
-        password_hash=_hash_password(payload.password),
-        prenom=payload.prenom,
-        nom=payload.nom,
-        sexe=payload.sexe,
-        date_naissance=dn,
-        poids_kg=payload.poids_kg,
-        onboarding_complet=False,
-    )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
+    try:
+        password_hash = _hash_password(payload.password)
+    except Exception as e:
+        raise HTTPException(500, f"Erreur hachage mot de passe: {e}")
+    try:
+        user = Utilisateur(
+            email=payload.email,
+            password_hash=password_hash,
+            prenom=payload.prenom,
+            nom=payload.nom,
+            sexe=payload.sexe,
+            date_naissance=dn,
+            poids_kg=payload.poids_kg,
+            onboarding_complet=False,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(500, f"Erreur base de données: {e}")
     token = _create_token(user.id)
     return {"access_token": token, "token_type": "bearer", "user_id": user.id, "onboarding_complet": False}
 
