@@ -658,7 +658,7 @@ def get_objectif_course(utilisateur_id: int = Query(1), db: Session = Depends(ob
         .first()
     )
     if not obj:
-        return None
+        raise HTTPException(status_code=404, detail="Aucun objectif de course enregistré")
     jours_restants = (obj.date_course - date.today()).days
     allures = _allures_depuis_objectif(obj.distance_km, obj.objectif_temps_min)
     h, m = divmod(obj.objectif_temps_min, 60)

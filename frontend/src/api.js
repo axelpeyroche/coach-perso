@@ -17,7 +17,9 @@ export const getBiometrieRecuperation = (utilisateur_id, macrocycle_id) =>
 
 // --- Objectif course ---
 export const getObjectifCourse = (utilisateur_id = 1) =>
-  api.get("/objectif-course", { params: { utilisateur_id } }).then((r) => r.data);
+  api.get("/objectif-course", { params: { utilisateur_id } })
+    .then((r) => r.data)
+    .catch((e) => e?.response?.status === 404 ? null : Promise.reject(e));
 
 export const setObjectifCourse = (payload, utilisateur_id = 1) =>
   api.post("/objectif-course", payload, { params: { utilisateur_id } }).then((r) => r.data);
