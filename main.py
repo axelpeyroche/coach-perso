@@ -481,20 +481,28 @@ async def analyser_screenshot(
     file: UploadFile = File(...),
     db: Session = Depends(obtenir_session),
 ):
-    try:
-        import pytesseract
-        from PIL import Image
-    except ImportError as exc:
-        raise HTTPException(500, f"Dépendance manquante : {exc}")
+    import httpx
 
     seance = db.get(SeanceEntrainement, seance_id)
     if not seance:
         raise HTTPException(404, "Séance introuvable")
 
     contenu = await file.read()
+    api_key = os.getenv("OCR_SPACE_API_KEY", "helloworld")
+
     try:
-        image = Image.open(io.BytesIO(contenu))
-        texte = pytesseract.image_to_string(image, lang="fra+eng")
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(
+                "https://api.ocr.space/parse/image",
+                data={"apikey": api_key, "language": "fre", "isOverlayRequired": "false"},
+                files={"file": (file.filename or "screen.jpg", contenu, file.content_type or "image/jpeg")},
+            )
+        result = resp.json()
+        if result.get("IsErroredOnProcessing"):
+            raise HTTPException(500, f"OCR.space : {result.get('ErrorMessage', 'erreur inconnue')}")
+        texte = result["ParsedResults"][0]["ParsedText"]
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(500, f"OCR échoué : {exc}")
 

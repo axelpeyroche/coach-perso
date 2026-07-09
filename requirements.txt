@@ -6,6 +6,6 @@ pydantic==2.10.3
 pydantic-core==2.27.1
 python-dotenv==1.0.1
 alembic==1.14.0
-pytesseract==0.3.13
 Pillow==11.2.1
 python-multipart==0.0.20
+httpx==0.28.1
