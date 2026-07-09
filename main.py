@@ -361,7 +361,7 @@ def semaine_courante(utilisateur_id: int = Query(1), db: Session = Depends(obten
         "macrocycle": {
             "id": mc.id,
             "numero_cycle": mc.numero_cycle,
-            "nom": f"Module {mc.numero_cycle} — {'Adaptation' if mc.numero_cycle == 1 else 'Révélation'}",
+            "nom": {1: "Module 1 — Adaptation", 2: "Module 2 — Révélation", 3: "Module 3 — Confirmation"}.get(mc.numero_cycle, f"Module {mc.numero_cycle}"),
         },
         "seances": [
             {
@@ -516,7 +516,7 @@ def lister_macrocycles(utilisateur_id: int = Query(1), db: Session = Depends(obt
             "numero_cycle": mc.numero_cycle,
             "date_debut": str(mc.date_debut),
             "date_fin": str(mc.date_fin),
-            "nom": f"Module {mc.numero_cycle} — {'Adaptation' if mc.numero_cycle == 1 else 'Révélation'}",
+            "nom": {1: "Module 1 — Adaptation", 2: "Module 2 — Révélation", 3: "Module 3 — Confirmation"}.get(mc.numero_cycle, f"Module {mc.numero_cycle}"),
         }
         for mc in mcs
     ]
@@ -524,13 +524,14 @@ def lister_macrocycles(utilisateur_id: int = Query(1), db: Session = Depends(obt
 
 @app.post("/api/admin/seed-seances", summary="Génère toutes les séances des 16 semaines EPC (2 macrocycles)")
 def seed_seances_route(db: Session = Depends(obtenir_session)):
-    from seed_seances import seed_module1, seed_module2
+    from seed_seances import seed_module1, seed_module2, seed_module3
     import io, sys
     buf = io.StringIO()
     sys.stdout = buf
     try:
         seed_module1()
         seed_module2()
+        seed_module3()
     finally:
         sys.stdout = sys.__stdout__
     return {"message": buf.getvalue().strip()}
@@ -548,9 +549,9 @@ def init_macrocycles(utilisateur_id: int = Query(1), db: Session = Depends(obten
     existants = {mc.numero_cycle for mc in db.query(Macrocycle).filter(Macrocycle.utilisateur_id == utilisateur_id).all()}
     crees = []
     debut_mc1 = date.today()
-    debuts = {1: debut_mc1, 2: debut_mc1 + timedelta(weeks=8)}
+    debuts = {1: debut_mc1, 2: debut_mc1 + timedelta(weeks=8), 3: debut_mc1 + timedelta(weeks=16)}
 
-    for numero_cycle in [1, 2]:
+    for numero_cycle in [1, 2, 3]:
         if numero_cycle in existants:
             continue
         debut = debuts[numero_cycle]

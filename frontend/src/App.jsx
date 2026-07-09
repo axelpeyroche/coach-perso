@@ -4,12 +4,10 @@ import Dashboard from "./pages/Dashboard";
 import Programme from "./pages/Programme";
 import Evaluation from "./pages/Evaluation";
 import Analytics from "./pages/Analytics";
-import Journal from "./pages/Journal";
 
 const NAV = [
   { to: "/", label: "Dashboard", icon: "⚡" },
   { to: "/programme", label: "Programme", icon: "📅" },
-  { to: "/journal", label: "Journal", icon: "✏️" },
   { to: "/evaluation", label: "Évaluation", icon: "🎯" },
   { to: "/analytics", label: "Stats", icon: "📊" },
 ];
@@ -71,7 +69,6 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/programme" element={<Programme />} />
-          <Route path="/journal" element={<Journal />} />
           <Route path="/evaluation" element={<Evaluation />} />
           <Route path="/analytics" element={<Analytics />} />
         </Routes>
