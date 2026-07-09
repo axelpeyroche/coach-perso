@@ -319,6 +319,84 @@ def journaliser_seance(
 
 
 # ---------------------------------------------------------------------------
+# Routes — Semaine courante
+# ---------------------------------------------------------------------------
+
+@app.get("/api/semaine-courante", summary="Retourne les séances de la semaine en cours")
+def semaine_courante(utilisateur_id: int = Query(1), db: Session = Depends(obtenir_session)):
+    from datetime import date
+    aujourd_hui = date.today()
+
+    semaine = (
+        db.query(SemaineEntrainement)
+        .join(Macrocycle)
+        .filter(
+            Macrocycle.utilisateur_id == utilisateur_id,
+            SemaineEntrainement.date_debut <= aujourd_hui,
+            SemaineEntrainement.date_debut + timedelta(days=7) > aujourd_hui,
+        )
+        .first()
+    )
+
+    if not semaine:
+        # Retourne la prochaine semaine à venir si aucune en cours
+        semaine = (
+            db.query(SemaineEntrainement)
+            .join(Macrocycle)
+            .filter(
+                Macrocycle.utilisateur_id == utilisateur_id,
+                SemaineEntrainement.date_debut > aujourd_hui,
+            )
+            .order_by(SemaineEntrainement.date_debut)
+            .first()
+        )
+
+    if not semaine:
+        raise HTTPException(404, "Aucune semaine trouvée")
+
+    mc = semaine.macrocycle
+    return {
+        "semaine_id": semaine.id,
+        "numero_semaine": semaine.numero_semaine,
+        "macrophase": semaine.macrophase.value,
+        "date_debut": str(semaine.date_debut),
+        "macrocycle": {
+            "id": mc.id,
+            "numero_cycle": mc.numero_cycle,
+            "nom": f"Module {mc.numero_cycle} — {'Adaptation' if mc.numero_cycle == 1 else 'Révélation'}",
+        },
+        "seances": [
+            {
+                "id": s.id,
+                "type": s.type_seance.value,
+                "titre": s.titre,
+                "date": str(s.date_seance),
+                "zone_cible": s.zone_cible.value if s.zone_cible else None,
+                "duree_cible_min": s.duree_cible_min,
+                "dplus_cible_m": s.dplus_cible_m,
+                "temps_limite_min": s.temps_limite_min,
+                "description": s.description,
+                "exercices": [
+                    {
+                        "nom": ex.exercice.nom,
+                        "repetitions": ex.repetitions,
+                        "duree_sec": ex.duree_sec,
+                        "tempo": ex.tempo_effectif,
+                    }
+                    for ex in s.exercices
+                ],
+                "journal": {
+                    "completee": s.journal.completee,
+                    "rpe": s.journal.rpe,
+                    "notes": s.journal.notes,
+                } if s.journal else None,
+            }
+            for s in sorted(semaine.seances, key=lambda x: x.date_seance)
+        ],
+    }
+
+
+# ---------------------------------------------------------------------------
 # Routes — Macrocycles
 # ---------------------------------------------------------------------------
 
