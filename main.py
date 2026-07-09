@@ -15,7 +15,7 @@ Routes :
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, date, timedelta
 from typing import Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Query
@@ -45,7 +45,6 @@ app = FastAPI(
 
 def _initialiser_donnees_demo():
     """Crée un utilisateur et 2 macrocycles (Module 1 + Module 2) si la base est vide."""
-    from datetime import date, timedelta
     from models import Utilisateur, SemaineEntrainement
     from periodization_rules import BLUEPRINT_MACROCYCLE, generer_dates_semaines
     db = next(obtenir_session())
@@ -324,7 +323,6 @@ def journaliser_seance(
 
 @app.get("/api/semaine-courante", summary="Retourne les séances de la semaine en cours")
 def semaine_courante(utilisateur_id: int = Query(1), db: Session = Depends(obtenir_session)):
-    from datetime import date
     aujourd_hui = date.today()
 
     semaine = (
@@ -540,7 +538,6 @@ def seed_seances_route(db: Session = Depends(obtenir_session)):
 
 @app.post("/api/admin/init-macrocycles", summary="Crée les 2 macrocycles si absents (pour utilisateurs existants)")
 def init_macrocycles(utilisateur_id: int = Query(1), db: Session = Depends(obtenir_session)):
-    from datetime import date, timedelta
     from models import Utilisateur, SemaineEntrainement
     from periodization_rules import BLUEPRINT_MACROCYCLE, generer_dates_semaines
 
