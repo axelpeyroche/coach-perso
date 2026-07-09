@@ -388,7 +388,7 @@ class SemaineEntrainement(Base):
 
     __table_args__ = (
         UniqueConstraint("macrocycle_id", "numero_semaine"),
-        CheckConstraint("numero_semaine BETWEEN 1 AND 8", name="ck_numero_semaine_plage"),
+        CheckConstraint("numero_semaine >= 1", name="ck_numero_semaine_positif"),
         CheckConstraint("multiplicateur_volume > 0", name="ck_multiplicateur_volume_positif"),
     )
 

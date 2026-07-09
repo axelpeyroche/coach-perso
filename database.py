@@ -31,6 +31,7 @@ def creer_tables() -> None:
     # Migrations manuelles pour les colonnes ajoutées après la création initiale
     _migrations = [
         "ALTER TABLE exercices_seance ADD COLUMN IF NOT EXISTS duree_bloc_min INTEGER",
+        "ALTER TABLE semaines_entrainement DROP CONSTRAINT IF EXISTS ck_numero_semaine_plage",
     ]
     with engine.begin() as conn:
         for stmt in _migrations:
