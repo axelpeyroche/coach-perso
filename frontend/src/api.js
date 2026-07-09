@@ -80,6 +80,9 @@ export const getHistoriqueEvaluations = (utilisateur_id = 1) =>
 export const supprimerEvaluationsIncompletes = (utilisateur_id = 1) =>
   api.delete("/evaluations/incompletes", { params: { utilisateur_id } }).then((r) => r.data);
 
+export const modifierEvaluation = (evaluation_id, payload) =>
+  api.patch(`/evaluations/${evaluation_id}`, payload).then((r) => r.data);
+
 export const creerEvaluation = (payload) =>
   api.post("/evaluations/", payload).then((r) => r.data);
 

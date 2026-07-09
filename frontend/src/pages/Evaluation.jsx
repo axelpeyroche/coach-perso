@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { creerEvaluation, enregistrerDemiCooper, enregistrerMax1Min, enregistrerAmrapBenchmark, getExercicesEvaluation, getHistoriqueEvaluations, supprimerEvaluationsIncompletes } from "../api";
+import { creerEvaluation, enregistrerDemiCooper, enregistrerMax1Min, enregistrerAmrapBenchmark, getExercicesEvaluation, getHistoriqueEvaluations, supprimerEvaluationsIncompletes, modifierEvaluation } from "../api";
 import Card from "../components/Card";
 import clsx from "clsx";
 
@@ -8,10 +8,92 @@ const USER_ID = 1;
 
 const ETAPES = ["intro", "demi_cooper", "max_1min", "amrap", "resultats"];
 
+function ModalEditerEval({ ev, onClose }) {
+  const qc = useQueryClient();
+  const [distance, setDistance] = useState(ev.distance_m != null ? String(ev.distance_m) : "");
+  const [amrap, setAmrap]       = useState(ev.amrap_tours != null ? String(ev.amrap_tours) : "");
+  const [reps, setReps]         = useState(
+    Object.fromEntries(ev.max_1min.map(m => [m.nom, String(m.reps)]))
+  );
+
+  const mut = useMutation({
+    mutationFn: () => {
+      const payload = {};
+      if (distance !== "" && parseFloat(distance) !== ev.distance_m)
+        payload.distance_metres = parseFloat(distance);
+      if (amrap !== "" && parseFloat(amrap) !== ev.amrap_tours)
+        payload.amrap_tours = parseFloat(amrap);
+      if (ev.max_1min.length > 0)
+        payload.max_1min = ev.max_1min.map(m => ({
+          exercice_id: m.exercice_id,
+          repetitions: parseInt(reps[m.nom] ?? m.reps),
+        }));
+      return modifierEvaluation(ev.id, payload);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["evaluations-historique"] });
+      qc.invalidateQueries({ queryKey: ["tendances"] });
+      onClose();
+    },
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={onClose}>
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4" onClick={e => e.stopPropagation()}>
+        <h3 className="text-base font-bold text-gray-900 dark:text-white">
+          Modifier — {ev.date.split("-").reverse().join("/")}
+        </h3>
+
+        {ev.distance_m != null && (
+          <div>
+            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Distance Demi-Cooper (m)</label>
+            <input type="number" value={distance} onChange={e => setDistance(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
+            {distance && <p className="text-xs text-brand mt-1">VMA → {(parseFloat(distance) / 100).toFixed(1)} km/h</p>}
+          </div>
+        )}
+
+        {ev.amrap_tours != null && (
+          <div>
+            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">AMRAP 10' (tours)</label>
+            <input type="number" step="0.5" value={amrap} onChange={e => setAmrap(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
+          </div>
+        )}
+
+        {ev.max_1min.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Max 1 min</p>
+            <div className="grid grid-cols-2 gap-2">
+              {ev.max_1min.map(m => (
+                <div key={m.nom}>
+                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1 truncate">{m.nom}</label>
+                  <input type="number" value={reps[m.nom] ?? ""} onChange={e => setReps(r => ({ ...r, [m.nom]: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="flex justify-end gap-2 pt-1">
+          <button onClick={onClose} className="px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-sm text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800">Annuler</button>
+          <button onClick={() => mut.mutate()} disabled={mut.isPending}
+            className="px-5 py-2 rounded-xl bg-brand text-white font-semibold text-sm disabled:opacity-50">
+            {mut.isPending ? "…" : "Enregistrer"}
+          </button>
+        </div>
+        {mut.isError && <p className="text-xs text-red-500 text-center">Erreur — réessaie.</p>}
+      </div>
+    </div>
+  );
+}
+
 export default function Evaluation() {
   const [etape, setEtape] = useState("intro");
   const [evaluationId, setEvaluationId] = useState(null);
   const [resultats, setResultats] = useState({});
+  const [evalEnEdition, setEvalEnEdition] = useState(null);
 
   // Demi-Cooper
   const [distance, setDistance] = useState("");
@@ -119,6 +201,10 @@ export default function Evaluation() {
         </Card>
       )}
 
+      {evalEnEdition && (
+        <ModalEditerEval ev={evalEnEdition} onClose={() => setEvalEnEdition(null)} />
+      )}
+
       {etape === "intro" && historique.length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center justify-between">
@@ -144,11 +230,18 @@ export default function Evaluation() {
                     <span className="px-2 py-0.5 rounded-full text-xs bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 font-medium">Dernière</span>
                   )}
                 </div>
-                {i > 0 && historique[i - 1].vma_kmh && ev.vma_kmh && (
-                  <span className={clsx("text-xs font-semibold", historique[i - 1].vma_kmh > ev.vma_kmh ? "text-red-500" : "text-green-500")}>
-                    {historique[i - 1].vma_kmh > ev.vma_kmh ? "▼" : "▲"} {Math.abs(historique[i - 1].vma_kmh - ev.vma_kmh).toFixed(1)} km/h
-                  </span>
-                )}
+                <div className="flex items-center gap-3">
+                  {i > 0 && historique[i - 1].vma_kmh && ev.vma_kmh && (
+                    <span className={clsx("text-xs font-semibold", historique[i - 1].vma_kmh > ev.vma_kmh ? "text-red-500" : "text-green-500")}>
+                      {historique[i - 1].vma_kmh > ev.vma_kmh ? "▼" : "▲"} {Math.abs(historique[i - 1].vma_kmh - ev.vma_kmh).toFixed(1)} km/h
+                    </span>
+                  )}
+                  <button onClick={() => setEvalEnEdition(ev)}
+                    className="text-gray-400 hover:text-brand transition-colors p-1 rounded-lg hover:bg-brand/10"
+                    title="Modifier">
+                    ✏️
+                  </button>
+                </div>
               </div>
               {/* Métriques principales */}
               <div className="grid grid-cols-3 divide-x divide-gray-100 dark:divide-gray-800">

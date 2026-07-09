@@ -198,6 +198,51 @@ def supprimer_evaluations_incompletes(utilisateur_id: int = Query(1), db: Sessio
     return {"supprimes": supprimes}
 
 
+class ModifierEvaluationSchema(BaseModel):
+    distance_metres: Optional[float] = None
+    amrap_tours: Optional[float] = None
+    max_1min: Optional[list[dict]] = None  # [{"exercice_id": int, "repetitions": int}]
+
+@app.patch("/api/evaluations/{evaluation_id}", summary="Modifier les données d'une évaluation existante")
+def modifier_evaluation(evaluation_id: int, payload: ModifierEvaluationSchema, db: Session = Depends(obtenir_session)):
+    evaluation = db.get(JournalEvaluationSeance, evaluation_id)
+    if not evaluation:
+        raise HTTPException(404, "Évaluation introuvable")
+
+    if payload.distance_metres is not None:
+        cooper = evaluation.demi_cooper
+        if cooper:
+            cooper.distance_metres = payload.distance_metres
+            cooper.vma_calculee_kmh = ResultatDemiCooper.calculer_vma(payload.distance_metres)
+            # Met à jour la biométrie liée
+            bio = (
+                db.query(BiometrieUtilisateur)
+                .filter(BiometrieUtilisateur.utilisateur_id == evaluation.utilisateur_id)
+                .filter(BiometrieUtilisateur.enregistre_le >= evaluation.evalue_le)
+                .order_by(BiometrieUtilisateur.enregistre_le.asc())
+                .first()
+            )
+            if bio:
+                bio.vma_kmh = cooper.vma_calculee_kmh
+
+    if payload.amrap_tours is not None:
+        amrap = evaluation.benchmark_amrap
+        if amrap:
+            amrap.tours_completes = payload.amrap_tours
+
+    if payload.max_1min is not None:
+        for item in payload.max_1min:
+            r = db.query(ResultatMax1Min).filter(
+                ResultatMax1Min.evaluation_id == evaluation_id,
+                ResultatMax1Min.exercice_id == item["exercice_id"],
+            ).first()
+            if r:
+                r.repetitions_realisees = item["repetitions"]
+
+    db.commit()
+    return {"ok": True}
+
+
 @app.get("/api/evaluations/historique", summary="Historique des évaluations passées")
 def historique_evaluations(utilisateur_id: int = Query(1), db: Session = Depends(obtenir_session)):
     evals = (
@@ -219,7 +264,7 @@ def historique_evaluations(utilisateur_id: int = Query(1), db: Session = Depends
             "distance_m": cooper.distance_metres if cooper else None,
             "amrap_tours": amrap.tours_completes if amrap else None,
             "max_1min": [
-                {"nom": r.exercice.nom, "reps": r.repetitions_realisees}
+                {"nom": r.exercice.nom, "reps": r.repetitions_realisees, "exercice_id": r.exercice_id}
                 for r in sorted(max1min, key=lambda x: x.exercice_id)
             ],
         })
