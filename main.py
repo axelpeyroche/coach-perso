@@ -95,9 +95,15 @@ def _initialiser_donnees_demo():
         db.close()
 
 
+_ALLOWED_ORIGINS = [
+    "https://coach-perso-frontend.onrender.com",
+    "http://localhost:5173",
+    "http://localhost:4173",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
