@@ -481,28 +481,21 @@ async def analyser_screenshot(
     file: UploadFile = File(...),
     db: Session = Depends(obtenir_session),
 ):
-    import httpx
+    from PIL import Image
+    from rapidocr_onnxruntime import RapidOCR
 
     seance = db.get(SeanceEntrainement, seance_id)
     if not seance:
         raise HTTPException(404, "Séance introuvable")
 
     contenu = await file.read()
-    api_key = os.getenv("OCR_SPACE_API_KEY", "helloworld")
-
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(
-                "https://api.ocr.space/parse/image",
-                data={"apikey": api_key, "language": "fre", "isOverlayRequired": "false"},
-                files={"file": (file.filename or "screen.jpg", contenu, file.content_type or "image/jpeg")},
-            )
-        result = resp.json()
-        if result.get("IsErroredOnProcessing"):
-            raise HTTPException(500, f"OCR.space : {result.get('ErrorMessage', 'erreur inconnue')}")
-        texte = result["ParsedResults"][0]["ParsedText"]
-    except HTTPException:
-        raise
+        image = Image.open(io.BytesIO(contenu)).convert("RGB")
+        import numpy as np
+        arr = np.array(image)
+        ocr = RapidOCR()
+        result, _ = ocr(arr)
+        texte = "\n".join(r[1] for r in result) if result else ""
     except Exception as exc:
         raise HTTPException(500, f"OCR échoué : {exc}")
 

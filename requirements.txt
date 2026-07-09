@@ -8,4 +8,5 @@ python-dotenv==1.0.1
 alembic==1.14.0
 Pillow==11.2.1
 python-multipart==0.0.20
-httpx==0.28.1
+rapidocr-onnxruntime==1.4.4
+numpy>=1.24
