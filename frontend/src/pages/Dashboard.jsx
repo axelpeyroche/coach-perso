@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getBiometrieRecuperation, getTendancesPhysiologiques, getObjectifCourse, setObjectifCourse, getStatutProgramme, initialiserProgramme } from "../api";
+import { getBiometrieRecuperation, getTendancesPhysiologiques, getObjectifCourse, setObjectifCourse, getStatutProgramme, initialiserProgramme, supprimerProgramme } from "../api";
 import Card from "../components/Card";
 import StatTile from "../components/StatTile";
 import clsx from "clsx";
@@ -163,6 +163,28 @@ function BlocObjectif() {
         </button>
       </div>
     </Card>
+  );
+}
+
+// ─── Bouton reconfigurer (supprime en DB) ───────────────────────────────────
+
+function ReconfigurerBtn() {
+  const qc = useQueryClient();
+  const mut = useMutation({
+    mutationFn: () => supprimerProgramme(USER_ID),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["statut-programme"] });
+      qc.invalidateQueries({ queryKey: ["macrocycles"] });
+    },
+  });
+  return (
+    <button
+      onClick={() => { if (window.confirm("Supprimer le programme actuel et tout recréer ?")) mut.mutate(); }}
+      disabled={mut.isPending}
+      className="text-xs text-gray-400 hover:text-red-500 transition-colors mt-1 disabled:opacity-50"
+    >
+      {mut.isPending ? "Suppression…" : "Reconfigurer →"}
+    </button>
   );
 }
 
@@ -358,13 +380,7 @@ export default function Dashboard() {
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Dashboard</h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Vue d'ensemble de ta progression EPC</p>
         </div>
-        <button
-          onClick={() => qc.setQueryData(["statut-programme", USER_ID], { programme_existe: false })}
-          className="text-xs text-gray-400 hover:text-brand transition-colors mt-1"
-          title="Reconfigurer le programme"
-        >
-          Reconfigurer →
-        </button>
+        <ReconfigurerBtn />
       </div>
 
       {alerteActive && (

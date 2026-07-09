@@ -31,6 +31,9 @@ export const getStatutProgramme = (utilisateur_id = 1) =>
 export const initialiserProgramme = (date_debut, utilisateur_id = 1) =>
   api.post("/programme/initialiser", { date_debut, utilisateur_id }).then((r) => r.data);
 
+export const supprimerProgramme = (utilisateur_id = 1) =>
+  api.delete("/programme", { params: { utilisateur_id } }).then((r) => r.data);
+
 // --- Semaine courante ---
 export const getSemaineCourante = (utilisateur_id = 1) =>
   api.get("/semaine-courante", { params: { utilisateur_id } }).then((r) => r.data);

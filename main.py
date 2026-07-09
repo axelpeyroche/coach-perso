@@ -810,6 +810,13 @@ def statut_programme(utilisateur_id: int = Query(1), db: Session = Depends(obten
     }
 
 
+@app.delete("/api/programme", summary="Supprime tous les macrocycles et séances de l'utilisateur")
+def supprimer_programme(utilisateur_id: int = Query(1), db: Session = Depends(obtenir_session)):
+    nb = db.query(Macrocycle).filter(Macrocycle.utilisateur_id == utilisateur_id).delete()
+    db.commit()
+    return {"message": f"{nb} macrocycle(s) supprimé(s)."}
+
+
 @app.post("/api/programme/initialiser", summary="Génère le programme depuis la date choisie dans l'UI")
 def initialiser_programme(payload: InitProgrammePayload, db: Session = Depends(obtenir_session)):
     from models import SemaineEntrainement
