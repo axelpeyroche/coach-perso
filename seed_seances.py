@@ -34,10 +34,10 @@ MODULE1 = {
     # -----------------------------------------------------------------------
     1: [
         {
-            "jour": 1, "type": TypeSeance.COURSE, "titre": "EF Z2 — 35 min (D+ 80 m)",
-            "zone": ZoneCourse.Z2, "duree_min": 35, "dplus_m": 80,
+            "jour": 1, "type": TypeSeance.COURSE, "titre": "EF Z2 — 35 min (D+ 50 m)",
+            "zone": ZoneCourse.Z2, "duree_min": 35, "dplus_m": 50,
             "description": (
-                "Terrain : trail ou chemin (D+ 80 m).\n"
+                "Terrain : chemin souple (D+ 50 m).\n"
                 "Allure Z1-Z2 conversationnelle — respiration nasale prioritaire.\n"
                 "1ère semaine : accumuler du temps sur les jambes, pas de chrono."
             ),
@@ -115,10 +115,10 @@ MODULE1 = {
     # -----------------------------------------------------------------------
     2: [
         {
-            "jour": 1, "type": TypeSeance.COURSE, "titre": "EF Z2 — 40 min (D+ 50 m)",
-            "zone": ZoneCourse.Z2, "duree_min": 40, "dplus_m": 50,
+            "jour": 1, "type": TypeSeance.COURSE, "titre": "EF Z2 — 42 min (D+ 90 m)",
+            "zone": ZoneCourse.Z2, "duree_min": 42, "dplus_m": 90,
             "description": (
-                "Terrain : chemin avec D+ léger (~50 m). +5 min vs S1.\n"
+                "Terrain : chemin vallonné (D+ 90 m). +7 min vs S1.\n"
                 "Allure Z1-Z2 conversationnelle — récupération avant fractionné."
             ),
         },
@@ -195,10 +195,10 @@ MODULE1 = {
     # -----------------------------------------------------------------------
     3: [
         {
-            "jour": 1, "type": TypeSeance.COURSE, "titre": "EF Z2 — 40 min (D+ 80 m)",
-            "zone": ZoneCourse.Z2, "duree_min": 40, "dplus_m": 80,
+            "jour": 1, "type": TypeSeance.COURSE, "titre": "EF Z2 — 48 min (D+ 130 m)",
+            "zone": ZoneCourse.Z2, "duree_min": 48, "dplus_m": 130,
             "description": (
-                "Terrain : trail court (D+ 80 m).\n"
+                "Terrain : trail court (D+ 130 m). +6 min vs S2.\n"
                 "Allure Z2 — récupération active avant séance seuil."
             ),
         },
@@ -270,10 +270,10 @@ MODULE1 = {
     # -----------------------------------------------------------------------
     4: [
         {
-            "jour": 1, "type": TypeSeance.COURSE, "titre": "EF Z2 — 40 min (D+ 100 m)",
-            "zone": ZoneCourse.Z2, "duree_min": 40, "dplus_m": 100,
+            "jour": 1, "type": TypeSeance.COURSE, "titre": "EF Z2 — 55 min (D+ 170 m)",
+            "zone": ZoneCourse.Z2, "duree_min": 55, "dplus_m": 170,
             "description": (
-                "Terrain : trail court (D+ 100 m).\n"
+                "Terrain : trail court (D+ 170 m). Semaine pic M1.\n"
                 "Allure Z2 — récupération active avant fractionné de pointe."
             ),
         },
@@ -346,10 +346,10 @@ MODULE1 = {
     # -----------------------------------------------------------------------
     5: [
         {
-            "jour": 1, "type": TypeSeance.COURSE, "titre": "EF Z2 — 35 min",
-            "zone": ZoneCourse.Z2, "duree_min": 35, "dplus_m": 0,
+            "jour": 1, "type": TypeSeance.COURSE, "titre": "EF Z2 — 35 min (D+ 50 m)",
+            "zone": ZoneCourse.Z2, "duree_min": 35, "dplus_m": 50,
             "description": (
-                "Terrain : route plate. Semaine de consolidation.\n"
+                "Terrain : chemin souple. Semaine de décharge.\n"
                 "Récupération active — allure Z2 relâchée, respiration nasale."
             ),
         },
@@ -527,11 +527,11 @@ MODULE2 = {
     # -----------------------------------------------------------------------
     1: [
         {
-            "jour": 1, "type": TypeSeance.COURSE, "titre": "EF Z2 — 45 min",
-            "zone": ZoneCourse.Z2, "duree_min": 45, "dplus_m": 0,
+            "jour": 1, "type": TypeSeance.COURSE, "titre": "EF Z2 — 55 min (D+ 200 m)",
+            "zone": ZoneCourse.Z2, "duree_min": 55, "dplus_m": 200,
             "description": (
-                "Terrain : route ou chemin. Reprise après évaluation M1.\n"
-                "Allure Z2 conversationnelle — ne pas forcer l'entrée en Module 2."
+                "Terrain : trail (D+ 200 m). Reprise après évaluation M1.\n"
+                "Allure Z2 conversationnelle — premier palier du Module 2."
             ),
         },
         {
@@ -605,9 +605,9 @@ MODULE2 = {
     # -----------------------------------------------------------------------
     2: [
         {
-            "jour": 1, "type": TypeSeance.COURSE, "titre": "EF Z2 — 40 min",
-            "zone": ZoneCourse.Z2, "duree_min": 40, "dplus_m": 0,
-            "description": "Terrain : route ou chemin. EF Z2 — récupération active avant fractionné.",
+            "jour": 1, "type": TypeSeance.COURSE, "titre": "EF Z2 — 60 min (D+ 250 m)",
+            "zone": ZoneCourse.Z2, "duree_min": 60, "dplus_m": 250,
+            "description": "Terrain : trail (D+ 250 m). +5 min vs S1. Allure Z2 — récupération active avant fractionné.",
         },
         {
             "jour": 2, "type": TypeSeance.EMOM, "titre": "EMOM PULL — Module 2 S2 (38 min)",
@@ -681,9 +681,9 @@ MODULE2 = {
     # -----------------------------------------------------------------------
     3: [
         {
-            "jour": 1, "type": TypeSeance.COURSE, "titre": "EF Z2 — 45 min (D+ 100 m)",
-            "zone": ZoneCourse.Z2, "duree_min": 45, "dplus_m": 100,
-            "description": "Terrain : trail court (D+ 100 m). Allure Z2 — récupération active avant séance seuil.",
+            "jour": 1, "type": TypeSeance.COURSE, "titre": "EF Z2 — 65 min (D+ 310 m)",
+            "zone": ZoneCourse.Z2, "duree_min": 65, "dplus_m": 310,
+            "description": "Terrain : trail (D+ 310 m). +5 min vs S2. Allure Z2 — récupération active avant séance seuil.",
         },
         {
             "jour": 2, "type": TypeSeance.EMOM, "titre": "EMOM PUSH (pauses) — Module 2 S3 (34 min)",
@@ -753,9 +753,9 @@ MODULE2 = {
     # -----------------------------------------------------------------------
     4: [
         {
-            "jour": 1, "type": TypeSeance.COURSE, "titre": "EF Z2 — 45 min (D+ 100 m)",
-            "zone": ZoneCourse.Z2, "duree_min": 45, "dplus_m": 100,
-            "description": "Terrain : chemin vallonné (D+ 100 m). Allure Z2 — récupération avant fractionné.",
+            "jour": 1, "type": TypeSeance.COURSE, "titre": "EF Z2 — 70 min (D+ 380 m)",
+            "zone": ZoneCourse.Z2, "duree_min": 70, "dplus_m": 380,
+            "description": "Terrain : trail (D+ 380 m). Semaine pic M2. Allure Z2 — récupération avant fractionné.",
         },
         {
             "jour": 2, "type": TypeSeance.EMOM, "titre": "EMOM PULL — Module 2 S4 (24 min)",
@@ -825,9 +825,9 @@ MODULE2 = {
     # -----------------------------------------------------------------------
     5: [
         {
-            "jour": 1, "type": TypeSeance.COURSE, "titre": "EF Z2 — 35 min",
-            "zone": ZoneCourse.Z2, "duree_min": 35, "dplus_m": 0,
-            "description": "Terrain : route. Amorce décharge — allure Z2 légère, sans effort ressenti.",
+            "jour": 1, "type": TypeSeance.COURSE, "titre": "EF Z2 — 40 min (D+ 100 m)",
+            "zone": ZoneCourse.Z2, "duree_min": 40, "dplus_m": 100,
+            "description": "Terrain : chemin. Semaine de décharge — allure Z2 légère, sans effort ressenti.",
         },
         {
             "jour": 2, "type": TypeSeance.EMOM, "titre": "EMOM PUSH (libre) — Module 2 S5 (18 min)",
@@ -1021,9 +1021,9 @@ MODULE3 = {
     # -----------------------------------------------------------------------
     1: [
         {
-            "jour": 1, "type": TypeSeance.COURSE, "titre": "EF Z2 — 40 min (D+ 50 m)",
-            "zone": ZoneCourse.Z2, "duree_min": 40, "dplus_m": 50,
-            "description": "Terrain : route ou chemin souple (D+ 50 m).\nAllure Z2 conversationnelle. Reprise après évaluation M2.",
+            "jour": 1, "type": TypeSeance.COURSE, "titre": "EF Z2 — 65 min (D+ 400 m)",
+            "zone": ZoneCourse.Z2, "duree_min": 65, "dplus_m": 400,
+            "description": "Terrain : trail (D+ 400 m). Reprise après évaluation M2 — premier palier spécifique.\nAllure Z2 conversationnelle.",
         },
         {
             "jour": 2, "type": TypeSeance.EMOM, "titre": "EMOM — Module 3 S1 (28 min)",
@@ -1098,9 +1098,9 @@ MODULE3 = {
     # -----------------------------------------------------------------------
     2: [
         {
-            "jour": 1, "type": TypeSeance.COURSE, "titre": "EF Z2 — 45 min (D+ 80 m)",
-            "zone": ZoneCourse.Z2, "duree_min": 45, "dplus_m": 80,
-            "description": "Terrain : chemin avec D+ léger (80 m). +5 min vs S1. Récupération avant fractionné.",
+            "jour": 1, "type": TypeSeance.COURSE, "titre": "EF Z2 — 72 min (D+ 480 m)",
+            "zone": ZoneCourse.Z2, "duree_min": 72, "dplus_m": 480,
+            "description": "Terrain : trail (D+ 480 m). +7 min vs S1 M3. Récupération avant fractionné.",
         },
         {
             "jour": 2, "type": TypeSeance.EMOM, "titre": "EMOM — Module 3 S2 (31 min)",
@@ -1173,9 +1173,9 @@ MODULE3 = {
     # -----------------------------------------------------------------------
     3: [
         {
-            "jour": 1, "type": TypeSeance.COURSE, "titre": "EF Z2 — 45 min (D+ 100 m)",
-            "zone": ZoneCourse.Z2, "duree_min": 45, "dplus_m": 100,
-            "description": "Terrain : trail court (D+ 100 m). Allure Z2 — récupération active avant séance seuil.",
+            "jour": 1, "type": TypeSeance.COURSE, "titre": "EF Z2 — 78 min (D+ 560 m)",
+            "zone": ZoneCourse.Z2, "duree_min": 78, "dplus_m": 560,
+            "description": "Terrain : trail (D+ 560 m). +6 min vs S2 M3. Allure Z2 — récupération active avant séance seuil.",
         },
         {
             "jour": 2, "type": TypeSeance.EMOM, "titre": "EMOM — Module 3 S3 (34 min)",
@@ -1251,9 +1251,9 @@ MODULE3 = {
     # -----------------------------------------------------------------------
     4: [
         {
-            "jour": 1, "type": TypeSeance.COURSE, "titre": "EF Z2 — 50 min (D+ 150 m)",
-            "zone": ZoneCourse.Z2, "duree_min": 50, "dplus_m": 150,
-            "description": "Terrain : trail court (D+ 150 m). +5 min vs S3. Récupération active avant fractionné.",
+            "jour": 1, "type": TypeSeance.COURSE, "titre": "EF Z2 — 85 min (D+ 650 m)",
+            "zone": ZoneCourse.Z2, "duree_min": 85, "dplus_m": 650,
+            "description": "Terrain : trail (D+ 650 m). Semaine pic M3. Allure Z2 — récupération active avant fractionné.",
         },
         {
             "jour": 2, "type": TypeSeance.EMOM, "titre": "EMOM — Module 3 S4 — PIC (37 min)",
@@ -1334,9 +1334,9 @@ MODULE3 = {
     # -----------------------------------------------------------------------
     5: [
         {
-            "jour": 1, "type": TypeSeance.COURSE, "titre": "EF Z2 — 40 min",
-            "zone": ZoneCourse.Z2, "duree_min": 40, "dplus_m": 0,
-            "description": "Terrain : route. -10 min vs S4. Début de décharge — allure légère.",
+            "jour": 1, "type": TypeSeance.COURSE, "titre": "EF Z2 — 50 min (D+ 150 m)",
+            "zone": ZoneCourse.Z2, "duree_min": 50, "dplus_m": 150,
+            "description": "Terrain : chemin (D+ 150 m). Semaine de décharge — allure Z2 légère.",
         },
         {
             "jour": 2, "type": TypeSeance.EMOM, "titre": "EMOM — Module 3 S5 (26 min)",

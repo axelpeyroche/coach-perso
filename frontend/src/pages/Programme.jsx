@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getMacrocycles, getSemainesMacrocycle, journaliserSeance } from "../api";
+import { getToutesSemaines, journaliserSeance } from "../api";
 import clsx from "clsx";
 
 const USER_ID = 1;
@@ -281,30 +281,20 @@ function CarteSeance({ seance }) {
 // ─── Page principale ────────────────────────────────────────────────────────
 
 export default function Programme() {
-  const [mcId, setMcId]         = useState(null);
-  const [semIdx, setSemIdx]     = useState(null);
-
-  const { data: macrocycles = [], isLoading: loadingMC } = useQuery({
-    queryKey: ["macrocycles"],
-    queryFn: () => getMacrocycles(1),
-  });
-
-  const resolvedMcId = mcId ?? macrocycles[0]?.id ?? null;
-  const mcActif = macrocycles.find(m => m.id === resolvedMcId) ?? macrocycles[0];
+  const [semIdx, setSemIdx] = useState(null);
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ["semaines", resolvedMcId],
-    queryFn: () => getSemainesMacrocycle(resolvedMcId),
-    enabled: !!resolvedMcId,
+    queryKey: ["toutes-semaines"],
+    queryFn: () => getToutesSemaines(1),
   });
 
-  if (loadingMC) return <Loader />;
-  if (!loadingMC && macrocycles.length === 0)
-    return <Erreur msg="Aucun macrocycle. Lance /api/admin/init-macrocycles puis /api/admin/seed-seances." />;
   if (isLoading) return <Loader />;
   if (error) return <Erreur msg={`Erreur : ${error.message}`} />;
 
   const semaines = data?.semaines ?? [];
+  if (semaines.length === 0)
+    return <Erreur msg="Aucun programme. Génère-en un depuis le tableau de bord." />;
+
   const idx = semIdx !== null ? semIdx : 0;
   const semaine = semaines[idx];
 
@@ -318,26 +308,9 @@ export default function Programme() {
       <div>
         <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Programme</h2>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-          Séances de la semaine + journalisation
+          {semaines.length} semaines au total
         </p>
       </div>
-
-      {/* Sélecteur module */}
-      {macrocycles.length > 0 && (
-        <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-0.5">
-          {macrocycles.map(mc => (
-            <button key={mc.id} onClick={() => { setMcId(mc.id); setSemIdx(null); }}
-              className={clsx(
-                "shrink-0 px-3 py-1.5 rounded-xl text-sm font-semibold border transition-colors",
-                mc.id === resolvedMcId
-                  ? "border-brand bg-brand/10 text-brand dark:bg-brand/20"
-                  : "border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-300"
-              )}>
-              {mc.nom}
-            </button>
-          ))}
-        </div>
-      )}
 
       {/* Sélecteur semaine */}
       <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-0.5">
@@ -346,7 +319,7 @@ export default function Programme() {
           const nbTotal = (s.seances ?? []).filter(x => x.type !== "REPOS").length;
           const complet = nbFait === nbTotal && nbTotal > 0;
           return (
-            <button key={s.numero_semaine} onClick={() => setSemIdx(i)}
+            <button key={s.semaine_globale} onClick={() => setSemIdx(i)}
               className={clsx(
                 "shrink-0 flex flex-col items-center px-3 py-2 rounded-xl border text-xs font-medium transition-colors",
                 idx === i
@@ -355,7 +328,7 @@ export default function Programme() {
                   ? "border-green-200 dark:border-green-900/50 bg-green-50 dark:bg-green-900/10 text-green-600 dark:text-green-400"
                   : "border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-300"
               )}>
-              <span className="font-bold">S{s.numero_semaine}</span>
+              <span className="font-bold">S{s.semaine_globale}</span>
               <span className="opacity-70 mt-0.5">{complet ? "✓" : s.macrophase === "surcharge" ? "↑" : s.macrophase === "decharge" ? "↓" : "★"}</span>
             </button>
           );

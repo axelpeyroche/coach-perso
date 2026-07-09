@@ -512,6 +512,56 @@ SLUGS_EVALUATION = [
     "pistol-squat-droit",
 ]
 
+@app.get("/api/programme/toutes-semaines", summary="Toutes les semaines du programme — vue à plat sans notion de module")
+def toutes_semaines_programme(utilisateur_id: int = Query(1), db: Session = Depends(obtenir_session)):
+    mcs = db.query(Macrocycle).filter(Macrocycle.utilisateur_id == utilisateur_id).order_by(Macrocycle.numero_cycle).all()
+    semaine_globale = 0
+    result = []
+    for mc in mcs:
+        for s in sorted(mc.semaines, key=lambda x: x.numero_semaine):
+            semaine_globale += 1
+            result.append({
+                "semaine_globale": semaine_globale,
+                "macrocycle_id": mc.id,
+                "numero_semaine": s.numero_semaine,
+                "macrophase": s.macrophase.value,
+                "date_debut": str(s.date_debut),
+                "multiplicateur_volume": s.multiplicateur_volume,
+                "seances": [
+                    {
+                        "id": seance.id,
+                        "type": seance.type_seance.value,
+                        "titre": seance.titre,
+                        "description": seance.description,
+                        "date": str(seance.date_seance),
+                        "zone_cible": seance.zone_cible.value if seance.zone_cible else None,
+                        "distance_cible_km": seance.distance_cible_km,
+                        "duree_cible_min": seance.duree_cible_min,
+                        "dplus_cible_m": seance.dplus_cible_m,
+                        "temps_limite_min": seance.temps_limite_min,
+                        "exercices": [
+                            {
+                                "nom": ex.exercice.nom,
+                                "slug": ex.exercice.slug,
+                                "repetitions": ex.repetitions,
+                                "duree_sec": ex.duree_sec,
+                                "tempo": ex.tempo_effectif,
+                                "duree_bloc_min": ex.duree_bloc_min,
+                            }
+                            for ex in seance.exercices
+                        ],
+                        "journal": {
+                            "completee": seance.journal.completee,
+                            "rpe": seance.journal.rpe,
+                            "notes": seance.journal.notes,
+                        } if seance.journal else None,
+                    }
+                    for seance in s.seances
+                ],
+            })
+    return {"semaines": result, "total": semaine_globale}
+
+
 @app.get("/api/macrocycles", summary="Liste tous les macrocycles de l'utilisateur")
 def lister_macrocycles(utilisateur_id: int = Query(1), db: Session = Depends(obtenir_session)):
     mcs = db.query(Macrocycle).filter(Macrocycle.utilisateur_id == utilisateur_id).order_by(Macrocycle.numero_cycle).all()
