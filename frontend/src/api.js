@@ -15,6 +15,13 @@ export const getDistributionVolume = (utilisateur_id, macrocycle_id) =>
 export const getBiometrieRecuperation = (utilisateur_id, macrocycle_id) =>
   api.get("/analytics/biometrie-recuperation", { params: { utilisateur_id, macrocycle_id } }).then((r) => r.data);
 
+// --- Objectif course ---
+export const getObjectifCourse = (utilisateur_id = 1) =>
+  api.get("/objectif-course", { params: { utilisateur_id } }).then((r) => r.data);
+
+export const setObjectifCourse = (payload, utilisateur_id = 1) =>
+  api.post("/objectif-course", payload, { params: { utilisateur_id } }).then((r) => r.data);
+
 // --- Semaine courante ---
 export const getSemaineCourante = (utilisateur_id = 1) =>
   api.get("/semaine-courante", { params: { utilisateur_id } }).then((r) => r.data);

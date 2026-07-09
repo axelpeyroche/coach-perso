@@ -370,7 +370,7 @@ export default function Programme() {
             <span className={clsx("px-2.5 py-1 rounded-full text-xs font-semibold", PHASE_COLORS[semaine.macrophase])}>
               {PHASE_LABEL[semaine.macrophase]}
             </span>
-            <span className="text-xs text-gray-400">{semaine.date_debut}</span>
+            <span className="text-xs text-gray-400">{semaine.date_debut ? semaine.date_debut.split("-").reverse().join("/") : ""}</span>
             {seancesVisibles.length > 0 && (
               <span className="text-xs text-gray-400 ml-auto">{nbFaites}/{seancesVisibles.length} faites</span>
             )}

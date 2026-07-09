@@ -695,3 +695,26 @@ class ResultatAMRAPBenchmark(Base):
     evaluation: Mapped["JournalEvaluationSeance"] = relationship(
         back_populates="benchmark_amrap"
     )
+
+
+# ---------------------------------------------------------------------------
+# Objectif course — race goal pour ajuster les séances de course
+# ---------------------------------------------------------------------------
+
+class ObjectifCourse(Base):
+    """
+    Prochain objectif de course de l'utilisateur.
+    Une seule ligne active par utilisateur (remplacée à chaque POST).
+    Utilisée pour ajuster les allures cibles dans les séances de course.
+    """
+    __tablename__ = "objectifs_course"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    utilisateur_id: Mapped[int] = mapped_column(ForeignKey("utilisateurs.id"), nullable=False)
+    nom: Mapped[str] = mapped_column(String(200), nullable=False)
+    date_course: Mapped[date] = mapped_column(Date, nullable=False)
+    distance_km: Mapped[float] = mapped_column(Float, nullable=False)
+    dplus_m: Mapped[Optional[int]] = mapped_column(Integer, default=0)
+    objectif_temps_min: Mapped[int] = mapped_column(Integer, nullable=False, comment="Objectif en minutes")
+    notes: Mapped[Optional[str]] = mapped_column(Text)
+    cree_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
