@@ -1629,6 +1629,101 @@ def seed_module3():
     _inserer_semaines(3, MODULE3)
 
 
+# ============================================================================
+# PROGRAMME ORIENTÉ COURSE — seed adaptatif N semaines
+# ============================================================================
+
+# Pool de semaines de surcharge : 15 semaines max (M1 S1-5, M2 S1-5, M3 S1-5)
+_POOL_SURCHARGE = {
+    **{i: MODULE1[i] for i in range(1, 6)},
+    **{i + 5: MODULE2[i] for i in range(1, 6)},
+    **{i + 10: MODULE3[i] for i in range(1, 6)},
+}
+
+
+def _semaine_course(date_course, course_nom: str) -> list:
+    """Contenu de la semaine de course : activation légère + jour J."""
+    from datetime import date as date_type
+    if isinstance(date_course, date_type):
+        jour_course = date_course.weekday() + 1  # 1=lundi … 7=dimanche
+    else:
+        jour_course = 6  # samedi par défaut
+
+    seances = [
+        {
+            "jour": 1, "type": TypeSeance.COURSE, "titre": "Activation Z1 — 15 min",
+            "zone": ZoneCourse.Z1, "duree_min": 15, "dplus_m": 0,
+            "description": (
+                "Sortie très légère d'activation — pas d'effort.\n"
+                "Respiration nasale uniquement, aucune sensation de fatigue.\n"
+                "Objectif : activer la circulation, garder les jambes légères avant la course."
+            ),
+        },
+        {
+            "jour": 2, "type": TypeSeance.EMOM, "titre": "Activation neuromusculaire — 10 min",
+            "temps_limite": 10,
+            "description": (
+                "5 mouvements × 2 min — schémas moteurs uniquement, zéro intensité :\n"
+                "  Traction australienne / Pompes / Squats / Burpees / Mountain climbers\n"
+                "Focus : fluidité du mouvement, aucune fatigue résiduelle."
+            ),
+            "exercices": [
+                {"slug": "traction-australienne", "reps": 5, "tempo": "X/1/3/0", "duree_min": 2},
+                {"slug": "pompe-standard",        "reps": 5, "tempo": "3/1/3/0", "duree_min": 2},
+                {"slug": "squat-bw",              "reps": 5, "tempo": "3/1/X/0", "duree_min": 2},
+                {"slug": "burpee",                "reps": 5, "tempo": "X/0/X/0", "duree_min": 2},
+                {"slug": "mountain-climber",      "reps": 5, "tempo": "X/0/X/0", "duree_min": 2},
+            ],
+        },
+        {
+            "jour": min(jour_course, 7),
+            "type": TypeSeance.COURSE,
+            "titre": f"COURSE — {course_nom}",
+            "zone": ZoneCourse.Z4,
+            "duree_min": None,
+            "dplus_m": 0,
+            "description": (
+                f"Jour de course : {course_nom}\n"
+                "Pas d'échauffement intensif — 10 min de trot léger suffisent.\n"
+                "Allure cible : voir Dashboard → Prochain objectif.\n"
+                "Bonne course !"
+            ),
+        },
+    ]
+
+    # Dédoublonner si le jour_course tombe sur un jour déjà utilisé (lundi ou mardi)
+    jours_utilises = {s["jour"] for s in seances[:-1]}
+    if seances[-1]["jour"] in jours_utilises:
+        seances[-1]["jour"] = max(jours_utilises) + 1
+
+    return seances
+
+
+def seed_programme_course(n_semaines: int, date_course=None, course_nom: str = "Course"):
+    """
+    Seed adaptatif pour un programme orienté course de n_semaines semaines.
+
+    Structure :
+      Semaines 1 … n-3 : surcharge progressive (contenu M1/M2/M3 dans l'ordre)
+      Semaine n-2       : décharge (M1 S6)
+      Semaine n-1       : affûtage (M1 S7)
+      Semaine n         : semaine de course (activation + jour J)
+    """
+    n_surcharge = n_semaines - 3
+
+    content: dict[int, list] = {}
+
+    for i in range(1, n_surcharge + 1):
+        pool_idx = min(i, 15)
+        content[i] = _POOL_SURCHARGE[pool_idx]
+
+    content[n_surcharge + 1] = MODULE1[6]   # décharge
+    content[n_surcharge + 2] = MODULE1[7]   # affûtage
+    content[n_semaines]      = _semaine_course(date_course, course_nom)
+
+    _inserer_semaines(1, content)
+
+
 if __name__ == "__main__":
     seed_module1()
     seed_module2()

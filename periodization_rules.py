@@ -479,3 +479,60 @@ def est_semaine_decharge(semaine: int) -> bool:
 
 def est_semaine_evaluation(semaine: int) -> bool:
     return obtenir_regle_semaine(semaine).macrophase == TypeMacrophase.EVALUATION
+
+
+def generer_blueprint_course(n_semaines: int) -> list[RegleSemaine]:
+    """
+    Blueprint adaptatif pour un programme orienté course (N semaines).
+
+    Structure :
+      Semaines 1 … n-3 : surcharge progressive
+      Semaine n-2       : décharge (-30 % volume)
+      Semaine n-1       : affûtage (-50 % volume)
+      Semaine n         : semaine de course (très léger)
+    """
+    if n_semaines < 4:
+        raise ValueError("Minimum 4 semaines pour un programme orienté course.")
+
+    n_surcharge = n_semaines - 3
+    semaines: list[RegleSemaine] = []
+
+    for i in range(1, n_surcharge + 1):
+        mult = round(min(1.0 + (i - 1) * 0.06, 1.30), 2)
+        semaines.append(RegleSemaine(
+            numero=i,
+            macrophase=TypeMacrophase.SURCHARGE,
+            multiplicateur_volume=mult,
+            objectif_amrap_min=min(20 + i * 2, 35),
+            objectif_km_course=min(15.0 + i * 1.5, 30.0),
+            description=f"Surcharge progressive {i}/{n_surcharge}",
+        ))
+
+    semaines.append(RegleSemaine(
+        numero=n_surcharge + 1,
+        macrophase=TypeMacrophase.DECHARGE,
+        multiplicateur_volume=0.70,
+        objectif_amrap_min=15,
+        objectif_km_course=10.0,
+        description="Décharge — récupération active, volume -30 %",
+    ))
+
+    semaines.append(RegleSemaine(
+        numero=n_surcharge + 2,
+        macrophase=TypeMacrophase.DECHARGE,
+        multiplicateur_volume=0.50,
+        objectif_amrap_min=None,
+        objectif_km_course=5.0,
+        description="Affûtage — préservation neuromusculaire avant course",
+    ))
+
+    semaines.append(RegleSemaine(
+        numero=n_semaines,
+        macrophase=TypeMacrophase.EVALUATION,
+        multiplicateur_volume=0.20,
+        objectif_amrap_min=None,
+        objectif_km_course=None,
+        description="Semaine de course — activation légère + jour J",
+    ))
+
+    return semaines

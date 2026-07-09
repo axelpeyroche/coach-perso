@@ -823,8 +823,10 @@ def supprimer_programme(utilisateur_id: int = Query(1), db: Session = Depends(ob
 @app.post("/api/programme/initialiser", summary="Génère le programme depuis la date choisie dans l'UI")
 def initialiser_programme(payload: InitProgrammePayload, db: Session = Depends(obtenir_session)):
     from models import SemaineEntrainement
-    from periodization_rules import BLUEPRINT_MACROCYCLE, generer_dates_semaines
-    from seed_seances import seed_module1, seed_module2, seed_module3
+    from periodization_rules import (
+        BLUEPRINT_MACROCYCLE, generer_dates_semaines, generer_blueprint_course,
+    )
+    from seed_seances import seed_module1, seed_module2, seed_module3, seed_programme_course
 
     try:
         debut_mc1 = datetime.strptime(payload.date_debut, "%d/%m/%Y").date()
@@ -838,34 +840,69 @@ def initialiser_programme(payload: InitProgrammePayload, db: Session = Depends(o
     if not user:
         raise HTTPException(404, f"Utilisateur {payload.utilisateur_id} introuvable")
 
-    # Récupérer la course éventuelle pour calculer le nb de modules
-    obj = db.query(ObjectifCourse).filter(ObjectifCourse.utilisateur_id == payload.utilisateur_id).order_by(ObjectifCourse.id.desc()).first()
-
-    # Calcul du nombre de modules selon la distance jusqu'à la course
-    nb_modules = 3  # par défaut (programme complet 24 semaines)
-    avertissement = None
-    if obj:
-        semaines_avant_course = (obj.date_course - debut_mc1).days // 7
-        if semaines_avant_course < 8:
-            raise HTTPException(400, f"La course est dans {semaines_avant_course} semaine(s) — trop proche pour générer un programme (minimum 8 semaines).")
-        elif semaines_avant_course < 16:
-            nb_modules = 1
-            avertissement = f"Course dans {semaines_avant_course} semaines — programme adapté à 1 module (8 semaines)."
-        elif semaines_avant_course < 24:
-            nb_modules = 2
-            avertissement = f"Course dans {semaines_avant_course} semaines — programme adapté à 2 modules (16 semaines)."
-        else:
-            nb_modules = 3
+    obj = db.query(ObjectifCourse).filter(
+        ObjectifCourse.utilisateur_id == payload.utilisateur_id
+    ).order_by(ObjectifCourse.id.desc()).first()
 
     # Suppression des macrocycles existants (cascade ORM)
     for mc in db.query(Macrocycle).filter(Macrocycle.utilisateur_id == payload.utilisateur_id).all():
         db.delete(mc)
     db.flush()
 
-    debuts = {i: debut_mc1 + timedelta(weeks=8 * (i - 1)) for i in range(1, nb_modules + 1)}
     crees = []
+
+    # ── CAS 1 : course planifiée → programme adaptatif N semaines ───────────
+    if obj:
+        n_semaines = (obj.date_course - debut_mc1).days // 7
+        if n_semaines < 4:
+            raise HTTPException(400, f"La course est dans {n_semaines} semaine(s) — trop proche (minimum 4 semaines).")
+
+        blueprint = generer_blueprint_course(n_semaines)
+        dates = [debut_mc1 + timedelta(weeks=i) for i in range(n_semaines)]
+
+        mc = Macrocycle(
+            utilisateur_id=user.id,
+            numero_cycle=1,
+            date_debut=debut_mc1,
+            date_fin=debut_mc1 + timedelta(weeks=n_semaines),
+        )
+        db.add(mc)
+        db.flush()
+        for regle, date_sem in zip(blueprint, dates):
+            db.add(SemaineEntrainement(
+                macrocycle_id=mc.id,
+                numero_semaine=regle.numero,
+                macrophase=regle.macrophase,
+                date_debut=date_sem,
+                multiplicateur_volume=regle.multiplicateur_volume,
+                objectif_km_course=regle.objectif_km_course,
+                objectif_amrap_min=regle.objectif_amrap_min,
+            ))
+        crees.append({"numero_cycle": 1, "debut": debut_mc1.strftime("%d/%m/%Y"), "semaines": n_semaines})
+        db.commit()
+
+        try:
+            seed_programme_course(
+                n_semaines=n_semaines,
+                date_course=obj.date_course,
+                course_nom=obj.nom,
+            )
+        except Exception as exc:
+            raise HTTPException(500, f"Erreur seed course : {exc}")
+
+        n_surcharge = n_semaines - 3
+        return {
+            "message": f"Programme orienté course généré : {n_semaines} semaines ({n_surcharge} de build + 2 de taper + semaine course).",
+            "nb_modules": 1,
+            "semaines_totales": n_semaines,
+            "course": obj.nom,
+            "macrocycles": crees,
+        }
+
+    # ── CAS 2 : pas de course → programme standard 3 modules × 8 semaines ───
+    nb_modules = 3
     for numero_cycle in range(1, nb_modules + 1):
-        debut = debuts[numero_cycle]
+        debut = debut_mc1 + timedelta(weeks=8 * (numero_cycle - 1))
         mc = Macrocycle(
             utilisateur_id=user.id,
             numero_cycle=numero_cycle,
@@ -884,25 +921,20 @@ def initialiser_programme(payload: InitProgrammePayload, db: Session = Depends(o
                 objectif_km_course=regle.objectif_km_course,
                 objectif_amrap_min=regle.objectif_amrap_min,
             ))
-        crees.append({"numero_cycle": numero_cycle, "debut": debut.strftime("%d/%m/%Y")})
-
+        crees.append({"numero_cycle": numero_cycle, "debut": debut.strftime("%d/%m/%Y"), "semaines": 8})
     db.commit()
 
-    # Seed des séances pour chaque module créé
     try:
-        if nb_modules >= 1:
-            seed_module1()
-        if nb_modules >= 2:
-            seed_module2()
-        if nb_modules >= 3:
-            seed_module3()
+        seed_module1()
+        seed_module2()
+        seed_module3()
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Erreur lors du seed des séances : {exc}")
+        raise HTTPException(500, f"Erreur seed standard : {exc}")
 
     return {
-        "message": "Programme généré avec succès.",
-        "avertissement": avertissement,
-        "nb_modules": nb_modules,
+        "message": "Programme performance générale généré : 3 modules × 8 semaines.",
+        "nb_modules": 3,
+        "semaines_totales": 24,
         "macrocycles": crees,
     }
 

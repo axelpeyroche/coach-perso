@@ -227,14 +227,9 @@ function SetupProgramme({ objectifCourse, onDone }) {
     return Math.floor((dateCourse - dateSelectionnee) / (7 * 24 * 3600 * 1000));
   }, [objectifCourse, dateSelectionnee]);
 
-  const nbModules = semainesAvantCourse === null ? 3
-    : semainesAvantCourse < 16 ? 1
-    : semainesAvantCourse < 24 ? 2
-    : 3;
+  const tooClose = semainesAvantCourse !== null && semainesAvantCourse < 4;
 
-  const labelModules = { 1: "1 module — 8 semaines", 2: "2 modules — 16 semaines", 3: "3 modules — 24 semaines" };
-
-  const tooClose = semainesAvantCourse !== null && semainesAvantCourse < 8;
+  const nSurcharge = semainesAvantCourse !== null ? Math.max(0, semainesAvantCourse - 3) : null;
 
   const mut = useMutation({
     mutationFn: () => initialiserProgramme(toApiDate(dateSelectionnee), USER_ID),
@@ -280,11 +275,11 @@ function SetupProgramme({ objectifCourse, onDone }) {
             </p>
             {tooClose ? (
               <p className="text-xs mt-1 font-medium">
-                Course dans {semainesAvantCourse} semaine(s) depuis cette date — trop proche (minimum 8 semaines).
+                Course dans {semainesAvantCourse} semaine(s) depuis cette date — trop proche (minimum 4 semaines).
               </p>
             ) : (
               <p className="text-xs mt-1 text-gray-600 dark:text-gray-300">
-                Course dans <strong>{semainesAvantCourse} semaines</strong> — programme adapté : <strong>{labelModules[nbModules]}</strong>
+                Course dans <strong>{semainesAvantCourse} semaines</strong> — <strong>{nSurcharge} semaines de build</strong> + 2 de taper + semaine course
               </p>
             )}
           </div>
@@ -300,8 +295,8 @@ function SetupProgramme({ objectifCourse, onDone }) {
           <div className="grid grid-cols-3 gap-2 text-center">
             {[
               { label: "Début", val: toApiDate(dateSelectionnee).replace(/\//g, " / ") },
-              { label: "Modules", val: nbModules },
-              { label: "Semaines", val: nbModules * 8 },
+              { label: "Build", val: semainesAvantCourse !== null ? `${nSurcharge} sem.` : "15 sem." },
+              { label: "Total", val: semainesAvantCourse !== null ? `${semainesAvantCourse} sem.` : "24 sem." },
             ].map(({ label, val }) => (
               <div key={label} className="rounded-xl bg-gray-50 dark:bg-gray-800 py-2 px-3">
                 <p className="text-xs text-gray-400">{label}</p>
