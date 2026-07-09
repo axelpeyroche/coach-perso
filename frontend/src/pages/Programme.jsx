@@ -37,10 +37,22 @@ function fmt(min) {
 function FormulaireLog({ seance, onClose, onDone }) {
   const qc = useQueryClient();
   const prefill = seance.journal && !seance.journal.completee;
-  const [rpe, setRpe]     = useState(7);
-  const [champs, set_]    = useState({});
-  const [notes, setNotes] = useState("");
+  const [rpe, setRpe]       = useState(7);
+  const [notes, setNotes]   = useState("");
+  const [champs, set_]      = useState({});
+  const [imgPreview, setImg] = useState(null);
   const setC = (k, v) => set_(c => ({ ...c, [k]: v }));
+
+  const isAMRAP = seance.type === "AMRAP";
+  const isEMOM  = seance.type === "EMOM";
+
+  function onFileChange(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => setImg(ev.target.result);
+    reader.readAsDataURL(file);
+  }
 
   const mut = useMutation({
     mutationFn: () => {
@@ -53,48 +65,49 @@ function FormulaireLog({ seance, onClose, onDone }) {
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["toutes-semaines"] }); onDone(); },
   });
 
-  const isCourse = seance.type === "COURSE";
-  const isAMRAP  = seance.type === "AMRAP";
-  const isEMOM   = seance.type === "EMOM";
-
   return (
     <div className="border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40 px-4 py-4 space-y-4">
 
-      {/* Métriques pré-remplies (mode prefill) */}
-      {prefill && (
+      {/* Zone upload screenshot */}
+      {prefill ? (
+        /* Métriques importées */
         <div className="rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 px-4 py-3 space-y-2">
-          <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wide">Métriques importées</p>
+          <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wide">Métriques importées ✓</p>
           <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-            {seance.journal.duree_reelle_min && <span className="text-gray-500 dark:text-gray-400">Durée <strong className="text-gray-900 dark:text-white">{seance.journal.duree_reelle_min} min</strong></span>}
+            {seance.journal.duree_reelle_min   && <span className="text-gray-500 dark:text-gray-400">Durée <strong className="text-gray-900 dark:text-white">{seance.journal.duree_reelle_min} min</strong></span>}
             {seance.journal.distance_reelle_km && <span className="text-gray-500 dark:text-gray-400">Distance <strong className="text-gray-900 dark:text-white">{seance.journal.distance_reelle_km} km</strong></span>}
             {seance.journal.dplus_reel_m != null && <span className="text-gray-500 dark:text-gray-400">D+ <strong className="text-gray-900 dark:text-white">{seance.journal.dplus_reel_m} m</strong></span>}
-            {seance.journal.fc_moyenne_bpm && <span className="text-gray-500 dark:text-gray-400">FC moy <strong className="text-gray-900 dark:text-white">{seance.journal.fc_moyenne_bpm} bpm</strong></span>}
-            {seance.journal.fc_max_bpm && <span className="text-gray-500 dark:text-gray-400">FC max <strong className="text-gray-900 dark:text-white">{seance.journal.fc_max_bpm} bpm</strong></span>}
+            {seance.journal.fc_moyenne_bpm     && <span className="text-gray-500 dark:text-gray-400">FC moy <strong className="text-gray-900 dark:text-white">{seance.journal.fc_moyenne_bpm} bpm</strong></span>}
+            {seance.journal.fc_max_bpm         && <span className="text-gray-500 dark:text-gray-400">FC max <strong className="text-gray-900 dark:text-white">{seance.journal.fc_max_bpm} bpm</strong></span>}
           </div>
         </div>
-      )}
-
-      {/* Champs course */}
-      {isCourse && !prefill && (
-        <div className="grid grid-cols-2 gap-3">
-          {[
-            { k: "duree_reelle_min",   label: "Durée réelle (min)",  ph: seance.duree_cible_min ?? "60" },
-            { k: "distance_reelle_km", label: "Distance (km)",       ph: "12.0", step: "0.1" },
-            { k: "dplus_reel_m",       label: "D+ réel (m)",         ph: seance.dplus_cible_m ?? "0" },
-            { k: "fc_moyenne_bpm",     label: "FC moy (bpm)",        ph: "152" },
-            { k: "fc_max_bpm",         label: "FC max (bpm)",        ph: "178" },
-          ].map(({ k, label, ph, step }) => (
-            <div key={k}>
-              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">{label}</label>
-              <input type="number" step={step} placeholder={ph} value={champs[k] ?? ""}
-                onChange={e => setC(k, e.target.value)}
-                className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
-            </div>
-          ))}
+      ) : (
+        /* Upload */
+        <div>
+          <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Screenshot activité</label>
+          <label className={clsx(
+            "flex flex-col items-center justify-center w-full rounded-xl border-2 border-dashed cursor-pointer transition-colors overflow-hidden",
+            imgPreview ? "border-brand/40 p-0" : "border-gray-200 dark:border-gray-700 hover:border-brand/50 py-5"
+          )}>
+            {imgPreview ? (
+              <img src={imgPreview} alt="aperçu" className="w-full max-h-48 object-cover" />
+            ) : (
+              <div className="flex flex-col items-center gap-2 text-gray-400">
+                <span className="text-2xl">📷</span>
+                <span className="text-xs">Ajouter un screenshot</span>
+              </div>
+            )}
+            <input type="file" accept="image/*" className="sr-only" onChange={onFileChange} />
+          </label>
+          {imgPreview && (
+            <button onClick={() => setImg(null)} className="mt-1 text-xs text-gray-400 hover:text-red-400 transition-colors">
+              Supprimer
+            </button>
+          )}
         </div>
       )}
 
-      {/* Champs AMRAP */}
+      {/* Champs manuels AMRAP / EMOM (hors prefill) */}
       {isAMRAP && !prefill && (
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -111,8 +124,6 @@ function FormulaireLog({ seance, onClose, onDone }) {
           </div>
         </div>
       )}
-
-      {/* Champs EMOM */}
       {isEMOM && !prefill && (
         <div>
           <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Total reps réalisées</label>
@@ -122,7 +133,7 @@ function FormulaireLog({ seance, onClose, onDone }) {
         </div>
       )}
 
-      {/* RPE */}
+      {/* Slider RPE */}
       <div>
         <div className="flex justify-between items-baseline mb-2">
           <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Effort perçu (RPE)</span>
@@ -146,13 +157,13 @@ function FormulaireLog({ seance, onClose, onDone }) {
       </div>
 
       {/* Boutons */}
-      <div className="flex gap-2">
+      <div className="flex justify-between items-center gap-2">
         <button onClick={onClose}
-          className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+          className="px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
           Annuler
         </button>
         <button onClick={() => mut.mutate()} disabled={mut.isPending}
-          className="flex-2 px-6 py-2.5 rounded-xl bg-brand text-white font-semibold text-sm hover:bg-brand-dark transition-colors disabled:opacity-50">
+          className="px-6 py-2.5 rounded-xl bg-brand text-white font-semibold text-sm hover:bg-brand-dark transition-colors disabled:opacity-50">
           {mut.isPending ? "..." : "Valider ✓"}
         </button>
       </div>
@@ -213,15 +224,15 @@ function CarteSeance({ seance }) {
         <div className="flex items-center gap-2 shrink-0">
           {fait ? (
             <span className="text-sm text-green-600 dark:text-green-400 font-bold">✓</span>
-          ) : prefillEnAttente ? (
-            <button onClick={() => { setLogOpen(v => !v); setOuvert(false); }}
-              className="px-3 py-1.5 rounded-xl bg-orange-500 text-white text-xs font-semibold hover:bg-orange-600 transition-colors">
-              RPE ?
-            </button>
           ) : (
             <button onClick={() => { setLogOpen(v => !v); setOuvert(false); }}
-              className="px-3 py-1.5 rounded-xl bg-brand text-white text-xs font-semibold hover:bg-brand-dark transition-colors">
-              Logger
+              className={clsx(
+                "px-3 py-1.5 rounded-xl text-white text-xs font-semibold transition-colors",
+                prefillEnAttente
+                  ? "bg-orange-500 hover:bg-orange-600"
+                  : "bg-brand hover:bg-brand-dark"
+              )}>
+              Valider
             </button>
           )}
           <button onClick={() => { setOuvert(v => !v); setLogOpen(false); }}
