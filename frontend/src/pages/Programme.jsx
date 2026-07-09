@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getToutesSemaines, journaliserSeance, validerRPE, analyserScreenshot } from "../api";
+import { getToutesSemaines, journaliserSeance, validerRPE } from "../api";
 import clsx from "clsx";
 
 const USER_ID = 1;
@@ -37,47 +37,17 @@ function fmt(min) {
 function FormulaireLog({ seance, onClose, onDone }) {
   const qc = useQueryClient();
   const prefill = seance.journal && !seance.journal.completee;
-  const [rpe, setRpe]       = useState(7);
-  const [notes, setNotes]   = useState("");
-  const [champs, set_]      = useState({});
-  const [imgPreview, setImg]   = useState(null);
-  const [analysing, setAnal]   = useState(false);
-  const [analyseErr, setErr]   = useState(null);
-  const [manuelMode, setManuel] = useState(false);
+  const [rpe, setRpe]   = useState(7);
+  const [notes, setNotes] = useState("");
+  const [champs, set_]  = useState({});
   const setC = (k, v) => set_(c => ({ ...c, [k]: v }));
 
   const isCourse = seance.type === "COURSE";
   const isMuscu  = seance.type === "AMRAP" || seance.type === "EMOM";
 
-  async function onFileChange(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => setImg(ev.target.result);
-    reader.readAsDataURL(file);
-    setAnal(true);
-    setErr(null);
-    try {
-      const data = await analyserScreenshot(seance.id, file, USER_ID);
-      // pré-remplir les champs avec les métriques OCR
-      const mapping = {
-        duree_reelle_min:   data?.duree_reelle_min,
-        distance_reelle_km: data?.distance_reelle_km,
-        dplus_reel_m:       data?.dplus_reel_m,
-        fc_moyenne_bpm:     data?.fc_moyenne_bpm,
-        fc_max_bpm:         data?.fc_max_bpm,
-      };
-      Object.entries(mapping).forEach(([k, v]) => { if (v != null) setC(k, String(v)); });
-    } catch (err) {
-      setErr(err?.response?.data?.detail || err?.message || "Analyse échouée");
-    } finally {
-      setAnal(false);
-    }
-  }
-
   const mut = useMutation({
     mutationFn: () => {
-      if (prefill && !manuelMode) return validerRPE(seance.id, rpe, notes || undefined);
+      if (prefill) return validerRPE(seance.id, rpe, notes || undefined);
       const nums = Object.fromEntries(
         Object.entries(champs).filter(([,v]) => v !== "").map(([k,v]) => [k, Number(v)])
       );
@@ -89,63 +59,25 @@ function FormulaireLog({ seance, onClose, onDone }) {
   return (
     <div className="border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40 px-4 py-4 space-y-4">
 
-      {/* COURSE : upload screenshot → OCR automatique */}
+      {/* COURSE : métriques manuelles */}
       {isCourse && (
-        prefill ? (
-          <div className="rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 px-4 py-3 space-y-2">
-            <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wide">Métriques importées ✓</p>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-              {seance.journal.duree_reelle_min   && <span className="text-gray-500 dark:text-gray-400">Durée <strong className="text-gray-900 dark:text-white">{seance.journal.duree_reelle_min} min</strong></span>}
-              {seance.journal.distance_reelle_km && <span className="text-gray-500 dark:text-gray-400">Distance <strong className="text-gray-900 dark:text-white">{seance.journal.distance_reelle_km} km</strong></span>}
-              {seance.journal.dplus_reel_m != null && <span className="text-gray-500 dark:text-gray-400">D+ <strong className="text-gray-900 dark:text-white">{seance.journal.dplus_reel_m} m</strong></span>}
-              {seance.journal.fc_moyenne_bpm     && <span className="text-gray-500 dark:text-gray-400">FC moy <strong className="text-gray-900 dark:text-white">{seance.journal.fc_moyenne_bpm} bpm</strong></span>}
-              {seance.journal.fc_max_bpm         && <span className="text-gray-500 dark:text-gray-400">FC max <strong className="text-gray-900 dark:text-white">{seance.journal.fc_max_bpm} bpm</strong></span>}
+        <div className="grid grid-cols-2 gap-3">
+          {[
+            { key: "duree_reelle_min",   label: "Durée (min)",   ph: "40" },
+            { key: "distance_reelle_km", label: "Distance (km)", ph: "6.2" },
+            { key: "dplus_reel_m",       label: "D+ (m)",        ph: "50" },
+            { key: "fc_moyenne_bpm",     label: "FC moy (bpm)",  ph: "153" },
+            { key: "fc_max_bpm",         label: "FC max (bpm)",  ph: "165" },
+          ].map(({ key, label, ph }) => (
+            <div key={key}>
+              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">{label}</label>
+              <input type="number" placeholder={ph}
+                value={prefill && seance.journal?.[key] != null ? seance.journal[key] : (champs[key] ?? "")}
+                onChange={e => setC(key, e.target.value)}
+                className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
             </div>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {/* Zone upload — toujours visible, jamais masquée */}
-            <div>
-              <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
-                Screenshot activité {analysing && <span className="text-brand normal-case font-normal">(analyse en cours…)</span>}
-              </label>
-              <label className={clsx(
-                "flex flex-col items-center justify-center w-full rounded-xl border-2 border-dashed cursor-pointer transition-colors overflow-hidden",
-                imgPreview ? "border-brand/40 p-0" : "border-gray-200 dark:border-gray-700 hover:border-brand/50 py-5"
-              )}>
-                {imgPreview
-                  ? <img src={imgPreview} alt="aperçu" className="w-full max-h-48 object-cover" />
-                  : <div className="flex flex-col items-center gap-2 text-gray-400">
-                      <span className="text-2xl">📷</span>
-                      <span className="text-xs">Ajouter un screenshot</span>
-                    </div>
-                }
-                <input type="file" accept="image/*" className="sr-only" onChange={onFileChange} />
-              </label>
-              {analyseErr && (
-                <p className="mt-1 text-xs text-red-500">{analyseErr} — saisis les valeurs ci-dessous.</p>
-              )}
-            </div>
-
-            {/* Champs manuels — toujours affichés pour les courses */}
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                { key: "duree_reelle_min",   label: "Durée (min)",   ph: "40" },
-                { key: "distance_reelle_km", label: "Distance (km)", ph: "6.2" },
-                { key: "dplus_reel_m",       label: "D+ (m)",        ph: "50" },
-                { key: "fc_moyenne_bpm",     label: "FC moy (bpm)",  ph: "153" },
-                { key: "fc_max_bpm",         label: "FC max (bpm)",  ph: "165" },
-              ].map(({ key, label, ph }) => (
-                <div key={key}>
-                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">{label}</label>
-                  <input type="number" placeholder={ph} value={champs[key] ?? ""}
-                    onChange={e => setC(key, e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
-                </div>
-              ))}
-            </div>
-          </div>
-        )
+          ))}
+        </div>
       )}
 
       {/* MUSCULATION : durée + FC moyenne manuelles */}
