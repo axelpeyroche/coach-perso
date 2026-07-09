@@ -741,8 +741,9 @@ def reset_macrocycles(
         jours = (7 - today.weekday()) % 7 or 7  # lundi prochain
         debut_mc1 = today + timedelta(days=jours)
 
-    # Suppression des macrocycles existants (cascade : semaines + séances + exercices + journaux)
-    db.query(Macrocycle).filter(Macrocycle.utilisateur_id == utilisateur_id).delete()
+    # Suppression des macrocycles existants (cascade ORM)
+    for mc in db.query(Macrocycle).filter(Macrocycle.utilisateur_id == utilisateur_id).all():
+        db.delete(mc)
     db.flush()
 
     debuts = {1: debut_mc1, 2: debut_mc1 + timedelta(weeks=8), 3: debut_mc1 + timedelta(weeks=16)}
@@ -812,9 +813,11 @@ def statut_programme(utilisateur_id: int = Query(1), db: Session = Depends(obten
 
 @app.delete("/api/programme", summary="Supprime tous les macrocycles et séances de l'utilisateur")
 def supprimer_programme(utilisateur_id: int = Query(1), db: Session = Depends(obtenir_session)):
-    nb = db.query(Macrocycle).filter(Macrocycle.utilisateur_id == utilisateur_id).delete()
+    mcs = db.query(Macrocycle).filter(Macrocycle.utilisateur_id == utilisateur_id).all()
+    for mc in mcs:
+        db.delete(mc)
     db.commit()
-    return {"message": f"{nb} macrocycle(s) supprimé(s)."}
+    return {"message": f"{len(mcs)} macrocycle(s) supprimé(s)."}
 
 
 @app.post("/api/programme/initialiser", summary="Génère le programme depuis la date choisie dans l'UI")
@@ -854,8 +857,9 @@ def initialiser_programme(payload: InitProgrammePayload, db: Session = Depends(o
         else:
             nb_modules = 3
 
-    # Suppression des macrocycles existants (cascade)
-    db.query(Macrocycle).filter(Macrocycle.utilisateur_id == payload.utilisateur_id).delete()
+    # Suppression des macrocycles existants (cascade ORM)
+    for mc in db.query(Macrocycle).filter(Macrocycle.utilisateur_id == payload.utilisateur_id).all():
+        db.delete(mc)
     db.flush()
 
     debuts = {i: debut_mc1 + timedelta(weeks=8 * (i - 1)) for i in range(1, nb_modules + 1)}
