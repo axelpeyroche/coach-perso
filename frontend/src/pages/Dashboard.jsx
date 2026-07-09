@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getBiometrieRecuperation, getTendancesPhysiologiques, getObjectifCourse, setObjectifCourse, getStatutProgramme, initialiserProgramme, supprimerProgramme } from "../api";
+import { getBiometrieRecuperation, getTendancesPhysiologiques, getObjectifCourse, setObjectifCourse, getStatutProgramme, initialiserProgramme, supprimerProgramme, getProfilFC, patchProfilFC } from "../api";
 import Card from "../components/Card";
 import StatTile from "../components/StatTile";
 import clsx from "clsx";
@@ -330,10 +330,71 @@ function SetupProgramme({ objectifCourse, onDone }) {
   );
 }
 
+// ─── Bornes zones (% VMA) ───────────────────────────────────────────────────
+const BORNES_VMA = {
+  Z1: [0.60, 0.65], Z2: [0.65, 0.75], Z3: [0.75, 0.85],
+  Z4: [0.85, 0.95], Z5: [0.95, 1.00],
+};
+
+function karvonen(fcMax, fcRepos, pct) {
+  return Math.round((fcMax - fcRepos) * pct + fcRepos);
+}
+
+// ─── Modal config FC ────────────────────────────────────────────────────────
+
+function ModalFC({ profil, onClose }) {
+  const qc = useQueryClient();
+  const [fcMax, setFcMax]     = useState(profil?.fc_max ?? "");
+  const [fcRepos, setFcRepos] = useState(profil?.fc_repos ?? "");
+
+  const mut = useMutation({
+    mutationFn: () => patchProfilFC({
+      fc_max:   fcMax   ? parseInt(fcMax)   : undefined,
+      fc_repos: fcRepos ? parseInt(fcRepos) : undefined,
+    }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["profil-fc"] }); onClose(); },
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={onClose}>
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4" onClick={e => e.stopPropagation()}>
+        <h3 className="text-base font-bold text-gray-900 dark:text-white">Paramètres cardiaques</h3>
+        <p className="text-xs text-gray-400">Utilisés pour calculer les zones FC via la méthode Karvonen.</p>
+        <div className="grid grid-cols-2 gap-3">
+          {[
+            { label: "FC max (bpm)", val: fcMax, set: setFcMax, ph: "192" },
+            { label: "FC repos (bpm)", val: fcRepos, set: setFcRepos, ph: "55" },
+          ].map(({ label, val, set, ph }) => (
+            <div key={label}>
+              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">{label}</label>
+              <input type="number" placeholder={ph} value={val} onChange={e => set(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
+            </div>
+          ))}
+        </div>
+        {fcMax && fcRepos && (
+          <p className="text-xs text-gray-400">
+            Réserve cardiaque : <strong className="text-gray-700 dark:text-gray-200">{parseInt(fcMax) - parseInt(fcRepos)} bpm</strong>
+          </p>
+        )}
+        <div className="flex justify-end gap-2 pt-1">
+          <button onClick={onClose} className="px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-sm text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800">Annuler</button>
+          <button onClick={() => mut.mutate()} disabled={mut.isPending}
+            className="px-5 py-2 rounded-xl bg-brand text-white font-semibold text-sm disabled:opacity-50">
+            {mut.isPending ? "…" : "Enregistrer"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Dashboard ──────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
   const qc = useQueryClient();
+  const [showModalFC, setShowModalFC] = useState(false);
+
   const { data: physio } = useQuery({
     queryKey: ["tendances", USER_ID],
     queryFn: () => getTendancesPhysiologiques(USER_ID),
@@ -350,12 +411,29 @@ export default function Dashboard() {
     queryKey: ["objectif-course", USER_ID],
     queryFn: () => getObjectifCourse(USER_ID),
   });
+  const { data: profilFC } = useQuery({
+    queryKey: ["profil-fc", USER_ID],
+    queryFn: () => getProfilFC(USER_ID),
+  });
 
   const derniereVMA  = physio?.vma?.at(-1);
   const derniereACWA = recup?.acwa?.at(-1);
   const alerteActive = recup?.alerte_active;
   const zones        = derniereVMA?.zones;
   const programmExiste = statut?.programme_existe;
+
+  // Recalcule les zones FC avec Karvonen si fc_max + fc_repos disponibles
+  const zonesFCKarvonen = useMemo(() => {
+    const vma = derniereVMA?.valeur;
+    const fcMax = profilFC?.fc_max;
+    const fcRepos = profilFC?.fc_repos;
+    if (!vma || !fcMax || !fcRepos) return null;
+    return Object.fromEntries(
+      Object.entries(BORNES_VMA).map(([z, [pMin, pMax]]) => [
+        z, [karvonen(fcMax, fcRepos, pMin), karvonen(fcMax, fcRepos, pMax)],
+      ])
+    );
+  }, [derniereVMA, profilFC]);
 
   if (loadingStatut) return null;
 
@@ -406,7 +484,15 @@ export default function Dashboard() {
 
       {/* Zones */}
       {zones && (
-        <Card title="Zones de vitesse actuelles">
+        <Card title={
+          <div className="flex items-center justify-between w-full">
+            <span>Zones de vitesse actuelles</span>
+            <button onClick={() => setShowModalFC(true)}
+              className="text-xs text-brand border border-brand/30 hover:bg-brand/10 px-2.5 py-1 rounded-lg transition-colors font-medium">
+              ⚙ FC {profilFC?.fc_max ? `${profilFC.fc_max}/${profilFC.fc_repos ?? "?"}` : "configurer"}
+            </button>
+          </div>
+        }>
           <div className="space-y-1">
             {/* En-tête colonnes */}
             <div className="flex items-center gap-2 pb-1 border-b border-gray-100 dark:border-gray-800">
@@ -425,7 +511,7 @@ export default function Dashboard() {
               { z: "Z5", label: "VO2max" },
             ].map(({ z, label }) => {
               const pace = derniereVMA?.zones_pace?.[z];
-              const fc   = derniereVMA?.zones_fc?.[z];
+              const fc   = zonesFCKarvonen?.[z] ?? derniereVMA?.zones_fc?.[z];
               return (
                 <div key={z} className="flex items-center gap-2 py-1">
                   <span className={`w-2 h-2 rounded-full shrink-0 ${ZONE_COLORS[z]}`} />
@@ -443,9 +529,15 @@ export default function Dashboard() {
                 </div>
               );
             })}
+            {zonesFCKarvonen && (
+              <p className="text-xs text-gray-400 pt-1 border-t border-gray-100 dark:border-gray-800">
+                Karvonen — réserve {profilFC.fc_max - profilFC.fc_repos} bpm
+              </p>
+            )}
           </div>
         </Card>
       )}
+      {showModalFC && <ModalFC profil={profilFC} onClose={() => setShowModalFC(false)} />}
 
       {!derniereVMA && !derniereACWA && !zones && (
         <Card title="Démarrer">

@@ -94,6 +94,8 @@ class Utilisateur(Base):
     nom: Mapped[str] = mapped_column(String(120), nullable=False)
     date_naissance: Mapped[Optional[date]] = mapped_column(Date)
     cree_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    fc_max: Mapped[Optional[int]] = mapped_column(Integer, comment="FC max mesurée (bpm)")
+    fc_repos: Mapped[Optional[int]] = mapped_column(Integer, comment="FC de repos (bpm)")
 
     # Relations
     biometries: Mapped[list["BiometrieUtilisateur"]] = relationship(

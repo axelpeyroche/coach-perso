@@ -110,6 +110,30 @@ def demarrage():
 # Schémas Pydantic
 # ---------------------------------------------------------------------------
 
+class ProfilFCSchema(BaseModel):
+    fc_max: Optional[int] = Field(None, gt=0, lt=250)
+    fc_repos: Optional[int] = Field(None, gt=0, lt=150)
+
+@app.get("/api/utilisateur/profil-fc", summary="Récupère fc_max et fc_repos de l'utilisateur")
+def get_profil_fc(utilisateur_id: int = 1, db: Session = Depends(obtenir_session)):
+    u = db.query(Utilisateur).filter(Utilisateur.id == utilisateur_id).first()
+    if not u:
+        raise HTTPException(404, "Utilisateur non trouvé")
+    return {"fc_max": u.fc_max, "fc_repos": u.fc_repos}
+
+@app.patch("/api/utilisateur/profil-fc", summary="Met à jour fc_max et/ou fc_repos")
+def patch_profil_fc(payload: ProfilFCSchema, utilisateur_id: int = 1, db: Session = Depends(obtenir_session)):
+    u = db.query(Utilisateur).filter(Utilisateur.id == utilisateur_id).first()
+    if not u:
+        raise HTTPException(404, "Utilisateur non trouvé")
+    if payload.fc_max is not None:
+        u.fc_max = payload.fc_max
+    if payload.fc_repos is not None:
+        u.fc_repos = payload.fc_repos
+    db.commit()
+    return {"fc_max": u.fc_max, "fc_repos": u.fc_repos}
+
+
 class CreerEvaluationSchema(BaseModel):
     utilisateur_id: int
     macrocycle_id: Optional[int] = None
