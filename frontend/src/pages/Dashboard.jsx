@@ -5,7 +5,6 @@ import Card from "../components/Card";
 import StatTile from "../components/StatTile";
 import clsx from "clsx";
 
-const USER_ID = 1;
 
 const ZONE_COLORS = {
   Z1: "bg-blue-400", Z2: "bg-green-400", Z3: "bg-yellow-400", Z4: "bg-orange-400", Z5: "bg-red-400",
@@ -38,7 +37,7 @@ function FormulaireObjectif({ onClose }) {
         dplus_m: form.dplus_m ? parseInt(form.dplus_m) : 0,
         objectif_temps_min: temps,
         notes: form.notes || undefined,
-      }, USER_ID);
+      });
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["objectif-course"] }); onClose(); },
   });
@@ -111,7 +110,7 @@ const ALLURES_VMA = {
 
 function BlocObjectif({ vma }) {
   const [edit, setEdit] = useState(false);
-  const { data: obj, isLoading } = useQuery({ queryKey: ["objectif-course"], queryFn: () => getObjectifCourse(USER_ID) });
+  const { data: obj, isLoading } = useQuery({ queryKey: ["objectif-course"], queryFn: () => getObjectifCourse() });
 
   const alluresVMA = vma ? {
     z2: kmhToPace(vma * ALLURES_VMA.z2),
@@ -194,7 +193,7 @@ function BlocObjectif({ vma }) {
 function ReconfigurerBtn() {
   const qc = useQueryClient();
   const mut = useMutation({
-    mutationFn: () => supprimerProgramme(USER_ID),
+    mutationFn: () => supprimerProgramme(),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["statut-programme"] });
       qc.invalidateQueries({ queryKey: ["macrocycles"] });
@@ -255,7 +254,7 @@ function SetupProgramme({ objectifCourse, onDone }) {
   const nSurcharge = semainesAvantCourse !== null ? Math.max(0, semainesAvantCourse - 3) : null;
 
   const mut = useMutation({
-    mutationFn: () => initialiserProgramme(toApiDate(dateSelectionnee), USER_ID),
+    mutationFn: () => initialiserProgramme(toApiDate(dateSelectionnee)),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["statut-programme"] });
       qc.invalidateQueries({ queryKey: ["macrocycles"] });
@@ -442,24 +441,24 @@ export default function Dashboard() {
   const [showModalFC, setShowModalFC] = useState(false);
 
   const { data: physio } = useQuery({
-    queryKey: ["tendances", USER_ID],
-    queryFn: () => getTendancesPhysiologiques(USER_ID),
+    queryKey: ["tendances", undefined],
+    queryFn: () => getTendancesPhysiologiques(),
   });
   const { data: recup } = useQuery({
-    queryKey: ["recuperation", USER_ID],
-    queryFn: () => getBiometrieRecuperation(USER_ID),
+    queryKey: ["recuperation", undefined],
+    queryFn: () => getBiometrieRecuperation(),
   });
   const { data: statut, isLoading: loadingStatut } = useQuery({
-    queryKey: ["statut-programme", USER_ID],
-    queryFn: () => getStatutProgramme(USER_ID),
+    queryKey: ["statut-programme", undefined],
+    queryFn: () => getStatutProgramme(),
   });
   const { data: objectifCourse } = useQuery({
-    queryKey: ["objectif-course", USER_ID],
-    queryFn: () => getObjectifCourse(USER_ID),
+    queryKey: ["objectif-course", undefined],
+    queryFn: () => getObjectifCourse(),
   });
   const { data: profilFC } = useQuery({
-    queryKey: ["profil-fc", USER_ID],
-    queryFn: () => getProfilFC(USER_ID),
+    queryKey: ["profil-fc", undefined],
+    queryFn: () => getProfilFC(),
   });
 
   const derniereVMA  = physio?.vma?.at(-1);

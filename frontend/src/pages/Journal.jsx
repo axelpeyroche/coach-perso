@@ -4,7 +4,6 @@ import { getSemaineCourante, journaliserSeance } from "../api";
 import Card from "../components/Card";
 import clsx from "clsx";
 
-const USER_ID = 1;
 
 const TYPE_ICONS = { COURSE: "🏃", AMRAP: "🔥", EMOM: "⏱️", EVALUATION: "🎯", DECHARGE: "🧘", REPOS: "😴" };
 const TYPE_LABELS = { COURSE: "Course", AMRAP: "AMRAP", EMOM: "EMOM", EVALUATION: "Évaluation", DECHARGE: "Décharge", REPOS: "Repos" };
@@ -61,7 +60,7 @@ function FormulaireSeance({ seance, onSuccess }) {
           .filter(([, v]) => v !== "")
           .map(([k, v]) => [k, Number(v)])
       );
-      return journaliserSeance(seance.id, { utilisateur_id: USER_ID, rpe, notes: notes || undefined, ...nums });
+      return journaliserSeance(seance.id, { rpe, notes: notes || undefined, ...nums });
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["semaine-courante"] });
@@ -189,7 +188,7 @@ export default function Journal() {
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["semaine-courante"],
-    queryFn: () => getSemaineCourante(USER_ID),
+    queryFn: () => getSemaineCourante(),
   });
 
   if (isLoading) return (

@@ -3,7 +3,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getToutesSemaines, journaliserSeance, validerRPE, getProfilFC, supprimerJournal, modifierJournal } from "../api";
 import clsx from "clsx";
 
-const USER_ID = 1;
 
 // ─── Constantes ────────────────────────────────────────────────────────────
 
@@ -116,7 +115,7 @@ function FormulaireLog({ seance, onClose, onDone, modeEdit = false }) {
         }));
         if (distRepos) nums.distance_repos_km = parseFloat(distRepos);
       }
-      const payload = { utilisateur_id: USER_ID, rpe, notes: notes || undefined, ...nums, details_intervalles: detailsIntervalles };
+      const payload = { rpe, notes: notes || undefined, ...nums, details_intervalles: detailsIntervalles };
       if (modeEdit) return modifierJournal(seance.id, payload);
       return journaliserSeance(seance.id, payload);
     },
@@ -447,11 +446,11 @@ export default function Programme() {
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["toutes-semaines"],
-    queryFn: () => getToutesSemaines(1),
+    queryFn: () => getToutesSemaines(),
   });
   const { data: profilFC } = useQuery({
-    queryKey: ["profil-fc", USER_ID],
-    queryFn: () => getProfilFC(USER_ID),
+    queryKey: ["profil-fc"],
+    queryFn: () => getProfilFC(),
   });
   const zonesFC = calcZonesFC(profilFC?.fc_max, profilFC?.fc_repos);
 

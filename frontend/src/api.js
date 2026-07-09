@@ -5,52 +5,44 @@ const api = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
-// --- Analytique ---
-export const getTendancesPhysiologiques = (utilisateur_id) =>
-  api.get("/analytics/tendances-physiologiques", { params: { utilisateur_id } }).then((r) => r.data);
-
-export const getDistributionVolume = (utilisateur_id, macrocycle_id) =>
-  api.get("/analytics/distribution-volume", { params: { utilisateur_id, macrocycle_id } }).then((r) => r.data);
-
-export const getBiometrieRecuperation = (utilisateur_id, macrocycle_id) =>
-  api.get("/analytics/biometrie-recuperation", { params: { utilisateur_id, macrocycle_id } }).then((r) => r.data);
+export default api;
 
 // --- Profil FC ---
-export const getProfilFC = (utilisateur_id = 1) =>
-  api.get("/utilisateur/profil-fc", { params: { utilisateur_id } }).then((r) => r.data);
+export const getProfilFC = () =>
+  api.get("/utilisateur/profil-fc").then((r) => r.data);
 
-export const patchProfilFC = (payload, utilisateur_id = 1) =>
-  api.patch("/utilisateur/profil-fc", payload, { params: { utilisateur_id } }).then((r) => r.data);
+export const patchProfilFC = (payload) =>
+  api.patch("/utilisateur/profil-fc", payload).then((r) => r.data);
 
 // --- Objectif course ---
-export const getObjectifCourse = (utilisateur_id = 1) =>
-  api.get("/objectif-course", { params: { utilisateur_id } })
+export const getObjectifCourse = () =>
+  api.get("/objectif-course")
     .then((r) => r.data)
     .catch((e) => e?.response?.status === 404 ? null : Promise.reject(e));
 
-export const setObjectifCourse = (payload, utilisateur_id = 1) =>
-  api.post("/objectif-course", payload, { params: { utilisateur_id } }).then((r) => r.data);
+export const setObjectifCourse = (payload) =>
+  api.post("/objectif-course", payload).then((r) => r.data);
 
 // --- Programme ---
-export const getStatutProgramme = (utilisateur_id = 1) =>
-  api.get("/programme/statut", { params: { utilisateur_id } }).then((r) => r.data);
+export const getStatutProgramme = () =>
+  api.get("/programme/statut").then((r) => r.data);
 
-export const getToutesSemaines = (utilisateur_id = 1) =>
-  api.get("/programme/toutes-semaines", { params: { utilisateur_id } }).then((r) => r.data);
+export const getToutesSemaines = () =>
+  api.get("/programme/toutes-semaines").then((r) => r.data);
 
-export const initialiserProgramme = (date_debut, utilisateur_id = 1) =>
-  api.post("/programme/initialiser", { date_debut, utilisateur_id }, { timeout: 120000 }).then((r) => r.data);
+export const initialiserProgramme = (date_debut) =>
+  api.post("/programme/initialiser", { date_debut }, { timeout: 120000 }).then((r) => r.data);
 
-export const supprimerProgramme = (utilisateur_id = 1) =>
-  api.delete("/programme", { params: { utilisateur_id } }).then((r) => r.data);
+export const supprimerProgramme = () =>
+  api.delete("/programme").then((r) => r.data);
 
 // --- Semaine courante ---
-export const getSemaineCourante = (utilisateur_id = 1) =>
-  api.get("/semaine-courante", { params: { utilisateur_id } }).then((r) => r.data);
+export const getSemaineCourante = () =>
+  api.get("/semaine-courante").then((r) => r.data);
 
 // --- Macrocycles ---
-export const getMacrocycles = (utilisateur_id = 1) =>
-  api.get("/macrocycles", { params: { utilisateur_id } }).then((r) => r.data);
+export const getMacrocycles = () =>
+  api.get("/macrocycles").then((r) => r.data);
 
 export const getSemainesMacrocycle = (macrocycle_id) =>
   api.get(`/macrocycles/${macrocycle_id}/semaines`).then((r) => r.data);
@@ -62,14 +54,6 @@ export const journaliserSeance = (seance_id, payload) =>
 export const prefillSeance = (seance_id, metriques) =>
   api.post(`/seances/${seance_id}/journal/prefill`, metriques).then((r) => r.data);
 
-export const analyserScreenshot = (seance_id, file, utilisateur_id = 1) => {
-  const form = new FormData();
-  form.append("file", file);
-  return api.post(`/seances/${seance_id}/journal/analyse-screenshot?utilisateur_id=${utilisateur_id}`, form, {
-    timeout: 30000,
-  }).then((r) => r.data);
-};
-
 export const validerRPE = (seance_id, rpe, notes) =>
   api.patch(`/seances/${seance_id}/journal/valider`, { rpe, notes }).then((r) => r.data);
 
@@ -77,14 +61,14 @@ export const supprimerJournal = (seance_id) =>
   api.delete(`/seances/${seance_id}/journal`).then((r) => r.data);
 
 export const modifierJournal = (seance_id, payload) =>
-  api.patch(`/seances/${seance_id}/journal`, { utilisateur_id: 1, ...payload }).then((r) => r.data);
+  api.patch(`/seances/${seance_id}/journal`, payload).then((r) => r.data);
 
 // --- Évaluations ---
-export const getHistoriqueEvaluations = (utilisateur_id = 1) =>
-  api.get("/evaluations/historique", { params: { utilisateur_id } }).then((r) => r.data);
+export const getHistoriqueEvaluations = () =>
+  api.get("/evaluations/historique").then((r) => r.data);
 
-export const supprimerEvaluationsIncompletes = (utilisateur_id = 1) =>
-  api.delete("/evaluations/incompletes", { params: { utilisateur_id } }).then((r) => r.data);
+export const supprimerEvaluationsIncompletes = () =>
+  api.delete("/evaluations/incompletes").then((r) => r.data);
 
 export const modifierEvaluation = (evaluation_id, payload) =>
   api.patch(`/evaluations/${evaluation_id}`, payload).then((r) => r.data);
@@ -104,4 +88,12 @@ export const enregistrerAmrapBenchmark = (evaluation_id, payload) =>
 export const getExercicesEvaluation = () =>
   api.get("/exercices/evaluation").then((r) => r.data);
 
-export default api;
+// --- Analytics ---
+export const getTendancesPhysiologiques = () =>
+  api.get("/analytics/tendances-physiologiques").then((r) => r.data);
+
+export const getDistributionVolume = (macrocycle_id) =>
+  api.get("/analytics/distribution-volume", { params: macrocycle_id ? { macrocycle_id } : {} }).then((r) => r.data);
+
+export const getBiometrieRecuperation = (macrocycle_id) =>
+  api.get("/analytics/biometrie-recuperation", { params: macrocycle_id ? { macrocycle_id } : {} }).then((r) => r.data);

@@ -6,12 +6,10 @@ import {
 import { getTendancesPhysiologiques, getDistributionVolume, getBiometrieRecuperation } from "../api";
 import Card from "../components/Card";
 
-const USER_ID = 1;
-
 export default function Analytics() {
-  const { data: physio } = useQuery({ queryKey: ["tendances", USER_ID], queryFn: () => getTendancesPhysiologiques(USER_ID) });
-  const { data: volume } = useQuery({ queryKey: ["volume", USER_ID], queryFn: () => getDistributionVolume(USER_ID) });
-  const { data: recup } = useQuery({ queryKey: ["recuperation", USER_ID], queryFn: () => getBiometrieRecuperation(USER_ID) });
+  const { data: physio } = useQuery({ queryKey: ["tendances"], queryFn: () => getTendancesPhysiologiques() });
+  const { data: volume } = useQuery({ queryKey: ["volume"], queryFn: () => getDistributionVolume() });
+  const { data: recup } = useQuery({ queryKey: ["recuperation"], queryFn: () => getBiometrieRecuperation() });
 
   const vmaData = physio?.vma?.map((v) => ({ date: v.date.slice(5), vma: v.valeur })) ?? [];
   const volumeData = volume?.semaines?.map((s) => ({ sem: `S${s.numero_semaine}`, km: s.km_course, push: s.volume_muscu?.push ?? 0, pull: s.volume_muscu?.pull ?? 0, jambes: s.volume_muscu?.jambes ?? 0 })) ?? [];

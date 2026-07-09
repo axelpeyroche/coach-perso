@@ -91,9 +91,25 @@ class Utilisateur(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    password_hash: Mapped[Optional[str]] = mapped_column(String(255))
+    prenom: Mapped[Optional[str]] = mapped_column(String(120))
     nom: Mapped[str] = mapped_column(String(120), nullable=False)
+    sexe: Mapped[Optional[str]] = mapped_column(String(10))  # "homme" | "femme" | "autre"
     date_naissance: Mapped[Optional[date]] = mapped_column(Date)
     cree_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    onboarding_complet: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    # Préférences programme
+    type_programme: Mapped[Optional[str]] = mapped_column(String(20))    # "course" | "muscu" | "hybride"
+    seances_semaine: Mapped[Optional[int]] = mapped_column(Integer)
+    seances_course_semaine: Mapped[Optional[int]] = mapped_column(Integer)
+    seances_muscu_semaine: Mapped[Optional[int]] = mapped_column(Integer)
+    frequence_tests_semaines: Mapped[Optional[int]] = mapped_column(Integer, default=8)
+
+    # Objectifs
+    objectif_type: Mapped[Optional[str]] = mapped_column(String(20))     # "course" | "muscu" | "aucun"
+
+    # Physiologie
     fc_max: Mapped[Optional[int]] = mapped_column(Integer, comment="FC max mesurée (bpm)")
     fc_repos: Mapped[Optional[int]] = mapped_column(Integer, comment="FC de repos (bpm)")
     poids_kg: Mapped[Optional[float]] = mapped_column(Float, comment="Poids corporel (kg)")

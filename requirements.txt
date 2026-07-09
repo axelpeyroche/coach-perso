@@ -10,3 +10,5 @@ Pillow==11.2.1
 python-multipart==0.0.20
 rapidocr-onnxruntime==1.4.4
 numpy>=1.24
+passlib[bcrypt]==1.7.4
+python-jose[cryptography]==3.3.0

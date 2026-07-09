@@ -4,7 +4,6 @@ import { creerEvaluation, enregistrerDemiCooper, enregistrerMax1Min, enregistrer
 import Card from "../components/Card";
 import clsx from "clsx";
 
-const USER_ID = 1;
 
 const ETAPES = ["intro", "demi_cooper", "max_1min", "amrap", "resultats"];
 
@@ -113,14 +112,14 @@ export default function Evaluation() {
 
   const { data: historiqueData } = useQuery({
     queryKey: ["evaluations-historique"],
-    queryFn: () => getHistoriqueEvaluations(USER_ID),
+    queryFn: () => getHistoriqueEvaluations(),
   });
   const historique = historiqueData?.evaluations ?? [];
 
   const qc = useQueryClient();
   const creerMut = useMutation({ mutationFn: creerEvaluation });
   const nettoyerMut = useMutation({
-    mutationFn: () => supprimerEvaluationsIncompletes(USER_ID),
+    mutationFn: () => supprimerEvaluationsIncompletes(),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["evaluations-historique"] }),
   });
   const cooperMut = useMutation({ mutationFn: ({ id, data }) => enregistrerDemiCooper(id, data) });
@@ -148,7 +147,7 @@ export default function Evaluation() {
     // Crée l'évaluation en DB au moment de la première sauvegarde réelle
     let id = evaluationId;
     if (!id) {
-      const eval_ = await creerMut.mutateAsync({ utilisateur_id: USER_ID, est_induction: true });
+      const eval_ = await creerMut.mutateAsync({ est_induction: true });
       id = eval_.id;
       setEvaluationId(id);
     }

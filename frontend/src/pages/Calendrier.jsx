@@ -3,7 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 import { getToutesSemaines } from "../api";
 import clsx from "clsx";
 
-const USER_ID = 1;
 
 const TYPE_COLORS = {
   COURSE:     "bg-brand",
@@ -32,8 +31,8 @@ export default function Calendrier() {
   const [moisIdx, setMoisIdx] = useState(today.getMonth());
 
   const { data: raw } = useQuery({
-    queryKey: ["toutes-semaines", USER_ID],
-    queryFn:  () => getToutesSemaines(USER_ID),
+    queryKey: ["toutes-semaines"],
+    queryFn:  () => getToutesSemaines(),
   });
   const semaines = raw?.semaines ?? [];
 

@@ -36,6 +36,17 @@ def creer_tables() -> None:
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS fc_repos INTEGER",
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS poids_kg FLOAT",
         "ALTER TABLE journaux_seances ADD COLUMN IF NOT EXISTS details_intervalles TEXT",
+        # Auth + onboarding
+        "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255)",
+        "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS prenom VARCHAR(120)",
+        "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS sexe VARCHAR(10)",
+        "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS onboarding_complet BOOLEAN DEFAULT FALSE",
+        "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS type_programme VARCHAR(20)",
+        "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS seances_semaine INTEGER",
+        "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS seances_course_semaine INTEGER",
+        "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS seances_muscu_semaine INTEGER",
+        "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS frequence_tests_semaines INTEGER DEFAULT 8",
+        "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS objectif_type VARCHAR(20)",
     ]
     with engine.begin() as conn:
         for stmt in _migrations:

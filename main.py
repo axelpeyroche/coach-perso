@@ -19,12 +19,16 @@ from datetime import datetime, date, timedelta
 from typing import Optional
 
 import io
+import os
 import re
 
-from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Query, Security, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
+from passlib.context import CryptContext
+from jose import JWTError, jwt
 
 import analytics_service
 from database import creer_tables, obtenir_session
@@ -99,11 +103,216 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ---------------------------------------------------------------------------
+# Auth — JWT + bcrypt
+# ---------------------------------------------------------------------------
+
+SECRET_KEY = os.getenv("JWT_SECRET", "change-me-in-production-super-secret-key-32chars")
+ALGORITHM  = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 30  # 30 jours
+
+pwd_ctx    = CryptContext(schemes=["bcrypt"], deprecated="auto")
+http_bearer = HTTPBearer(auto_error=False)
+
+
+def _hash_password(password: str) -> str:
+    return pwd_ctx.hash(password)
+
+def _verify_password(plain: str, hashed: str) -> bool:
+    return pwd_ctx.verify(plain, hashed)
+
+def _create_token(user_id: int) -> str:
+    return jwt.encode({"sub": str(user_id)}, SECRET_KEY, algorithm=ALGORITHM)
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Security(http_bearer),
+    db: Session = Depends(obtenir_session),
+) -> Utilisateur:
+    if not credentials:
+        raise HTTPException(401, "Non authentifié")
+    try:
+        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = int(payload["sub"])
+    except (JWTError, KeyError, ValueError):
+        raise HTTPException(401, "Token invalide")
+    user = db.get(Utilisateur, user_id)
+    if not user:
+        raise HTTPException(401, "Utilisateur introuvable")
+    return user
+
 
 @app.on_event("startup")
 def demarrage():
     creer_tables()
     _initialiser_donnees_demo()
+
+
+# ---------------------------------------------------------------------------
+# Auth — Register / Login / Me / Onboarding
+# ---------------------------------------------------------------------------
+
+class RegisterSchema(BaseModel):
+    email: str
+    password: str
+    prenom: str
+    nom: str
+    sexe: Optional[str] = None
+    date_naissance: Optional[str] = None  # "YYYY-MM-DD"
+    poids_kg: Optional[float] = None
+
+class LoginSchema(BaseModel):
+    email: str
+    password: str
+
+class OnboardingSchema(BaseModel):
+    type_programme: str           # "course" | "muscu" | "hybride"
+    seances_semaine: int
+    seances_course_semaine: Optional[int] = None
+    seances_muscu_semaine: Optional[int] = None
+    frequence_tests_semaines: int = 8
+    objectif_type: str            # "course" | "muscu" | "aucun"
+    date_debut_programme: str     # "DD/MM/YYYY"
+
+
+@app.post("/api/auth/register", summary="Crée un nouveau compte")
+def register(payload: RegisterSchema, db: Session = Depends(obtenir_session)):
+    if db.query(Utilisateur).filter(Utilisateur.email == payload.email).first():
+        raise HTTPException(400, "Un compte existe déjà avec cet email")
+    dn = None
+    if payload.date_naissance:
+        try:
+            dn = date.fromisoformat(payload.date_naissance)
+        except ValueError:
+            raise HTTPException(400, "Format date_naissance invalide — attendu YYYY-MM-DD")
+    user = Utilisateur(
+        email=payload.email,
+        password_hash=_hash_password(payload.password),
+        prenom=payload.prenom,
+        nom=payload.nom,
+        sexe=payload.sexe,
+        date_naissance=dn,
+        poids_kg=payload.poids_kg,
+        onboarding_complet=False,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    token = _create_token(user.id)
+    return {"access_token": token, "token_type": "bearer", "user_id": user.id, "onboarding_complet": False}
+
+
+@app.post("/api/auth/login", summary="Authentifie et retourne un token JWT")
+def login(payload: LoginSchema, db: Session = Depends(obtenir_session)):
+    user = db.query(Utilisateur).filter(Utilisateur.email == payload.email).first()
+    if not user or not user.password_hash or not _verify_password(payload.password, user.password_hash):
+        raise HTTPException(401, "Email ou mot de passe incorrect")
+    token = _create_token(user.id)
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user_id": user.id,
+        "onboarding_complet": bool(user.onboarding_complet),
+    }
+
+
+@app.get("/api/auth/me", summary="Retourne le profil de l'utilisateur connecté")
+def me(current_user: Utilisateur = Depends(get_current_user)):
+    dn = current_user.date_naissance
+    age = None
+    if dn:
+        today = date.today()
+        age = today.year - dn.year - ((today.month, today.day) < (dn.month, dn.day))
+    return {
+        "id": current_user.id,
+        "email": current_user.email,
+        "prenom": current_user.prenom,
+        "nom": current_user.nom,
+        "sexe": current_user.sexe,
+        "date_naissance": str(dn) if dn else None,
+        "age": age,
+        "poids_kg": current_user.poids_kg,
+        "fc_max": current_user.fc_max,
+        "fc_repos": current_user.fc_repos,
+        "onboarding_complet": bool(current_user.onboarding_complet),
+        "type_programme": current_user.type_programme,
+        "seances_semaine": current_user.seances_semaine,
+        "seances_course_semaine": current_user.seances_course_semaine,
+        "seances_muscu_semaine": current_user.seances_muscu_semaine,
+        "frequence_tests_semaines": current_user.frequence_tests_semaines,
+        "objectif_type": current_user.objectif_type,
+    }
+
+
+@app.post("/api/auth/onboarding", summary="Complète l'onboarding et génère le programme")
+def onboarding(
+    payload: OnboardingSchema,
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(obtenir_session),
+):
+    from models import SemaineEntrainement
+    from periodization_rules import BLUEPRINT_MACROCYCLE, generer_dates_semaines, generer_blueprint_course
+    from seed_seances import MODULE1, _POOL_SURCHARGE, _semaine_course, _inserer_seances_en_session
+
+    # Sauvegarder préférences
+    current_user.type_programme = payload.type_programme
+    current_user.seances_semaine = payload.seances_semaine
+    current_user.seances_course_semaine = payload.seances_course_semaine
+    current_user.seances_muscu_semaine = payload.seances_muscu_semaine
+    current_user.frequence_tests_semaines = payload.frequence_tests_semaines
+    current_user.objectif_type = payload.objectif_type
+    current_user.onboarding_complet = True
+
+    try:
+        debut = datetime.strptime(payload.date_debut_programme, "%d/%m/%Y").date()
+    except ValueError:
+        raise HTTPException(400, "Format date_debut_programme invalide — attendu jj/mm/aaaa")
+    if debut.weekday() != 0:
+        # Ramener au lundi suivant
+        debut = debut + timedelta(days=(7 - debut.weekday()) % 7)
+
+    # Supprimer ancien programme si existant
+    for mc_old in db.query(Macrocycle).filter(Macrocycle.utilisateur_id == current_user.id).all():
+        db.delete(mc_old)
+    db.flush()
+
+    # Récupérer objectif course si existant
+    obj_course = db.query(ObjectifCourse).filter(
+        ObjectifCourse.utilisateur_id == current_user.id
+    ).order_by(ObjectifCourse.id.desc()).first()
+
+    if obj_course and payload.objectif_type in ("course", "hybride"):
+        n_semaines = max(4, (obj_course.date_course - debut).days // 7)
+        n_surcharge = n_semaines - 3
+        blueprint = generer_blueprint_course(n_semaines)
+        mc = Macrocycle(utilisateur_id=current_user.id, numero_cycle=1,
+                        date_debut=debut, date_fin=debut + timedelta(weeks=n_semaines))
+        db.add(mc); db.flush()
+        for regle, ds in zip(blueprint, [debut + timedelta(weeks=i) for i in range(n_semaines)]):
+            db.add(SemaineEntrainement(macrocycle_id=mc.id, numero_semaine=regle.numero,
+                macrophase=regle.macrophase, date_debut=ds,
+                multiplicateur_volume=regle.multiplicateur_volume,
+                objectif_km_course=regle.objectif_km_course, objectif_amrap_min=regle.objectif_amrap_min))
+        db.flush()
+        content = {i: _POOL_SURCHARGE[min(i, 15)] for i in range(1, n_surcharge + 1)}
+        content[n_surcharge + 1] = MODULE1[6]; content[n_surcharge + 2] = MODULE1[7]
+        content[n_semaines] = _semaine_course(obj_course.date_course, obj_course.nom)
+        _inserer_seances_en_session(db, mc, content)
+    else:
+        # Programme standard 2 macrocycles
+        for numero_cycle in (1, 2):
+            debut_mc = debut + timedelta(weeks=8 * (numero_cycle - 1))
+            mc = Macrocycle(utilisateur_id=current_user.id, numero_cycle=numero_cycle,
+                            date_debut=debut_mc, date_fin=debut_mc + timedelta(weeks=8))
+            db.add(mc); db.flush()
+            for regle, ds in zip(BLUEPRINT_MACROCYCLE, generer_dates_semaines(debut_mc)):
+                db.add(SemaineEntrainement(macrocycle_id=mc.id, numero_semaine=regle.numero,
+                    macrophase=regle.macrophase, date_debut=ds,
+                    multiplicateur_volume=regle.multiplicateur_volume,
+                    objectif_km_course=regle.objectif_km_course, objectif_amrap_min=regle.objectif_amrap_min))
+            db.flush()
+
+    db.commit()
+    return {"ok": True, "message": "Onboarding terminé, programme généré."}
 
 
 # ---------------------------------------------------------------------------
@@ -116,25 +325,16 @@ class ProfilFCSchema(BaseModel):
     poids_kg: Optional[float] = Field(None, gt=0, lt=300)
 
 @app.get("/api/utilisateur/profil-fc", summary="Récupère fc_max, fc_repos et poids_kg de l'utilisateur")
-def get_profil_fc(utilisateur_id: int = 1, db: Session = Depends(obtenir_session)):
-    u = db.query(Utilisateur).filter(Utilisateur.id == utilisateur_id).first()
-    if not u:
-        raise HTTPException(404, "Utilisateur non trouvé")
-    return {"fc_max": u.fc_max, "fc_repos": u.fc_repos, "poids_kg": u.poids_kg}
+def get_profil_fc(current_user: Utilisateur = Depends(get_current_user)):
+    return {"fc_max": current_user.fc_max, "fc_repos": current_user.fc_repos, "poids_kg": current_user.poids_kg}
 
 @app.patch("/api/utilisateur/profil-fc", summary="Met à jour fc_max, fc_repos et/ou poids_kg")
-def patch_profil_fc(payload: ProfilFCSchema, utilisateur_id: int = 1, db: Session = Depends(obtenir_session)):
-    u = db.query(Utilisateur).filter(Utilisateur.id == utilisateur_id).first()
-    if not u:
-        raise HTTPException(404, "Utilisateur non trouvé")
-    if payload.fc_max is not None:
-        u.fc_max = payload.fc_max
-    if payload.fc_repos is not None:
-        u.fc_repos = payload.fc_repos
-    if payload.poids_kg is not None:
-        u.poids_kg = payload.poids_kg
+def patch_profil_fc(payload: ProfilFCSchema, current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
+    if payload.fc_max is not None: current_user.fc_max = payload.fc_max
+    if payload.fc_repos is not None: current_user.fc_repos = payload.fc_repos
+    if payload.poids_kg is not None: current_user.poids_kg = payload.poids_kg
     db.commit()
-    return {"fc_max": u.fc_max, "fc_repos": u.fc_repos, "poids_kg": u.poids_kg}
+    return {"fc_max": current_user.fc_max, "fc_repos": current_user.fc_repos, "poids_kg": current_user.poids_kg}
 
 
 class CreerEvaluationSchema(BaseModel):
@@ -191,8 +391,8 @@ class JournalSeanceSchema(BaseModel):
 # ---------------------------------------------------------------------------
 
 @app.delete("/api/evaluations/incompletes", summary="Supprime les évaluations sans AMRAP ET sans Max 1 min")
-def supprimer_evaluations_incompletes(utilisateur_id: int = Query(1), db: Session = Depends(obtenir_session)):
-    evals = db.query(JournalEvaluationSeance).filter(JournalEvaluationSeance.utilisateur_id == utilisateur_id).all()
+def supprimer_evaluations_incompletes(current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
+    evals = db.query(JournalEvaluationSeance).filter(JournalEvaluationSeance.utilisateur_id == current_user.id).all()
     supprimes = 0
     for ev in evals:
         if ev.benchmark_amrap is None and len(ev.resultats_max_1min) == 0:
@@ -248,10 +448,10 @@ def modifier_evaluation(evaluation_id: int, payload: ModifierEvaluationSchema, d
 
 
 @app.get("/api/evaluations/historique", summary="Historique des évaluations passées")
-def historique_evaluations(utilisateur_id: int = Query(1), db: Session = Depends(obtenir_session)):
+def historique_evaluations(current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
     evals = (
         db.query(JournalEvaluationSeance)
-        .filter(JournalEvaluationSeance.utilisateur_id == utilisateur_id)
+        .filter(JournalEvaluationSeance.utilisateur_id == current_user.id)
         .order_by(JournalEvaluationSeance.evalue_le.desc())
         .all()
     )
@@ -276,9 +476,9 @@ def historique_evaluations(utilisateur_id: int = Query(1), db: Session = Depends
 
 
 @app.post("/api/evaluations/", summary="Créer une session d'évaluation")
-def creer_evaluation(payload: CreerEvaluationSchema, db: Session = Depends(obtenir_session)):
+def creer_evaluation(payload: CreerEvaluationSchema, current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
     evaluation = JournalEvaluationSeance(
-        utilisateur_id=payload.utilisateur_id,
+        utilisateur_id=current_user.id,
         macrocycle_id=payload.macrocycle_id,
         est_induction=payload.est_induction,
         notes=payload.notes,
@@ -409,6 +609,7 @@ def enregistrer_amrap_benchmark(
 def journaliser_seance(
     seance_id: int,
     payload: JournalSeanceSchema,
+    current_user: Utilisateur = Depends(get_current_user),
     db: Session = Depends(obtenir_session),
 ):
     seance = db.get(SeanceEntrainement, seance_id)
@@ -416,7 +617,7 @@ def journaliser_seance(
         raise HTTPException(404, "Séance introuvable")
 
     journal = JournalSeance(
-        utilisateur_id=payload.utilisateur_id,
+        utilisateur_id=current_user.id,
         seance_id=seance_id,
         completee=payload.completee,
         rpe=payload.rpe,
@@ -453,6 +654,7 @@ class PrefillSeanceSchema(BaseModel):
 def prefill_seance(
     seance_id: int,
     payload: PrefillSeanceSchema,
+    current_user: Utilisateur = Depends(get_current_user),
     db: Session = Depends(obtenir_session),
 ):
     seance = db.get(SeanceEntrainement, seance_id)
@@ -469,7 +671,7 @@ def prefill_seance(
         existing.completee = False
     else:
         journal = JournalSeance(
-            utilisateur_id=payload.utilisateur_id,
+            utilisateur_id=current_user.id,
             seance_id=seance_id,
             completee=False,
             duree_reelle_min=payload.duree_reelle_min,
@@ -641,14 +843,14 @@ async def analyser_screenshot(
 # ---------------------------------------------------------------------------
 
 @app.get("/api/semaine-courante", summary="Retourne les séances de la semaine en cours")
-def semaine_courante(utilisateur_id: int = Query(1), db: Session = Depends(obtenir_session)):
+def semaine_courante(current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
     aujourd_hui = date.today()
 
     semaine = (
         db.query(SemaineEntrainement)
         .join(Macrocycle)
         .filter(
-            Macrocycle.utilisateur_id == utilisateur_id,
+            Macrocycle.utilisateur_id == current_user.id,
             SemaineEntrainement.date_debut <= aujourd_hui,
             SemaineEntrainement.date_debut + timedelta(days=7) > aujourd_hui,
         )
@@ -661,7 +863,7 @@ def semaine_courante(utilisateur_id: int = Query(1), db: Session = Depends(obten
             db.query(SemaineEntrainement)
             .join(Macrocycle)
             .filter(
-                Macrocycle.utilisateur_id == utilisateur_id,
+                Macrocycle.utilisateur_id == current_user.id,
                 SemaineEntrainement.date_debut > aujourd_hui,
             )
             .order_by(SemaineEntrainement.date_debut)
@@ -784,10 +986,10 @@ def obtenir_semaines_macrocycle(
     summary="Évolution VMA et scores Max 1 min au fil des macrocycles",
 )
 def tendances_physiologiques(
-    utilisateur_id: int = Query(...),
+    current_user: Utilisateur = Depends(get_current_user),
     db: Session = Depends(obtenir_session),
 ):
-    return analytics_service.tendances_physiologiques(db, utilisateur_id)
+    return analytics_service.tendances_physiologiques(db, current_user.id)
 
 
 @app.get(
@@ -795,11 +997,11 @@ def tendances_physiologiques(
     summary="Kilométrage hebdomadaire, D+ cumulé et répartition musculaire Push/Pull/Jambes",
 )
 def distribution_volume(
-    utilisateur_id: int = Query(...),
     macrocycle_id: Optional[int] = Query(None),
+    current_user: Utilisateur = Depends(get_current_user),
     db: Session = Depends(obtenir_session),
 ):
-    return analytics_service.distribution_volume(db, utilisateur_id, macrocycle_id)
+    return analytics_service.distribution_volume(db, current_user.id, macrocycle_id)
 
 
 @app.get(
@@ -807,11 +1009,11 @@ def distribution_volume(
     summary="Tendance RPE et Ratio Charge Aiguë/Chronique (ACWA) avec alerte risque blessure",
 )
 def biometrie_recuperation(
-    utilisateur_id: int = Query(...),
     macrocycle_id: Optional[int] = Query(None),
+    current_user: Utilisateur = Depends(get_current_user),
     db: Session = Depends(obtenir_session),
 ):
-    return analytics_service.biometrie_recuperation(db, utilisateur_id, macrocycle_id)
+    return analytics_service.biometrie_recuperation(db, current_user.id, macrocycle_id)
 
 
 # ---------------------------------------------------------------------------
@@ -829,8 +1031,8 @@ SLUGS_EVALUATION = [
 ]
 
 @app.get("/api/programme/toutes-semaines", summary="Toutes les semaines du programme — vue à plat sans notion de module")
-def toutes_semaines_programme(utilisateur_id: int = Query(1), db: Session = Depends(obtenir_session)):
-    mcs = db.query(Macrocycle).filter(Macrocycle.utilisateur_id == utilisateur_id).order_by(Macrocycle.numero_cycle).all()
+def toutes_semaines_programme(current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
+    mcs = db.query(Macrocycle).filter(Macrocycle.utilisateur_id == current_user.id).order_by(Macrocycle.numero_cycle).all()
     semaine_globale = 0
     result = []
     for mc in mcs:
@@ -885,8 +1087,8 @@ def toutes_semaines_programme(utilisateur_id: int = Query(1), db: Session = Depe
 
 
 @app.get("/api/macrocycles", summary="Liste tous les macrocycles de l'utilisateur")
-def lister_macrocycles(utilisateur_id: int = Query(1), db: Session = Depends(obtenir_session)):
-    mcs = db.query(Macrocycle).filter(Macrocycle.utilisateur_id == utilisateur_id).order_by(Macrocycle.numero_cycle).all()
+def lister_macrocycles(current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
+    mcs = db.query(Macrocycle).filter(Macrocycle.utilisateur_id == current_user.id).order_by(Macrocycle.numero_cycle).all()
     return [
         {
             "id": mc.id,
@@ -1021,10 +1223,10 @@ def _allures_depuis_objectif(distance_km: float, objectif_temps_min: int) -> dic
 
 
 @app.get("/api/objectif-course", summary="Récupère le prochain objectif de course")
-def get_objectif_course(utilisateur_id: int = Query(1), db: Session = Depends(obtenir_session)):
+def get_objectif_course(current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
     obj = (
         db.query(ObjectifCourse)
-        .filter(ObjectifCourse.utilisateur_id == utilisateur_id)
+        .filter(ObjectifCourse.utilisateur_id == current_user.id)
         .order_by(ObjectifCourse.cree_le.desc())
         .first()
     )
@@ -1050,17 +1252,17 @@ def get_objectif_course(utilisateur_id: int = Query(1), db: Session = Depends(ob
 @app.post("/api/objectif-course", summary="Enregistre/remplace le prochain objectif de course")
 def set_objectif_course(
     payload: ObjectifCourseSchema,
-    utilisateur_id: int = Query(1),
+    current_user: Utilisateur = Depends(get_current_user),
     db: Session = Depends(obtenir_session),
 ):
     # Remplace l'objectif existant
-    db.query(ObjectifCourse).filter(ObjectifCourse.utilisateur_id == utilisateur_id).delete()
+    db.query(ObjectifCourse).filter(ObjectifCourse.utilisateur_id == current_user.id).delete()
     try:
         date_course = datetime.strptime(payload.date_course, "%d/%m/%Y").date()
     except ValueError:
         raise HTTPException(400, "Format de date invalide — attendu jj/mm/aaaa")
     obj = ObjectifCourse(
-        utilisateur_id=utilisateur_id,
+        utilisateur_id=current_user.id,
         nom=payload.nom,
         date_course=date_course,
         distance_km=payload.distance_km,
@@ -1159,14 +1361,14 @@ class InitProgrammePayload(BaseModel):
 
 
 @app.get("/api/programme/statut", summary="Statut du programme : existe-t-il ? quelle date de début ?")
-def statut_programme(utilisateur_id: int = Query(1), db: Session = Depends(obtenir_session)):
-    mcs = db.query(Macrocycle).filter(Macrocycle.utilisateur_id == utilisateur_id).order_by(Macrocycle.numero_cycle).all()
+def statut_programme(current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
+    mcs = db.query(Macrocycle).filter(Macrocycle.utilisateur_id == current_user.id).order_by(Macrocycle.numero_cycle).all()
     if not mcs:
         return {"programme_existe": False}
 
     mc1 = mcs[0]
     mc_last = mcs[-1]
-    obj = db.query(ObjectifCourse).filter(ObjectifCourse.utilisateur_id == utilisateur_id).order_by(ObjectifCourse.id.desc()).first()
+    obj = db.query(ObjectifCourse).filter(ObjectifCourse.utilisateur_id == current_user.id).order_by(ObjectifCourse.id.desc()).first()
 
     semaines_totales = sum(len(mc.semaines) for mc in mcs)
     return {
@@ -1184,8 +1386,8 @@ def statut_programme(utilisateur_id: int = Query(1), db: Session = Depends(obten
 
 
 @app.delete("/api/programme", summary="Supprime tous les macrocycles et séances de l'utilisateur")
-def supprimer_programme(utilisateur_id: int = Query(1), db: Session = Depends(obtenir_session)):
-    mcs = db.query(Macrocycle).filter(Macrocycle.utilisateur_id == utilisateur_id).all()
+def supprimer_programme(current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
+    mcs = db.query(Macrocycle).filter(Macrocycle.utilisateur_id == current_user.id).all()
     for mc in mcs:
         db.delete(mc)
     db.commit()
@@ -1193,7 +1395,7 @@ def supprimer_programme(utilisateur_id: int = Query(1), db: Session = Depends(ob
 
 
 @app.post("/api/programme/initialiser", summary="Génère le programme depuis la date choisie dans l'UI")
-def initialiser_programme(payload: InitProgrammePayload, db: Session = Depends(obtenir_session)):
+def initialiser_programme(payload: InitProgrammePayload, current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
     from models import SemaineEntrainement
     from periodization_rules import (
         BLUEPRINT_MACROCYCLE, generer_dates_semaines, generer_blueprint_course,
@@ -1211,16 +1413,14 @@ def initialiser_programme(payload: InitProgrammePayload, db: Session = Depends(o
     if debut_mc1.weekday() != 0:
         raise HTTPException(400, "La date de début doit être un lundi")
 
-    user = db.query(Utilisateur).filter(Utilisateur.id == payload.utilisateur_id).first()
-    if not user:
-        raise HTTPException(404, f"Utilisateur {payload.utilisateur_id} introuvable")
+    user = current_user
 
     obj = db.query(ObjectifCourse).filter(
-        ObjectifCourse.utilisateur_id == payload.utilisateur_id
+        ObjectifCourse.utilisateur_id == user.id
     ).order_by(ObjectifCourse.id.desc()).first()
 
     # Suppression des macrocycles existants (cascade ORM — même session)
-    for mc_old in db.query(Macrocycle).filter(Macrocycle.utilisateur_id == payload.utilisateur_id).all():
+    for mc_old in db.query(Macrocycle).filter(Macrocycle.utilisateur_id == user.id).all():
         db.delete(mc_old)
     db.flush()
 
