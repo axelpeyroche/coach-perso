@@ -507,6 +507,48 @@ def valider_rpe(
     return {"ok": True}
 
 
+@app.delete(
+    "/api/seances/{seance_id}/journal",
+    summary="Supprime le journal d'une séance (annule la validation)",
+)
+def supprimer_journal_seance(
+    seance_id: int,
+    db: Session = Depends(obtenir_session),
+):
+    seance = db.get(SeanceEntrainement, seance_id)
+    if not seance or not seance.journal:
+        raise HTTPException(404, "Journal introuvable")
+    db.delete(seance.journal)
+    db.commit()
+    return {"ok": True}
+
+
+@app.patch(
+    "/api/seances/{seance_id}/journal",
+    summary="Modifie les données d'un journal existant",
+)
+def modifier_journal_seance(
+    seance_id: int,
+    payload: JournalSeanceSchema,
+    db: Session = Depends(obtenir_session),
+):
+    seance = db.get(SeanceEntrainement, seance_id)
+    if not seance or not seance.journal:
+        raise HTTPException(404, "Journal introuvable")
+    j = seance.journal
+    if payload.rpe is not None: j.rpe = payload.rpe
+    if payload.notes is not None: j.notes = payload.notes
+    if payload.duree_reelle_min is not None: j.duree_reelle_min = payload.duree_reelle_min
+    if payload.distance_reelle_km is not None: j.distance_reelle_km = payload.distance_reelle_km
+    if payload.dplus_reel_m is not None: j.dplus_reel_m = payload.dplus_reel_m
+    if payload.fc_moyenne_bpm is not None: j.fc_moyenne_bpm = payload.fc_moyenne_bpm
+    if payload.fc_max_bpm is not None: j.fc_max_bpm = payload.fc_max_bpm
+    if payload.details_intervalles is not None: j.details_intervalles = payload.details_intervalles
+    j.completee = True
+    db.commit()
+    return {"ok": True}
+
+
 def _extraire_metriques_forme(texte: str) -> dict:
     """Parse le texte OCR d'un screenshot de l'app Forme (Apple Watch)."""
     metriques = {}

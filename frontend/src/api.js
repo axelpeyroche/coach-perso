@@ -73,6 +73,12 @@ export const analyserScreenshot = (seance_id, file, utilisateur_id = 1) => {
 export const validerRPE = (seance_id, rpe, notes) =>
   api.patch(`/seances/${seance_id}/journal/valider`, { rpe, notes }).then((r) => r.data);
 
+export const supprimerJournal = (seance_id) =>
+  api.delete(`/seances/${seance_id}/journal`).then((r) => r.data);
+
+export const modifierJournal = (seance_id, payload) =>
+  api.patch(`/seances/${seance_id}/journal`, { utilisateur_id: 1, ...payload }).then((r) => r.data);
+
 // --- Évaluations ---
 export const getHistoriqueEvaluations = (utilisateur_id = 1) =>
   api.get("/evaluations/historique", { params: { utilisateur_id } }).then((r) => r.data);

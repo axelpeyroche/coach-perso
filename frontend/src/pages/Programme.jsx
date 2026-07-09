@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getToutesSemaines, journaliserSeance, validerRPE, getProfilFC } from "../api";
+import { getToutesSemaines, journaliserSeance, validerRPE, getProfilFC, supprimerJournal, modifierJournal } from "../api";
 import clsx from "clsx";
 
 const USER_ID = 1;
@@ -60,12 +60,19 @@ function signalCorrelationRPEFC(rpe, fcMoy, zone, zonesFC) {
 
 // ─── Formulaire de journalisation ──────────────────────────────────────────
 
-function FormulaireLog({ seance, onClose, onDone }) {
+function FormulaireLog({ seance, onClose, onDone, modeEdit = false }) {
   const qc = useQueryClient();
-  const prefill = seance.journal && !seance.journal.completee;
-  const [rpe, setRpe]   = useState(7);
-  const [notes, setNotes] = useState("");
-  const [champs, set_]  = useState({});
+  const prefill = !modeEdit && seance.journal && !seance.journal.completee;
+  const j = seance.journal;
+  const [rpe, setRpe]     = useState(modeEdit && j?.rpe ? j.rpe : 7);
+  const [notes, setNotes] = useState(modeEdit && j?.notes ? j.notes : "");
+  const [champs, set_]    = useState(() => modeEdit && j ? {
+    duree_reelle_min:   j.duree_reelle_min   ?? "",
+    distance_reelle_km: j.distance_reelle_km ?? "",
+    dplus_reel_m:       j.dplus_reel_m       ?? "",
+    fc_moyenne_bpm:     j.fc_moyenne_bpm     ?? "",
+    fc_max_bpm:         j.fc_max_bpm         ?? "",
+  } : {});
   const setC = (k, v) => set_(c => ({ ...c, [k]: v }));
 
   const isCourse = seance.type === "COURSE";
@@ -78,7 +85,15 @@ function FormulaireLog({ seance, onClose, onDone }) {
   const dureeBloc = isIntervalles ? parseInt(mIntervalles[2]) : 0;
 
   // Blocs intervalles : [{distance_km, fc_moyenne_bpm}]
-  const [blocs, setBlocs] = useState(() => Array.from({ length: nbBlocs }, () => ({ distance_km: "", fc_moyenne_bpm: "" })));
+  const [blocs, setBlocs] = useState(() => {
+    if (modeEdit && j?.details_intervalles) {
+      try {
+        const parsed = JSON.parse(j.details_intervalles);
+        return parsed.map(b => ({ distance_km: b.distance_km ?? "", fc_moyenne_bpm: b.fc_moyenne_bpm ?? "" }));
+      } catch {}
+    }
+    return Array.from({ length: nbBlocs }, () => ({ distance_km: "", fc_moyenne_bpm: "" }));
+  });
   const [distRepos, setDistRepos] = useState("");
   const setBloc = (i, k, v) => setBlocs(b => b.map((bloc, idx) => idx === i ? { ...bloc, [k]: v } : bloc));
 
@@ -101,7 +116,9 @@ function FormulaireLog({ seance, onClose, onDone }) {
         }));
         if (distRepos) nums.distance_repos_km = parseFloat(distRepos);
       }
-      return journaliserSeance(seance.id, { utilisateur_id: USER_ID, rpe, notes: notes || undefined, ...nums, details_intervalles: detailsIntervalles });
+      const payload = { utilisateur_id: USER_ID, rpe, notes: notes || undefined, ...nums, details_intervalles: detailsIntervalles };
+      if (modeEdit) return modifierJournal(seance.id, payload);
+      return journaliserSeance(seance.id, payload);
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["toutes-semaines"] }); onDone(); },
   });
@@ -220,7 +237,7 @@ function FormulaireLog({ seance, onClose, onDone }) {
         </button>
         <button onClick={() => mut.mutate()} disabled={mut.isPending}
           className="px-6 py-2.5 rounded-xl bg-brand text-white font-semibold text-sm hover:bg-brand-dark transition-colors disabled:opacity-50">
-          {mut.isPending ? "..." : "Valider ✓"}
+          {mut.isPending ? "..." : modeEdit ? "Enregistrer ✓" : "Valider ✓"}
         </button>
       </div>
       {mut.isError && <p className="text-xs text-red-500 text-center">Erreur — réessaie.</p>}
@@ -231,12 +248,19 @@ function FormulaireLog({ seance, onClose, onDone }) {
 // ─── Carte séance ───────────────────────────────────────────────────────────
 
 function CarteSeance({ seance, zonesFC }) {
-  const [ouvert, setOuvert]   = useState(false);
-  const [logOpen, setLogOpen] = useState(false);
-  const [valide, setValide]   = useState(false);
+  const qc = useQueryClient();
+  const [ouvert, setOuvert]     = useState(false);
+  const [logOpen, setLogOpen]   = useState(false);
+  const [valide, setValide]     = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
 
   const fait = valide || seance.journal?.completee;
   const prefillEnAttente = !fait && seance.journal && !seance.journal.completee;
+
+  const mutAnnuler = useMutation({
+    mutationFn: () => supprimerJournal(seance.id),
+    onSuccess: () => { setValide(false); qc.invalidateQueries({ queryKey: ["toutes-semaines"] }); },
+  });
 
   return (
     <div className={clsx(
@@ -279,7 +303,18 @@ function CarteSeance({ seance, zonesFC }) {
         {/* Actions */}
         <div className="flex items-center gap-2 shrink-0">
           {fait ? (
-            <span className="text-sm text-green-600 dark:text-green-400 font-bold">✓</span>
+            <>
+              <span className="text-sm text-green-600 dark:text-green-400 font-bold">✓</span>
+              <button onClick={() => { setEditOpen(v => !v); setOuvert(false); }}
+                className="px-2 py-1 rounded-lg text-xs text-gray-500 hover:text-brand hover:bg-brand/10 transition-colors" title="Modifier">
+                ✏️
+              </button>
+              <button onClick={() => { if (window.confirm("Annuler cette séance ?")) mutAnnuler.mutate(); }}
+                disabled={mutAnnuler.isPending}
+                className="px-2 py-1 rounded-lg text-xs text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-40" title="Annuler la validation">
+                🗑
+              </button>
+            </>
           ) : (
             <button onClick={() => { setLogOpen(v => !v); setOuvert(false); }}
               className={clsx(
@@ -291,7 +326,7 @@ function CarteSeance({ seance, zonesFC }) {
               Valider
             </button>
           )}
-          <button onClick={() => { setOuvert(v => !v); setLogOpen(false); }}
+          <button onClick={() => { setOuvert(v => !v); setLogOpen(false); setEditOpen(false); }}
             className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 px-1">
             <span className={clsx("inline-block transition-transform text-xs", ouvert ? "rotate-180" : "")}>▼</span>
           </button>
@@ -312,6 +347,16 @@ function CarteSeance({ seance, zonesFC }) {
           })()}
           {seance.journal.notes && <span className="truncate italic w-full">{seance.journal.notes}</span>}
         </div>
+      )}
+
+      {/* ── Formulaire modification ── */}
+      {editOpen && fait && (
+        <FormulaireLog
+          seance={seance}
+          onClose={() => setEditOpen(false)}
+          onDone={() => setEditOpen(false)}
+          modeEdit
+        />
       )}
 
       {/* ── Détail séance ── */}
