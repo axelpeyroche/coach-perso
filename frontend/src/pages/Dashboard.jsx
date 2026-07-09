@@ -475,7 +475,7 @@ export default function Dashboard() {
       <div className="p-4 md:p-8 max-w-2xl mx-auto space-y-6">
         <div>
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Bienvenue</h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Configure ton programme d'entraînement EPC pour commencer.</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Configure ton programme d'entraînement pour commencer.</p>
         </div>
         <BlocObjectif vma={null} />
         <SetupProgramme objectifCourse={objectifCourse} onDone={() => qc.invalidateQueries({ queryKey: ["statut-programme"] })} />
@@ -488,7 +488,7 @@ export default function Dashboard() {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Dashboard</h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Vue d'ensemble de ta progression EPC</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Vue d'ensemble de ta progression</p>
         </div>
         <ReconfigurerBtn />
       </div>

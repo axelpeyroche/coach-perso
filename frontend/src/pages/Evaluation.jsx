@@ -181,7 +181,7 @@ export default function Evaluation() {
     <div className="p-4 md:p-8 max-w-2xl mx-auto space-y-6">
       <div>
         <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Évaluation</h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Tests EPC — VMA, force & conditionnement</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Tests — VMA, force & conditionnement</p>
       </div>
 
       {/* Stepper */}
@@ -201,13 +201,13 @@ export default function Evaluation() {
       </div>
 
       {etape === "intro" && (
-        <Card title="Protocole EPC — Semaine 8">
+        <Card title="Protocole — Semaine 8">
           <div className="space-y-3 text-sm text-gray-600 dark:text-gray-400">
             <p>Cette session comprend 3 tests enchaînés :</p>
             <div className="space-y-2">
               <div className="flex gap-3"><span>🏃</span><span><strong className="text-gray-900 dark:text-white">Demi-Cooper</strong> — 6 min à allure maximale. Calcule ta VMA.</span></div>
               <div className="flex gap-3"><span>💪</span><span><strong className="text-gray-900 dark:text-white">Max 1 min</strong> — 7 mouvements, 3 min de récup entre chaque.</span></div>
-              <div className="flex gap-3"><span>🔥</span><span><strong className="text-gray-900 dark:text-white">AMRAP 10 min</strong> — circuit fixe EPC, score en tours.</span></div>
+              <div className="flex gap-3"><span>🔥</span><span><strong className="text-gray-900 dark:text-white">AMRAP 10 min</strong> — circuit fixe, score en tours.</span></div>
             </div>
           </div>
           <button onClick={demarrer} disabled={creerMut.isPending} className="mt-5 w-full py-3 rounded-xl bg-brand text-white font-semibold text-sm hover:bg-brand-dark transition-colors disabled:opacity-50">
@@ -370,7 +370,7 @@ export default function Evaluation() {
       {etape === "amrap" && (
         <Card title="🔥 AMRAP Benchmark — 10 minutes">
           <div className="text-sm text-gray-600 dark:text-gray-400 space-y-1 mb-4">
-            <p className="font-medium text-gray-800 dark:text-gray-200 mb-2">Circuit fixe EPC :</p>
+            <p className="font-medium text-gray-800 dark:text-gray-200 mb-2">Circuit fixe :</p>
             {["10 Tractions", "10 Pompes", "10 Squats", "10 Dips", "10 Burpees", "10 Mountain Climbers"].map((ex) => (
               <div key={ex} className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-brand" /><span>{ex}</span></div>
             ))}
