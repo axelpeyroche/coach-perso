@@ -45,8 +45,8 @@ function FormulaireLog({ seance, onClose, onDone }) {
   const [analyseErr, setErr]   = useState(null);
   const setC = (k, v) => set_(c => ({ ...c, [k]: v }));
 
-  const isAMRAP = seance.type === "AMRAP";
-  const isEMOM  = seance.type === "EMOM";
+  const isCourse = seance.type === "COURSE";
+  const isMuscu  = seance.type === "AMRAP" || seance.type === "EMOM";
 
   async function onFileChange(e) {
     const file = e.target.files[0];
@@ -82,76 +82,68 @@ function FormulaireLog({ seance, onClose, onDone }) {
   return (
     <div className="border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40 px-4 py-4 space-y-4">
 
-      {/* Zone upload screenshot */}
-      {prefill ? (
-        /* Métriques importées */
-        <div className="rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 px-4 py-3 space-y-2">
-          <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wide">Métriques importées ✓</p>
-          <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-            {seance.journal.duree_reelle_min   && <span className="text-gray-500 dark:text-gray-400">Durée <strong className="text-gray-900 dark:text-white">{seance.journal.duree_reelle_min} min</strong></span>}
-            {seance.journal.distance_reelle_km && <span className="text-gray-500 dark:text-gray-400">Distance <strong className="text-gray-900 dark:text-white">{seance.journal.distance_reelle_km} km</strong></span>}
-            {seance.journal.dplus_reel_m != null && <span className="text-gray-500 dark:text-gray-400">D+ <strong className="text-gray-900 dark:text-white">{seance.journal.dplus_reel_m} m</strong></span>}
-            {seance.journal.fc_moyenne_bpm     && <span className="text-gray-500 dark:text-gray-400">FC moy <strong className="text-gray-900 dark:text-white">{seance.journal.fc_moyenne_bpm} bpm</strong></span>}
-            {seance.journal.fc_max_bpm         && <span className="text-gray-500 dark:text-gray-400">FC max <strong className="text-gray-900 dark:text-white">{seance.journal.fc_max_bpm} bpm</strong></span>}
+      {/* COURSE : upload screenshot → OCR automatique */}
+      {isCourse && (
+        prefill ? (
+          <div className="rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 px-4 py-3 space-y-2">
+            <p className="text-xs font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wide">Métriques importées ✓</p>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+              {seance.journal.duree_reelle_min   && <span className="text-gray-500 dark:text-gray-400">Durée <strong className="text-gray-900 dark:text-white">{seance.journal.duree_reelle_min} min</strong></span>}
+              {seance.journal.distance_reelle_km && <span className="text-gray-500 dark:text-gray-400">Distance <strong className="text-gray-900 dark:text-white">{seance.journal.distance_reelle_km} km</strong></span>}
+              {seance.journal.dplus_reel_m != null && <span className="text-gray-500 dark:text-gray-400">D+ <strong className="text-gray-900 dark:text-white">{seance.journal.dplus_reel_m} m</strong></span>}
+              {seance.journal.fc_moyenne_bpm     && <span className="text-gray-500 dark:text-gray-400">FC moy <strong className="text-gray-900 dark:text-white">{seance.journal.fc_moyenne_bpm} bpm</strong></span>}
+              {seance.journal.fc_max_bpm         && <span className="text-gray-500 dark:text-gray-400">FC max <strong className="text-gray-900 dark:text-white">{seance.journal.fc_max_bpm} bpm</strong></span>}
+            </div>
           </div>
-        </div>
-      ) : (
-        /* Upload */
-        <div>
-          <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Screenshot activité</label>
-          <label className={clsx(
-            "flex flex-col items-center justify-center w-full rounded-xl border-2 border-dashed cursor-pointer transition-colors overflow-hidden",
-            imgPreview ? "border-brand/40 p-0" : "border-gray-200 dark:border-gray-700 hover:border-brand/50 py-5"
-          )}>
-            {imgPreview ? (
-              <div className="relative w-full">
-                <img src={imgPreview} alt="aperçu" className="w-full max-h-48 object-cover" />
-                {analysing && (
-                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                    <span className="text-white text-xs font-semibold animate-pulse">Analyse en cours…</span>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="flex flex-col items-center gap-2 text-gray-400">
-                <span className="text-2xl">📷</span>
-                <span className="text-xs">{analysing ? "Analyse…" : "Ajouter un screenshot"}</span>
-              </div>
+        ) : (
+          <div>
+            <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Screenshot activité</label>
+            <label className={clsx(
+              "flex flex-col items-center justify-center w-full rounded-xl border-2 border-dashed cursor-pointer transition-colors overflow-hidden",
+              imgPreview ? "border-brand/40 p-0" : "border-gray-200 dark:border-gray-700 hover:border-brand/50 py-5"
+            )}>
+              {imgPreview ? (
+                <div className="relative w-full">
+                  <img src={imgPreview} alt="aperçu" className="w-full max-h-48 object-cover" />
+                  {analysing && (
+                    <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                      <span className="text-white text-xs font-semibold animate-pulse">Analyse en cours…</span>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-2 text-gray-400">
+                  <span className="text-2xl">📷</span>
+                  <span className="text-xs">{analysing ? "Analyse…" : "Ajouter un screenshot"}</span>
+                </div>
+              )}
+              <input type="file" accept="image/*" className="sr-only" onChange={onFileChange} disabled={analysing} />
+            </label>
+            {analyseErr && <p className="mt-1 text-xs text-red-500">{analyseErr}</p>}
+            {imgPreview && !analysing && (
+              <button onClick={() => setImg(null)} className="mt-1 text-xs text-gray-400 hover:text-red-400 transition-colors">
+                Supprimer
+              </button>
             )}
-            <input type="file" accept="image/*" className="sr-only" onChange={onFileChange} disabled={analysing} />
-          </label>
-          {analyseErr && <p className="mt-1 text-xs text-red-500">{analyseErr}</p>}
-          {imgPreview && !analysing && (
-            <button onClick={() => setImg(null)} className="mt-1 text-xs text-gray-400 hover:text-red-400 transition-colors">
-              Supprimer
-            </button>
-          )}
-        </div>
+          </div>
+        )
       )}
 
-      {/* Champs manuels AMRAP / EMOM (hors prefill) */}
-      {isAMRAP && !prefill && (
+      {/* MUSCULATION : durée + FC moyenne manuelles */}
+      {isMuscu && (
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Tours complétés</label>
-            <input type="number" step="0.1" placeholder="2.9" value={champs.tours_amrap_completes ?? ""}
-              onChange={e => setC("tours_amrap_completes", e.target.value)}
+            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Durée (min)</label>
+            <input type="number" placeholder="45" value={champs.duree_reelle_min ?? ""}
+              onChange={e => setC("duree_reelle_min", e.target.value)}
               className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
           </div>
           <div>
-            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Total reps</label>
-            <input type="number" placeholder="180" value={champs.total_reps_enregistrees ?? ""}
-              onChange={e => setC("total_reps_enregistrees", e.target.value)}
+            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">FC moyenne (bpm)</label>
+            <input type="number" placeholder="140" value={champs.fc_moyenne_bpm ?? ""}
+              onChange={e => setC("fc_moyenne_bpm", e.target.value)}
               className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
           </div>
-        </div>
-      )}
-      {isEMOM && !prefill && (
-        <div>
-          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Total reps réalisées</label>
-          <input type="number" placeholder="160" value={champs.total_reps_enregistrees ?? ""}
-            onChange={e => setC("total_reps_enregistrees", e.target.value)}
-            className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
         </div>
       )}
 
