@@ -264,18 +264,23 @@ function CarteSeance({ seance, zonesFC }) {
 
   return (
     <div className={clsx(
-      "rounded-2xl border overflow-hidden transition-colors",
-      fait ? "border-green-200 dark:border-green-900/50" : "border-gray-200 dark:border-gray-700"
+      "rounded-2xl border-2 overflow-hidden transition-all",
+      fait
+        ? "border-green-400 dark:border-green-600 shadow-[0_0_0_3px_rgba(34,197,94,0.15)]"
+        : "border-gray-200 dark:border-gray-700"
     )}>
       {/* ── Ligne principale ── */}
       <div className={clsx(
         "flex items-center gap-3 px-4 py-3",
-        fait ? "bg-green-50 dark:bg-green-900/10" : "bg-white dark:bg-gray-900"
+        fait ? "bg-green-50 dark:bg-green-900/15" : "bg-white dark:bg-gray-900"
       )}>
         <span className="text-xl shrink-0">{TYPE_ICONS[seance.type] ?? "📌"}</span>
 
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-gray-900 dark:text-white leading-snug">{seance.titre}</p>
+          <div className="flex items-center gap-2">
+            <p className="text-sm font-semibold text-gray-900 dark:text-white leading-snug">{seance.titre}</p>
+            {fait && <span className="text-green-500 dark:text-green-400 font-bold text-base leading-none">✓</span>}
+          </div>
           <div className="flex flex-wrap gap-1.5 mt-1">
             {seance.zone_cible && (
               <span className={clsx("px-1.5 py-0.5 rounded text-xs font-mono font-semibold", ZONE_PILL[seance.zone_cible])}>
@@ -301,17 +306,16 @@ function CarteSeance({ seance, zonesFC }) {
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-1 shrink-0">
           {fait ? (
             <>
-              <span className="text-sm text-green-600 dark:text-green-400 font-bold">✓</span>
               <button onClick={() => { setEditOpen(v => !v); setOuvert(false); }}
-                className="px-2 py-1 rounded-lg text-xs text-gray-500 hover:text-brand hover:bg-brand/10 transition-colors" title="Modifier">
+                className="p-1.5 rounded-lg text-sm text-gray-400 hover:text-brand hover:bg-brand/10 transition-colors" title="Modifier">
                 ✏️
               </button>
               <button onClick={() => { if (window.confirm("Annuler cette séance ?")) mutAnnuler.mutate(); }}
                 disabled={mutAnnuler.isPending}
-                className="px-2 py-1 rounded-lg text-xs text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-40" title="Annuler la validation">
+                className="p-1.5 rounded-lg text-sm text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-40" title="Annuler la validation">
                 🗑
               </button>
             </>
@@ -327,7 +331,7 @@ function CarteSeance({ seance, zonesFC }) {
             </button>
           )}
           <button onClick={() => { setOuvert(v => !v); setLogOpen(false); setEditOpen(false); }}
-            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 px-1">
+            className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
             <span className={clsx("inline-block transition-transform text-xs", ouvert ? "rotate-180" : "")}>▼</span>
           </button>
         </div>

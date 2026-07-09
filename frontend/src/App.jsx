@@ -1,4 +1,5 @@
-import { Routes, Route, NavLink, useLocation } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { Routes, Route, NavLink } from "react-router-dom";
 import clsx from "clsx";
 import Dashboard from "./pages/Dashboard";
 import Programme from "./pages/Programme";
@@ -53,8 +54,19 @@ function BottomLink({ to, label, icon }) {
 }
 
 export default function App() {
+  const [dark, setDark] = useState(() => {
+    const saved = localStorage.getItem("theme");
+    if (saved) return saved === "dark";
+    return window.matchMedia("(prefers-color-scheme: dark)").matches;
+  });
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", dark);
+    localStorage.setItem("theme", dark ? "dark" : "light");
+  }, [dark]);
+
   return (
-    <div className="min-h-screen flex">
+    <div className="min-h-screen flex bg-gray-50 dark:bg-gray-950">
       {/* Sidebar desktop */}
       <aside className="hidden md:flex flex-col w-56 shrink-0 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-6 gap-1 fixed top-0 left-0 h-full z-10">
         <div className="px-4 mb-6">
@@ -64,6 +76,16 @@ export default function App() {
         {NAV.map((n) => (
           <SidebarLink key={n.to} {...n} />
         ))}
+        {/* Toggle thème */}
+        <div className="mt-auto px-4">
+          <button
+            onClick={() => setDark(d => !d)}
+            className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+          >
+            <span className="text-lg">{dark ? "☀️" : "🌙"}</span>
+            <span>{dark ? "Mode clair" : "Mode sombre"}</span>
+          </button>
+        </div>
       </aside>
 
       {/* Contenu principal */}
@@ -82,6 +104,13 @@ export default function App() {
         {NAV.map((n) => (
           <BottomLink key={n.to} {...n} />
         ))}
+        <button
+          onClick={() => setDark(d => !d)}
+          className="flex flex-col items-center gap-1 px-3 py-2 text-xs font-medium text-gray-400 dark:text-gray-500"
+        >
+          <span className="text-2xl leading-none">{dark ? "☀️" : "🌙"}</span>
+          <span>{dark ? "Clair" : "Sombre"}</span>
+        </button>
       </nav>
     </div>
   );
