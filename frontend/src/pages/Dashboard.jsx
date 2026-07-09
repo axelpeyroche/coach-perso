@@ -553,7 +553,7 @@ export default function Dashboard() {
                   <span className="w-6 text-xs font-bold text-gray-700 dark:text-gray-300 shrink-0">{z}</span>
                   <span className="text-xs text-gray-500 dark:text-gray-400 w-24 shrink-0">{label}</span>
                   <span className="text-xs font-mono text-gray-700 dark:text-gray-300 flex-1 text-center">
-                    {allureMin}–{allureMax}
+                    {allureMax}–{allureMin}
                   </span>
                   <span className="text-xs font-mono text-gray-700 dark:text-gray-300 flex-1 text-center">
                     {fc?.[0] && fc?.[1] ? `${fc[0]}–${fc[1]}` : "—"}
