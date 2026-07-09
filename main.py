@@ -484,20 +484,23 @@ async def analyser_screenshot(
     try:
         import pytesseract
         from PIL import Image
-    except ImportError:
-        raise HTTPException(500, "pytesseract / Pillow non installés sur ce serveur")
+    except ImportError as exc:
+        raise HTTPException(500, f"Dépendance manquante : {exc}")
 
     seance = db.get(SeanceEntrainement, seance_id)
     if not seance:
         raise HTTPException(404, "Séance introuvable")
 
     contenu = await file.read()
-    image = Image.open(io.BytesIO(contenu))
-    texte = pytesseract.image_to_string(image, lang="fra+eng")
+    try:
+        image = Image.open(io.BytesIO(contenu))
+        texte = pytesseract.image_to_string(image, lang="fra+eng")
+    except Exception as exc:
+        raise HTTPException(500, f"OCR échoué : {exc}")
 
     metriques = _extraire_metriques_forme(texte)
     if not metriques:
-        raise HTTPException(422, "Aucune métrique détectée — vérifie que l'image est un screenshot Forme")
+        raise HTTPException(422, f"Aucune métrique détectée. Texte extrait : {texte[:300]!r}")
 
     existing = seance.journal
     if existing:

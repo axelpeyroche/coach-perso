@@ -61,8 +61,8 @@ function FormulaireLog({ seance, onClose, onDone }) {
     try {
       await analyserScreenshot(seance.id, file, USER_ID);
       qc.invalidateQueries({ queryKey: ["toutes-semaines"] });
-    } catch {
-      setErr("Analyse échouée — métriques à saisir manuellement.");
+    } catch (e) {
+      setErr(e?.response?.data?.detail || e?.message || "Analyse échouée");
     } finally {
       setAnal(false);
     }
