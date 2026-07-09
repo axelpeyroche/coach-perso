@@ -177,27 +177,62 @@ export default function Programme() {
                   </button>
 
                   {seanceOuverte === s.id && (
-                    <div className="mt-1 mx-1 rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-100 dark:border-gray-700 p-4 space-y-3">
-                      {s.description && (
-                        <pre className="text-xs text-gray-600 dark:text-gray-300 whitespace-pre-wrap font-sans leading-relaxed">
-                          {s.description}
-                        </pre>
+                    <div className="mt-1 mx-1 rounded-xl bg-gray-50 dark:bg-gray-800/60 border border-gray-100 dark:border-gray-700 p-4 space-y-4">
+
+                      {/* Résumé durée pour EMOM / AMRAP */}
+                      {(s.type === "EMOM" || s.type === "AMRAP") && s.temps_limite_min && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg">{s.type === "EMOM" ? "⏱️" : "🔥"}</span>
+                          <span className="text-sm font-semibold text-gray-900 dark:text-white">
+                            {s.type} — {s.temps_limite_min} minutes
+                          </span>
+                        </div>
                       )}
+
+                      {/* Liste exercices EMOM / AMRAP */}
                       {s.exercices?.length > 0 && (
                         <div>
-                          <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Exercices</p>
-                          <div className="space-y-1">
+                          <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-2">
+                            {s.type === "EMOM" ? "Exercices (EMOM)" : s.type === "AMRAP" ? "Circuit AMRAP" : "Exercices"}
+                          </p>
+                          <div className="divide-y divide-gray-100 dark:divide-gray-700 rounded-lg overflow-hidden border border-gray-100 dark:border-gray-700">
                             {s.exercices.map((ex, idx) => (
-                              <div key={idx} className="flex items-center justify-between text-xs">
-                                <span className="text-gray-700 dark:text-gray-300 font-medium">{ex.nom || ex.slug}</span>
-                                <div className="flex gap-3 text-gray-500 dark:text-gray-400">
-                                  {ex.repetitions && <span>{ex.repetitions} reps</span>}
-                                  {ex.tempo && <span className="font-mono">{ex.tempo}</span>}
+                              <div key={idx} className="flex items-center justify-between px-3 py-2 bg-white dark:bg-gray-800 text-sm">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs text-gray-400 w-4 text-right">{idx + 1}.</span>
+                                  <span className="font-medium text-gray-800 dark:text-gray-200">{ex.nom}</span>
+                                </div>
+                                <div className="flex items-center gap-3 shrink-0">
+                                  {ex.repetitions && (
+                                    <span className="px-2 py-0.5 rounded bg-brand/10 text-brand text-xs font-bold">
+                                      {ex.repetitions} reps
+                                    </span>
+                                  )}
+                                  {ex.duree_sec && !ex.repetitions && (
+                                    <span className="px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-xs font-bold">
+                                      {ex.duree_sec} sec
+                                    </span>
+                                  )}
+                                  {ex.tempo && (
+                                    <span className="text-xs font-mono text-gray-400">{ex.tempo}</span>
+                                  )}
                                 </div>
                               </div>
                             ))}
                           </div>
                         </div>
+                      )}
+
+                      {/* Instructions / description détaillée */}
+                      {s.description && (
+                        <details className="group">
+                          <summary className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide cursor-pointer select-none list-none flex items-center gap-1">
+                            <span className="group-open:rotate-90 inline-block transition-transform">▶</span> Instructions détaillées
+                          </summary>
+                          <pre className="mt-2 text-xs text-gray-600 dark:text-gray-300 whitespace-pre-wrap font-sans leading-relaxed">
+                            {s.description}
+                          </pre>
+                        </details>
                       )}
                     </div>
                   )}

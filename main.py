@@ -352,10 +352,23 @@ def obtenir_semaines_macrocycle(
                         "id": seance.id,
                         "type": seance.type_seance.value,
                         "titre": seance.titre,
+                        "description": seance.description,
                         "date": str(seance.date_seance),
                         "zone_cible": seance.zone_cible.value if seance.zone_cible else None,
                         "distance_cible_km": seance.distance_cible_km,
+                        "duree_cible_min": seance.duree_cible_min,
+                        "dplus_cible_m": seance.dplus_cible_m,
                         "temps_limite_min": seance.temps_limite_min,
+                        "exercices": [
+                            {
+                                "nom": ex.exercice.nom,
+                                "slug": ex.exercice.slug,
+                                "repetitions": ex.repetitions,
+                                "duree_sec": ex.duree_sec,
+                                "tempo": ex.tempo_effectif,
+                            }
+                            for ex in seance.exercices
+                        ],
                     }
                     for seance in s.seances
                 ],
