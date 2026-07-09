@@ -41,8 +41,8 @@ export default function Calendrier() {
     const map = {};
     for (const sem of semaines) {
       for (const s of sem.seances ?? []) {
-        if (!s.journal?.completee || !s.date_seance) continue;
-        const key = s.date_seance.slice(0, 10);
+        if (!s.journal?.completee || !s.date) continue;
+        const key = s.date.slice(0, 10);
         if (!map[key]) map[key] = [];
         map[key].push(s);
       }
