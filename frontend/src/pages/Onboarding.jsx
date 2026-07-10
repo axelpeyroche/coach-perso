@@ -32,8 +32,15 @@ function NumInput({ label, value, onChange, min = 1, max = 14 }) {
   return (
     <div>
       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{label}</label>
-      <input type="number" min={min} max={max} value={value}
-        onChange={e => onChange(parseInt(e.target.value) || min)}
+      <input type="number" min={min} max={max}
+        value={value === 0 ? "" : value}
+        onChange={e => {
+          const v = e.target.value;
+          if (v === "" || v === "0") { onChange(0); return; }
+          const n = parseInt(v, 10);
+          if (!isNaN(n)) onChange(Math.min(Math.max(n, min), max));
+        }}
+        onBlur={e => { if (!e.target.value || parseInt(e.target.value) < min) onChange(min); }}
         className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
     </div>
   );
@@ -118,7 +125,14 @@ function Etape2({ data, set, typeProg }) {
         <input type="date" value={data.date_debut_raw ?? ""}
           onChange={e => set({ date_debut_raw: e.target.value })}
           className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
-        <p className="text-xs text-gray-400 mt-1">Le programme démarrera le lundi de cette semaine.</p>
+        <p className="text-xs text-gray-400 mt-1">
+          {data.date_debut_raw
+            ? (() => {
+                const [y, m, d] = data.date_debut_raw.split("-");
+                return `Le programme démarrera le ${d}/${m}/${y}.`;
+              })()
+            : "Laisse vide pour démarrer dès le lundi de cette semaine."}
+        </p>
       </div>
     </div>
   );
