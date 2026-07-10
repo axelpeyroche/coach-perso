@@ -1,6 +1,8 @@
 import { useState, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getBiometrieRecuperation, getTendancesPhysiologiques, getObjectifCourse, setObjectifCourse, getStatutProgramme, initialiserProgramme, supprimerProgramme, getProfilFC, patchProfilFC } from "../api";
+import { useNavigate } from "react-router-dom";
+import { getBiometrieRecuperation, getTendancesPhysiologiques, getObjectifCourse, setObjectifCourse, getStatutProgramme, initialiserProgramme, supprimerProgramme, resetOnboarding, getProfilFC, patchProfilFC } from "../api";
+import { useAuth } from "../AuthContext";
 import Card from "../components/Card";
 import StatTile from "../components/StatTile";
 import clsx from "clsx";
@@ -188,24 +190,25 @@ function BlocObjectif({ vma }) {
   );
 }
 
-// ─── Bouton reconfigurer (supprime en DB) ───────────────────────────────────
+// ─── Bouton reconfigurer → relance l'onboarding complet ────────────────────
 
 function ReconfigurerBtn() {
-  const qc = useQueryClient();
+  const { setUser } = useAuth();
+  const navigate = useNavigate();
   const mut = useMutation({
-    mutationFn: () => supprimerProgramme(),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["statut-programme"] });
-      qc.invalidateQueries({ queryKey: ["macrocycles"] });
+    mutationFn: () => resetOnboarding(),
+    onSuccess: (userData) => {
+      setUser(userData);
+      navigate("/onboarding");
     },
   });
   return (
     <button
-      onClick={() => { if (window.confirm("Supprimer le programme actuel et tout recréer ?")) mut.mutate(); }}
+      onClick={() => { if (window.confirm("Reconfigurer le programme depuis le début ?")) mut.mutate(); }}
       disabled={mut.isPending}
       className="text-xs text-gray-400 hover:text-red-500 transition-colors mt-1 disabled:opacity-50"
     >
-      {mut.isPending ? "Suppression…" : "Reconfigurer →"}
+      {mut.isPending ? "Réinitialisation…" : "Reconfigurer →"}
     </button>
   );
 }

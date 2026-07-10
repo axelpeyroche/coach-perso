@@ -36,6 +36,9 @@ export const initialiserProgramme = (date_debut) =>
 export const supprimerProgramme = () =>
   api.delete("/programme").then((r) => r.data);
 
+export const resetOnboarding = () =>
+  api.post("/auth/reset-onboarding").then((r) => r.data);
+
 // --- Semaine courante ---
 export const getSemaineCourante = () =>
   api.get("/semaine-courante").then((r) => r.data);

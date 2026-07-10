@@ -268,6 +268,39 @@ def me(current_user: Utilisateur = Depends(get_current_user)):
     }
 
 
+@app.post("/api/auth/reset-onboarding", summary="Réinitialise l'onboarding et supprime le programme")
+def reset_onboarding(current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
+    for mc in db.query(Macrocycle).filter(Macrocycle.utilisateur_id == current_user.id).all():
+        db.delete(mc)
+    current_user.onboarding_complet = False
+    db.commit()
+    db.refresh(current_user)
+    dn = current_user.date_naissance
+    age = None
+    if dn:
+        today = date.today()
+        age = today.year - dn.year - ((today.month, today.day) < (dn.month, dn.day))
+    return {
+        "id": current_user.id,
+        "email": current_user.email,
+        "prenom": current_user.prenom,
+        "nom": current_user.nom,
+        "sexe": current_user.sexe,
+        "date_naissance": str(dn) if dn else None,
+        "age": age,
+        "poids_kg": current_user.poids_kg,
+        "fc_max": current_user.fc_max,
+        "fc_repos": current_user.fc_repos,
+        "onboarding_complet": False,
+        "type_programme": current_user.type_programme,
+        "seances_semaine": current_user.seances_semaine,
+        "seances_course_semaine": current_user.seances_course_semaine,
+        "seances_muscu_semaine": current_user.seances_muscu_semaine,
+        "frequence_tests_semaines": current_user.frequence_tests_semaines,
+        "objectif_type": current_user.objectif_type,
+    }
+
+
 def _calculer_calibration(historique: dict) -> dict:
     """Calcule km_factor et amrap_factor depuis l'historique de performance utilisateur."""
     niveau = historique.get("niveau", "intermediaire")
