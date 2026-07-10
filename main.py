@@ -1529,9 +1529,11 @@ def initialiser_programme(payload: InitProgrammePayload, current_user: Utilisate
     from periodization_rules import (
         BLUEPRINT_MACROCYCLE, generer_dates_semaines, generer_blueprint_course,
     )
+    from models import TypeMacrophase
     from seed_seances import (
         MODULE1, MODULE2, MODULE3,
         _POOL_SURCHARGE, _semaine_course, _inserer_seances_en_session,
+        calibrer_module,
     )
 
     try:
@@ -1584,10 +1586,39 @@ def initialiser_programme(payload: InitProgrammePayload, current_user: Utilisate
                 ))
             db.flush()
 
-            # Contenu : pool surcharge + décharge M1S6 + affûtage M1S7 + semaine course
+            # Injection des semaines d'évaluation dans le blueprint
+            eval_freq = user.frequence_tests_semaines or 8
+            for regle in blueprint:
+                if regle.numero <= n_surcharge and regle.numero % eval_freq == 0:
+                    regle.macrophase = TypeMacrophase.EVALUATION
+                    regle.objectif_amrap_min = None
+                    regle.objectif_km_course = None
+
+            # Calibration si historique dispo
+            historique = {}
+            if user.historique_perf:
+                import json as _json
+                try:
+                    historique = _json.loads(user.historique_perf)
+                except Exception:
+                    historique = {}
+            cal = _calculer_calibration(historique)
+            surcharge_cal = calibrer_module(
+                _POOL_SURCHARGE,
+                km_factor=cal["km_factor"],
+                amrap_factor=cal["amrap_factor"],
+                reps_factor=cal["reps_factor"],
+            )
+
+            # Contenu : pool surcharge (+ évaluations) + décharge M1S6 + affûtage M1S7 + semaine course
             content: dict = {}
+            pool_idx = 1
             for i in range(1, n_surcharge + 1):
-                content[i] = _POOL_SURCHARGE[min(i, 15)]
+                if i % eval_freq == 0:
+                    content[i] = MODULE1[8]
+                else:
+                    content[i] = surcharge_cal.get(min(pool_idx, 15), _POOL_SURCHARGE[min(pool_idx, 15)])
+                    pool_idx += 1
             content[n_surcharge + 1] = MODULE1[6]
             content[n_surcharge + 2] = MODULE1[7]
             content[n_semaines]      = _semaine_course(obj.date_course, obj.nom)
