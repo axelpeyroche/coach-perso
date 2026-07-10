@@ -257,6 +257,7 @@ function CarteSeance({ seance, zonesFC }) {
   const [valide, setValide]     = useState(false);
   const [editOpen, setEditOpen] = useState(false);
 
+  const isGym = GYM_TYPES.includes(seance.type);
   const fait = valide || seance.journal?.completee;
   const prefillEnAttente = !fait && seance.journal && !seance.journal.completee;
 
