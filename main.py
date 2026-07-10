@@ -382,9 +382,19 @@ def onboarding(
     rf = calib["reps_factor"]
 
     if obj_course and payload.objectif_type in ("course", "hybride"):
+        from models import TypeMacrophase
         n_semaines = max(4, (obj_course.date_course - debut).days // 7)
         n_surcharge = n_semaines - 3
+        eval_freq = current_user.frequence_tests_semaines or 8
+
+        # Blueprint adaptatif + marquage des semaines d'évaluation dans la période de surcharge
         blueprint = generer_blueprint_course(n_semaines)
+        for regle in blueprint:
+            if regle.numero <= n_surcharge and regle.numero % eval_freq == 0:
+                regle.macrophase = TypeMacrophase.EVALUATION
+                regle.objectif_amrap_min = None
+                regle.objectif_km_course = None
+
         mc = Macrocycle(utilisateur_id=current_user.id, numero_cycle=1,
                         date_debut=debut, date_fin=debut + timedelta(weeks=n_semaines))
         db.add(mc); db.flush()
@@ -396,9 +406,18 @@ def onboarding(
                 multiplicateur_volume=regle.multiplicateur_volume,
                 objectif_km_course=km, objectif_amrap_min=amrap))
         db.flush()
+
+        # Contenu des séances : surcharge interrompue par les semaines d'évaluation
         surcharge_cal = calibrer_module(_POOL_SURCHARGE, kf, af, rf)
         m1_cal = calibrer_module(MODULE1, kf, af, rf)
-        content = {i: surcharge_cal[min(i, 15)] for i in range(1, n_surcharge + 1)}
+        content = {}
+        pool_idx = 1  # index dans le pool de surcharge (indépendant du numéro de semaine)
+        for i in range(1, n_surcharge + 1):
+            if i % eval_freq == 0:
+                content[i] = MODULE1[8]  # semaine d'évaluation — non calibrée (tests standardisés)
+            else:
+                content[i] = surcharge_cal.get(min(pool_idx, 15), _POOL_SURCHARGE[min(pool_idx, 15)])
+                pool_idx += 1
         content[n_surcharge + 1] = m1_cal.get(6, MODULE1[6])
         content[n_surcharge + 2] = m1_cal.get(7, MODULE1[7])
         content[n_semaines] = _semaine_course(obj_course.date_course, obj_course.nom)
