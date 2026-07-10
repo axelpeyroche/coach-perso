@@ -375,12 +375,12 @@ function CarteSeance({ seance, zonesFC }) {
               </p>
               <div className="divide-y divide-gray-50 dark:divide-gray-800 rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
                 {seance.exercices.map((ex, i) => (
-                  <div key={i} className="flex items-center justify-between px-3 py-2 bg-white dark:bg-gray-900 text-sm">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-gray-400 w-4">{i + 1}.</span>
-                      <span className="font-medium text-gray-800 dark:text-gray-200">{ex.nom}</span>
+                  <div key={i} className="flex items-center justify-between px-3 py-2 bg-white dark:bg-gray-900 text-sm gap-2 min-w-0">
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <span className="text-xs text-gray-400 w-4 shrink-0">{i + 1}.</span>
+                      <span className="font-medium text-gray-800 dark:text-gray-200 truncate">{ex.nom}</span>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 shrink-0">
                       {ex.duree_bloc_min && seance.type === "EMOM" && (
                         <span className="px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-xs font-bold">
                           {ex.duree_bloc_min} min
@@ -406,9 +406,9 @@ function CarteSeance({ seance, zonesFC }) {
 
           {/* Instructions */}
           {seance.description && (
-            <pre className="text-xs text-gray-600 dark:text-gray-300 whitespace-pre-wrap font-sans leading-relaxed">
+            <p className="text-xs text-gray-600 dark:text-gray-300 whitespace-pre-wrap break-words font-sans leading-relaxed overflow-hidden">
               {seance.description}
-            </pre>
+            </p>
           )}
         </div>
       )}

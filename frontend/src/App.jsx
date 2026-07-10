@@ -87,7 +87,7 @@ export default function App() {
       <Route path="/*" element={
         <RequireAuth>
           <RequireOnboarding>
-            <div className="min-h-screen flex bg-gray-50 dark:bg-gray-950">
+            <div className="min-h-screen flex bg-gray-50 dark:bg-gray-950 overflow-x-hidden">
 
               {/* ── Sidebar desktop ── */}
               <aside className="hidden md:flex flex-col w-56 shrink-0 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-6 gap-1 fixed top-0 left-0 h-full z-20">
@@ -134,7 +134,7 @@ export default function App() {
               </header>
 
               {/* ── Contenu principal ── */}
-              <main className="flex-1 md:ml-56 pt-14 md:pt-0 pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0 min-h-screen">
+              <main className="flex-1 md:ml-56 pt-14 md:pt-0 pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0 min-h-screen overflow-x-hidden w-full min-w-0">
                 <Routes>
                   <Route path="/"           element={<Dashboard />} />
                   <Route path="/programme"  element={<Programme />} />

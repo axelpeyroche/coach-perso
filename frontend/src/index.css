@@ -4,7 +4,8 @@
 
 @layer base {
   * { box-sizing: border-box; }
-  body { margin: 0; -webkit-font-smoothing: antialiased; }
+  html { overflow-x: hidden; max-width: 100vw; }
+  body { margin: 0; -webkit-font-smoothing: antialiased; overflow-x: hidden; max-width: 100vw; }
 }
 
 @layer utilities {
