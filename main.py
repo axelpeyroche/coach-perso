@@ -1566,6 +1566,14 @@ def initialiser_programme(payload: InitProgrammePayload, current_user: Utilisate
             blueprint = generer_blueprint_course(n_semaines)
             dates = [debut_mc1 + timedelta(weeks=i) for i in range(n_semaines)]
 
+            # Injection des semaines d'évaluation dans le blueprint (AVANT insertion en BDD)
+            eval_freq = user.frequence_tests_semaines or 8
+            for regle in blueprint:
+                if regle.numero <= n_surcharge and regle.numero % eval_freq == 0:
+                    regle.macrophase = TypeMacrophase.EVALUATION
+                    regle.objectif_amrap_min = None
+                    regle.objectif_km_course = None
+
             mc = Macrocycle(
                 utilisateur_id=user.id,
                 numero_cycle=1,
@@ -1585,14 +1593,6 @@ def initialiser_programme(payload: InitProgrammePayload, current_user: Utilisate
                     objectif_amrap_min=regle.objectif_amrap_min,
                 ))
             db.flush()
-
-            # Injection des semaines d'évaluation dans le blueprint
-            eval_freq = user.frequence_tests_semaines or 8
-            for regle in blueprint:
-                if regle.numero <= n_surcharge and regle.numero % eval_freq == 0:
-                    regle.macrophase = TypeMacrophase.EVALUATION
-                    regle.objectif_amrap_min = None
-                    regle.objectif_km_course = None
 
             # Calibration si historique dispo
             historique = {}
