@@ -49,19 +49,18 @@ MODULE1 = {
                 "Structure EMOM PULL — 4 blocs :\n"
                 "  • Bloc A — 9 min : Traction stricte (tempo X/1/2/0)\n"
                 "      2 reps (min 1-3) → 3 reps (min 4-6) → 4 reps (min 7-9)\n"
-                "  • Bloc B — 9 min : Dips aux parallettes\n"
-                "      3 reps → 4 reps → 5 reps\n"
-                "  • Bloc C — 5 min : Traction australienne\n"
-                "      10 reps × 5\n"
-                "  • Bloc D — 9 min : Curl biceps + Hollow actif\n"
-                "      8 reps / 20 sec hollow (alternés)"
+                "  • Bloc B — 9 min : Traction australienne (libres)\n"
+                "      10 reps × 9 min\n"
+                "  • Bloc C — 9 min : Curl biceps traction\n"
+                "      8 reps × 9 min\n"
+                "  • Bloc D — 5 min : Extension de hanche (pont fessier)\n"
+                "      12 reps × 5 min — chaîne postérieure"
             ),
             "exercices": [
-                {"slug": "traction-stricte",     "reps": 3,    "tempo": "X/1/2/0", "duree_min": 9},
-                {"slug": "dip-parallettes",      "reps": 4,    "tempo": None,       "duree_min": 9},
-                {"slug": "traction-australienne","reps": 10,   "tempo": "X/1/2/0", "duree_min": 5},
-                {"slug": "curl-biceps-traction", "reps": 8,    "tempo": "X/1/2/0", "duree_min": 9},
-                {"slug": "hollow-actif",         "reps": None, "tempo": None,       "duree_min": 9},
+                {"slug": "traction-stricte",     "reps": 3,  "tempo": "X/1/2/0", "duree_min": 9},
+                {"slug": "traction-australienne","reps": 10, "tempo": "X/1/2/0", "duree_min": 9},
+                {"slug": "curl-biceps-traction", "reps": 8,  "tempo": "X/1/2/0", "duree_min": 9},
+                {"slug": "extension-hanche",     "reps": 12, "tempo": "2/1/X/0", "duree_min": 5},
             ]
         },
         {
@@ -209,14 +208,16 @@ MODULE1 = {
                 "Structure EMOM PUSH avec pauses isométriques — 4 blocs :\n"
                 "  • Bloc A — 5 min : Dips avec pause isométrique (1 sec position basse)\n"
                 "      11 reps × 5 min\n"
-                "  • Bloc B — 9 min : Tractions strictes + hold 30 sec (alternés)\n"
-                "  • Bloc C — 9 min : Pompes libres — maintenir la qualité\n"
-                "  • Bloc D — 9 min : Extension triceps / Pause proactive\n"
-                "      9 reps / 25 sec position tenue (alternés)"
+                "  • Bloc B — 9 min : Pompes prise large + pause basse 1 sec\n"
+                "      8 reps × 9 min\n"
+                "  • Bloc C — 9 min : Pompes standard libres — maintenir la qualité\n"
+                "      10 reps × 9 min\n"
+                "  • Bloc D — 9 min : Extension triceps (dips) / Chaise isométrique (alternés)\n"
+                "      9 reps / 25 sec position tenue"
             ),
             "exercices": [
                 {"slug": "dip-parallettes",       "reps": 11, "tempo": "2/1/X/0", "pause_iso": 1.0, "duree_min": 5},
-                {"slug": "traction-stricte",      "reps": 11, "tempo": "X/1/2/0", "pause_iso": 1.0, "duree_min": 9},
+                {"slug": "pompe-large",           "reps": 8,  "tempo": "2/1/X/0", "pause_iso": 1.0, "duree_min": 9},
                 {"slug": "pompe-standard",        "reps": 10, "tempo": "2/0/X/0",                   "duree_min": 9},
                 {"slug": "triceps-extension-dips","reps": 9,  "tempo": "2/1/X/0",                   "duree_min": 9},
             ]
@@ -278,21 +279,22 @@ MODULE1 = {
             ),
         },
         {
-            "jour": 2, "type": TypeSeance.EMOM, "titre": "EMOM PUSH (barres) — S4 (27 min)",
+            "jour": 2, "type": TypeSeance.EMOM, "titre": "EMOM PULL (barres) — S4 (27 min)",
             "temps_limite": 27,
             "description": (
-                "Structure EMOM PUSH variante barres — 3 blocs :\n"
-                "  • Bloc A — 9 min : Dips *barre droite de traction\n"
-                "      8 reps × 9 min\n"
-                "  • Bloc B — 9 min : Traction australienne (libre)\n"
-                "      5 reps × 9 min\n"
-                "  • Bloc C — 9 min : Traction stricte + hold\n"
-                "      12 reps / 30 sec en position haute (alternés)"
+                "Structure EMOM PULL variante barres — 3 blocs :\n"
+                "  • Bloc A — 9 min : Traction australienne (libre)\n"
+                "      5 reps × 9 min — tirage horizontal\n"
+                "  • Bloc B — 9 min : Traction stricte + hold position haute\n"
+                "      4 reps / 30 sec hold (alternés)\n"
+                "  • Bloc C — 9 min : Curl biceps traction / Extension de hanche (alternés)\n"
+                "      8 reps curl / 12 reps pont fessier (cycle × 4)"
             ),
             "exercices": [
-                {"slug": "dip-parallettes",       "reps": 8,  "tempo": "2/1/X/0",                   "duree_min": 9},
-                {"slug": "traction-australienne",  "reps": 5,  "tempo": "X/1/2/0",                   "duree_min": 9},
-                {"slug": "traction-stricte",      "reps": 12, "tempo": "X/1/2/0", "pause_iso": 1.0, "duree_min": 9},
+                {"slug": "traction-australienne", "reps": 5,  "tempo": "X/1/2/0",                   "duree_min": 9},
+                {"slug": "traction-stricte",      "reps": 4,  "tempo": "X/1/2/0", "pause_iso": 1.0, "duree_min": 9},
+                {"slug": "curl-biceps-traction",  "reps": 8,  "tempo": "X/1/2/0",                   "duree_min": 9},
+                {"slug": "extension-hanche",      "reps": 12, "tempo": "2/1/X/0",                   "duree_min": 9},
             ]
         },
         {
@@ -359,16 +361,17 @@ MODULE1 = {
             "description": (
                 "Structure EMOM PULL — 3 blocs :\n"
                 "  • Bloc A — 9 min : Traction australienne (libre)\n"
-                "      5 reps × 9 min\n"
-                "  • Bloc B — 5 min : Dips aux parallettes\n"
-                "      13 reps × 5 min\n"
-                "  • Bloc C — 9 min : Pompes + hold\n"
-                "      13 reps / 35 sec position haute (alternés)"
+                "      5 reps × 9 min — tirage horizontal\n"
+                "  • Bloc B — 5 min : Traction stricte (tempo X/1/2/0)\n"
+                "      4 reps × 5 min\n"
+                "  • Bloc C — 9 min : Curl biceps traction / Extension de hanche (alternés)\n"
+                "      10 reps curl / 15 reps pont fessier (cycle × 4)"
             ),
             "exercices": [
-                {"slug": "traction-australienne","reps": 5,  "tempo": None,       "duree_min": 9},
-                {"slug": "dip-parallettes",      "reps": 13, "tempo": "2/1/X/0", "duree_min": 5},
-                {"slug": "pompe-standard",       "reps": 13, "tempo": "2/1/X/0", "duree_min": 9},
+                {"slug": "traction-australienne","reps": 5,  "tempo": "X/1/2/0", "duree_min": 9},
+                {"slug": "traction-stricte",     "reps": 4,  "tempo": "X/1/2/0", "duree_min": 5},
+                {"slug": "curl-biceps-traction", "reps": 10, "tempo": "X/1/2/0", "duree_min": 9},
+                {"slug": "extension-hanche",     "reps": 15, "tempo": "2/1/X/0", "duree_min": 9},
             ]
         },
         {
@@ -540,17 +543,17 @@ MODULE2 = {
             "description": (
                 "Structure EMOM PUSH Module 2 — 4 blocs :\n"
                 "  • Bloc A — 10 min : Dips (tempo 2/1/X/0) — 3 reps × 10 min\n"
-                "  • Bloc B — 9 min : Traction australienne — 9D2/3/4\n"
+                "  • Bloc B — 9 min : Pompes prise large — 8 reps × 9 min\n"
                 "  • Bloc C — 6 min : Dips partiel (amplitude réduite) — 5 reps × 6 min\n"
-                "  • Bloc D — 9 min : Triceps ext / Rotateur long / Repos (triplet)\n"
-                "      10 reps triceps (min 1,4,7) / 10 reps rotateur long (min 2,5,8) / repos"
+                "  • Bloc D — 9 min : Triceps ext / Squat poids du corps (alternés)\n"
+                "      10 reps triceps (min 1,4,7) / 15 reps squat (min 2,5,8)"
             ),
             "exercices": [
                 {"slug": "dip-parallettes",       "reps": 3,  "tempo": "2/1/X/0", "duree_min": 10},
-                {"slug": "traction-australienne",  "reps": 3,  "tempo": "X/1/2/0", "duree_min": 9},
-                {"slug": "dip-partiel",            "reps": 5,  "tempo": "2/1/X/0", "duree_min": 6},
-                {"slug": "triceps-extension-dips", "reps": 10, "tempo": "2/1/X/0", "duree_min": 9},
-                {"slug": "rotateur-long",          "reps": 10, "tempo": "2/1/X/0", "duree_min": 9},
+                {"slug": "pompe-large",           "reps": 8,  "tempo": "2/1/X/0", "duree_min": 9},
+                {"slug": "dip-partiel",           "reps": 5,  "tempo": "2/1/X/0", "duree_min": 6},
+                {"slug": "triceps-extension-dips","reps": 10, "tempo": "2/1/X/0", "duree_min": 9},
+                {"slug": "squat-bw",             "reps": 15, "tempo": "3/1/X/0", "duree_min": 9},
             ]
         },
         {
@@ -762,18 +765,18 @@ MODULE2 = {
             "temps_limite": 24,
             "description": (
                 "Structure EMOM PULL — 3 blocs :\n"
-                "  • Bloc A — 9 min : Pompes + Traction australienne (alternés)\n"
-                "      Pompes libres (min impairs) / trac austr libres (min pairs)\n"
-                "  • Bloc B — 6 min : Dips partiel — 7 reps × 6 min\n"
-                "  • Bloc C — 9 min : Triceps ext / Rotateur long (triplet + hold)\n"
+                "  • Bloc A — 9 min : Traction australienne + Traction stricte (alternés)\n"
+                "      Trac australienne libre (min impairs) / trac stricte 4 reps (min pairs)\n"
+                "  • Bloc B — 6 min : Curl biceps traction — 10 reps × 6 min\n"
+                "  • Bloc C — 9 min : Rotateur long / Extension de hanche (alternés + hold)\n"
                 "      13 reps / 13 reps / 30 sec hold (cycle × 3)"
             ),
             "exercices": [
-                {"slug": "pompe-standard",         "reps": 10, "tempo": "2/1/X/0", "duree_min": 9},
                 {"slug": "traction-australienne",  "reps": 10, "tempo": "X/1/2/0", "duree_min": 9},
-                {"slug": "dip-partiel",            "reps": 7,  "tempo": "2/1/X/0", "duree_min": 6},
-                {"slug": "triceps-extension-dips", "reps": 13, "tempo": "2/1/X/0", "duree_min": 9},
+                {"slug": "traction-stricte",       "reps": 4,  "tempo": "X/1/2/0", "duree_min": 9},
+                {"slug": "curl-biceps-traction",   "reps": 10, "tempo": "X/1/2/0", "duree_min": 6},
                 {"slug": "rotateur-long",          "reps": 13, "tempo": "2/1/X/0", "duree_min": 9},
+                {"slug": "extension-hanche",       "reps": 13, "tempo": "2/1/X/0", "duree_min": 9},
             ]
         },
         {
@@ -830,19 +833,19 @@ MODULE2 = {
             "description": "Terrain : chemin. Semaine de décharge — allure Z2 légère, sans effort ressenti.",
         },
         {
-            "jour": 2, "type": TypeSeance.EMOM, "titre": "EMOM PUSH (libre) — Module 2 S5 (18 min)",
+            "jour": 2, "type": TypeSeance.EMOM, "titre": "EMOM PUSH (décharge amorce) — Module 2 S5 (18 min)",
             "temps_limite": 18,
             "description": (
-                "Structure EMOM PUSH amorce décharge — 2 blocs :\n"
-                "  • Bloc A — 9 min : Exercice au choix (libre) — 5 reps × 9 min, focus technique\n"
-                "  • Bloc B — 9 min : Curl / Le Y / Position traction (triplet + hold)\n"
-                "      14 reps / 14 reps / 30 sec (cycle × 3)"
+                "Structure EMOM PUSH décharge amorce — 2 blocs :\n"
+                "  • Bloc A — 9 min : Dips (focus technique) — 5 reps × 9 min\n"
+                "  • Bloc B — 9 min : Pompes standard / Triceps ext / Squat (triplet + hold)\n"
+                "      14 reps pompes / 14 reps triceps / 15 reps squat (cycle × 3)"
             ),
             "exercices": [
-                {"slug": "traction-australienne","reps": 5,    "tempo": None,        "duree_min": 9},
-                {"slug": "curl-biceps-traction", "reps": 14,   "tempo": "X/1/2/0",  "duree_min": 9},
-                {"slug": "le-y",                 "reps": 14,   "tempo": "2/1/X/0",  "duree_min": 9},
-                {"slug": "traction-partielle",   "reps": None, "tempo": "X/1/2/0",  "duree_min": 9},
+                {"slug": "dip-parallettes",       "reps": 5,  "tempo": "2/1/X/0", "duree_min": 9},
+                {"slug": "pompe-standard",        "reps": 14, "tempo": "2/0/X/0", "duree_min": 9},
+                {"slug": "triceps-extension-dips","reps": 14, "tempo": "2/1/X/0", "duree_min": 9},
+                {"slug": "squat-bw",             "reps": 15, "tempo": "3/1/X/0", "duree_min": 9},
             ]
         },
         {
@@ -894,13 +897,13 @@ MODULE2 = {
             "description": (
                 "Structure EMOM PUSH décharge — 2 blocs :\n"
                 "  • Bloc A — 6 min : Dips + Pompes — 10 reps × 6 min\n"
-                "  • Bloc B — 9 min : Triceps ext / Rotateur long — 10 reps / 10 reps / 30 sec"
+                "  • Bloc B — 9 min : Triceps ext / Squat poids du corps — 10 reps / 15 reps / 30 sec"
             ),
             "exercices": [
                 {"slug": "dip-parallettes",       "reps": 10, "tempo": "2/1/X/0", "duree_min": 6},
                 {"slug": "pompe-standard",        "reps": 10, "tempo": "2/0/X/0", "duree_min": 6},
                 {"slug": "triceps-extension-dips","reps": 10, "tempo": "2/1/X/0", "duree_min": 9},
-                {"slug": "rotateur-long",         "reps": 10, "tempo": "2/1/X/0", "duree_min": 9},
+                {"slug": "squat-bw",             "reps": 15, "tempo": "3/1/X/0", "duree_min": 9},
             ]
         },
         {
@@ -1026,24 +1029,22 @@ MODULE3 = {
             "description": "Terrain : trail (D+ 400 m). Reprise après évaluation M2 — premier palier spécifique.\nAllure Z2 conversationnelle.",
         },
         {
-            "jour": 2, "type": TypeSeance.EMOM, "titre": "EMOM — Module 3 S1 (28 min)",
+            "jour": 2, "type": TypeSeance.EMOM, "titre": "EMOM PULL — Module 3 S1 (28 min)",
             "temps_limite": 28,
             "description": (
-                "Structure EMOM — 3 blocs (reprise du niveau M2 S1) :\n"
-                "  • Bloc A — 10 min : Dips aux parallettes (pause basse) — 3 reps × 10 min\n"
-                "  • Bloc B — 9 min : Traction australienne / Curl biceps / Le Y (triplet)\n"
-                "      10 reps / 10 reps / repos (cycle × 3)\n"
-                "  • Bloc C — 9 min : Triceps ext / Rotateur long / Sit ups (triplet)\n"
-                "      10 reps / 10 reps / 30 sec hold (cycle × 3)"
+                "Structure EMOM PULL — 3 blocs :\n"
+                "  • Bloc A — 10 min : Traction australienne (libre) — 10 reps × 10 min\n"
+                "  • Bloc B — 9 min : Curl biceps traction / Le Y (alternés)\n"
+                "      10 reps / 10 reps (cycle × 4)\n"
+                "  • Bloc C — 9 min : Rotateur long / Extension de hanche (alternés)\n"
+                "      10 reps / 15 reps (cycle × 4)"
             ),
             "exercices": [
-                {"slug": "dip-parallettes",       "reps": 3,  "tempo": "2/1/X/0", "duree_min": 10},
-                {"slug": "traction-australienne",  "reps": 10, "tempo": "X/1/2/0", "duree_min": 9},
+                {"slug": "traction-australienne",  "reps": 10, "tempo": "X/1/2/0", "duree_min": 10},
                 {"slug": "curl-biceps-traction",   "reps": 10, "tempo": "X/1/2/0", "duree_min": 9},
                 {"slug": "le-y",                   "reps": 10, "tempo": "2/1/X/0", "duree_min": 9},
-                {"slug": "triceps-extension-dips", "reps": 10, "tempo": "2/1/X/0", "duree_min": 9},
                 {"slug": "rotateur-long",          "reps": 10, "tempo": "2/1/X/0", "duree_min": 9},
-                {"slug": "sit-up",                 "reps": 10, "tempo": "X/0/2/0", "duree_min": 9},
+                {"slug": "extension-hanche",       "reps": 15, "tempo": "2/1/X/0", "duree_min": 9},
             ]
         },
         {
@@ -1103,24 +1104,22 @@ MODULE3 = {
             "description": "Terrain : trail (D+ 480 m). +7 min vs S1 M3. Récupération avant fractionné.",
         },
         {
-            "jour": 2, "type": TypeSeance.EMOM, "titre": "EMOM — Module 3 S2 (31 min)",
+            "jour": 2, "type": TypeSeance.EMOM, "titre": "EMOM PUSH — Module 3 S2 (31 min)",
             "temps_limite": 31,
             "description": (
-                "Structure EMOM — 3 blocs :\n"
+                "Structure EMOM PUSH — 3 blocs :\n"
                 "  • Bloc A — 10 min : Dips aux parallettes (pause basse) — 4 reps × 10 min\n"
-                "  • Bloc B — 9 min : Traction australienne / Curl / Le Y (triplet × 3)\n"
-                "      11 reps / 11 reps / repos\n"
+                "  • Bloc B — 9 min : Pompes larges / Squat poids du corps (alternés × 4)\n"
+                "      11 reps pompes / 15 reps squat\n"
                 "  • Bloc C — 12 min : Pompes larges / Triceps ext / Sit ups (triplet × 4)\n"
-                "      11 reps / 11 reps / 30 sec"
+                "      11 reps / 11 reps / 11 reps"
             ),
             "exercices": [
                 {"slug": "dip-parallettes",       "reps": 4,  "tempo": "2/1/X/0", "duree_min": 10},
-                {"slug": "traction-australienne",  "reps": 11, "tempo": "X/1/2/0", "duree_min": 9},
-                {"slug": "curl-biceps-traction",   "reps": 11, "tempo": "X/1/2/0", "duree_min": 9},
-                {"slug": "le-y",                   "reps": 11, "tempo": "2/1/X/0", "duree_min": 9},
-                {"slug": "pompe-large",            "reps": 11, "tempo": "2/1/X/0", "duree_min": 12},
-                {"slug": "triceps-extension-dips", "reps": 11, "tempo": "2/1/X/0", "duree_min": 12},
-                {"slug": "sit-up",                 "reps": 11, "tempo": "X/0/2/0", "duree_min": 12},
+                {"slug": "pompe-large",           "reps": 11, "tempo": "2/1/X/0", "duree_min": 9},
+                {"slug": "squat-bw",             "reps": 15, "tempo": "3/1/X/0", "duree_min": 9},
+                {"slug": "triceps-extension-dips","reps": 11, "tempo": "2/1/X/0", "duree_min": 12},
+                {"slug": "sit-up",               "reps": 11, "tempo": "X/0/2/0", "duree_min": 12},
             ]
         },
         {
@@ -1178,25 +1177,24 @@ MODULE3 = {
             "description": "Terrain : trail (D+ 560 m). +6 min vs S2 M3. Allure Z2 — récupération active avant séance seuil.",
         },
         {
-            "jour": 2, "type": TypeSeance.EMOM, "titre": "EMOM — Module 3 S3 (34 min)",
+            "jour": 2, "type": TypeSeance.EMOM, "titre": "EMOM PULL — Module 3 S3 (34 min)",
             "temps_limite": 34,
             "description": (
-                "Structure EMOM — 3 blocs (pause isométrique généralisée) :\n"
-                "  • Bloc A — 10 min : Dips aux parallettes (pause 2 sec basse)\n"
-                "      5 reps × 10 min (tempo 2/2/X/0)\n"
-                "  • Bloc B — 12 min : Traction australienne / Curl / Le Y (triplet × 4)\n"
-                "      12 reps / 12 reps / repos\n"
-                "  • Bloc C — 12 min : Pompes larges / Triceps ext / Extension hanche (triplet × 4)\n"
-                "      12 reps / 12 reps / 12 reps"
+                "Structure EMOM PULL (pauses isométriques) — 3 blocs :\n"
+                "  • Bloc A — 10 min : Traction australienne (pause 2 sec position haute)\n"
+                "      5 reps × 10 min (tempo X/2/2/0)\n"
+                "  • Bloc B — 12 min : Traction stricte / Curl biceps / Le Y (triplet × 4)\n"
+                "      4 reps / 12 reps / 12 reps\n"
+                "  • Bloc C — 12 min : Rotateur long / Extension de hanche (alternés × 4)\n"
+                "      12 reps / 12 reps"
             ),
             "exercices": [
-                {"slug": "dip-parallettes",       "reps": 5,  "tempo": "2/2/X/0", "pause_iso": 2.0, "duree_min": 10},
-                {"slug": "traction-australienne",  "reps": 12, "tempo": "X/1/2/0",                   "duree_min": 12},
-                {"slug": "curl-biceps-traction",   "reps": 12, "tempo": "X/1/2/0",                   "duree_min": 12},
-                {"slug": "le-y",                   "reps": 12, "tempo": "2/1/X/0",                   "duree_min": 12},
-                {"slug": "pompe-large",            "reps": 12, "tempo": "2/1/X/0",                   "duree_min": 12},
-                {"slug": "triceps-extension-dips", "reps": 12, "tempo": "2/1/X/0",                   "duree_min": 12},
-                {"slug": "extension-hanche",       "reps": 12, "tempo": "2/1/X/0",                   "duree_min": 12},
+                {"slug": "traction-australienne", "reps": 5,  "tempo": "X/2/2/0", "pause_iso": 2.0, "duree_min": 10},
+                {"slug": "traction-stricte",      "reps": 4,  "tempo": "X/1/2/0",                   "duree_min": 12},
+                {"slug": "curl-biceps-traction",  "reps": 12, "tempo": "X/1/2/0",                   "duree_min": 12},
+                {"slug": "le-y",                  "reps": 12, "tempo": "2/1/X/0",                   "duree_min": 12},
+                {"slug": "rotateur-long",         "reps": 12, "tempo": "2/1/X/0",                   "duree_min": 12},
+                {"slug": "extension-hanche",      "reps": 12, "tempo": "2/1/X/0",                   "duree_min": 12},
             ]
         },
         {
@@ -1256,24 +1254,23 @@ MODULE3 = {
             "description": "Terrain : trail (D+ 650 m). Semaine pic M3. Allure Z2 — récupération active avant fractionné.",
         },
         {
-            "jour": 2, "type": TypeSeance.EMOM, "titre": "EMOM — Module 3 S4 — PIC (37 min)",
+            "jour": 2, "type": TypeSeance.EMOM, "titre": "EMOM PUSH — Module 3 S4 — PIC (37 min)",
             "temps_limite": 37,
             "description": (
-                "Structure EMOM PIC — 3 blocs :\n"
-                "  • Bloc A — 12 min : Dips aux parallettes (pause 2 sec) — 6 reps × 12 min\n"
-                "  • Bloc B — 12 min : Traction australienne / Curl / Le Y (triplet × 4)\n"
-                "      13 reps / 13 reps / repos\n"
-                "  • Bloc C — 13 min : Pompes larges / Triceps ext / Extension hanche (triplet × 4+1)\n"
-                "      13 reps / 13 reps / 13 reps"
+                "Structure EMOM PUSH PIC — 3 blocs :\n"
+                "  • Bloc A — 12 min : Dips aux parallettes (pause 2 sec basse) — 6 reps × 12 min\n"
+                "  • Bloc B — 12 min : Pompes larges / Squat poids du corps (alternés × 4)\n"
+                "      13 reps pompes / 15 reps squat\n"
+                "  • Bloc C — 13 min : Pompes standard / Triceps ext / Chaise iso (triplet × 4)\n"
+                "      13 reps / 13 reps / 30 sec"
             ),
             "exercices": [
                 {"slug": "dip-parallettes",       "reps": 6,  "tempo": "2/2/X/0", "pause_iso": 2.0, "duree_min": 12},
-                {"slug": "traction-australienne",  "reps": 13, "tempo": "X/1/2/0",                   "duree_min": 12},
-                {"slug": "curl-biceps-traction",   "reps": 13, "tempo": "X/1/2/0",                   "duree_min": 12},
-                {"slug": "le-y",                   "reps": 13, "tempo": "2/1/X/0",                   "duree_min": 12},
-                {"slug": "pompe-large",            "reps": 13, "tempo": "2/1/X/0",                   "duree_min": 13},
-                {"slug": "triceps-extension-dips", "reps": 13, "tempo": "2/1/X/0",                   "duree_min": 13},
-                {"slug": "extension-hanche",       "reps": 13, "tempo": "2/1/X/0",                   "duree_min": 13},
+                {"slug": "pompe-large",           "reps": 13, "tempo": "2/1/X/0",                   "duree_min": 12},
+                {"slug": "squat-bw",             "reps": 15, "tempo": "3/1/X/0",                   "duree_min": 12},
+                {"slug": "pompe-standard",       "reps": 13, "tempo": "2/0/X/0",                   "duree_min": 13},
+                {"slug": "triceps-extension-dips","reps": 13, "tempo": "2/1/X/0",                   "duree_min": 13},
+                {"slug": "chaise-isometrique",   "reps": None, "tempo": None,                       "duree_min": 13},
             ]
         },
         {
@@ -1339,22 +1336,21 @@ MODULE3 = {
             "description": "Terrain : chemin (D+ 150 m). Semaine de décharge — allure Z2 légère.",
         },
         {
-            "jour": 2, "type": TypeSeance.EMOM, "titre": "EMOM — Module 3 S5 (26 min)",
+            "jour": 2, "type": TypeSeance.EMOM, "titre": "EMOM PULL — Module 3 S5 (26 min)",
             "temps_limite": 26,
             "description": (
-                "Structure EMOM décharge amorçée — 3 blocs :\n"
-                "  • Bloc A — 9 min : Dips aux parallettes (libre) — 5 reps × 9 min\n"
-                "  • Bloc B — 9 min : Traction australienne / Curl / Le Y (triplet × 3)\n"
-                "      12 reps / 12 reps / repos\n"
-                "  • Bloc C — 8 min : Pompes larges / Extension hanche (alternés)\n"
-                "      12 reps / 12 reps × 4"
+                "Structure EMOM PULL décharge amorçée — 3 blocs :\n"
+                "  • Bloc A — 9 min : Traction australienne (libre) — 5 reps × 9 min\n"
+                "  • Bloc B — 9 min : Curl biceps traction / Le Y (alternés × 4)\n"
+                "      12 reps / 12 reps\n"
+                "  • Bloc C — 8 min : Rotateur long / Extension de hanche (alternés × 4)\n"
+                "      12 reps / 12 reps"
             ),
             "exercices": [
-                {"slug": "dip-parallettes",      "reps": 5,  "tempo": "2/1/X/0", "duree_min": 9},
-                {"slug": "traction-australienne", "reps": 12, "tempo": "X/1/2/0", "duree_min": 9},
+                {"slug": "traction-australienne", "reps": 5,  "tempo": "X/1/2/0", "duree_min": 9},
                 {"slug": "curl-biceps-traction",  "reps": 12, "tempo": "X/1/2/0", "duree_min": 9},
                 {"slug": "le-y",                  "reps": 12, "tempo": "2/1/X/0", "duree_min": 9},
-                {"slug": "pompe-large",           "reps": 12, "tempo": "2/1/X/0", "duree_min": 8},
+                {"slug": "rotateur-long",         "reps": 12, "tempo": "2/1/X/0", "duree_min": 8},
                 {"slug": "extension-hanche",      "reps": 12, "tempo": "2/1/X/0", "duree_min": 8},
             ]
         },
