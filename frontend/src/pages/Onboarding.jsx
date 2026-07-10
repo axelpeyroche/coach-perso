@@ -329,12 +329,21 @@ function Etape4({ data, set }) {
                 className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
             </div>
           </div>
-          <div>
-            <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">Objectif de temps (min)</label>
-            <input type="number" value={data.objectif_course_temps ?? ""}
-              placeholder="ex: 240 pour 4h"
-              onChange={e => set({ objectif_course_temps: e.target.value })}
-              className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">Objectif de temps (min)</label>
+              <input type="number" value={data.objectif_course_temps ?? ""}
+                placeholder="ex: 240 pour 4h"
+                onChange={e => set({ objectif_course_temps: e.target.value })}
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">Dénivelé D+ (m) <span className="text-gray-400">(optionnel)</span></label>
+              <input type="number" value={data.objectif_course_dplus ?? ""}
+                placeholder="ex: 1200"
+                onChange={e => set({ objectif_course_dplus: e.target.value })}
+                className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
+            </div>
           </div>
         </div>
       )}
@@ -381,6 +390,7 @@ export default function Onboarding() {
     objectif_course_date: "",
     objectif_course_km: "",
     objectif_course_temps: "",
+    objectif_course_dplus: "",
   });
 
   function set(patch) { setData(d => ({ ...d, ...patch })); }
@@ -427,6 +437,7 @@ export default function Onboarding() {
           nom: data.objectif_course_nom,
           date_course: formatDateFr(data.objectif_course_date),
           distance_km: parseFloat(data.objectif_course_km),
+          dplus_m: data.objectif_course_dplus ? parseInt(data.objectif_course_dplus) : 0,
           objectif_temps_min: data.objectif_course_temps ? parseInt(data.objectif_course_temps) : 0,
         });
       }
