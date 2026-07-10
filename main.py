@@ -360,7 +360,6 @@ def patch_profil_fc(payload: ProfilFCSchema, current_user: Utilisateur = Depends
 
 
 class CreerEvaluationSchema(BaseModel):
-    utilisateur_id: int
     macrocycle_id: Optional[int] = None
     est_induction: bool = False
     notes: Optional[str] = None
