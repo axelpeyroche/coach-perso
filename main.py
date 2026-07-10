@@ -241,12 +241,18 @@ def login(payload: LoginSchema, db: Session = Depends(obtenir_session)):
 
 
 @app.get("/api/auth/me", summary="Retourne le profil de l'utilisateur connecté")
-def me(current_user: Utilisateur = Depends(get_current_user)):
+def me(current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
     dn = current_user.date_naissance
     age = None
     if dn:
         today = date.today()
         age = today.year - dn.year - ((today.month, today.day) < (dn.month, dn.day))
+    derniere_bio = (
+        db.query(BiometrieUtilisateur)
+        .filter(BiometrieUtilisateur.utilisateur_id == current_user.id)
+        .order_by(BiometrieUtilisateur.enregistre_le.desc())
+        .first()
+    )
     return {
         "id": current_user.id,
         "email": current_user.email,
@@ -258,6 +264,7 @@ def me(current_user: Utilisateur = Depends(get_current_user)):
         "poids_kg": current_user.poids_kg,
         "fc_max": current_user.fc_max,
         "fc_repos": current_user.fc_repos,
+        "vma_kmh": round(derniere_bio.vma_kmh, 1) if derniere_bio else None,
         "onboarding_complet": bool(current_user.onboarding_complet),
         "type_programme": current_user.type_programme,
         "seances_semaine": current_user.seances_semaine,

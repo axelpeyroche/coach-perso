@@ -1,6 +1,4 @@
 import { useAuth } from "../AuthContext";
-import { useQuery } from "@tanstack/react-query";
-import { getProfilFC } from "../api";
 
 const PROG_LABEL = { course: "Course", muscu: "Musculation", hybride: "Hybride" };
 const MUSCU_LABEL = { poids_corps: "Poids du corps", salle: "Salle de sport" };
@@ -25,9 +23,20 @@ function Section({ title, children }) {
   );
 }
 
+function BioStat({ label, value, unit }) {
+  return (
+    <div className="flex-1 flex flex-col items-center py-3">
+      <span className="text-lg font-bold text-gray-900 dark:text-white">
+        {value != null ? value : <span className="text-gray-300 dark:text-gray-600">—</span>}
+        {value != null && unit && <span className="text-xs font-normal text-gray-400 ml-0.5">{unit}</span>}
+      </span>
+      <span className="text-xs text-gray-400 mt-0.5">{label}</span>
+    </div>
+  );
+}
+
 export default function Profil({ dark, setDark }) {
   const { user, logout } = useAuth();
-  const { data: fc } = useQuery({ queryKey: ["profil-fc"], queryFn: getProfilFC, retry: 0 });
 
   const initials = [user?.prenom?.[0], user?.nom?.[0]].filter(Boolean).join("").toUpperCase() || "?";
 
@@ -49,7 +58,7 @@ export default function Profil({ dark, setDark }) {
         <Row label="Email" value={user?.email} />
         <Row label="Âge" value={user?.age ? `${user.age} ans` : null} />
         <Row label="Sexe" value={user?.sexe === "M" ? "Homme" : user?.sexe === "F" ? "Femme" : null} />
-        <Row label="Poids" value={fc?.poids_kg ? `${fc.poids_kg} kg` : null} />
+        <Row label="Poids" value={user?.poids_kg ? `${user.poids_kg} kg` : null} />
       </Section>
 
       {/* Programme */}
@@ -65,8 +74,12 @@ export default function Profil({ dark, setDark }) {
 
       {/* Physiologie */}
       <Section title="Physiologie">
-        <Row label="FC max" value={fc?.fc_max ? `${fc.fc_max} bpm` : null} />
-        <Row label="FC repos" value={fc?.fc_repos ? `${fc.fc_repos} bpm` : null} />
+        <div className="flex divide-x divide-gray-100 dark:divide-gray-800">
+          <BioStat label="FC max"   value={user?.fc_max}   unit="bpm" />
+          <BioStat label="FC repos" value={user?.fc_repos} unit="bpm" />
+          <BioStat label="VMA"      value={user?.vma_kmh}  unit="km/h" />
+          <BioStat label="Poids"    value={user?.poids_kg} unit="kg" />
+        </div>
       </Section>
 
       {/* Apparence */}
