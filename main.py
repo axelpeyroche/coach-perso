@@ -266,15 +266,55 @@ def me(current_user: Utilisateur = Depends(get_current_user)):
     }
 
 
+def _calculer_calibration(historique: dict) -> dict:
+    """Calcule km_factor et amrap_factor depuis l'historique de performance utilisateur."""
+    niveau = historique.get("niveau", "intermediaire")
+    niveau_map = {"debutant": 0.75, "intermediaire": 1.0, "confirme": 1.25}
+    base_factor = niveau_map.get(niveau, 1.0)
+
+    # km_factor — calé sur le volume hebdomadaire actuel
+    volume = historique.get("volume_km_semaine")
+    try:
+        vol = float(volume) if volume is not None else None
+    except (TypeError, ValueError):
+        vol = None
+    if vol is not None:
+        km_base = min(max(vol * 0.8, 8.0), 50.0)
+        km_factor = km_base / 15.0
+    else:
+        km_factor = base_factor
+
+    # amrap_factor — calé sur les performances muscu
+    max_pompes = historique.get("max_pompes")
+    max_tractions = historique.get("max_tractions")
+    try:
+        pompes = float(max_pompes) if max_pompes is not None else None
+        tractions = float(max_tractions) if max_tractions is not None else None
+    except (TypeError, ValueError):
+        pompes = tractions = None
+    if pompes is not None and tractions is not None:
+        score = (pompes / 20.0) + (tractions / 8.0)
+        amrap_factor = max(0.55, min(1.6, 0.45 + score * 0.275))
+    else:
+        amrap_factor = base_factor
+
+    return {
+        "km_factor": round(km_factor, 3),
+        "amrap_factor": round(amrap_factor, 3),
+        "reps_factor": round(amrap_factor, 3),
+    }
+
+
 @app.post("/api/auth/onboarding", summary="Complète l'onboarding et génère le programme")
 def onboarding(
     payload: OnboardingSchema,
     current_user: Utilisateur = Depends(get_current_user),
     db: Session = Depends(obtenir_session),
 ):
+    import json as _json
     from models import SemaineEntrainement
     from periodization_rules import BLUEPRINT_MACROCYCLE, generer_dates_semaines, generer_blueprint_course
-    from seed_seances import MODULE1, _POOL_SURCHARGE, _semaine_course, _inserer_seances_en_session
+    from seed_seances import MODULE1, MODULE2, MODULE3, _POOL_SURCHARGE, _semaine_course, _inserer_seances_en_session, calibrer_module
 
     # Sauvegarder préférences
     current_user.type_programme = payload.type_programme
@@ -284,16 +324,41 @@ def onboarding(
     current_user.frequence_tests_semaines = payload.frequence_tests_semaines
     current_user.objectif_type = payload.objectif_type
     current_user.onboarding_complet = True
+
+    # Calibration depuis l'historique de performance
+    calib = {"km_factor": 1.0, "amrap_factor": 1.0, "reps_factor": 1.0}
     if payload.historique_perf:
-        import json as _json
         current_user.historique_perf = _json.dumps(payload.historique_perf, ensure_ascii=False)
+        hist = payload.historique_perf
+        calib = _calculer_calibration(hist)
+
+        # Pre-fill FC max
+        if hist.get("fc_max") and not current_user.fc_max:
+            try:
+                current_user.fc_max = int(hist["fc_max"])
+            except (TypeError, ValueError):
+                pass
+
+        # Pre-fill biométrie depuis VMA connue (équivaut à un test demi-Cooper virtuel)
+        if hist.get("vma_estimee"):
+            try:
+                vma = float(hist["vma_estimee"])
+                if 5.0 <= vma <= 30.0:
+                    # distance_metres = vma * 100 → depuis_demi_cooper recalcule vma = dist/100 = vma
+                    biometrie = BiometrieUtilisateur.depuis_demi_cooper(
+                        utilisateur_id=current_user.id,
+                        distance_metres=vma * 100,
+                        fc_max=current_user.fc_max,
+                    )
+                    db.add(biometrie)
+            except (TypeError, ValueError):
+                pass
 
     try:
         debut = datetime.strptime(payload.date_debut_programme, "%d/%m/%Y").date()
     except ValueError:
         raise HTTPException(400, "Format date_debut_programme invalide — attendu jj/mm/aaaa")
     if debut.weekday() != 0:
-        # Ramener au lundi suivant
         debut = debut + timedelta(days=(7 - debut.weekday()) % 7)
 
     # Supprimer ancien programme si existant
@@ -306,6 +371,10 @@ def onboarding(
         ObjectifCourse.utilisateur_id == current_user.id
     ).order_by(ObjectifCourse.id.desc()).first()
 
+    kf = calib["km_factor"]
+    af = calib["amrap_factor"]
+    rf = calib["reps_factor"]
+
     if obj_course and payload.objectif_type in ("course", "hybride"):
         n_semaines = max(4, (obj_course.date_course - debut).days // 7)
         n_surcharge = n_semaines - 3
@@ -314,28 +383,38 @@ def onboarding(
                         date_debut=debut, date_fin=debut + timedelta(weeks=n_semaines))
         db.add(mc); db.flush()
         for regle, ds in zip(blueprint, [debut + timedelta(weeks=i) for i in range(n_semaines)]):
+            km = round(regle.objectif_km_course * kf, 1) if regle.objectif_km_course else None
+            amrap = round(regle.objectif_amrap_min * af) if regle.objectif_amrap_min else None
             db.add(SemaineEntrainement(macrocycle_id=mc.id, numero_semaine=regle.numero,
                 macrophase=regle.macrophase, date_debut=ds,
                 multiplicateur_volume=regle.multiplicateur_volume,
-                objectif_km_course=regle.objectif_km_course, objectif_amrap_min=regle.objectif_amrap_min))
+                objectif_km_course=km, objectif_amrap_min=amrap))
         db.flush()
-        content = {i: _POOL_SURCHARGE[min(i, 15)] for i in range(1, n_surcharge + 1)}
-        content[n_surcharge + 1] = MODULE1[6]; content[n_surcharge + 2] = MODULE1[7]
+        surcharge_cal = calibrer_module(_POOL_SURCHARGE, kf, af, rf)
+        m1_cal = calibrer_module(MODULE1, kf, af, rf)
+        content = {i: surcharge_cal[min(i, 15)] for i in range(1, n_surcharge + 1)}
+        content[n_surcharge + 1] = m1_cal.get(6, MODULE1[6])
+        content[n_surcharge + 2] = m1_cal.get(7, MODULE1[7])
         content[n_semaines] = _semaine_course(obj_course.date_course, obj_course.nom)
         _inserer_seances_en_session(db, mc, content)
     else:
-        # Programme standard 2 macrocycles
+        # Programme standard 2 macrocycles avec sessions calibrées
+        modules = {1: MODULE1, 2: MODULE2, 3: MODULE3}
         for numero_cycle in (1, 2):
             debut_mc = debut + timedelta(weeks=8 * (numero_cycle - 1))
             mc = Macrocycle(utilisateur_id=current_user.id, numero_cycle=numero_cycle,
                             date_debut=debut_mc, date_fin=debut_mc + timedelta(weeks=8))
             db.add(mc); db.flush()
             for regle, ds in zip(BLUEPRINT_MACROCYCLE, generer_dates_semaines(debut_mc)):
+                km = round(regle.objectif_km_course * kf, 1) if regle.objectif_km_course else None
+                amrap = round(regle.objectif_amrap_min * af) if regle.objectif_amrap_min else None
                 db.add(SemaineEntrainement(macrocycle_id=mc.id, numero_semaine=regle.numero,
                     macrophase=regle.macrophase, date_debut=ds,
                     multiplicateur_volume=regle.multiplicateur_volume,
-                    objectif_km_course=regle.objectif_km_course, objectif_amrap_min=regle.objectif_amrap_min))
+                    objectif_km_course=km, objectif_amrap_min=amrap))
             db.flush()
+            module_data = modules.get(numero_cycle, MODULE1)
+            _inserer_seances_en_session(db, mc, calibrer_module(module_data, kf, af, rf))
 
     db.commit()
     return {"ok": True, "message": "Onboarding terminé, programme généré."}

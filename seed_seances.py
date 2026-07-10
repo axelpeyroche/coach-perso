@@ -1701,6 +1701,38 @@ def _semaine_course(date_course, course_nom: str) -> list:
     return seances
 
 
+def calibrer_module(module_data: dict, km_factor: float = 1.0, amrap_factor: float = 1.0, reps_factor: float = 1.0) -> dict:
+    """Retourne une copie calibrée du module avec durées et répétitions ajustées au niveau de l'utilisateur."""
+    result = {}
+    for sem, seances in module_data.items():
+        sem_cal = []
+        for s in seances:
+            ns = dict(s)
+            t = ns.get("type")
+            if t == TypeSeance.COURSE:
+                if ns.get("duree_min"):
+                    ns["duree_min"] = max(20, round(ns["duree_min"] * km_factor / 5) * 5)
+                if ns.get("dplus_m"):
+                    ns["dplus_m"] = max(0, round(ns["dplus_m"] * km_factor / 10) * 10)
+            elif t == TypeSeance.AMRAP and ns.get("temps_limite"):
+                ns["temps_limite"] = max(10, round(ns["temps_limite"] * amrap_factor / 2) * 2)
+            elif t == TypeSeance.EMOM and ns.get("temps_limite"):
+                # EMOM : calibration plus douce (moitié du facteur)
+                emom_factor = amrap_factor * 0.5 + 0.5
+                ns["temps_limite"] = max(8, round(ns["temps_limite"] * emom_factor / 2) * 2)
+            if "exercices" in ns:
+                exs = []
+                for ex in ns["exercices"]:
+                    nex = dict(ex)
+                    if nex.get("reps") is not None:
+                        nex["reps"] = max(1, round(nex["reps"] * reps_factor))
+                    exs.append(nex)
+                ns["exercices"] = exs
+            sem_cal.append(ns)
+        result[sem] = sem_cal
+    return result
+
+
 def seed_programme_course(n_semaines: int, date_course=None, course_nom: str = "Course"):
     """
     Seed adaptatif pour un programme orienté course de n_semaines semaines.
