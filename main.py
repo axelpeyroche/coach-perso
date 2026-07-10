@@ -349,7 +349,7 @@ def onboarding(
     import json as _json
     from models import SemaineEntrainement
     from periodization_rules import BLUEPRINT_MACROCYCLE, generer_dates_semaines, generer_blueprint_course
-    from seed_seances import MODULE1, MODULE2, MODULE3, _POOL_SURCHARGE, _semaine_course, _inserer_seances_en_session, calibrer_module
+    from seed_seances import MODULE1, MODULE2, MODULE3, _POOL_SURCHARGE, _semaine_course, _inserer_seances_en_session, calibrer_module, adapter_contenu_muscu
 
     # Sauvegarder préférences
     current_user.type_programme = payload.type_programme
@@ -454,10 +454,12 @@ def onboarding(
         content[n_surcharge + 1] = m1_cal.get(6, MODULE1[6])
         content[n_surcharge + 2] = m1_cal.get(7, MODULE1[7])
         content[n_semaines] = _semaine_course(obj_course.date_course, obj_course.nom)
-        _inserer_seances_en_session(db, mc, content)
+        n_muscu = current_user.seances_muscu_semaine or 2
+        _inserer_seances_en_session(db, mc, adapter_contenu_muscu(content, n_muscu))
     else:
         # Programme standard 2 macrocycles avec sessions calibrées
         modules = {1: MODULE1, 2: MODULE2, 3: MODULE3}
+        n_muscu = current_user.seances_muscu_semaine or 2
         for numero_cycle in (1, 2):
             debut_mc = debut + timedelta(weeks=8 * (numero_cycle - 1))
             mc = Macrocycle(utilisateur_id=current_user.id, numero_cycle=numero_cycle,
@@ -472,7 +474,8 @@ def onboarding(
                     objectif_km_course=km, objectif_amrap_min=amrap))
             db.flush()
             module_data = modules.get(numero_cycle, MODULE1)
-            _inserer_seances_en_session(db, mc, calibrer_module(module_data, kf, af, rf))
+            calibrated = calibrer_module(module_data, kf, af, rf)
+            _inserer_seances_en_session(db, mc, adapter_contenu_muscu(calibrated, n_muscu))
 
     db.commit()
     return {"ok": True, "message": "Onboarding terminé, programme généré."}
@@ -1566,7 +1569,7 @@ def initialiser_programme(payload: InitProgrammePayload, current_user: Utilisate
     from seed_seances import (
         MODULE1, MODULE2, MODULE3,
         _POOL_SURCHARGE, _semaine_course, _inserer_seances_en_session,
-        calibrer_module,
+        calibrer_module, adapter_contenu_muscu,
     )
 
     try:
@@ -1656,7 +1659,8 @@ def initialiser_programme(payload: InitProgrammePayload, current_user: Utilisate
             content[n_surcharge + 2] = MODULE1[7]
             content[n_semaines]      = _semaine_course(obj.date_course, obj.nom)
 
-            _inserer_seances_en_session(db, mc, content)
+            n_muscu = user.seances_muscu_semaine or 2
+            _inserer_seances_en_session(db, mc, adapter_contenu_muscu(content, n_muscu))
             db.commit()
 
             return {
@@ -1666,6 +1670,7 @@ def initialiser_programme(payload: InitProgrammePayload, current_user: Utilisate
             }
 
         # ── CAS 2 : pas de course → programme standard 3 × 8 semaines ───────
+        n_muscu = user.seances_muscu_semaine or 2
         mcs_crees = []
         for numero_cycle in range(1, 4):
             debut = debut_mc1 + timedelta(weeks=8 * (numero_cycle - 1))
@@ -1689,7 +1694,7 @@ def initialiser_programme(payload: InitProgrammePayload, current_user: Utilisate
                 ))
             db.flush()
             module_data = {1: MODULE1, 2: MODULE2, 3: MODULE3}[numero_cycle]
-            _inserer_seances_en_session(db, mc, module_data)
+            _inserer_seances_en_session(db, mc, adapter_contenu_muscu(module_data, n_muscu))
             mcs_crees.append(numero_cycle)
 
         db.commit()

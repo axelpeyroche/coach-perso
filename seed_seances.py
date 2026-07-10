@@ -1697,6 +1697,76 @@ def _semaine_course(date_course, course_nom: str) -> list:
     return seances
 
 
+# ─── EMOM complémentaires pour la 3e séance muscu (j5 = vendredi) ──────────
+
+_COMPLEMENT_EMOM_PUSH = {
+    "jour": 5, "type": TypeSeance.EMOM, "titre": "EMOM PUSH — 3e séance",
+    "temps_limite": 20,
+    "description": (
+        "EMOM PUSH complémentaire — 2 blocs :\n"
+        "  • Bloc A — 10 min : Dips + Pompes standard (alternés)\n"
+        "      6 dips / 10 pompes (cycle × 5)\n"
+        "  • Bloc B — 10 min : Pompes prise large / Extension triceps / Squat (triplet × 3)\n"
+        "      8 reps / 10 reps / 15 reps"
+    ),
+    "exercices": [
+        {"slug": "dip-parallettes",       "reps": 6,  "tempo": "2/1/X/0", "duree_min": 10},
+        {"slug": "pompe-standard",        "reps": 10, "tempo": "2/0/X/0", "duree_min": 10},
+        {"slug": "pompe-large",           "reps": 8,  "tempo": "2/1/X/0", "duree_min": 10},
+        {"slug": "triceps-extension-dips","reps": 10, "tempo": "2/1/X/0", "duree_min": 10},
+        {"slug": "squat-bw",             "reps": 15, "tempo": "3/1/X/0", "duree_min": 10},
+    ],
+}
+
+_COMPLEMENT_EMOM_PULL = {
+    "jour": 5, "type": TypeSeance.EMOM, "titre": "EMOM PULL — 3e séance",
+    "temps_limite": 20,
+    "description": (
+        "EMOM PULL complémentaire — 2 blocs :\n"
+        "  • Bloc A — 10 min : Traction australienne + Curl biceps (alternés)\n"
+        "      8 tractions / 10 curl (cycle × 5)\n"
+        "  • Bloc B — 10 min : Le Y / Extension de hanche (alternés × 5)\n"
+        "      10 reps / 15 reps"
+    ),
+    "exercices": [
+        {"slug": "traction-australienne","reps": 8,  "tempo": "X/1/2/0", "duree_min": 10},
+        {"slug": "curl-biceps-traction", "reps": 10, "tempo": "X/1/2/0", "duree_min": 10},
+        {"slug": "le-y",                "reps": 10, "tempo": "2/1/X/0", "duree_min": 10},
+        {"slug": "extension-hanche",    "reps": 15, "tempo": "2/1/X/0", "duree_min": 10},
+    ],
+}
+
+
+def adapter_contenu_muscu(content: dict, seances_muscu: int) -> dict:
+    """Adapte le contenu d'un programme selon le nombre de séances muscu/semaine.
+
+    - 1 séance  → supprime tous les EMOM, garde uniquement l'AMRAP
+    - 2 séances → comportement par défaut (1 EMOM + 1 AMRAP)
+    - 3+ séances → ajoute un EMOM complémentaire (PUSH si la semaine est PULL, et vice versa)
+                   sur le jour 5 (vendredi), sauf semaines de décharge/affûtage/évaluation
+    """
+    result = {}
+    for sem, seances in content.items():
+        if seances_muscu == 1:
+            result[sem] = [s for s in seances if s.get("type") != TypeSeance.EMOM]
+        elif seances_muscu >= 3:
+            emoms = [s for s in seances if s.get("type") == TypeSeance.EMOM]
+            jours_pris = {s["jour"] for s in seances}
+            if (
+                len(emoms) == 1
+                and 5 not in jours_pris
+                and (emoms[0].get("temps_limite") or 0) >= 18  # pas une séance décharge (<18 min)
+            ):
+                is_pull = "PULL" in emoms[0].get("titre", "")
+                complement = dict(_COMPLEMENT_EMOM_PULL if is_pull else _COMPLEMENT_EMOM_PUSH)
+                result[sem] = seances + [complement]
+            else:
+                result[sem] = seances
+        else:
+            result[sem] = seances
+    return result
+
+
 def calibrer_module(module_data: dict, km_factor: float = 1.0, amrap_factor: float = 1.0, reps_factor: float = 1.0) -> dict:
     """Retourne une copie calibrée du module avec durées et répétitions ajustées au niveau de l'utilisateur."""
     result = {}
