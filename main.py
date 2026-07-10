@@ -27,7 +27,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
-from passlib.context import CryptContext
 from jose import JWTError, jwt
 
 import analytics_service
@@ -117,19 +116,24 @@ SECRET_KEY = os.getenv("JWT_SECRET", "change-me-in-production-super-secret-key-3
 ALGORITHM  = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 30  # 30 jours
 
-pwd_ctx     = CryptContext(schemes=["bcrypt"], deprecated="auto")
+import hashlib, hmac as _hmac, os as _os, base64 as _b64
+
 http_bearer = HTTPBearer(auto_error=False)
 
 
-def _pw_prepare(password: str) -> str:
-    import hashlib, base64
-    return base64.b64encode(hashlib.sha256(password.encode()).digest()).decode()
-
 def _hash_password(password: str) -> str:
-    return pwd_ctx.hash(_pw_prepare(password))
+    salt = _os.urandom(16)
+    key  = hashlib.pbkdf2_hmac("sha256", password.encode(), salt, 260_000)
+    return _b64.b64encode(salt + key).decode()
 
 def _verify_password(plain: str, hashed: str) -> bool:
-    return pwd_ctx.verify(_pw_prepare(plain), hashed)
+    try:
+        data = _b64.b64decode(hashed.encode())
+        salt, key = data[:16], data[16:]
+        new_key = hashlib.pbkdf2_hmac("sha256", plain.encode(), salt, 260_000)
+        return _hmac.compare_digest(key, new_key)
+    except Exception:
+        return False
 
 def _create_token(user_id: int) -> str:
     return jwt.encode({"sub": str(user_id)}, SECRET_KEY, algorithm=ALGORITHM)
