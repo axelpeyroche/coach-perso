@@ -538,17 +538,9 @@ export default function Dashboard() {
             </button>
           </div>
         }>
-          <div className="space-y-1">
-            {/* En-tête colonnes */}
-            <div className="flex items-center gap-2 pb-1 border-b border-gray-100 dark:border-gray-800">
-              <span className="w-2 shrink-0" />
-              <span className="w-6 shrink-0" />
-              <span className="text-xs text-gray-400 w-24 shrink-0">Zone</span>
-              <span className="text-xs text-gray-400 flex-1 text-center font-mono">min/km</span>
-              <span className="text-xs text-gray-400 flex-1 text-center font-mono">bpm</span>
-            </div>
+          <div className="space-y-0">
             {[
-              { z: "Z1", label: "Récupération" },
+              { z: "Z1", label: "Récup." },
               { z: "Z2", label: "Aérobie" },
               { z: "Z3", label: "Tempo" },
               { z: "Z4", label: "Seuil" },
@@ -556,19 +548,18 @@ export default function Dashboard() {
             ].map(({ z, label }) => {
               const [pMin, pMax] = BORNES_VMA[z];
               const vma = derniereVMA?.valeur;
-              // allure max (la plus lente) = %VMA min ; allure min (la plus rapide) = %VMA max
               const allureMax = vmaToAllure(vma, pMin);
               const allureMin = vmaToAllure(vma, pMax);
               const fc = zonesFCKarvonen?.[z] ?? derniereVMA?.zones_fc?.[z];
               return (
-                <div key={z} className="flex items-center gap-2 py-1">
-                  <span className={`w-2 h-2 rounded-full shrink-0 ${ZONE_COLORS[z]}`} />
-                  <span className="w-6 text-xs font-bold text-gray-700 dark:text-gray-300 shrink-0">{z}</span>
-                  <span className="text-xs text-gray-500 dark:text-gray-400 w-24 shrink-0">{label}</span>
-                  <span className="text-xs font-mono text-gray-700 dark:text-gray-300 flex-1 text-center">
-                    {allureMax}–{allureMin}
+                <div key={z} className="flex items-center gap-2 py-2 border-b border-gray-50 dark:border-gray-800 last:border-0">
+                  <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${ZONE_COLORS[z]}`} />
+                  <span className="w-7 text-xs font-bold text-gray-700 dark:text-gray-300 shrink-0">{z}</span>
+                  <span className="text-xs text-gray-500 dark:text-gray-400 w-14 shrink-0">{label}</span>
+                  <span className="text-xs font-mono text-gray-700 dark:text-gray-300 flex-1">
+                    {allureMax}–{allureMin}<span className="text-gray-400 dark:text-gray-500">/km</span>
                   </span>
-                  <span className="text-xs font-mono text-gray-700 dark:text-gray-300 flex-1 text-center">
+                  <span className="text-xs font-mono text-gray-500 dark:text-gray-400 text-right shrink-0">
                     {fc?.[0] && fc?.[1] ? `${fc[0]}–${fc[1]}` : "—"}
                   </span>
                 </div>

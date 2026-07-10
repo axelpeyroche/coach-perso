@@ -179,14 +179,16 @@ export default function Calendrier() {
         {/* ── Stats ── */}
         <div className="lg:w-64 flex flex-col gap-4">
 
-          {/* KPIs globaux */}
-          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-5 space-y-4">
-            <h3 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide">
+          {/* KPIs globaux — grille sur mobile */}
+          <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-4">
+            <h3 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-3">
               Depuis le début
             </h3>
-            <StatBloc label="Séances réalisées" value={stats.totalSeances} unit="séances" icon="✅" />
-            <StatBloc label="Kilomètres courus"  value={stats.totalKm}     unit="km"      icon="🏃" />
-            <StatBloc label="Dénivelé positif"   value={stats.totalDplus}  unit="m D+"    icon="⛰️" />
+            <div className="grid grid-cols-3 lg:grid-cols-1 gap-3 lg:gap-4">
+              <StatBloc label="Séances" value={stats.totalSeances} unit="séances" icon="✅" />
+              <StatBloc label="Distance" value={stats.totalKm}     unit="km"      icon="🏃" />
+              <StatBloc label="Dénivelé" value={stats.totalDplus}  unit="m D+"    icon="⛰️" />
+            </div>
           </div>
 
           {/* Séances du mois en cours */}
@@ -208,13 +210,13 @@ export default function Calendrier() {
 
 function StatBloc({ label, value, unit, icon }) {
   return (
-    <div className="flex items-center gap-3">
-      <span className="text-2xl leading-none">{icon}</span>
+    <div className="flex flex-col items-center lg:flex-row lg:items-center lg:gap-3 text-center lg:text-left">
+      <span className="text-xl leading-none mb-1 lg:mb-0">{icon}</span>
       <div>
-        <p className="text-xl font-bold text-gray-900 dark:text-white leading-tight">
-          {value} <span className="text-sm font-normal text-gray-400">{unit}</span>
+        <p className="text-lg font-bold text-gray-900 dark:text-white leading-tight">
+          {value}
         </p>
-        <p className="text-xs text-gray-400 dark:text-gray-500">{label}</p>
+        <p className="text-[10px] text-gray-400 dark:text-gray-500">{label}</p>
       </div>
     </div>
   );
@@ -237,13 +239,15 @@ function StatsMois({ seancesParDate, annee, moisIdx, moisLabel }) {
   }, [seancesParDate, annee, moisIdx]);
 
   return (
-    <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-5 space-y-4">
-      <h3 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide">
+    <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-4">
+      <h3 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-3">
         {moisLabel}
       </h3>
-      <StatBloc label="Séances réalisées" value={stats.seances} unit="séances" icon="✅" />
-      <StatBloc label="Kilomètres courus"  value={stats.km}     unit="km"      icon="🏃" />
-      <StatBloc label="Dénivelé positif"   value={stats.dplus}  unit="m D+"    icon="⛰️" />
+      <div className="grid grid-cols-3 lg:grid-cols-1 gap-3 lg:gap-4">
+        <StatBloc label="Séances" value={stats.seances} unit="séances" icon="✅" />
+        <StatBloc label="Distance" value={stats.km}     unit="km"      icon="🏃" />
+        <StatBloc label="Dénivelé" value={stats.dplus}  unit="m D+"    icon="⛰️" />
+      </div>
     </div>
   );
 }
