@@ -48,6 +48,8 @@ def creer_tables() -> None:
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS frequence_tests_semaines INTEGER DEFAULT 8",
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS objectif_type VARCHAR(20)",
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS historique_perf TEXT",
+        "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS type_course VARCHAR(20)",
+        "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS type_muscu VARCHAR(20)",
     ]
     with engine.begin() as conn:
         for stmt in _migrations:

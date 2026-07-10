@@ -187,6 +187,8 @@ class OnboardingSchema(BaseModel):
     objectif_type: str            # "course" | "muscu" | "aucun"
     date_debut_programme: str     # "DD/MM/YYYY"
     historique_perf: Optional[dict] = None
+    type_course: Optional[str] = None   # "route" | "trail"
+    type_muscu: Optional[str] = None    # "poids_corps" | "salle"
 
 
 @app.post("/api/auth/register", summary="Crée un nouveau compte")
@@ -324,6 +326,10 @@ def onboarding(
     current_user.frequence_tests_semaines = payload.frequence_tests_semaines
     current_user.objectif_type = payload.objectif_type
     current_user.onboarding_complet = True
+    if payload.type_course:
+        current_user.type_course = payload.type_course
+    if payload.type_muscu:
+        current_user.type_muscu = payload.type_muscu
 
     # Calibration depuis l'historique de performance
     calib = {"km_factor": 1.0, "amrap_factor": 1.0, "reps_factor": 1.0}

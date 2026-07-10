@@ -89,6 +89,8 @@ function Etape1({ data, set }) {
 
 function Etape2({ data, set }) {
   const isHybride = data.type_programme === "hybride";
+  const isCourse  = data.type_programme === "course" || isHybride;
+  const isMuscu   = data.type_programme === "muscu"  || isHybride;
 
   return (
     <div className="space-y-4">
@@ -113,6 +115,38 @@ function Etape2({ data, set }) {
             min={1} max={data.seances_semaine - 1}
           />
         </>
+      )}
+
+      {isCourse && (
+        <div>
+          <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Type de séances de course</p>
+          <div className="space-y-2">
+            <ChoixCard icon="🛣️" titre="Route / Plat uniquement"
+              description="Asphalte, piste, chemin plat — aucune contrainte de terrain"
+              selected={data.type_course === "route"}
+              onClick={() => set({ type_course: "route" })} />
+            <ChoixCard icon="🏔️" titre="Trail inclus"
+              description="Sentiers, dénivelé, terrain varié — sorties nature"
+              selected={data.type_course === "trail"}
+              onClick={() => set({ type_course: "trail" })} />
+          </div>
+        </div>
+      )}
+
+      {isMuscu && (
+        <div>
+          <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Type de séances de musculation</p>
+          <div className="space-y-2">
+            <ChoixCard icon="🤸" titre="Poids du corps"
+              description="Pompes, tractions, squats, AMRAP/EMOM — zéro matériel"
+              selected={data.type_muscu === "poids_corps"}
+              onClick={() => set({ type_muscu: "poids_corps" })} />
+            <ChoixCard icon="🏋️" titre="Salle de musculation"
+              description="Machines, haltères, barres — accès à une salle"
+              selected={data.type_muscu === "salle"}
+              onClick={() => set({ type_muscu: "salle" })} />
+          </div>
+        </div>
       )}
 
       <div>
@@ -323,6 +357,8 @@ export default function Onboarding() {
     seances_course_semaine: 2,
     seances_muscu_semaine: 2,
     frequence_tests_semaines: 8,
+    type_course: "",
+    type_muscu: "",
     objectif_type: "aucun",
     date_debut_raw: "",
     historique: {
@@ -404,6 +440,8 @@ export default function Onboarding() {
         objectif_type: data.objectif_type,
         date_debut_programme: dateDebutFr,
         historique_perf: buildHistorique(),
+        type_course: data.type_course || null,
+        type_muscu: data.type_muscu || null,
       });
 
       const me = await api.get("/auth/me");
