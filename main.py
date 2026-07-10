@@ -389,7 +389,7 @@ def onboarding(
     import json as _json
     from models import SemaineEntrainement
     from periodization_rules import BLUEPRINT_MACROCYCLE, generer_dates_semaines, generer_blueprint_course
-    from seed_seances import MODULE1, MODULE2, MODULE3, _POOL_SURCHARGE, _semaine_course, _inserer_seances_en_session, calibrer_module, adapter_contenu_muscu, enrichir_paces_vma
+    from seed_seances import MODULE1, MODULE2, MODULE3, _POOL_SURCHARGE, _semaine_course, _semaine_taper_course, _inserer_seances_en_session, calibrer_module, adapter_contenu_muscu, enrichir_paces_vma
 
     # Sauvegarder préférences
     current_user.type_programme = payload.type_programme
@@ -512,7 +512,7 @@ def onboarding(
                 pool_idx += 1
                 build_count += 1
         content[n_surcharge + 1] = m1_cal.get(6, MODULE1[6])  # décharge calibrée
-        content[n_surcharge + 2] = m1_cal.get(7, MODULE1[7])  # affûtage calibré
+        content[n_surcharge + 2] = _semaine_taper_course()     # taper pré-course (pas de prépa tests)
         content[n_semaines] = _semaine_course(obj_course.date_course, obj_course.nom)
 
         # Enrichissement des descriptions avec allures réelles
@@ -1661,7 +1661,7 @@ def initialiser_programme(payload: InitProgrammePayload, current_user: Utilisate
     from models import TypeMacrophase
     from seed_seances import (
         MODULE1, MODULE2, MODULE3,
-        _POOL_SURCHARGE, _semaine_course, _inserer_seances_en_session,
+        _POOL_SURCHARGE, _semaine_course, _semaine_taper_course, _inserer_seances_en_session,
         calibrer_module, adapter_contenu_muscu, enrichir_paces_vma,
     )
 
@@ -1771,7 +1771,7 @@ def initialiser_programme(payload: InitProgrammePayload, current_user: Utilisate
                     pool_idx += 1
                     build_count += 1
             content[n_surcharge + 1] = m1_cal_init.get(6, MODULE1[6])
-            content[n_surcharge + 2] = m1_cal_init.get(7, MODULE1[7])
+            content[n_surcharge + 2] = _semaine_taper_course()
             content[n_semaines]      = _semaine_course(obj.date_course, obj.nom)
 
             # Enrichissement allures réelles

@@ -1767,6 +1767,35 @@ def adapter_contenu_muscu(content: dict, seances_muscu: int) -> dict:
     return result
 
 
+def _min_to_heure(minutes: int) -> str:
+    """Convertit des minutes en format 'Xh' ou 'XhYY' (ex: 90→'1h30', 120→'2h')."""
+    h, m = divmod(minutes, 60)
+    return f"{h}h{m:02d}" if m else f"{h}h"
+
+
+def _heure_to_min(s: str) -> int | None:
+    """Parse '1h30'→90, '2h'→120. Retourne None si format non reconnu."""
+    import re
+    mo = re.match(r'^(\d+)h(\d*)$', s.strip())
+    if mo:
+        return int(mo.group(1)) * 60 + (int(mo.group(2)) if mo.group(2) else 0)
+    return None
+
+
+def _remplacer_duree_titre(titre: str, orig_min: int, new_min: int) -> str:
+    """Remplace la durée dans un titre, en gérant les formats 'X min' et 'XhYY'."""
+    if orig_min == new_min:
+        return titre
+    # Format "X min"
+    if f"{orig_min} min" in titre:
+        return titre.replace(f"{orig_min} min", f"{new_min} min", 1)
+    # Format heures "XhYY" ou "Xh"
+    orig_h = _min_to_heure(orig_min)
+    if orig_h in titre:
+        return titre.replace(orig_h, _min_to_heure(new_min), 1)
+    return titre
+
+
 def calibrer_module(module_data: dict, km_factor: float = 1.0, amrap_factor: float = 1.0, reps_factor: float = 1.0) -> dict:
     """Retourne une copie calibrée du module avec durées et répétitions ajustées au niveau de l'utilisateur."""
     result = {}
@@ -1782,8 +1811,7 @@ def calibrer_module(module_data: dict, km_factor: float = 1.0, amrap_factor: flo
                 if orig_dur:
                     new_dur = max(20, round(orig_dur * km_factor / 5) * 5)
                     ns["duree_min"] = new_dur
-                    if titre and new_dur != orig_dur:
-                        titre = titre.replace(f"{orig_dur} min", f"{new_dur} min", 1)
+                    titre = _remplacer_duree_titre(titre, orig_dur, new_dur)
                 if orig_dplus:
                     new_dplus = max(0, round(orig_dplus * km_factor / 10) * 10)
                     ns["dplus_m"] = new_dplus
@@ -1879,6 +1907,41 @@ def enrichir_paces_vma(content: dict, vma_kmh: float) -> dict:
             enriched.append(ns)
         result[sem] = enriched
     return result
+
+
+def _semaine_taper_course() -> list:
+    """Semaine d'affûtage avant course : légèreté, rappel d'allure, zéro fatigue."""
+    return [
+        {
+            "jour": 1, "type": TypeSeance.COURSE, "titre": "Activation Z1/Z2 — 25 min",
+            "zone": ZoneCourse.Z2, "duree_min": 25, "dplus_m": 0,
+            "description": (
+                "Terrain : route plate.\n"
+                "Footing très léger Z1/Z2 — jambes légères, respiration nasale.\n"
+                "Objectif : garder du tonus sans accumuler de fatigue avant la course.\n"
+                "Pas de montre, pas de chrono — ressenti uniquement."
+            ),
+        },
+        {
+            "jour": 3, "type": TypeSeance.COURSE, "titre": "Rappel d'allure — 20 min",
+            "zone": ZoneCourse.Z4, "duree_min": 20, "dplus_m": 0,
+            "description": (
+                "• 8 min Z1 échauffement\n"
+                "• 3 × 1 min à allure course cible / 2 min récup trot\n"
+                "• 3 min Z1 retour au calme\n"
+                "Rappel neuromusculaire de l'allure — aucune fatigue résiduelle tolérable."
+            ),
+        },
+        {
+            "jour": 5, "type": TypeSeance.DECHARGE, "titre": "Mobilité & repos actif — 30 min",
+            "description": (
+                "  • 10 min mobilité hanches et chevilles\n"
+                "  • 10 min étirements doux chaîne postérieure\n"
+                "  • 10 min visualisation du parcours et de la stratégie de course\n"
+                "Prépare mentalement et physiquement la performance du jour J."
+            ),
+        },
+    ]
 
 
 def seed_programme_course(n_semaines: int, date_course=None, course_nom: str = "Course"):
