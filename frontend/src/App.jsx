@@ -91,7 +91,7 @@ export default function App() {
 
               {/* ── Sidebar desktop ── */}
               <aside className="hidden md:flex flex-col w-56 shrink-0 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-6 gap-1 fixed top-0 left-0 h-full z-20">
-                <div className="px-4 mb-6">
+                <NavLink to="/" className="block px-4 mb-6 hover:opacity-75 transition-opacity">
                   <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Coach</p>
                   <h1 className="text-lg font-bold text-gray-900 dark:text-white mt-0.5">Coach Perso</h1>
                   {user && (
@@ -99,7 +99,7 @@ export default function App() {
                       {user.prenom} {user.nom}
                     </p>
                   )}
-                </div>
+                </NavLink>
                 {NAV.map(n => <SidebarLink key={n.to} {...n} />)}
                 <div className="mt-auto px-4 space-y-1">
                   <button onClick={() => setDark(d => !d)}
@@ -117,10 +117,10 @@ export default function App() {
 
               {/* ── Header mobile ── */}
               <header className="md:hidden fixed top-0 left-0 right-0 z-20 flex items-center justify-between px-4 h-14 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
-                <div className="flex items-center gap-2">
+                <NavLink to="/" className="flex items-center gap-2 hover:opacity-75 transition-opacity">
                   <span className="text-xl">⚡</span>
                   <span className="text-base font-bold text-gray-900 dark:text-white">Coach Perso</span>
-                </div>
+                </NavLink>
                 <div className="flex items-center gap-1">
                   <button onClick={() => setDark(d => !d)}
                     className="w-9 h-9 flex items-center justify-center rounded-xl text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-lg">
