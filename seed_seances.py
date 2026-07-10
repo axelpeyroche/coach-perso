@@ -1775,17 +1775,37 @@ def calibrer_module(module_data: dict, km_factor: float = 1.0, amrap_factor: flo
         for s in seances:
             ns = dict(s)
             t = ns.get("type")
+            titre = ns.get("titre", "")
             if t == TypeSeance.COURSE:
-                if ns.get("duree_min"):
-                    ns["duree_min"] = max(20, round(ns["duree_min"] * km_factor / 5) * 5)
-                if ns.get("dplus_m"):
-                    ns["dplus_m"] = max(0, round(ns["dplus_m"] * km_factor / 10) * 10)
+                orig_dur = ns.get("duree_min")
+                orig_dplus = ns.get("dplus_m")
+                if orig_dur:
+                    new_dur = max(20, round(orig_dur * km_factor / 5) * 5)
+                    ns["duree_min"] = new_dur
+                    if titre and new_dur != orig_dur:
+                        titre = titre.replace(f"{orig_dur} min", f"{new_dur} min", 1)
+                if orig_dplus:
+                    new_dplus = max(0, round(orig_dplus * km_factor / 10) * 10)
+                    ns["dplus_m"] = new_dplus
+                    if titre and new_dplus != orig_dplus:
+                        titre = titre.replace(f"D+ {orig_dplus} m", f"D+ {new_dplus} m", 1)
+                        titre = titre.replace(f"D+ {orig_dplus}m", f"D+ {new_dplus}m", 1)
+                ns["titre"] = titre
             elif t == TypeSeance.AMRAP and ns.get("temps_limite"):
-                ns["temps_limite"] = max(10, round(ns["temps_limite"] * amrap_factor / 2) * 2)
+                orig_tl = ns["temps_limite"]
+                new_tl = max(10, round(orig_tl * amrap_factor / 2) * 2)
+                ns["temps_limite"] = new_tl
+                if titre and new_tl != orig_tl:
+                    ns["titre"] = titre.replace(f"{orig_tl} min", f"{new_tl} min", 1)
             elif t == TypeSeance.EMOM and ns.get("temps_limite"):
-                # EMOM : calibration plus douce (moitié du facteur)
+                orig_tl = ns["temps_limite"]
                 emom_factor = amrap_factor * 0.5 + 0.5
-                ns["temps_limite"] = max(8, round(ns["temps_limite"] * emom_factor / 2) * 2)
+                new_tl = max(8, round(orig_tl * emom_factor / 2) * 2)
+                ns["temps_limite"] = new_tl
+                if titre and new_tl != orig_tl:
+                    ns["titre"] = titre.replace(f"{orig_tl} min", f"{new_tl} min", 1)
+                    # aussi la parenthèse ex: "(32 min)"
+                    ns["titre"] = ns["titre"].replace(f"({orig_tl} min)", f"({new_tl} min)", 1)
             if "exercices" in ns:
                 exs = []
                 for ex in ns["exercices"]:
