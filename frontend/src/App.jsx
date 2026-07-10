@@ -7,40 +7,84 @@ import Programme from "./pages/Programme";
 import Evaluation from "./pages/Evaluation";
 import Analytics from "./pages/Analytics";
 import Calendrier from "./pages/Calendrier";
+import Profil from "./pages/Profil";
 import Auth from "./pages/Auth";
 import Onboarding from "./pages/Onboarding";
 
+// ── SVG Icons ──────────────────────────────────────────────────────────────
+const Icon = {
+  Dashboard: () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+      <rect x="3" y="3" width="7" height="7" rx="1.5" />
+      <rect x="14" y="3" width="7" height="7" rx="1.5" />
+      <rect x="3" y="14" width="7" height="7" rx="1.5" />
+      <rect x="14" y="14" width="7" height="7" rx="1.5" />
+    </svg>
+  ),
+  Programme: () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+      <rect x="3" y="4" width="18" height="18" rx="2" />
+      <path d="M16 2v4M8 2v4M3 10h18" />
+    </svg>
+  ),
+  Calendrier: () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+      <rect x="3" y="4" width="18" height="18" rx="2" />
+      <path d="M16 2v4M8 2v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01" />
+    </svg>
+  ),
+  Evaluation: () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+      <circle cx="12" cy="12" r="9" />
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12 3v2M12 19v2M3 12h2M19 12h2" />
+    </svg>
+  ),
+  Stats: () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+      <path d="M3 20h18M7 20V10M12 20V4M17 20v-7" />
+    </svg>
+  ),
+  Profil: () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+      <circle cx="12" cy="8" r="4" />
+      <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
+    </svg>
+  ),
+};
+
 const NAV = [
-  { to: "/",           label: "Dashboard",  icon: "⚡" },
-  { to: "/programme",  label: "Programme",  icon: "📅" },
-  { to: "/calendrier", label: "Calendrier", icon: "🗓️" },
-  { to: "/evaluation", label: "Évaluation", icon: "🎯" },
-  { to: "/analytics",  label: "Stats",      icon: "📊" },
+  { to: "/",           label: "Dashboard",  IconC: Icon.Dashboard },
+  { to: "/programme",  label: "Programme",  IconC: Icon.Programme },
+  { to: "/calendrier", label: "Calendrier", IconC: Icon.Calendrier },
+  { to: "/evaluation", label: "Évaluation", IconC: Icon.Evaluation },
+  { to: "/analytics",  label: "Stats",      IconC: Icon.Stats },
+  { to: "/profil",     label: "Profil",     IconC: Icon.Profil },
 ];
 
-function SidebarLink({ to, label, icon }) {
+function SidebarLink({ to, label, IconC }) {
   return (
     <NavLink to={to} end={to === "/"}
       className={({ isActive }) => clsx(
-        "flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors",
+        "flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors",
         isActive
           ? "bg-brand/10 text-brand dark:bg-brand/20"
           : "text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800"
       )}>
-      <span className="text-xl leading-none">{icon}</span>
+      <IconC />
       <span>{label}</span>
     </NavLink>
   );
 }
 
-function BottomLink({ to, label, icon }) {
+function BottomLink({ to, label, IconC }) {
   return (
     <NavLink to={to} end={to === "/"}
       className={({ isActive }) => clsx(
         "flex flex-col items-center justify-center gap-0.5 flex-1 py-2 min-h-[52px] text-xs font-medium transition-colors",
         isActive ? "text-brand" : "text-gray-400 dark:text-gray-500"
       )}>
-      <span className="text-[22px] leading-none">{icon}</span>
+      <IconC />
       <span className="text-[10px] mt-0.5">{label}</span>
     </NavLink>
   );
@@ -51,7 +95,9 @@ function RequireAuth({ children }) {
   const location = useLocation();
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-950">
-      <div className="text-4xl animate-pulse">⚡</div>
+      <div className="animate-pulse">
+        <Icon.Dashboard />
+      </div>
     </div>
   );
   if (!token) return <Navigate to="/login" state={{ from: location }} replace />;
@@ -66,7 +112,7 @@ function RequireOnboarding({ children }) {
 }
 
 export default function App() {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
 
   const [dark, setDark] = useState(() => {
     const saved = localStorage.getItem("theme");
@@ -101,18 +147,6 @@ export default function App() {
                   )}
                 </NavLink>
                 {NAV.map(n => <SidebarLink key={n.to} {...n} />)}
-                <div className="mt-auto px-4 space-y-1">
-                  <button onClick={() => setDark(d => !d)}
-                    className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
-                    <span className="text-lg">{dark ? "☀️" : "🌙"}</span>
-                    <span>{dark ? "Mode clair" : "Mode sombre"}</span>
-                  </button>
-                  <button onClick={logout}
-                    className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl text-sm text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
-                    <span className="text-lg">🚪</span>
-                    <span>Déconnexion</span>
-                  </button>
-                </div>
               </aside>
 
               {/* ── Header mobile ── */}
@@ -121,16 +155,12 @@ export default function App() {
                   <span className="text-xl">⚡</span>
                   <span className="text-base font-bold text-gray-900 dark:text-white">Coach Perso</span>
                 </NavLink>
-                <div className="flex items-center gap-1">
-                  <button onClick={() => setDark(d => !d)}
-                    className="w-9 h-9 flex items-center justify-center rounded-xl text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-lg">
-                    {dark ? "☀️" : "🌙"}
-                  </button>
-                  <button onClick={logout}
-                    className="w-9 h-9 flex items-center justify-center rounded-xl text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors text-lg">
-                    🚪
-                  </button>
-                </div>
+                <NavLink to="/profil" className={({ isActive }) => clsx(
+                  "w-9 h-9 flex items-center justify-center rounded-xl transition-colors",
+                  isActive ? "text-brand bg-brand/10" : "text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                )}>
+                  <Icon.Profil />
+                </NavLink>
               </header>
 
               {/* ── Contenu principal ── */}
@@ -141,6 +171,7 @@ export default function App() {
                   <Route path="/evaluation" element={<Evaluation />} />
                   <Route path="/calendrier" element={<Calendrier />} />
                   <Route path="/analytics"  element={<Analytics />} />
+                  <Route path="/profil"     element={<Profil dark={dark} setDark={setDark} />} />
                 </Routes>
               </main>
 
