@@ -169,14 +169,16 @@ export default function Calendrier() {
             })}
           </div>
 
-          {/* Légende */}
+          {/* Légende — uniquement les types présents dans le programme */}
           <div className="mt-4 flex flex-wrap gap-3">
-            {Object.entries(TYPE_ICONS).filter(([t]) => t !== "REPOS").map(([type, icon]) => (
-              <div key={type} className="flex items-center gap-1.5">
-                <span className={clsx("w-3 h-3 rounded-sm inline-block", TYPE_COLORS[type])} />
-                <span className="text-xs text-gray-500 dark:text-gray-400">{icon} {type.charAt(0) + type.slice(1).toLowerCase()}</span>
-              </div>
-            ))}
+            {Object.entries(TYPE_ICONS)
+              .filter(([t]) => t !== "REPOS" && semaines.some(sem => sem.seances?.some(s => s.type === t)))
+              .map(([type, icon]) => (
+                <div key={type} className="flex items-center gap-1.5">
+                  <span className={clsx("w-3 h-3 rounded-sm inline-block", TYPE_COLORS[type])} />
+                  <span className="text-xs text-gray-500 dark:text-gray-400">{icon} {type.charAt(0) + type.slice(1).toLowerCase()}</span>
+                </div>
+              ))}
           </div>
         </div>
 
