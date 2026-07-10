@@ -1,7 +1,7 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { getBiometrieRecuperation, getTendancesPhysiologiques, getObjectifCourse, setObjectifCourse, getStatutProgramme, initialiserProgramme, supprimerProgramme, resetOnboarding, getProfilFC, patchProfilFC, getAnalyseObjectif, recalibrerProgramme } from "../api";
+import { getBiometrieRecuperation, getTendancesPhysiologiques, getObjectifCourse, setObjectifCourse, getStatutProgramme, initialiserProgramme, supprimerProgramme, resetOnboarding, getProfilFC, patchProfilFC, getAnalyseObjectif, recalibrerProgramme, getPreferences, patchPreferences } from "../api";
 import { useAuth } from "../AuthContext";
 import Card from "../components/Card";
 import StatTile from "../components/StatTile";
@@ -294,26 +294,179 @@ function BlocAnalyseObjectif() {
   );
 }
 
-// ─── Bouton reconfigurer → relance l'onboarding complet ────────────────────
+// ─── Modal Reconfigurer ─────────────────────────────────────────────────────
 
-function ReconfigurerBtn() {
+function ModalReconfigurer({ onClose }) {
   const { setUser } = useAuth();
   const navigate = useNavigate();
-  const mut = useMutation({
+  const qc = useQueryClient();
+  const lundis = useMemo(() => prochainLundis(16), []);
+  const [view, setView] = useState("choice"); // "choice" | "modifier" | "reset-confirm"
+  const [selectedIdx, setSelectedIdx] = useState(0);
+  const [seancesMuscu, setSeancesMuscu] = useState(2);
+  const [freqTests, setFreqTests] = useState(8);
+
+  const { data: prefs } = useQuery({
+    queryKey: ["preferences"],
+    queryFn: getPreferences,
+    onSuccess: (d) => {
+      setSeancesMuscu(d.seances_muscu_semaine ?? 2);
+      setFreqTests(d.frequence_tests_semaines ?? 8);
+    },
+  });
+
+  // Pré-remplir avec les préférences actuelles dès que disponibles
+  const prefsLoaded = useRef(false);
+  if (prefs && !prefsLoaded.current) {
+    prefsLoaded.current = true;
+    setSeancesMuscu(prefs.seances_muscu_semaine ?? 2);
+    setFreqTests(prefs.frequence_tests_semaines ?? 8);
+  }
+
+  const mutModifier = useMutation({
+    mutationFn: async () => {
+      await patchPreferences({ seances_muscu_semaine: seancesMuscu, frequence_tests_semaines: freqTests });
+      return initialiserProgramme(toApiDate(lundis[selectedIdx]));
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["statut-programme"] });
+      qc.invalidateQueries({ queryKey: ["macrocycles"] });
+      qc.invalidateQueries({ queryKey: ["preferences"] });
+      onClose();
+    },
+  });
+
+  const mutReset = useMutation({
     mutationFn: () => resetOnboarding(),
     onSuccess: (userData) => {
       setUser(userData);
       navigate("/onboarding");
     },
   });
+
+  const inputCls = "w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand";
+
   return (
-    <button
-      onClick={() => { if (window.confirm("Reconfigurer le programme depuis le début ?")) mut.mutate(); }}
-      disabled={mut.isPending}
-      className="text-xs text-gray-400 hover:text-red-500 transition-colors mt-1 disabled:opacity-50"
-    >
-      {mut.isPending ? "Réinitialisation…" : "Reconfigurer →"}
-    </button>
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4" onClick={e => e.stopPropagation()}>
+
+        {view === "choice" && (
+          <>
+            <div>
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white">Reconfigurer le programme</h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Comment veux-tu modifier ton programme ?</p>
+            </div>
+            <button
+              onClick={() => setView("modifier")}
+              className="w-full text-left rounded-xl border border-gray-200 dark:border-gray-700 px-4 py-3 hover:border-brand hover:bg-brand/5 transition-colors group"
+            >
+              <p className="font-semibold text-gray-900 dark:text-white group-hover:text-brand">Modifier les réglages</p>
+              <p className="text-xs text-gray-400 mt-0.5">Changer la date, les séances muscu ou la fréquence des tests</p>
+            </button>
+            <button
+              onClick={() => setView("reset-confirm")}
+              className="w-full text-left rounded-xl border border-gray-200 dark:border-gray-700 px-4 py-3 hover:border-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors group"
+            >
+              <p className="font-semibold text-gray-900 dark:text-white group-hover:text-red-600 dark:group-hover:text-red-400">Recommencer de zéro</p>
+              <p className="text-xs text-gray-400 mt-0.5">Reprendre l'onboarding complet — toutes les données seront supprimées</p>
+            </button>
+            <button onClick={onClose} className="w-full text-xs text-gray-400 hover:text-gray-600 py-1">Annuler</button>
+          </>
+        )}
+
+        {view === "modifier" && (
+          <>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setView("choice")} className="text-gray-400 hover:text-gray-600 text-lg leading-none">←</button>
+              <h3 className="text-base font-bold text-gray-900 dark:text-white">Modifier les réglages</h3>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Date de début (lundi)</label>
+                <select value={selectedIdx} onChange={e => setSelectedIdx(Number(e.target.value))} className={inputCls}>
+                  {lundis.map((d, i) => <option key={i} value={i}>{formatDate(d)}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Séances muscu / semaine</label>
+                <div className="flex gap-2">
+                  {[1, 2, 3].map(n => (
+                    <button key={n} onClick={() => setSeancesMuscu(n)}
+                      className={clsx("flex-1 py-2 rounded-xl border text-sm font-semibold transition-colors",
+                        seancesMuscu === n
+                          ? "border-brand bg-brand text-white"
+                          : "border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-brand"
+                      )}>{n}</button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Tests d'évaluation toutes les…</label>
+                <div className="flex gap-2 flex-wrap">
+                  {[4, 6, 8, 12].map(n => (
+                    <button key={n} onClick={() => setFreqTests(n)}
+                      className={clsx("flex-1 py-2 rounded-xl border text-sm font-semibold transition-colors",
+                        freqTests === n
+                          ? "border-brand bg-brand text-white"
+                          : "border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-brand"
+                      )}>{n} sem.</button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {mutModifier.isError && (
+              <p className="text-xs text-red-500">{mutModifier.error?.response?.data?.detail ?? "Erreur de génération"}</p>
+            )}
+
+            <button
+              onClick={() => mutModifier.mutate()}
+              disabled={mutModifier.isPending}
+              className="w-full py-3 rounded-xl bg-brand text-white font-semibold text-sm hover:bg-brand/90 transition-colors disabled:opacity-50"
+            >
+              {mutModifier.isPending ? "Génération en cours…" : "Régénérer le programme"}
+            </button>
+            <button onClick={onClose} className="w-full text-xs text-gray-400 hover:text-gray-600 py-1">Annuler</button>
+          </>
+        )}
+
+        {view === "reset-confirm" && (
+          <>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setView("choice")} className="text-gray-400 hover:text-gray-600 text-lg leading-none">←</button>
+              <h3 className="text-base font-bold text-gray-900 dark:text-white">Recommencer de zéro</h3>
+            </div>
+            <div className="rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 px-4 py-3">
+              <p className="text-sm text-red-700 dark:text-red-400">
+                Cette action supprime ton programme et toutes tes séances générées. Ton historique d'évaluations est conservé.
+              </p>
+            </div>
+            <button
+              onClick={() => mutReset.mutate()}
+              disabled={mutReset.isPending}
+              className="w-full py-3 rounded-xl bg-red-500 text-white font-semibold text-sm hover:bg-red-600 transition-colors disabled:opacity-50"
+            >
+              {mutReset.isPending ? "Suppression…" : "Confirmer — tout supprimer"}
+            </button>
+            <button onClick={onClose} className="w-full text-xs text-gray-400 hover:text-gray-600 py-1">Annuler</button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ReconfigurerBtn() {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button onClick={() => setOpen(true)}
+        className="text-xs text-gray-400 hover:text-brand transition-colors mt-1">
+        Reconfigurer →
+      </button>
+      {open && <ModalReconfigurer onClose={() => setOpen(false)} />}
+    </>
   );
 }
 

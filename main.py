@@ -108,6 +108,23 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from fastapi import Request
+from fastapi.responses import JSONResponse
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Garantit que les headers CORS sont présents même sur les 500 non catchés."""
+    origin = request.headers.get("origin", "")
+    headers = {}
+    if origin in _ALLOWED_ORIGINS:
+        headers["Access-Control-Allow-Origin"] = origin
+        headers["Access-Control-Allow-Credentials"] = "true"
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"{type(exc).__name__}: {exc}"},
+        headers=headers,
+    )
+
 # ---------------------------------------------------------------------------
 # Auth — JWT + bcrypt
 # ---------------------------------------------------------------------------
@@ -568,6 +585,32 @@ def patch_profil_fc(payload: ProfilFCSchema, current_user: Utilisateur = Depends
     if payload.poids_kg is not None: current_user.poids_kg = payload.poids_kg
     db.commit()
     return {"fc_max": current_user.fc_max, "fc_repos": current_user.fc_repos, "poids_kg": current_user.poids_kg}
+
+
+class PreferencesSchema(BaseModel):
+    seances_muscu_semaine: Optional[int] = Field(None, ge=1, le=5)
+    frequence_tests_semaines: Optional[int] = Field(None, ge=2, le=16)
+
+@app.patch("/api/utilisateur/preferences", summary="Met à jour les préférences d'entraînement")
+def patch_preferences(payload: PreferencesSchema, current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
+    if payload.seances_muscu_semaine is not None:
+        current_user.seances_muscu_semaine = payload.seances_muscu_semaine
+    if payload.frequence_tests_semaines is not None:
+        current_user.frequence_tests_semaines = payload.frequence_tests_semaines
+    db.commit()
+    return {
+        "seances_muscu_semaine": current_user.seances_muscu_semaine,
+        "frequence_tests_semaines": current_user.frequence_tests_semaines,
+    }
+
+@app.get("/api/utilisateur/preferences", summary="Récupère les préférences d'entraînement")
+def get_preferences(current_user: Utilisateur = Depends(get_current_user)):
+    return {
+        "seances_muscu_semaine": current_user.seances_muscu_semaine or 2,
+        "frequence_tests_semaines": current_user.frequence_tests_semaines or 8,
+        "type_programme": current_user.type_programme,
+        "objectif_type": current_user.objectif_type,
+    }
 
 
 class CreerEvaluationSchema(BaseModel):
@@ -1844,6 +1887,7 @@ def analyse_objectif(
     current_user: Utilisateur = Depends(get_current_user),
     db: Session = Depends(obtenir_session),
 ):
+  try:
     obj = db.query(ObjectifCourse).filter(
         ObjectifCourse.utilisateur_id == current_user.id
     ).order_by(ObjectifCourse.id.desc()).first()
@@ -1910,6 +1954,10 @@ def analyse_objectif(
         "allures_entrainement": allures_train,
         "volume_pic_cible": _calculer_volume_pic(obj.distance_km),
     }
+  except HTTPException:
+    raise
+  except Exception as exc:
+    raise HTTPException(500, detail=f"analyse-objectif: {type(exc).__name__}: {exc}")
 
 
 @app.post("/api/programme/recalibrer", summary="Recalibre les séances restantes après un test d'évaluation")

@@ -45,6 +45,12 @@ export const getAnalyseObjectif = () =>
 export const recalibrerProgramme = () =>
   api.post("/programme/recalibrer").then((r) => r.data);
 
+export const getPreferences = () =>
+  api.get("/utilisateur/preferences").then((r) => r.data);
+
+export const patchPreferences = (payload) =>
+  api.patch("/utilisateur/preferences", payload).then((r) => r.data);
+
 // --- Semaine courante ---
 export const getSemaineCourante = () =>
   api.get("/semaine-courante").then((r) => r.data);
