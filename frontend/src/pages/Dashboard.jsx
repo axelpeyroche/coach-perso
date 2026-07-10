@@ -205,6 +205,7 @@ function BlocAnalyseObjectif() {
     queryKey: ["analyse-objectif"],
     queryFn: getAnalyseObjectif,
     staleTime: 5 * 60 * 1000,
+    retry: 0,
   });
   const mut = useMutation({
     mutationFn: recalibrerProgramme,

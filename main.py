@@ -108,22 +108,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from fastapi.responses import JSONResponse
-
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    """Garantit que les headers CORS sont présents même sur les 500 non catchés."""
-    origin = request.headers.get("origin", "")
-    headers = {}
-    if origin in _ALLOWED_ORIGINS:
-        headers["Access-Control-Allow-Origin"] = origin
-        headers["Access-Control-Allow-Credentials"] = "true"
-    return JSONResponse(
-        status_code=500,
-        content={"detail": f"{type(exc).__name__}: {exc}"},
-        headers=headers,
-    )
-
 # ---------------------------------------------------------------------------
 # Auth — JWT + bcrypt
 # ---------------------------------------------------------------------------
@@ -1952,12 +1936,11 @@ def analyse_objectif(
             "allures_entrainement": allures_train,
             "volume_pic_cible": _calculer_volume_pic(dist),
         }
-    except HTTPException:
-        raise
     except Exception as exc:
         import traceback
         traceback.print_exc()
-        raise HTTPException(500, detail=f"analyse-objectif: {type(exc).__name__}: {exc}")
+        # Retourner un résultat vide plutôt qu'un 500 pour ne pas bloquer le Dashboard
+        return {"objectif": None, "vma_actuelle": None, "vma_requise": None, "delta_vma": None, "_error": str(exc)}
 
 
 @app.post("/api/programme/recalibrer", summary="Recalibre les séances restantes après un test d'évaluation")
