@@ -22,7 +22,7 @@ import io
 import os
 import re
 
-from fastapi import Depends, FastAPI, File, HTTPException, Query, Security, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, Security, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
@@ -108,7 +108,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from fastapi import Request
 from fastapi.responses import JSONResponse
 
 @app.exception_handler(Exception)
@@ -1887,77 +1886,78 @@ def analyse_objectif(
     current_user: Utilisateur = Depends(get_current_user),
     db: Session = Depends(obtenir_session),
 ):
-  try:
-    obj = db.query(ObjectifCourse).filter(
-        ObjectifCourse.utilisateur_id == current_user.id
-    ).order_by(ObjectifCourse.id.desc()).first()
+    try:
+        obj = db.query(ObjectifCourse).filter(
+            ObjectifCourse.utilisateur_id == current_user.id
+        ).order_by(ObjectifCourse.id.desc()).first()
 
-    if not obj:
-        return {"objectif": None, "vma_actuelle": None, "vma_requise": None, "delta_vma": None}
+        if not obj:
+            return {"objectif": None, "vma_actuelle": None, "vma_requise": None, "delta_vma": None}
 
-    bio = db.query(BiometrieUtilisateur).filter(
-        BiometrieUtilisateur.utilisateur_id == current_user.id
-    ).order_by(BiometrieUtilisateur.date_mesure.desc()).first()
-    vma_actuelle = bio.vma_kmh if bio else None
+        bio = db.query(BiometrieUtilisateur).filter(
+            BiometrieUtilisateur.utilisateur_id == current_user.id
+        ).order_by(BiometrieUtilisateur.date_mesure.desc()).first()
+        vma_actuelle = bio.vma_kmh if bio else None
 
-    vma_req = _vma_requise(obj.distance_km, obj.objectif_temps_min)
-    delta = round(vma_req - vma_actuelle, 1) if vma_actuelle else None
+        dist = float(obj.distance_km or 0)
+        temps = int(obj.objectif_temps_min or 0)
 
-    # Intensité de course selon la distance
-    if obj.distance_km <= 5:
-        label_intensite = "~97% VMA"
-    elif obj.distance_km <= 12:
-        label_intensite = "~94% VMA"
-    elif obj.distance_km <= 22:
-        label_intensite = "~85% VMA"
-    elif obj.distance_km <= 45:
-        label_intensite = "~78% VMA"
-    else:
-        label_intensite = "~70% VMA"
+        vma_req = _vma_requise(dist, temps) if dist > 0 and temps > 0 else None
+        delta = round(vma_req - vma_actuelle, 1) if (vma_req and vma_actuelle) else None
 
-    faisabilite = (
-        "atteignable" if delta is not None and delta <= 0 else
-        "ambitieux" if delta is not None and delta <= 1.5 else
-        "challenge" if delta is not None and delta <= 3.5 else
-        "très ambitieux"
-    )
+        if dist <= 5:
+            label_intensite = "~97% VMA"
+        elif dist <= 12:
+            label_intensite = "~94% VMA"
+        elif dist <= 22:
+            label_intensite = "~85% VMA"
+        elif dist <= 45:
+            label_intensite = "~78% VMA"
+        else:
+            label_intensite = "~70% VMA"
 
-    # Allures cibles (sur VMA actuelle, pas requise — ce que l'athlète doit courir maintenant)
-    allures_train = None
-    if vma_actuelle and vma_actuelle >= 5.0:
-        allures_train = {
-            "Z2": _pace_str(vma_actuelle * 0.70),
-            "Z4": _pace_str(vma_actuelle * 0.90),
-            "Z5": _pace_str(vma_actuelle * 1.025),
+        faisabilite = (
+            "atteignable" if delta is not None and delta <= 0 else
+            "ambitieux" if delta is not None and delta <= 1.5 else
+            "challenge" if delta is not None and delta <= 3.5 else
+            "très ambitieux"
+        )
+
+        allures_train = None
+        if vma_actuelle and vma_actuelle >= 5.0:
+            allures_train = {
+                "Z2": _pace_str(vma_actuelle * 0.70),
+                "Z4": _pace_str(vma_actuelle * 0.90),
+                "Z5": _pace_str(vma_actuelle * 1.025),
+            }
+
+        allure_course_kmh = (dist / temps) * 60 if dist > 0 and temps > 0 else None
+        h, mn = divmod(temps, 60)
+        objectif_temps_str = f"{h}h{mn:02d}" if h else f"{mn} min"
+        jours_restants = (obj.date_course - date.today()).days if obj.date_course else 0
+
+        return {
+            "objectif": {
+                "nom": obj.nom,
+                "distance_km": dist,
+                "objectif_temps_str": objectif_temps_str,
+                "allure_course": _pace_str(allure_course_kmh) if allure_course_kmh else None,
+                "jours_restants": jours_restants,
+            },
+            "vma_actuelle": vma_actuelle,
+            "vma_requise": vma_req,
+            "delta_vma": delta,
+            "label_intensite": label_intensite,
+            "faisabilite": faisabilite,
+            "allures_entrainement": allures_train,
+            "volume_pic_cible": _calculer_volume_pic(dist),
         }
-
-    # Allure course cible
-    allure_course_kmh = (obj.distance_km / obj.objectif_temps_min) * 60 if obj.objectif_temps_min else None
-
-    h, m = divmod(obj.objectif_temps_min, 60)
-    objectif_temps_str = f"{h}h{m:02d}" if h else f"{m} min"
-    jours_restants = (obj.date_course - date.today()).days
-
-    return {
-        "objectif": {
-            "nom": obj.nom,
-            "distance_km": obj.distance_km,
-            "objectif_temps_str": objectif_temps_str,
-            "allure_course": _pace_str(allure_course_kmh) if allure_course_kmh else None,
-            "jours_restants": jours_restants,
-        },
-        "vma_actuelle": vma_actuelle,
-        "vma_requise": vma_req,
-        "delta_vma": delta,
-        "label_intensite": label_intensite,
-        "faisabilite": faisabilite,
-        "allures_entrainement": allures_train,
-        "volume_pic_cible": _calculer_volume_pic(obj.distance_km),
-    }
-  except HTTPException:
-    raise
-  except Exception as exc:
-    raise HTTPException(500, detail=f"analyse-objectif: {type(exc).__name__}: {exc}")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(500, detail=f"analyse-objectif: {type(exc).__name__}: {exc}")
 
 
 @app.post("/api/programme/recalibrer", summary="Recalibre les séances restantes après un test d'évaluation")
