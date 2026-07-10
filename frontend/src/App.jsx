@@ -23,8 +23,9 @@ const Icon = {
   ),
   Programme: () => (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-      <rect x="3" y="4" width="18" height="18" rx="2" />
-      <path d="M16 2v4M8 2v4M3 10h18" />
+      <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2" />
+      <rect x="9" y="3" width="6" height="4" rx="1" />
+      <path d="M9 12h6M9 16h4" />
     </svg>
   ),
   Calendrier: () => (
@@ -154,12 +155,6 @@ export default function App() {
                 <NavLink to="/" className="flex items-center gap-2 hover:opacity-75 transition-opacity">
                   <span className="text-xl">⚡</span>
                   <span className="text-base font-bold text-gray-900 dark:text-white">Coach Perso</span>
-                </NavLink>
-                <NavLink to="/profil" className={({ isActive }) => clsx(
-                  "w-9 h-9 flex items-center justify-center rounded-xl transition-colors",
-                  isActive ? "text-brand bg-brand/10" : "text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
-                )}>
-                  <Icon.Profil />
                 </NavLink>
               </header>
 
