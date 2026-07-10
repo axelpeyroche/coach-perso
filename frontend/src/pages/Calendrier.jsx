@@ -186,6 +186,9 @@ export default function Calendrier() {
         {/* ── Stats ── */}
         <div className="lg:w-64 flex flex-col gap-4">
 
+          {/* Séances du mois en cours */}
+          <StatsMois seancesParDate={seancesParDate} annee={annee} moisIdx={moisIdx} moisLabel={MOIS[moisIdx]} />
+
           {/* KPIs globaux — grille sur mobile */}
           <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-4">
             <h3 className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-3">
@@ -197,9 +200,6 @@ export default function Calendrier() {
               <StatBloc label="Dénivelé" value={stats.totalDplus}  unit="m D+"    icon="⛰️" />
             </div>
           </div>
-
-          {/* Séances du mois en cours */}
-          <StatsMois seancesParDate={seancesParDate} annee={annee} moisIdx={moisIdx} moisLabel={MOIS[moisIdx]} />
 
           {/* Bouton revenir au mois courant */}
           {(annee !== today.getFullYear() || moisIdx !== today.getMonth()) && (
