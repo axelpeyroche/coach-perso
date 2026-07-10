@@ -186,6 +186,7 @@ class OnboardingSchema(BaseModel):
     frequence_tests_semaines: int = 8
     objectif_type: str            # "course" | "muscu" | "aucun"
     date_debut_programme: str     # "DD/MM/YYYY"
+    historique_perf: Optional[dict] = None
 
 
 @app.post("/api/auth/register", summary="Crée un nouveau compte")
@@ -283,6 +284,9 @@ def onboarding(
     current_user.frequence_tests_semaines = payload.frequence_tests_semaines
     current_user.objectif_type = payload.objectif_type
     current_user.onboarding_complet = True
+    if payload.historique_perf:
+        import json as _json
+        current_user.historique_perf = _json.dumps(payload.historique_perf, ensure_ascii=False)
 
     try:
         debut = datetime.strptime(payload.date_debut_programme, "%d/%m/%Y").date()

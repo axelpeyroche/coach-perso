@@ -108,6 +108,7 @@ class Utilisateur(Base):
 
     # Objectifs
     objectif_type: Mapped[Optional[str]] = mapped_column(String(20))     # "course" | "muscu" | "aucun"
+    historique_perf: Mapped[Optional[str]] = mapped_column(Text)          # JSON serialisé
 
     # Physiologie
     fc_max: Mapped[Optional[int]] = mapped_column(Integer, comment="FC max mesurée (bpm)")

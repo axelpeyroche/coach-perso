@@ -28,12 +28,13 @@ function ChoixCard({ icon, titre, description, selected, onClick }) {
   );
 }
 
-function NumInput({ label, value, onChange, min = 1, max = 14 }) {
+function NumInput({ label, value, onChange, min = 1, max = 14, placeholder }) {
   return (
     <div>
       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{label}</label>
       <input type="number" min={min} max={max}
         value={value === 0 ? "" : value}
+        placeholder={placeholder}
         onChange={e => {
           const v = e.target.value;
           if (v === "" || v === "0") { onChange(0); return; }
@@ -46,10 +47,21 @@ function NumInput({ label, value, onChange, min = 1, max = 14 }) {
   );
 }
 
+function TextInput({ label, value, onChange, placeholder, type = "text" }) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{label}</label>
+      <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
+        className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-brand" />
+    </div>
+  );
+}
+
 const ETAPES = [
-  { num: 1, label: "Type de programme" },
+  { num: 1, label: "Programme" },
   { num: 2, label: "Organisation" },
-  { num: 3, label: "Objectif" },
+  { num: 3, label: "Historique" },
+  { num: 4, label: "Objectif" },
 ];
 
 // ─── Étape 1 : type de programme ────────────────────────────────────────────
@@ -75,10 +87,8 @@ function Etape1({ data, set }) {
 
 // ─── Étape 2 : organisation des séances ─────────────────────────────────────
 
-function Etape2({ data, set, typeProg }) {
-  const isCourse  = typeProg === "course";
-  const isMuscu   = typeProg === "muscu";
-  const isHybride = typeProg === "hybride";
+function Etape2({ data, set }) {
+  const isHybride = data.type_programme === "hybride";
 
   return (
     <div className="space-y-4">
@@ -138,23 +148,119 @@ function Etape2({ data, set, typeProg }) {
   );
 }
 
-// ─── Étape 3 : objectif ──────────────────────────────────────────────────────
+// ─── Étape 3 : historique de performance ────────────────────────────────────
 
-function Etape3({ data, set, typeProg }) {
-  const isCourse  = typeProg === "course";
-  const isMuscu   = typeProg === "muscu";
-  const isHybride = typeProg === "hybride";
+function Etape3({ data, set }) {
+  const isCourse  = data.type_programme === "course" || data.type_programme === "hybride";
+  const isMuscu   = data.type_programme === "muscu"  || data.type_programme === "hybride";
+  const h = data.historique;
+  const setH = patch => set({ historique: { ...h, ...patch } });
+
+  return (
+    <div className="space-y-5">
+      <p className="text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 rounded-xl px-4 py-3">
+        Ces informations permettent de calibrer précisément l'intensité et le volume de tes séances dès le premier jour. Tous les champs sont optionnels — laisse vide si tu ne sais pas.
+      </p>
+
+      {/* Niveau général */}
+      <div>
+        <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Ton niveau général</p>
+        <div className="space-y-2">
+          {[
+            { v: "debutant",      icon: "🌱", titre: "Débutant",      desc: "Moins d'1 an de pratique régulière" },
+            { v: "intermediaire", icon: "📈", titre: "Intermédiaire",  desc: "1 à 3 ans de pratique, bases solides" },
+            { v: "confirme",      icon: "🏆", titre: "Confirmé",       desc: "3+ ans, charge d'entraînement élevée" },
+          ].map(({ v, icon, titre, desc }) => (
+            <ChoixCard key={v} icon={icon} titre={titre} description={desc}
+              selected={h.niveau === v}
+              onClick={() => setH({ niveau: v })} />
+          ))}
+        </div>
+      </div>
+
+      {/* Années de pratique */}
+      <TextInput label="Années de pratique sportive régulière" value={h.annees_pratique ?? ""}
+        onChange={v => setH({ annees_pratique: v })} placeholder="ex : 3 ans" />
+
+      {/* Course */}
+      {isCourse && (
+        <div className="space-y-3">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide border-t border-gray-100 dark:border-gray-800 pt-4">
+            🏃 Running
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <TextInput label="Volume hebdo actuel (km/sem)" value={h.volume_km_semaine ?? ""}
+              onChange={v => setH({ volume_km_semaine: v })} placeholder="ex : 30" />
+            <TextInput label="Longue sortie (km)" value={h.longue_sortie_km ?? ""}
+              onChange={v => setH({ longue_sortie_km: v })} placeholder="ex : 15" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <TextInput label="Meilleur 10 km" value={h.chrono_10k ?? ""}
+              onChange={v => setH({ chrono_10k: v })} placeholder="ex : 50:00" />
+            <TextInput label="Meilleur semi-marathon" value={h.chrono_semi ?? ""}
+              onChange={v => setH({ chrono_semi: v })} placeholder="ex : 1h50:00" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <TextInput label="Meilleur marathon" value={h.chrono_marathon ?? ""}
+              onChange={v => setH({ chrono_marathon: v })} placeholder="ex : 4h00:00" />
+            <TextInput label="VMA estimée (km/h)" value={h.vma_estimee ?? ""}
+              onChange={v => setH({ vma_estimee: v })} placeholder="ex : 14" />
+          </div>
+          <TextInput label="Fréquence cardiaque max connue (bpm)" value={h.fc_max ?? ""}
+            onChange={v => setH({ fc_max: v })} placeholder="ex : 190" />
+        </div>
+      )}
+
+      {/* Muscu */}
+      {isMuscu && (
+        <div className="space-y-3">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide border-t border-gray-100 dark:border-gray-800 pt-4">
+            💪 Musculation
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <TextInput label="Max pompes enchaînées" value={h.max_pompes ?? ""}
+              onChange={v => setH({ max_pompes: v })} placeholder="ex : 25" />
+            <TextInput label="Max tractions" value={h.max_tractions ?? ""}
+              onChange={v => setH({ max_tractions: v })} placeholder="ex : 8" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <TextInput label="Max squats en 1 min" value={h.max_squats ?? ""}
+              onChange={v => setH({ max_squats: v })} placeholder="ex : 40" />
+            <TextInput label="Max burpees en 1 min" value={h.max_burpees ?? ""}
+              onChange={v => setH({ max_burpees: v })} placeholder="ex : 15" />
+          </div>
+        </div>
+      )}
+
+      {/* Blessures / limitations */}
+      <div className="border-t border-gray-100 dark:border-gray-800 pt-4">
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+          Blessures ou limitations actuelles
+        </label>
+        <textarea value={h.blessures ?? ""} onChange={e => setH({ blessures: e.target.value })}
+          rows={3} placeholder="Douleur genou droit, tendinite, dos fragile… (optionnel)"
+          className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm resize-none focus:outline-none focus:ring-2 focus:ring-brand" />
+      </div>
+    </div>
+  );
+}
+
+// ─── Étape 4 : objectif ──────────────────────────────────────────────────────
+
+function Etape4({ data, set }) {
+  const isCourse  = data.type_programme === "course"  || data.type_programme === "hybride";
+  const isMuscu   = data.type_programme === "muscu"   || data.type_programme === "hybride";
 
   return (
     <div className="space-y-4">
       <div className="space-y-3">
-        {(isCourse || isHybride) && (
+        {isCourse && (
           <ChoixCard icon="🏁" titre="Objectif de course"
             description="Préparer un 10km, semi, marathon…"
             selected={data.objectif_type === "course"}
             onClick={() => set({ objectif_type: "course" })} />
         )}
-        {(isMuscu || isHybride) && (
+        {isMuscu && (
           <ChoixCard icon="🏆" titre="Objectif de performance muscu"
             description="Progresser sur les mouvements de force"
             selected={data.objectif_type === "muscu"}
@@ -219,6 +325,22 @@ export default function Onboarding() {
     frequence_tests_semaines: 8,
     objectif_type: "aucun",
     date_debut_raw: "",
+    historique: {
+      niveau: "",
+      annees_pratique: "",
+      volume_km_semaine: "",
+      longue_sortie_km: "",
+      chrono_10k: "",
+      chrono_semi: "",
+      chrono_marathon: "",
+      vma_estimee: "",
+      fc_max: "",
+      max_pompes: "",
+      max_tractions: "",
+      max_squats: "",
+      max_burpees: "",
+      blessures: "",
+    },
     objectif_course_nom: "",
     objectif_course_date: "",
     objectif_course_km: "",
@@ -244,8 +366,18 @@ export default function Onboarding() {
   function canGoNext() {
     if (etape === 1) return !!data.type_programme;
     if (etape === 2) return data.seances_semaine >= 1 && data.frequence_tests_semaines > 0;
-    if (etape === 3) return !!data.objectif_type;
+    if (etape === 3) return true; // tout optionnel
+    if (etape === 4) return !!data.objectif_type;
     return true;
+  }
+
+  // Nettoie l'historique en enlevant les champs vides avant envoi
+  function buildHistorique() {
+    const h = {};
+    for (const [k, v] of Object.entries(data.historique)) {
+      if (v !== "" && v !== null && v !== undefined) h[k] = v;
+    }
+    return Object.keys(h).length > 0 ? h : null;
   }
 
   async function valider() {
@@ -254,7 +386,6 @@ export default function Onboarding() {
       const dateDebutRaw = data.date_debut_raw || todayMonday();
       const dateDebutFr  = formatDateFr(dateDebutRaw);
 
-      // Si objectif course renseigné, l'enregistrer d'abord
       if (data.objectif_type === "course" && data.objectif_course_nom && data.objectif_course_date && data.objectif_course_km) {
         await api.post("/objectif-course", {
           nom: data.objectif_course_nom,
@@ -272,6 +403,7 @@ export default function Onboarding() {
         frequence_tests_semaines: data.frequence_tests_semaines,
         objectif_type: data.objectif_type,
         date_debut_programme: dateDebutFr,
+        historique_perf: buildHistorique(),
       });
 
       const me = await api.get("/auth/me");
@@ -294,18 +426,18 @@ export default function Onboarding() {
         </div>
 
         {/* Stepper */}
-        <div className="flex items-center gap-2 mb-6">
+        <div className="flex items-center gap-1 mb-6">
           {ETAPES.map((e, i) => (
-            <div key={e.num} className="flex-1 flex items-center gap-2">
+            <div key={e.num} className="flex-1 flex items-center gap-1">
               <div className={clsx(
                 "flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold shrink-0",
-                etape > e.num ? "bg-brand text-white"
-                  : etape === e.num ? "bg-brand text-white ring-4 ring-brand/20"
-                  : "bg-gray-200 dark:bg-gray-700 text-gray-400"
+                etape > e.num  ? "bg-brand text-white"
+                : etape === e.num ? "bg-brand text-white ring-4 ring-brand/20"
+                : "bg-gray-200 dark:bg-gray-700 text-gray-400"
               )}>
                 {etape > e.num ? "✓" : e.num}
               </div>
-              <span className={clsx("text-xs hidden sm:block", etape === e.num ? "text-brand font-semibold" : "text-gray-400")}>
+              <span className={clsx("text-[10px] hidden sm:block truncate", etape === e.num ? "text-brand font-semibold" : "text-gray-400")}>
                 {e.label}
               </span>
               {i < ETAPES.length - 1 && (
@@ -320,8 +452,9 @@ export default function Onboarding() {
           <h2 className="font-bold text-gray-900 dark:text-white mb-4">{ETAPES[etape - 1].label}</h2>
 
           {etape === 1 && <Etape1 data={data} set={set} />}
-          {etape === 2 && <Etape2 data={data} set={set} typeProg={data.type_programme} />}
-          {etape === 3 && <Etape3 data={data} set={set} typeProg={data.type_programme} />}
+          {etape === 2 && <Etape2 data={data} set={set} />}
+          {etape === 3 && <Etape3 data={data} set={set} />}
+          {etape === 4 && <Etape4 data={data} set={set} />}
 
           {err && <p className="text-sm text-red-500 mt-4">{err}</p>}
 
@@ -348,7 +481,7 @@ export default function Onboarding() {
           </div>
         </div>
 
-        <p className="text-center text-xs text-gray-400 mt-4">Tu pourras modifier tout ça plus tard dans les paramètres.</p>
+        <p className="text-center text-xs text-gray-400 mt-4">Tu pourras modifier ces informations dans ton profil.</p>
       </div>
     </div>
   );
