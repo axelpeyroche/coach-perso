@@ -1767,6 +1767,27 @@ def adapter_contenu_muscu(content: dict, seances_muscu: int) -> dict:
     return result
 
 
+def adapter_contenu_course(content: dict, seances_course: int) -> dict:
+    """Réduit le nombre de séances course/semaine si inférieur au contenu par défaut.
+
+    Priorité de conservation (ordre décroissant d'importance) :
+    1. Sortie longue (jour le plus tardif)
+    2. Fractionné / Seuil (intensité — jour intermédiaire)
+    3. EF Z2 (récupération active — la moins critique, jour le plus tôt)
+    """
+    if seances_course <= 0:
+        return content
+    result = {}
+    for sem, seances in content.items():
+        courses = [s for s in seances if s.get("type") == TypeSeance.COURSE]
+        autres = [s for s in seances if s.get("type") != TypeSeance.COURSE]
+        if len(courses) > seances_course:
+            # Trier par jour décroissant : sortie longue (J6) en premier, EF (J1) en dernier
+            courses = sorted(courses, key=lambda s: s.get("jour", 0), reverse=True)[:seances_course]
+        result[sem] = autres + sorted(courses, key=lambda s: s.get("jour", 0))
+    return result
+
+
 def _min_to_heure(minutes: int) -> str:
     """Convertit des minutes en format 'Xh' ou 'XhYY' (ex: 90→'1h30', 120→'2h')."""
     h, m = divmod(minutes, 60)
