@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { getBiometrieRecuperation, getTendancesPhysiologiques, getObjectifCourse, setObjectifCourse, getStatutProgramme, initialiserProgramme, supprimerProgramme, resetOnboarding, getProfilFC, patchProfilFC } from "../api";
+import { getBiometrieRecuperation, getTendancesPhysiologiques, getObjectifCourse, setObjectifCourse, getStatutProgramme, initialiserProgramme, supprimerProgramme, resetOnboarding, getProfilFC, patchProfilFC, getAnalyseObjectif, recalibrerProgramme } from "../api";
 import { useAuth } from "../AuthContext";
 import Card from "../components/Card";
 import StatTile from "../components/StatTile";
@@ -185,6 +185,110 @@ function BlocObjectif({ vma }) {
           className="w-full text-xs text-gray-400 hover:text-brand dark:hover:text-brand transition-colors py-1">
           Modifier l'objectif →
         </button>
+      </div>
+    </Card>
+  );
+}
+
+// ─── Analyse objectif : VMA cible vs actuelle ──────────────────────────────
+
+const FAISABILITE_STYLE = {
+  "atteignable":   { badge: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",  icon: "✅" },
+  "ambitieux":     { badge: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400", icon: "🎯" },
+  "challenge":     { badge: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400", icon: "🔥" },
+  "très ambitieux":{ badge: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",          icon: "⚡" },
+};
+
+function BlocAnalyseObjectif() {
+  const qc = useQueryClient();
+  const { data: analyse, isLoading } = useQuery({
+    queryKey: ["analyse-objectif"],
+    queryFn: getAnalyseObjectif,
+    staleTime: 5 * 60 * 1000,
+  });
+  const mut = useMutation({
+    mutationFn: recalibrerProgramme,
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["analyse-objectif"] });
+      alert(`Recalibration OK — VMA ${data.vma} km/h\nZ2 : ${data.allures.Z2} · Z4 : ${data.allures.Z4} · Z5 : ${data.allures.Z5}\n${data.seances_mises_a_jour} séance(s) mises à jour.`);
+    },
+    onError: (e) => alert(e?.response?.data?.detail ?? "Erreur recalibration"),
+  });
+
+  if (isLoading || !analyse?.objectif) return null;
+
+  const { vma_actuelle, vma_requise, delta_vma, faisabilite, allures_entrainement, volume_pic_cible } = analyse;
+  const fs = FAISABILITE_STYLE[faisabilite] ?? FAISABILITE_STYLE["challenge"];
+
+  return (
+    <Card title="">
+      <div className="space-y-4">
+        {/* Header */}
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-0.5">Analyse coach</p>
+            <h3 className="text-base font-bold text-gray-900 dark:text-white">Objectif atteignable ?</h3>
+          </div>
+          <span className={clsx("text-xs font-semibold px-2.5 py-1 rounded-full shrink-0", fs.badge)}>
+            {fs.icon} {faisabilite}
+          </span>
+        </div>
+
+        {/* VMA gap */}
+        <div className="grid grid-cols-3 gap-2 text-center">
+          <div className="rounded-xl bg-gray-50 dark:bg-gray-800 p-3">
+            <p className="text-xs text-gray-400 mb-1">VMA actuelle</p>
+            <p className="text-lg font-black text-gray-900 dark:text-white">
+              {vma_actuelle ? `${vma_actuelle.toFixed(1)}` : "—"}
+            </p>
+            <p className="text-xs text-gray-400">km/h</p>
+          </div>
+          <div className="rounded-xl bg-brand/5 dark:bg-brand/10 border border-brand/20 p-3">
+            <p className="text-xs text-gray-400 mb-1">Delta</p>
+            <p className={clsx("text-lg font-black", delta_vma === null ? "text-gray-400" : delta_vma <= 0 ? "text-green-600 dark:text-green-400" : "text-orange-500")}>
+              {delta_vma === null ? "—" : delta_vma > 0 ? `+${delta_vma.toFixed(1)}` : delta_vma.toFixed(1)}
+            </p>
+            <p className="text-xs text-gray-400">km/h</p>
+          </div>
+          <div className="rounded-xl bg-gray-50 dark:bg-gray-800 p-3">
+            <p className="text-xs text-gray-400 mb-1">VMA cible</p>
+            <p className="text-lg font-black text-brand">{vma_requise ? vma_requise.toFixed(1) : "—"}</p>
+            <p className="text-xs text-gray-400">km/h</p>
+          </div>
+        </div>
+
+        {/* Allures actuelles */}
+        {allures_entrainement && (
+          <div>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Tes allures d'entraînement</p>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { z: "Z2", label: "EF / Z2",    color: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
+                { z: "Z4", label: "Seuil / Z4", color: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400" },
+                { z: "Z5", label: "Frac. / Z5", color: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" },
+              ].map(({ z, label, color }) => (
+                <div key={z} className={clsx("rounded-xl px-3 py-2 text-center", color)}>
+                  <p className="text-xs font-medium opacity-80">{label}</p>
+                  <p className="text-sm font-bold font-mono">{allures_entrainement[z]}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Volume & recalibration */}
+        <div className="flex items-center justify-between gap-3 pt-1">
+          <p className="text-xs text-gray-400">
+            Volume pic cible : <span className="font-semibold text-gray-700 dark:text-gray-300">{volume_pic_cible} km/sem</span>
+          </p>
+          <button
+            onClick={() => { if (window.confirm("Recalibrer les allures des séances de course avec ta VMA actuelle ?")) mut.mutate(); }}
+            disabled={mut.isPending || !vma_actuelle}
+            className="text-xs text-brand border border-brand/30 hover:bg-brand/10 px-3 py-1.5 rounded-lg transition-colors font-medium disabled:opacity-40"
+          >
+            {mut.isPending ? "Recalibration…" : "Recalibrer allures"}
+          </button>
+        </div>
       </div>
     </Card>
   );
@@ -521,6 +625,9 @@ export default function Dashboard() {
 
       {/* Objectif course */}
       <BlocObjectif vma={derniereVMA?.valeur ?? null} />
+
+      {/* Analyse coach */}
+      <BlocAnalyseObjectif />
 
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

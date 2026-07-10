@@ -301,6 +301,46 @@ def reset_onboarding(current_user: Utilisateur = Depends(get_current_user), db: 
     }
 
 
+def _pace_str(kmh: float) -> str:
+    """Convertit une vitesse km/h en allure min:sec/km."""
+    if not kmh or kmh <= 0:
+        return "—"
+    s = 3600 / kmh
+    return f"{int(s // 60)}:{int(s % 60):02d}/km"
+
+
+def _calculer_volume_pic(distance_km: float) -> float:
+    """Volume hebdomadaire pic recommandé (km/semaine) selon la distance cible."""
+    if distance_km <= 5:
+        return 35.0
+    elif distance_km <= 12:
+        return 45.0
+    elif distance_km <= 22:
+        return 60.0
+    elif distance_km <= 45:
+        return 75.0
+    else:
+        return 90.0
+
+
+def _vma_requise(distance_km: float, objectif_temps_min: float) -> float:
+    """VMA nécessaire (km/h) pour atteindre l'objectif temps sur la distance."""
+    if not objectif_temps_min or objectif_temps_min <= 0:
+        return 0.0
+    allure_kmh = (distance_km / objectif_temps_min) * 60
+    if distance_km <= 5:
+        intensite = 0.97
+    elif distance_km <= 12:
+        intensite = 0.94
+    elif distance_km <= 22:
+        intensite = 0.85
+    elif distance_km <= 45:
+        intensite = 0.78
+    else:
+        intensite = 0.70
+    return round(allure_kmh / intensite, 2)
+
+
 def _calculer_calibration(historique: dict) -> dict:
     """Calcule km_factor et amrap_factor depuis l'historique de performance utilisateur."""
     niveau = historique.get("niveau", "intermediaire")
@@ -349,7 +389,7 @@ def onboarding(
     import json as _json
     from models import SemaineEntrainement
     from periodization_rules import BLUEPRINT_MACROCYCLE, generer_dates_semaines, generer_blueprint_course
-    from seed_seances import MODULE1, MODULE2, MODULE3, _POOL_SURCHARGE, _semaine_course, _inserer_seances_en_session, calibrer_module, adapter_contenu_muscu
+    from seed_seances import MODULE1, MODULE2, MODULE3, _POOL_SURCHARGE, _semaine_course, _inserer_seances_en_session, calibrer_module, adapter_contenu_muscu, enrichir_paces_vma
 
     # Sauvegarder préférences
     current_user.type_programme = payload.type_programme
@@ -440,20 +480,45 @@ def onboarding(
                 objectif_km_course=km, objectif_amrap_min=amrap))
         db.flush()
 
-        # Contenu des séances : surcharge interrompue par les semaines d'évaluation
-        surcharge_cal = calibrer_module(_POOL_SURCHARGE, kf, af, rf)
+        # VMA pour enrichissement des descriptions
+        vma_for_paces = None
+        if payload.historique_perf and payload.historique_perf.get("vma_estimee"):
+            try:
+                vma_for_paces = float(payload.historique_perf["vma_estimee"])
+            except (TypeError, ValueError):
+                pass
+
+        # Contenu des séances : surcharge progressive + semaines d'évaluation
+        # Volume progressif : facteur km augmente de kf (niveau actuel) vers f_pic (volume objectif)
+        vol_pic = _calculer_volume_pic(obj_course.distance_km)
+        BASELINE_VOL = 35.0
+        f_pic = min(vol_pic / BASELINE_VOL, kf * 2.2)  # cap à 2.2× le niveau actuel
+
+        n_build_weeks = sum(1 for i in range(1, n_surcharge + 1) if i % eval_freq != 0)
         m1_cal = calibrer_module(MODULE1, kf, af, rf)
         content = {}
-        pool_idx = 1  # index dans le pool de surcharge (indépendant du numéro de semaine)
+        pool_idx = 1
+        build_count = 0
         for i in range(1, n_surcharge + 1):
             if i % eval_freq == 0:
-                content[i] = MODULE1[8]  # semaine d'évaluation — non calibrée (tests standardisés)
+                content[i] = MODULE1[8]  # tests standardisés — non calibrés
             else:
-                content[i] = surcharge_cal.get(min(pool_idx, 15), _POOL_SURCHARGE[min(pool_idx, 15)])
+                # km_factor croît progressivement de kf à f_pic
+                progress = build_count / max(1, n_build_weeks - 1) if n_build_weeks > 1 else 1.0
+                week_kf = kf + (f_pic - kf) * (progress ** 0.75)
+                pool_key = min(pool_idx, 15)
+                week_content = calibrer_module({1: _POOL_SURCHARGE[pool_key]}, week_kf, af, rf)[1]
+                content[i] = week_content
                 pool_idx += 1
-        content[n_surcharge + 1] = m1_cal.get(6, MODULE1[6])
-        content[n_surcharge + 2] = m1_cal.get(7, MODULE1[7])
+                build_count += 1
+        content[n_surcharge + 1] = m1_cal.get(6, MODULE1[6])  # décharge calibrée
+        content[n_surcharge + 2] = m1_cal.get(7, MODULE1[7])  # affûtage calibré
         content[n_semaines] = _semaine_course(obj_course.date_course, obj_course.nom)
+
+        # Enrichissement des descriptions avec allures réelles
+        if vma_for_paces and vma_for_paces >= 5.0:
+            content = enrichir_paces_vma(content, vma_for_paces)
+
         n_muscu = current_user.seances_muscu_semaine or 2
         _inserer_seances_en_session(db, mc, adapter_contenu_muscu(content, n_muscu))
     else:
@@ -475,6 +540,8 @@ def onboarding(
             db.flush()
             module_data = modules.get(numero_cycle, MODULE1)
             calibrated = calibrer_module(module_data, kf, af, rf)
+            if vma_for_paces and vma_for_paces >= 5.0:
+                calibrated = enrichir_paces_vma(calibrated, vma_for_paces)
             _inserer_seances_en_session(db, mc, adapter_contenu_muscu(calibrated, n_muscu))
 
     db.commit()
@@ -1569,7 +1636,7 @@ def initialiser_programme(payload: InitProgrammePayload, current_user: Utilisate
     from seed_seances import (
         MODULE1, MODULE2, MODULE3,
         _POOL_SURCHARGE, _semaine_course, _inserer_seances_en_session,
-        calibrer_module, adapter_contenu_muscu,
+        calibrer_module, adapter_contenu_muscu, enrichir_paces_vma,
     )
 
     try:
@@ -1639,25 +1706,51 @@ def initialiser_programme(payload: InitProgrammePayload, current_user: Utilisate
                 except Exception:
                     historique = {}
             cal = _calculer_calibration(historique)
-            surcharge_cal = calibrer_module(
-                _POOL_SURCHARGE,
-                km_factor=cal["km_factor"],
-                amrap_factor=cal["amrap_factor"],
-                reps_factor=cal["reps_factor"],
-            )
+            kf_init = cal["km_factor"]
+            af_init = cal["amrap_factor"]
+            rf_init = cal["reps_factor"]
+            m1_cal_init = calibrer_module(MODULE1, kf_init, af_init, rf_init)
 
-            # Contenu : pool surcharge (+ évaluations) + décharge M1S6 + affûtage M1S7 + semaine course
+            # VMA pour enrichissement des allures cibles
+            vma_init = None
+            if historique.get("vma_estimee"):
+                try:
+                    vma_init = float(historique["vma_estimee"])
+                except (TypeError, ValueError):
+                    pass
+            if vma_init is None:
+                bio = db.query(BiometrieUtilisateur).filter(
+                    BiometrieUtilisateur.utilisateur_id == user.id
+                ).order_by(BiometrieUtilisateur.date_mesure.desc()).first()
+                if bio:
+                    vma_init = bio.vma_kmh
+
+            # Volume progressif
+            vol_pic = _calculer_volume_pic(obj.distance_km)
+            BASELINE_VOL = 35.0
+            f_pic_init = min(vol_pic / BASELINE_VOL, kf_init * 2.2)
+
+            n_build_weeks_init = sum(1 for i in range(1, n_surcharge + 1) if i % eval_freq != 0)
             content: dict = {}
             pool_idx = 1
+            build_count = 0
             for i in range(1, n_surcharge + 1):
                 if i % eval_freq == 0:
                     content[i] = MODULE1[8]
                 else:
-                    content[i] = surcharge_cal.get(min(pool_idx, 15), _POOL_SURCHARGE[min(pool_idx, 15)])
+                    progress = build_count / max(1, n_build_weeks_init - 1) if n_build_weeks_init > 1 else 1.0
+                    week_kf = kf_init + (f_pic_init - kf_init) * (progress ** 0.75)
+                    pool_key = min(pool_idx, 15)
+                    content[i] = calibrer_module({1: _POOL_SURCHARGE[pool_key]}, week_kf, af_init, rf_init)[1]
                     pool_idx += 1
-            content[n_surcharge + 1] = MODULE1[6]
-            content[n_surcharge + 2] = MODULE1[7]
+                    build_count += 1
+            content[n_surcharge + 1] = m1_cal_init.get(6, MODULE1[6])
+            content[n_surcharge + 2] = m1_cal_init.get(7, MODULE1[7])
             content[n_semaines]      = _semaine_course(obj.date_course, obj.nom)
+
+            # Enrichissement allures réelles
+            if vma_init and vma_init >= 5.0:
+                content = enrichir_paces_vma(content, vma_init)
 
             n_muscu = user.seances_muscu_semaine or 2
             _inserer_seances_en_session(db, mc, adapter_contenu_muscu(content, n_muscu))
@@ -1670,6 +1763,33 @@ def initialiser_programme(payload: InitProgrammePayload, current_user: Utilisate
             }
 
         # ── CAS 2 : pas de course → programme standard 3 × 8 semaines ───────
+        # Recalibration si historique dispo
+        historique_std = {}
+        if user.historique_perf:
+            import json as _json_std
+            try:
+                historique_std = _json_std.loads(user.historique_perf)
+            except Exception:
+                historique_std = {}
+        cal_std = _calculer_calibration(historique_std)
+        kf_std = cal_std["km_factor"]
+        af_std = cal_std["amrap_factor"]
+        rf_std = cal_std["reps_factor"]
+
+        # VMA pour allures
+        vma_std = None
+        if historique_std.get("vma_estimee"):
+            try:
+                vma_std = float(historique_std["vma_estimee"])
+            except (TypeError, ValueError):
+                pass
+        if vma_std is None:
+            bio_std = db.query(BiometrieUtilisateur).filter(
+                BiometrieUtilisateur.utilisateur_id == user.id
+            ).order_by(BiometrieUtilisateur.date_mesure.desc()).first()
+            if bio_std:
+                vma_std = bio_std.vma_kmh
+
         n_muscu = user.seances_muscu_semaine or 2
         mcs_crees = []
         for numero_cycle in range(1, 4):
@@ -1683,18 +1803,23 @@ def initialiser_programme(payload: InitProgrammePayload, current_user: Utilisate
             db.add(mc)
             db.flush()
             for regle, date_sem in zip(BLUEPRINT_MACROCYCLE, generer_dates_semaines(debut)):
+                km = round(regle.objectif_km_course * kf_std, 1) if regle.objectif_km_course else None
+                amrap = round(regle.objectif_amrap_min * af_std) if regle.objectif_amrap_min else None
                 db.add(SemaineEntrainement(
                     macrocycle_id=mc.id,
                     numero_semaine=regle.numero,
                     macrophase=regle.macrophase,
                     date_debut=date_sem,
                     multiplicateur_volume=regle.multiplicateur_volume,
-                    objectif_km_course=regle.objectif_km_course,
-                    objectif_amrap_min=regle.objectif_amrap_min,
+                    objectif_km_course=km,
+                    objectif_amrap_min=amrap,
                 ))
             db.flush()
             module_data = {1: MODULE1, 2: MODULE2, 3: MODULE3}[numero_cycle]
-            _inserer_seances_en_session(db, mc, adapter_contenu_muscu(module_data, n_muscu))
+            calibrated_std = calibrer_module(module_data, kf_std, af_std, rf_std)
+            if vma_std and vma_std >= 5.0:
+                calibrated_std = enrichir_paces_vma(calibrated_std, vma_std)
+            _inserer_seances_en_session(db, mc, adapter_contenu_muscu(calibrated_std, n_muscu))
             mcs_crees.append(numero_cycle)
 
         db.commit()
@@ -1708,6 +1833,153 @@ def initialiser_programme(payload: InitProgrammePayload, current_user: Utilisate
     except Exception as exc:
         db.rollback()
         raise HTTPException(500, detail=f"Erreur génération : {type(exc).__name__}: {exc}")
+
+
+# ---------------------------------------------------------------------------
+# Intelligence sportive — analyse objectif + recalibration
+# ---------------------------------------------------------------------------
+
+@app.get("/api/programme/analyse-objectif", summary="Analyse VMA cible vs actuelle pour l'objectif en cours")
+def analyse_objectif(
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(obtenir_session),
+):
+    obj = db.query(ObjectifCourse).filter(
+        ObjectifCourse.utilisateur_id == current_user.id
+    ).order_by(ObjectifCourse.id.desc()).first()
+
+    if not obj:
+        return {"objectif": None, "vma_actuelle": None, "vma_requise": None, "delta_vma": None}
+
+    bio = db.query(BiometrieUtilisateur).filter(
+        BiometrieUtilisateur.utilisateur_id == current_user.id
+    ).order_by(BiometrieUtilisateur.date_mesure.desc()).first()
+    vma_actuelle = bio.vma_kmh if bio else None
+
+    vma_req = _vma_requise(obj.distance_km, obj.objectif_temps_min)
+    delta = round(vma_req - vma_actuelle, 1) if vma_actuelle else None
+
+    # Intensité de course selon la distance
+    if obj.distance_km <= 5:
+        label_intensite = "~97% VMA"
+    elif obj.distance_km <= 12:
+        label_intensite = "~94% VMA"
+    elif obj.distance_km <= 22:
+        label_intensite = "~85% VMA"
+    elif obj.distance_km <= 45:
+        label_intensite = "~78% VMA"
+    else:
+        label_intensite = "~70% VMA"
+
+    faisabilite = (
+        "atteignable" if delta is not None and delta <= 0 else
+        "ambitieux" if delta is not None and delta <= 1.5 else
+        "challenge" if delta is not None and delta <= 3.5 else
+        "très ambitieux"
+    )
+
+    # Allures cibles (sur VMA actuelle, pas requise — ce que l'athlète doit courir maintenant)
+    allures_train = None
+    if vma_actuelle and vma_actuelle >= 5.0:
+        allures_train = {
+            "Z2": _pace_str(vma_actuelle * 0.70),
+            "Z4": _pace_str(vma_actuelle * 0.90),
+            "Z5": _pace_str(vma_actuelle * 1.025),
+        }
+
+    # Allure course cible
+    allure_course_kmh = (obj.distance_km / obj.objectif_temps_min) * 60 if obj.objectif_temps_min else None
+
+    h, m = divmod(obj.objectif_temps_min, 60)
+    objectif_temps_str = f"{h}h{m:02d}" if h else f"{m} min"
+    jours_restants = (obj.date_course - date.today()).days
+
+    return {
+        "objectif": {
+            "nom": obj.nom,
+            "distance_km": obj.distance_km,
+            "objectif_temps_str": objectif_temps_str,
+            "allure_course": _pace_str(allure_course_kmh) if allure_course_kmh else None,
+            "jours_restants": jours_restants,
+        },
+        "vma_actuelle": vma_actuelle,
+        "vma_requise": vma_req,
+        "delta_vma": delta,
+        "label_intensite": label_intensite,
+        "faisabilite": faisabilite,
+        "allures_entrainement": allures_train,
+        "volume_pic_cible": _calculer_volume_pic(obj.distance_km),
+    }
+
+
+@app.post("/api/programme/recalibrer", summary="Recalibre les séances restantes après un test d'évaluation")
+def recalibrer_programme(
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(obtenir_session),
+):
+    """
+    Après une semaine d'évaluation, met à jour la VMA et recalibre
+    les descriptions de toutes les séances de course futures avec les nouvelles allures.
+    """
+    from datetime import date as date_cls
+    from seed_seances import enrichir_paces_vma, calculer_paces_vma
+
+    # VMA la plus récente
+    bio = db.query(BiometrieUtilisateur).filter(
+        BiometrieUtilisateur.utilisateur_id == current_user.id
+    ).order_by(BiometrieUtilisateur.date_mesure.desc()).first()
+    if not bio:
+        raise HTTPException(400, "Aucune biométrie disponible. Effectuez d'abord un test Demi-Cooper.")
+
+    vma = bio.vma_kmh
+    if not vma or vma < 5.0:
+        raise HTTPException(400, "VMA invalide ou non calculée.")
+
+    paces = calculer_paces_vma(vma)
+    zone_prefix = {
+        "Z1": f"── Coach ({vma:.1f} km/h VMA) ────────────────\nAllure cible : {paces['Z1']} (Z1 — récupération — 60-65% VMA)\n──────────────────────────────────────\n",
+        "Z2": f"── Coach ({vma:.1f} km/h VMA) ────────────────\nAllure cible : {paces['Z2']} (Z2 — endurance fond. — 65-75% VMA)\n──────────────────────────────────────\n",
+        "Z3": f"── Coach ({vma:.1f} km/h VMA) ────────────────\nAllure cible : {paces['Z3']} (Z3 — tempo — 75-85% VMA)\n──────────────────────────────────────\n",
+        "Z4": f"── Coach ({vma:.1f} km/h VMA) ────────────────\nAllure cible : {paces['Z4']} (Z4 — seuil lactique — 85-95% VMA)\n──────────────────────────────────────\n",
+        "Z5": f"── Coach ({vma:.1f} km/h VMA) ────────────────\nAllure effort : {paces['Z5']} (Z5 — VO₂max — 100-105% VMA)\nAllure récup  : {paces['recup']} (Z1)\n──────────────────────────────────────\n",
+    }
+
+    today = date_cls.today()
+    updated = 0
+
+    # Mettre à jour toutes les séances de course futures
+    mcs = db.query(Macrocycle).filter(Macrocycle.utilisateur_id == current_user.id).all()
+    for mc in mcs:
+        for semaine in mc.semaines:
+            if semaine.date_debut < today:
+                continue
+            for seance in semaine.seances:
+                if seance.type_seance.value != "COURSE" or not seance.zone_cible:
+                    continue
+                zone_key = seance.zone_cible.value  # ex: "Z2"
+                prefix = zone_prefix.get(zone_key)
+                if not prefix:
+                    continue
+                # Supprimer l'ancien bloc Coach s'il existe
+                desc = seance.description or ""
+                coach_end = desc.find("──────────────────────────────────────\n")
+                if coach_end >= 0 and "── Coach" in desc[:coach_end]:
+                    desc = desc[coach_end + len("──────────────────────────────────────\n"):]
+                seance.description = prefix + desc
+                updated += 1
+
+    db.commit()
+    return {
+        "ok": True,
+        "vma": vma,
+        "allures": {
+            "Z2": paces["Z2"],
+            "Z4": paces["Z4"],
+            "Z5": paces["Z5"],
+        },
+        "seances_mises_a_jour": updated,
+        "message": f"Recalibration effectuée avec VMA {vma:.1f} km/h. {updated} séance(s) de course mises à jour.",
+    }
 
 
 # ---------------------------------------------------------------------------

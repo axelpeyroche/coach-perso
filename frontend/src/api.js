@@ -39,6 +39,12 @@ export const supprimerProgramme = () =>
 export const resetOnboarding = () =>
   api.post("/auth/reset-onboarding").then((r) => r.data);
 
+export const getAnalyseObjectif = () =>
+  api.get("/programme/analyse-objectif").then((r) => r.data);
+
+export const recalibrerProgramme = () =>
+  api.post("/programme/recalibrer").then((r) => r.data);
+
 // --- Semaine courante ---
 export const getSemaineCourante = () =>
   api.get("/semaine-courante").then((r) => r.data);

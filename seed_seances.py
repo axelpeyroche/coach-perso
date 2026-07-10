@@ -1799,6 +1799,68 @@ def calibrer_module(module_data: dict, km_factor: float = 1.0, amrap_factor: flo
     return result
 
 
+def calculer_paces_vma(vma_kmh: float) -> dict:
+    """Retourne les allures (format MM:SS/km) pour chaque zone depuis la VMA en km/h."""
+    def to_pace(kmh: float) -> str:
+        if not kmh or kmh <= 0:
+            return "—"
+        s = 3600 / kmh
+        return f"{int(s // 60)}:{int(s % 60):02d}/km"
+
+    return {
+        "Z1":   to_pace(vma_kmh * 0.62),   # 60-65% → 62%
+        "Z2":   to_pace(vma_kmh * 0.70),   # 65-75% → 70%
+        "Z3":   to_pace(vma_kmh * 0.80),   # 75-85% → 80%
+        "Z4":   to_pace(vma_kmh * 0.90),   # 85-95% → 90%
+        "Z5":   to_pace(vma_kmh * 1.025),  # 100-105% → 102.5%
+        "recup": to_pace(vma_kmh * 0.62),
+        "vma":  vma_kmh,
+    }
+
+
+def enrichir_paces_vma(content: dict, vma_kmh: float) -> dict:
+    """Injecte les allures cibles réelles (calculées depuis VMA) dans chaque séance de course."""
+    if not vma_kmh or vma_kmh <= 0:
+        return content
+
+    paces = calculer_paces_vma(vma_kmh)
+
+    zone_info = {
+        ZoneCourse.Z1: (paces["Z1"],   "Z1 — récupération",       "60-65%"),
+        ZoneCourse.Z2: (paces["Z2"],   "Z2 — endurance fond.",     "65-75%"),
+        ZoneCourse.Z3: (paces["Z3"],   "Z3 — tempo",               "75-85%"),
+        ZoneCourse.Z4: (paces["Z4"],   "Z4 — seuil lactique",      "85-95%"),
+        ZoneCourse.Z5: (paces["Z5"],   "Z5 — VO₂max",             "100-105%"),
+    }
+
+    result = {}
+    for sem, seances in content.items():
+        enriched = []
+        for s in seances:
+            ns = dict(s)
+            if ns.get("type") == TypeSeance.COURSE:
+                zone = ns.get("zone")
+                if zone and zone in zone_info:
+                    pace, label, pct = zone_info[zone]
+                    if zone == ZoneCourse.Z5:
+                        coach_line = (
+                            f"── Coach ({vma_kmh:.1f} km/h VMA) ────────────────\n"
+                            f"Allure effort : {pace} ({pct} VMA)\n"
+                            f"Allure récup  : {paces['recup']} (Z1)\n"
+                            f"──────────────────────────────────────\n"
+                        )
+                    else:
+                        coach_line = (
+                            f"── Coach ({vma_kmh:.1f} km/h VMA) ────────────────\n"
+                            f"Allure cible : {pace} ({label} — {pct} VMA)\n"
+                            f"──────────────────────────────────────\n"
+                        )
+                    ns["description"] = coach_line + (ns.get("description") or "")
+            enriched.append(ns)
+        result[sem] = enriched
+    return result
+
+
 def seed_programme_course(n_semaines: int, date_course=None, course_nom: str = "Course"):
     """
     Seed adaptatif pour un programme orienté course de n_semaines semaines.
