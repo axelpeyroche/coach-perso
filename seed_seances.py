@@ -1572,14 +1572,19 @@ def _inserer_seances_en_session(db, mc, module_data: dict):
             total_seances += 1
 
             for pos, ex_data in enumerate(s.get("exercices", []), 1):
-                exercice = exercices_map.get(ex_data["slug"])
-                if not exercice:
-                    slugs_manquants.add(ex_data["slug"])
+                slug = ex_data.get("slug")
+                nom_libre = ex_data.get("nom")  # exercices libres (machines salle)
+                exercice = exercices_map.get(slug) if slug else None
+                if slug and not exercice:
+                    slugs_manquants.add(slug)
+                if not exercice and not nom_libre:
                     continue
                 db.add(ExerciceSeance(
                     seance_id=seance.id,
-                    exercice_id=exercice.id,
+                    exercice_id=exercice.id if exercice else None,
+                    nom_affichage=nom_libre if not exercice else None,
                     ordre=pos,
+                    series=ex_data.get("series"),
                     repetitions=ex_data.get("reps"),
                     tempo_override=ex_data.get("tempo"),
                     pause_isometrique_override_sec=ex_data.get("pause_iso"),
@@ -1775,112 +1780,105 @@ _GYM_UPPER_BASE = {
     "jour": 2, "type": TypeSeance.GYM_UPPER, "titre": "Upper Body — Machines (60 min)",
     "temps_limite": 60,
     "description": (
-        "Upper Body Machines | 3 séries × 10-12 reps | Repos 60-90 sec\n\n"
-        "PECTORAUX & ÉPAULES\n"
-        "  • Développé pectoraux machine      3×10   tempo 2/0/X/1\n"
-        "  • Écarté pectoraux — Pec Deck      3×12   tempo 2/1/X/0\n"
-        "  • Développé épaules machine        3×10   tempo 2/0/X/1\n"
-        "  • Élévations latérales câble       3×15   tempo 2/1/X/0\n\n"
-        "DOS & BICEPS\n"
-        "  • Tirage vertical — Lat Pulldown   3×10   tempo 2/1/X/0\n"
-        "  • Rowing assis câble               3×12   tempo 2/1/X/0\n"
-        "  • Face Pull câble                  3×15   tempo 2/0/X/1\n"
-        "  • Curl biceps câble                3×12   tempo 2/1/X/0\n\n"
-        "TRICEPS\n"
-        "  • Extension triceps poulie         3×12   tempo 2/1/X/0\n\n"
+        "Upper Body Machines | Repos 60-90 sec entre séries\n"
         "Charge : 60-70 % 1RM. Dernier set à l'échec si possible."
     ),
+    "exercices": [
+        {"nom": "Développé pectoraux machine",    "series": 3, "reps": 10, "tempo": "2/0/X/1"},
+        {"nom": "Écarté pectoraux — Pec Deck",    "series": 3, "reps": 12, "tempo": "2/1/X/0"},
+        {"nom": "Développé épaules machine",       "series": 3, "reps": 10, "tempo": "2/0/X/1"},
+        {"nom": "Élévations latérales câble",      "series": 3, "reps": 15, "tempo": "2/1/X/0"},
+        {"nom": "Tirage vertical — Lat Pulldown",  "series": 3, "reps": 10, "tempo": "2/1/X/0"},
+        {"nom": "Rowing assis câble",              "series": 3, "reps": 12, "tempo": "2/1/X/0"},
+        {"nom": "Face Pull câble",                 "series": 3, "reps": 15, "tempo": "2/0/X/1"},
+        {"nom": "Curl biceps câble",               "series": 3, "reps": 12, "tempo": "2/1/X/0"},
+        {"nom": "Extension triceps poulie",        "series": 3, "reps": 12, "tempo": "2/1/X/0"},
+    ],
 }
 
 _GYM_LOWER_BASE = {
     "jour": 4, "type": TypeSeance.GYM_LOWER, "titre": "Lower Body — Machines (60 min)",
     "temps_limite": 60,
     "description": (
-        "Lower Body Machines | 3-4 séries × 10-15 reps | Repos 90 sec-2 min\n\n"
-        "QUADRICEPS & FESSIERS\n"
-        "  • Presse à cuisses                 4×10   tempo 3/1/X/0\n"
-        "  • Hack squat machine               3×10   tempo 3/1/X/0\n"
-        "  • Extension jambes                 3×15   tempo 2/1/X/0\n\n"
-        "ISCHIO-JAMBIERS & FESSIERS\n"
-        "  • Hip Thrust machine               3×12   tempo 2/1/X/1\n"
-        "  • Curl jambes couché               3×12   tempo 2/1/X/0\n"
-        "  • Curl jambes assis                3×12   tempo 2/1/X/0\n\n"
-        "ADDUCTEURS & MOLLETS\n"
-        "  • Abduction / Adduction hanche     3×15 chaque\n"
-        "  • Élévation mollets debout         4×15   tempo 3/1/X/0\n\n"
+        "Lower Body Machines | Repos 90 sec-2 min entre séries\n"
         "Charge : 60-70 % 1RM. Contrôle excentrique prioritaire."
     ),
+    "exercices": [
+        {"nom": "Presse à cuisses",            "series": 4, "reps": 10, "tempo": "3/1/X/0"},
+        {"nom": "Hack squat machine",          "series": 3, "reps": 10, "tempo": "3/1/X/0"},
+        {"nom": "Extension jambes",            "series": 3, "reps": 15, "tempo": "2/1/X/0"},
+        {"nom": "Hip Thrust machine",          "series": 3, "reps": 12, "tempo": "2/1/X/1"},
+        {"nom": "Curl jambes couché",          "series": 3, "reps": 12, "tempo": "2/1/X/0"},
+        {"nom": "Curl jambes assis",           "series": 3, "reps": 12, "tempo": "2/1/X/0"},
+        {"nom": "Abduction hanche machine",    "series": 3, "reps": 15, "tempo": "2/1/X/0"},
+        {"nom": "Élévation mollets debout",    "series": 4, "reps": 15, "tempo": "3/1/X/0"},
+    ],
 }
 
 _GYM_FULL_BASE = {
     "jour": 5, "type": TypeSeance.GYM_FULL, "titre": "Full Body — Machines (75 min)",
     "temps_limite": 75,
     "description": (
-        "Full Body Machines | 3 séries × 10-12 reps | Repos 90 sec\n\n"
-        "BAS DU CORPS\n"
-        "  • Presse à cuisses                 3×12   tempo 3/1/X/0\n"
-        "  • Hip Thrust machine               3×12   tempo 2/1/X/1\n"
-        "  • Extension jambes                 3×15   tempo 2/0/X/0\n\n"
-        "HAUT DU CORPS — PUSH\n"
-        "  • Développé pectoraux machine      3×10   tempo 2/0/X/1\n"
-        "  • Développé épaules machine        3×10   tempo 2/0/X/1\n"
-        "  • Extension triceps câble          3×12   tempo 2/1/X/0\n\n"
-        "HAUT DU CORPS — PULL\n"
-        "  • Tirage vertical — Lat Pulldown   3×10   tempo 2/1/X/0\n"
-        "  • Rowing assis câble               3×12   tempo 2/1/X/0\n"
-        "  • Curl biceps câble                3×12   tempo 2/1/X/0\n\n"
-        "FINITION\n"
-        "  • Élévation mollets debout         3×15   tempo 3/1/X/0\n\n"
-        "Charge : 60-70 % 1RM. Circuit push/pull/jambes enchaîné."
+        "Full Body Machines | Repos 90 sec entre séries\n"
+        "Charge : 60-70 % 1RM. Enchaîner push / pull / jambes."
     ),
+    "exercices": [
+        {"nom": "Presse à cuisses",            "series": 3, "reps": 12, "tempo": "3/1/X/0"},
+        {"nom": "Hip Thrust machine",          "series": 3, "reps": 12, "tempo": "2/1/X/1"},
+        {"nom": "Extension jambes",            "series": 3, "reps": 15, "tempo": "2/0/X/0"},
+        {"nom": "Développé pectoraux machine", "series": 3, "reps": 10, "tempo": "2/0/X/1"},
+        {"nom": "Développé épaules machine",   "series": 3, "reps": 10, "tempo": "2/0/X/1"},
+        {"nom": "Extension triceps câble",     "series": 3, "reps": 12, "tempo": "2/1/X/0"},
+        {"nom": "Tirage vertical — Lat Pulldown", "series": 3, "reps": 10, "tempo": "2/1/X/0"},
+        {"nom": "Rowing assis câble",          "series": 3, "reps": 12, "tempo": "2/1/X/0"},
+        {"nom": "Curl biceps câble",           "series": 3, "reps": 12, "tempo": "2/1/X/0"},
+        {"nom": "Élévation mollets debout",    "series": 3, "reps": 15, "tempo": "3/1/X/0"},
+    ],
 }
 
 # Variantes allégées pour semaines de décharge/affûtage
 _GYM_UPPER_DECHARGE = {
     "jour": 2, "type": TypeSeance.GYM_UPPER, "titre": "Upper Body Léger — Machines (40 min)",
     "temps_limite": 40,
-    "description": (
-        "Upper Body Décharge | 2 séries × 12-15 reps | Charge -30 % | Repos 60 sec\n\n"
-        "  • Développé pectoraux machine      2×12   tempo 2/0/X/1\n"
-        "  • Tirage vertical — Lat Pulldown   2×12   tempo 2/1/X/0\n"
-        "  • Développé épaules machine        2×12   tempo 2/0/X/1\n"
-        "  • Rowing assis câble               2×15   tempo 2/1/X/0\n"
-        "  • Face Pull câble                  2×15   tempo 2/0/X/1\n"
-        "  • Curl biceps câble                2×15   tempo 2/1/X/0\n"
-        "  • Extension triceps poulie         2×15   tempo 2/1/X/0\n\n"
-        "Objectif : maintien — pas de travail à l'échec."
-    ),
+    "description": "Upper Body Décharge | Charge -30 % | Repos 60 sec | Pas de travail à l'échec.",
+    "exercices": [
+        {"nom": "Développé pectoraux machine",    "series": 2, "reps": 12, "tempo": "2/0/X/1"},
+        {"nom": "Tirage vertical — Lat Pulldown", "series": 2, "reps": 12, "tempo": "2/1/X/0"},
+        {"nom": "Développé épaules machine",      "series": 2, "reps": 12, "tempo": "2/0/X/1"},
+        {"nom": "Rowing assis câble",             "series": 2, "reps": 15, "tempo": "2/1/X/0"},
+        {"nom": "Face Pull câble",                "series": 2, "reps": 15, "tempo": "2/0/X/1"},
+        {"nom": "Curl biceps câble",              "series": 2, "reps": 15, "tempo": "2/1/X/0"},
+        {"nom": "Extension triceps poulie",       "series": 2, "reps": 15, "tempo": "2/1/X/0"},
+    ],
 }
 
 _GYM_LOWER_DECHARGE = {
     "jour": 4, "type": TypeSeance.GYM_LOWER, "titre": "Lower Body Léger — Machines (40 min)",
     "temps_limite": 40,
-    "description": (
-        "Lower Body Décharge | 2 séries × 12-15 reps | Charge -30 % | Repos 60 sec\n\n"
-        "  • Presse à cuisses                 2×12   tempo 3/1/X/0\n"
-        "  • Extension jambes                 2×15   tempo 2/1/X/0\n"
-        "  • Hip Thrust machine               2×15   tempo 2/1/X/1\n"
-        "  • Curl jambes couché               2×15   tempo 2/1/X/0\n"
-        "  • Abduction hanche                 2×15\n"
-        "  • Élévation mollets debout         2×20   tempo 3/1/X/0\n\n"
-        "Objectif : maintien — mobilité et activation prioritaires."
-    ),
+    "description": "Lower Body Décharge | Charge -30 % | Repos 60 sec | Mobilité et activation prioritaires.",
+    "exercices": [
+        {"nom": "Presse à cuisses",         "series": 2, "reps": 12, "tempo": "3/1/X/0"},
+        {"nom": "Extension jambes",         "series": 2, "reps": 15, "tempo": "2/1/X/0"},
+        {"nom": "Hip Thrust machine",       "series": 2, "reps": 15, "tempo": "2/1/X/1"},
+        {"nom": "Curl jambes couché",       "series": 2, "reps": 15, "tempo": "2/1/X/0"},
+        {"nom": "Abduction hanche machine", "series": 2, "reps": 15, "tempo": "2/1/X/0"},
+        {"nom": "Élévation mollets debout", "series": 2, "reps": 20, "tempo": "3/1/X/0"},
+    ],
 }
 
 _GYM_FULL_DECHARGE = {
     "jour": 2, "type": TypeSeance.GYM_FULL, "titre": "Full Body Léger — Machines (45 min)",
     "temps_limite": 45,
-    "description": (
-        "Full Body Décharge | 2 séries × 12-15 reps | Charge -30 % | Repos 60 sec\n\n"
-        "  • Presse à cuisses                 2×12   tempo 3/1/X/0\n"
-        "  • Développé pectoraux machine      2×12   tempo 2/0/X/1\n"
-        "  • Tirage vertical — Lat Pulldown   2×12   tempo 2/1/X/0\n"
-        "  • Hip Thrust machine               2×15   tempo 2/1/X/1\n"
-        "  • Rowing assis câble               2×15   tempo 2/1/X/0\n"
-        "  • Extension triceps câble          2×15   tempo 2/1/X/0\n"
-        "  • Curl biceps câble                2×15   tempo 2/1/X/0\n\n"
-        "Objectif : maintien — pas de travail à l'échec."
-    ),
+    "description": "Full Body Décharge | Charge -30 % | Repos 60 sec | Pas de travail à l'échec.",
+    "exercices": [
+        {"nom": "Presse à cuisses",              "series": 2, "reps": 12, "tempo": "3/1/X/0"},
+        {"nom": "Développé pectoraux machine",   "series": 2, "reps": 12, "tempo": "2/0/X/1"},
+        {"nom": "Tirage vertical — Lat Pulldown","series": 2, "reps": 12, "tempo": "2/1/X/0"},
+        {"nom": "Hip Thrust machine",            "series": 2, "reps": 15, "tempo": "2/1/X/1"},
+        {"nom": "Rowing assis câble",            "series": 2, "reps": 15, "tempo": "2/1/X/0"},
+        {"nom": "Extension triceps câble",       "series": 2, "reps": 15, "tempo": "2/1/X/0"},
+        {"nom": "Curl biceps câble",             "series": 2, "reps": 15, "tempo": "2/1/X/0"},
+    ],
 }
 
 

@@ -472,8 +472,11 @@ class ExerciceSeance(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     seance_id: Mapped[int] = mapped_column(ForeignKey("seances_entrainement.id"), nullable=False)
-    exercice_id: Mapped[int] = mapped_column(
-        ForeignKey("variations_exercices.id"), nullable=False
+    exercice_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("variations_exercices.id"), nullable=True
+    )
+    nom_affichage: Mapped[Optional[str]] = mapped_column(
+        String(200), comment="Nom libre pour les exercices sans slug (machines salle, etc.)"
     )
     ordre: Mapped[int] = mapped_column(
         Integer, nullable=False, comment="Position dans la séance (indexée à 1)"

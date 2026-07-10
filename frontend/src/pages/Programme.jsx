@@ -379,8 +379,10 @@ function CarteSeance({ seance, zonesFC }) {
           {seance.exercices?.length > 0 && (
             <div>
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
-                {seance.type === "AMRAP" ? `Circuit AMRAP ${seance.temps_limite_min} min` :
-                 seance.type === "EMOM"  ? `EMOM ${seance.temps_limite_min} min` : "Exercices"}
+                {seance.type === "AMRAP"     ? `Circuit AMRAP ${seance.temps_limite_min} min` :
+                 seance.type === "EMOM"      ? `EMOM ${seance.temps_limite_min} min` :
+                 isGym                       ? `${GYM_LABEL[seance.type]} — ${seance.temps_limite_min} min` :
+                 "Exercices"}
               </p>
               <div className="divide-y divide-gray-50 dark:divide-gray-800 rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
                 {seance.exercices.map((ex, i) => (
@@ -395,7 +397,12 @@ function CarteSeance({ seance, zonesFC }) {
                           {ex.duree_bloc_min} min
                         </span>
                       )}
-                      {ex.repetitions && (
+                      {ex.series && ex.repetitions && (
+                        <span className="px-2 py-0.5 rounded bg-brand/10 text-brand text-xs font-bold">
+                          {ex.series}×{ex.repetitions}
+                        </span>
+                      )}
+                      {!ex.series && ex.repetitions && (
                         <span className="px-2 py-0.5 rounded bg-brand/10 text-brand text-xs font-bold">
                           {ex.repetitions} reps
                         </span>

@@ -50,6 +50,10 @@ def creer_tables() -> None:
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS historique_perf TEXT",
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS type_course VARCHAR(20)",
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS type_muscu VARCHAR(20)",
+        # Exercices libres (machines salle, etc.)
+        "ALTER TABLE exercices_seance ADD COLUMN IF NOT EXISTS nom_affichage VARCHAR(200)",
+        "ALTER TABLE exercices_seance ADD COLUMN IF NOT EXISTS series INTEGER",
+        "ALTER TABLE exercices_seance ALTER COLUMN exercice_id DROP NOT NULL",
     ]
     with engine.begin() as conn:
         for stmt in _migrations:

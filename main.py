@@ -1161,7 +1161,8 @@ def semaine_courante(current_user: Utilisateur = Depends(get_current_user), db: 
                 "description": s.description,
                 "exercices": [
                     {
-                        "nom": ex.exercice.nom,
+                        "nom": ex.nom_affichage if ex.exercice_id is None else ex.exercice.nom,
+                        "series": ex.series,
                         "repetitions": ex.repetitions,
                         "duree_sec": ex.duree_sec,
                         "tempo": ex.tempo_effectif,
@@ -1223,8 +1224,9 @@ def obtenir_semaines_macrocycle(
                         "temps_limite_min": seance.temps_limite_min,
                         "exercices": [
                             {
-                                "nom": ex.exercice.nom,
-                                "slug": ex.exercice.slug,
+                                "nom": ex.nom_affichage if ex.exercice_id is None else ex.exercice.nom,
+                                "slug": None if ex.exercice_id is None else ex.exercice.slug,
+                                "series": ex.series,
                                 "repetitions": ex.repetitions,
                                 "duree_sec": ex.duree_sec,
                                 "tempo": ex.tempo_effectif,
@@ -1323,8 +1325,9 @@ def toutes_semaines_programme(current_user: Utilisateur = Depends(get_current_us
                         "temps_limite_min": seance.temps_limite_min,
                         "exercices": [
                             {
-                                "nom": ex.exercice.nom,
-                                "slug": ex.exercice.slug,
+                                "nom": ex.nom_affichage if ex.exercice_id is None else ex.exercice.nom,
+                                "slug": None if ex.exercice_id is None else ex.exercice.slug,
+                                "series": ex.series,
                                 "repetitions": ex.repetitions,
                                 "duree_sec": ex.duree_sec,
                                 "tempo": ex.tempo_effectif,
