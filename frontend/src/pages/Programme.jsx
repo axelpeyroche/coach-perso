@@ -6,7 +6,10 @@ import clsx from "clsx";
 
 // ─── Constantes ────────────────────────────────────────────────────────────
 
-const TYPE_ICONS   = { COURSE: "🏃", AMRAP: "🔥", EMOM: "⏱️", EVALUATION: "🎯", DECHARGE: "🧘", REPOS: "😴" };
+const TYPE_ICONS   = { COURSE: "🏃", AMRAP: "🔥", EMOM: "⏱️", EVALUATION: "🎯", DECHARGE: "🧘", REPOS: "😴", GYM_UPPER: "💪", GYM_LOWER: "🦵", GYM_FULL: "🏋️" };
+const GYM_TYPES    = ["GYM_UPPER", "GYM_LOWER", "GYM_FULL"];
+const GYM_LABEL    = { GYM_UPPER: "Upper Body", GYM_LOWER: "Lower Body", GYM_FULL: "Full Body" };
+const GYM_COLOR    = { GYM_UPPER: "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400", GYM_LOWER: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400", GYM_FULL: "bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400" };
 const PHASE_LABEL  = { surcharge: "Surcharge ↑", decharge: "Décharge ↓", evaluation: "Évaluation ★" };
 const PHASE_COLORS = {
   surcharge:  "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
@@ -76,6 +79,7 @@ function FormulaireLog({ seance, onClose, onDone, modeEdit = false }) {
 
   const isCourse = seance.type === "COURSE";
   const isMuscu  = seance.type === "AMRAP" || seance.type === "EMOM";
+  const isGym    = GYM_TYPES.includes(seance.type);
 
   // Détection séance seuil/fractionné : COURSE en Z4 ou Z5 avec pattern N×D min
   const mIntervalles = seance.titre?.match(/(\d+)\s*[×x\*]\s*(\d+)\s*min/i);
@@ -294,6 +298,11 @@ function CarteSeance({ seance, zonesFC }) {
             {seance.dplus_cible_m > 0 && (
               <span className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-xs text-gray-600 dark:text-gray-400">
                 ↑ {seance.dplus_cible_m} m
+              </span>
+            )}
+            {isGym && (
+              <span className={clsx("px-1.5 py-0.5 rounded text-xs font-bold", GYM_COLOR[seance.type])}>
+                {GYM_LABEL[seance.type]}
               </span>
             )}
             {seance.temps_limite_min && (

@@ -68,6 +68,9 @@ class TypeSeance(str, enum.Enum):
     EVALUATION = "EVALUATION"
     DECHARGE = "DECHARGE"
     REPOS = "REPOS"
+    GYM_UPPER = "GYM_UPPER"
+    GYM_LOWER = "GYM_LOWER"
+    GYM_FULL  = "GYM_FULL"
 
 
 class TypeMacrophase(str, enum.Enum):

@@ -389,7 +389,7 @@ def onboarding(
     import json as _json
     from models import SemaineEntrainement
     from periodization_rules import BLUEPRINT_MACROCYCLE, generer_dates_semaines, generer_blueprint_course
-    from seed_seances import MODULE1, MODULE2, MODULE3, _POOL_SURCHARGE, _semaine_course, _semaine_taper_course, _inserer_seances_en_session, calibrer_module, adapter_contenu_muscu, adapter_contenu_course, enrichir_paces_vma
+    from seed_seances import MODULE1, MODULE2, MODULE3, _POOL_SURCHARGE, _semaine_course, _semaine_taper_course, _inserer_seances_en_session, calibrer_module, adapter_contenu_muscu, adapter_contenu_gym, adapter_contenu_course, enrichir_paces_vma
 
     # Sauvegarder préférences
     current_user.type_programme = payload.type_programme
@@ -521,13 +521,15 @@ def onboarding(
 
         n_muscu = current_user.seances_muscu_semaine or 2
         n_course = current_user.seances_course_semaine or 3
-        adapted = adapter_contenu_course(adapter_contenu_muscu(content, n_muscu), n_course)
+        muscu_adapter = adapter_contenu_gym if current_user.type_muscu == "salle" else adapter_contenu_muscu
+        adapted = adapter_contenu_course(muscu_adapter(content, n_muscu), n_course)
         _inserer_seances_en_session(db, mc, adapted)
     else:
         # Programme standard 2 macrocycles avec sessions calibrées
         modules = {1: MODULE1, 2: MODULE2, 3: MODULE3}
         n_muscu = current_user.seances_muscu_semaine or 2
         n_course = current_user.seances_course_semaine or 3
+        muscu_adapter = adapter_contenu_gym if current_user.type_muscu == "salle" else adapter_contenu_muscu
         for numero_cycle in (1, 2):
             debut_mc = debut + timedelta(weeks=8 * (numero_cycle - 1))
             mc = Macrocycle(utilisateur_id=current_user.id, numero_cycle=numero_cycle,
@@ -545,7 +547,7 @@ def onboarding(
             calibrated = calibrer_module(module_data, kf, af, rf)
             if vma_for_paces and vma_for_paces >= 5.0:
                 calibrated = enrichir_paces_vma(calibrated, vma_for_paces)
-            adapted = adapter_contenu_course(adapter_contenu_muscu(calibrated, n_muscu), n_course)
+            adapted = adapter_contenu_course(muscu_adapter(calibrated, n_muscu), n_course)
             _inserer_seances_en_session(db, mc, adapted)
 
     db.commit()
@@ -1666,7 +1668,7 @@ def initialiser_programme(payload: InitProgrammePayload, current_user: Utilisate
     from seed_seances import (
         MODULE1, MODULE2, MODULE3,
         _POOL_SURCHARGE, _semaine_course, _semaine_taper_course, _inserer_seances_en_session,
-        calibrer_module, adapter_contenu_muscu, adapter_contenu_course, enrichir_paces_vma,
+        calibrer_module, adapter_contenu_muscu, adapter_contenu_gym, adapter_contenu_course, enrichir_paces_vma,
     )
 
     try:
@@ -1784,7 +1786,8 @@ def initialiser_programme(payload: InitProgrammePayload, current_user: Utilisate
 
             n_muscu = user.seances_muscu_semaine or 2
             n_course = user.seances_course_semaine or 3
-            adapted = adapter_contenu_course(adapter_contenu_muscu(content, n_muscu), n_course)
+            muscu_adapter = adapter_contenu_gym if user.type_muscu == "salle" else adapter_contenu_muscu
+            adapted = adapter_contenu_course(muscu_adapter(content, n_muscu), n_course)
             _inserer_seances_en_session(db, mc, adapted)
             db.commit()
 
@@ -1824,6 +1827,7 @@ def initialiser_programme(payload: InitProgrammePayload, current_user: Utilisate
 
         n_muscu = user.seances_muscu_semaine or 2
         n_course = user.seances_course_semaine or 3
+        muscu_adapter = adapter_contenu_gym if user.type_muscu == "salle" else adapter_contenu_muscu
         mcs_crees = []
         for numero_cycle in range(1, 4):
             debut = debut_mc1 + timedelta(weeks=8 * (numero_cycle - 1))
@@ -1852,7 +1856,7 @@ def initialiser_programme(payload: InitProgrammePayload, current_user: Utilisate
             calibrated_std = calibrer_module(module_data, kf_std, af_std, rf_std)
             if vma_std and vma_std >= 5.0:
                 calibrated_std = enrichir_paces_vma(calibrated_std, vma_std)
-            adapted_std = adapter_contenu_course(adapter_contenu_muscu(calibrated_std, n_muscu), n_course)
+            adapted_std = adapter_contenu_course(muscu_adapter(calibrated_std, n_muscu), n_course)
             _inserer_seances_en_session(db, mc, adapted_std)
             mcs_crees.append(numero_cycle)
 

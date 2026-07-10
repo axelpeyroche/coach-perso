@@ -11,9 +11,13 @@ const TYPE_COLORS = {
   EVALUATION: "bg-yellow-500",
   DECHARGE:   "bg-blue-400",
   REPOS:      "bg-gray-300 dark:bg-gray-600",
+  GYM_UPPER:  "bg-rose-500",
+  GYM_LOWER:  "bg-amber-500",
+  GYM_FULL:   "bg-teal-500",
 };
 const TYPE_ICONS = {
   COURSE: "🏃", AMRAP: "🔥", EMOM: "⏱️", EVALUATION: "🎯", DECHARGE: "🧘", REPOS: "😴",
+  GYM_UPPER: "💪", GYM_LOWER: "🦵", GYM_FULL: "🏋️",
 };
 
 const JOURS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];

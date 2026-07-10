@@ -1767,6 +1767,156 @@ def adapter_contenu_muscu(content: dict, seances_muscu: int) -> dict:
     return result
 
 
+# ============================================================================
+# SÉANCES SALLE — MACHINES
+# ============================================================================
+
+_GYM_UPPER_BASE = {
+    "jour": 2, "type": TypeSeance.GYM_UPPER, "titre": "Upper Body — Machines (60 min)",
+    "temps_limite": 60,
+    "description": (
+        "Upper Body Machines | 3 séries × 10-12 reps | Repos 60-90 sec\n\n"
+        "PECTORAUX & ÉPAULES\n"
+        "  • Développé pectoraux machine      3×10   tempo 2/0/X/1\n"
+        "  • Écarté pectoraux — Pec Deck      3×12   tempo 2/1/X/0\n"
+        "  • Développé épaules machine        3×10   tempo 2/0/X/1\n"
+        "  • Élévations latérales câble       3×15   tempo 2/1/X/0\n\n"
+        "DOS & BICEPS\n"
+        "  • Tirage vertical — Lat Pulldown   3×10   tempo 2/1/X/0\n"
+        "  • Rowing assis câble               3×12   tempo 2/1/X/0\n"
+        "  • Face Pull câble                  3×15   tempo 2/0/X/1\n"
+        "  • Curl biceps câble                3×12   tempo 2/1/X/0\n\n"
+        "TRICEPS\n"
+        "  • Extension triceps poulie         3×12   tempo 2/1/X/0\n\n"
+        "Charge : 60-70 % 1RM. Dernier set à l'échec si possible."
+    ),
+}
+
+_GYM_LOWER_BASE = {
+    "jour": 4, "type": TypeSeance.GYM_LOWER, "titre": "Lower Body — Machines (60 min)",
+    "temps_limite": 60,
+    "description": (
+        "Lower Body Machines | 3-4 séries × 10-15 reps | Repos 90 sec-2 min\n\n"
+        "QUADRICEPS & FESSIERS\n"
+        "  • Presse à cuisses                 4×10   tempo 3/1/X/0\n"
+        "  • Hack squat machine               3×10   tempo 3/1/X/0\n"
+        "  • Extension jambes                 3×15   tempo 2/1/X/0\n\n"
+        "ISCHIO-JAMBIERS & FESSIERS\n"
+        "  • Hip Thrust machine               3×12   tempo 2/1/X/1\n"
+        "  • Curl jambes couché               3×12   tempo 2/1/X/0\n"
+        "  • Curl jambes assis                3×12   tempo 2/1/X/0\n\n"
+        "ADDUCTEURS & MOLLETS\n"
+        "  • Abduction / Adduction hanche     3×15 chaque\n"
+        "  • Élévation mollets debout         4×15   tempo 3/1/X/0\n\n"
+        "Charge : 60-70 % 1RM. Contrôle excentrique prioritaire."
+    ),
+}
+
+_GYM_FULL_BASE = {
+    "jour": 5, "type": TypeSeance.GYM_FULL, "titre": "Full Body — Machines (75 min)",
+    "temps_limite": 75,
+    "description": (
+        "Full Body Machines | 3 séries × 10-12 reps | Repos 90 sec\n\n"
+        "BAS DU CORPS\n"
+        "  • Presse à cuisses                 3×12   tempo 3/1/X/0\n"
+        "  • Hip Thrust machine               3×12   tempo 2/1/X/1\n"
+        "  • Extension jambes                 3×15   tempo 2/0/X/0\n\n"
+        "HAUT DU CORPS — PUSH\n"
+        "  • Développé pectoraux machine      3×10   tempo 2/0/X/1\n"
+        "  • Développé épaules machine        3×10   tempo 2/0/X/1\n"
+        "  • Extension triceps câble          3×12   tempo 2/1/X/0\n\n"
+        "HAUT DU CORPS — PULL\n"
+        "  • Tirage vertical — Lat Pulldown   3×10   tempo 2/1/X/0\n"
+        "  • Rowing assis câble               3×12   tempo 2/1/X/0\n"
+        "  • Curl biceps câble                3×12   tempo 2/1/X/0\n\n"
+        "FINITION\n"
+        "  • Élévation mollets debout         3×15   tempo 3/1/X/0\n\n"
+        "Charge : 60-70 % 1RM. Circuit push/pull/jambes enchaîné."
+    ),
+}
+
+# Variantes allégées pour semaines de décharge/affûtage
+_GYM_UPPER_DECHARGE = {
+    "jour": 2, "type": TypeSeance.GYM_UPPER, "titre": "Upper Body Léger — Machines (40 min)",
+    "temps_limite": 40,
+    "description": (
+        "Upper Body Décharge | 2 séries × 12-15 reps | Charge -30 % | Repos 60 sec\n\n"
+        "  • Développé pectoraux machine      2×12   tempo 2/0/X/1\n"
+        "  • Tirage vertical — Lat Pulldown   2×12   tempo 2/1/X/0\n"
+        "  • Développé épaules machine        2×12   tempo 2/0/X/1\n"
+        "  • Rowing assis câble               2×15   tempo 2/1/X/0\n"
+        "  • Face Pull câble                  2×15   tempo 2/0/X/1\n"
+        "  • Curl biceps câble                2×15   tempo 2/1/X/0\n"
+        "  • Extension triceps poulie         2×15   tempo 2/1/X/0\n\n"
+        "Objectif : maintien — pas de travail à l'échec."
+    ),
+}
+
+_GYM_LOWER_DECHARGE = {
+    "jour": 4, "type": TypeSeance.GYM_LOWER, "titre": "Lower Body Léger — Machines (40 min)",
+    "temps_limite": 40,
+    "description": (
+        "Lower Body Décharge | 2 séries × 12-15 reps | Charge -30 % | Repos 60 sec\n\n"
+        "  • Presse à cuisses                 2×12   tempo 3/1/X/0\n"
+        "  • Extension jambes                 2×15   tempo 2/1/X/0\n"
+        "  • Hip Thrust machine               2×15   tempo 2/1/X/1\n"
+        "  • Curl jambes couché               2×15   tempo 2/1/X/0\n"
+        "  • Abduction hanche                 2×15\n"
+        "  • Élévation mollets debout         2×20   tempo 3/1/X/0\n\n"
+        "Objectif : maintien — mobilité et activation prioritaires."
+    ),
+}
+
+_GYM_FULL_DECHARGE = {
+    "jour": 2, "type": TypeSeance.GYM_FULL, "titre": "Full Body Léger — Machines (45 min)",
+    "temps_limite": 45,
+    "description": (
+        "Full Body Décharge | 2 séries × 12-15 reps | Charge -30 % | Repos 60 sec\n\n"
+        "  • Presse à cuisses                 2×12   tempo 3/1/X/0\n"
+        "  • Développé pectoraux machine      2×12   tempo 2/0/X/1\n"
+        "  • Tirage vertical — Lat Pulldown   2×12   tempo 2/1/X/0\n"
+        "  • Hip Thrust machine               2×15   tempo 2/1/X/1\n"
+        "  • Rowing assis câble               2×15   tempo 2/1/X/0\n"
+        "  • Extension triceps câble          2×15   tempo 2/1/X/0\n"
+        "  • Curl biceps câble                2×15   tempo 2/1/X/0\n\n"
+        "Objectif : maintien — pas de travail à l'échec."
+    ),
+}
+
+
+def adapter_contenu_gym(content: dict, n_muscu: int) -> dict:
+    """Remplace les séances EMOM/AMRAP par des séances machines Upper/Lower/Full Body.
+
+    - 1 séance → Full Body (J2)
+    - 2 séances → Upper (J2) + Lower (J4)
+    - 3+ séances → Upper (J2) + Lower (J4) + Full Body (J5)
+    Semaines de décharge/évaluation : variantes allégées, 1 séance max.
+    """
+    result = {}
+    for sem, seances in content.items():
+        amraps = [s for s in seances if s.get("type") == TypeSeance.AMRAP]
+        is_decharge = not amraps or (amraps[0].get("temps_limite") or 0) < 20
+
+        autres = [s for s in seances if s.get("type") not in (TypeSeance.EMOM, TypeSeance.AMRAP)]
+
+        if is_decharge:
+            if n_muscu >= 2:
+                gym = [dict(_GYM_UPPER_DECHARGE), dict(_GYM_LOWER_DECHARGE)]
+            else:
+                gym = [dict(_GYM_FULL_DECHARGE)]
+        else:
+            if n_muscu == 1:
+                full = dict(_GYM_FULL_BASE); full["jour"] = 2
+                gym = [full]
+            elif n_muscu == 2:
+                gym = [dict(_GYM_UPPER_BASE), dict(_GYM_LOWER_BASE)]
+            else:
+                gym = [dict(_GYM_UPPER_BASE), dict(_GYM_LOWER_BASE), dict(_GYM_FULL_BASE)]
+
+        result[sem] = autres + gym
+    return result
+
+
 def adapter_contenu_course(content: dict, seances_course: int) -> dict:
     """Réduit le nombre de séances course/semaine si inférieur au contenu par défaut.
 
