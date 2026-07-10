@@ -62,6 +62,26 @@ def creer_tables() -> None:
             except Exception:
                 pass
 
+    # ALTER TYPE ADD VALUE ne peut pas s'exécuter dans une transaction PostgreSQL
+    _enum_migrations = [
+        "ALTER TYPE typeseance ADD VALUE IF NOT EXISTS 'GYM_UPPER'",
+        "ALTER TYPE typeseance ADD VALUE IF NOT EXISTS 'GYM_LOWER'",
+        "ALTER TYPE typeseance ADD VALUE IF NOT EXISTS 'GYM_FULL'",
+    ]
+    if not DATABASE_URL.startswith("sqlite"):
+        raw = engine.raw_connection()
+        try:
+            raw.set_isolation_level(0)  # AUTOCOMMIT
+            cur = raw.cursor()
+            for stmt in _enum_migrations:
+                try:
+                    cur.execute(stmt)
+                except Exception:
+                    pass
+            cur.close()
+        finally:
+            raw.close()
+
 
 def obtenir_session():
     """Dépendance FastAPI — fournit une session et la ferme après la requête."""
