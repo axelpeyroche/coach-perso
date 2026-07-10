@@ -263,7 +263,7 @@ function CarteSeance({ seance, zonesFC }) {
 
   return (
     <div className={clsx(
-      "rounded-2xl border-2 overflow-hidden transition-all",
+      "rounded-2xl border-2 overflow-hidden transition-all w-full min-w-0",
       fait
         ? "border-green-400 dark:border-green-600 shadow-[0_0_0_3px_rgba(34,197,94,0.15)]"
         : "border-gray-200 dark:border-gray-700"
@@ -276,9 +276,9 @@ function CarteSeance({ seance, zonesFC }) {
         <span className="text-xl shrink-0">{TYPE_ICONS[seance.type] ?? "📌"}</span>
 
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <p className="text-sm font-semibold text-gray-900 dark:text-white leading-snug">{seance.titre}</p>
-            {fait && <span className="text-green-500 dark:text-green-400 font-bold text-base leading-none">✓</span>}
+          <div className="flex items-center gap-2 min-w-0">
+            <p className="text-sm font-semibold text-gray-900 dark:text-white leading-snug truncate">{seance.titre}</p>
+            {fait && <span className="text-green-500 dark:text-green-400 font-bold text-base leading-none shrink-0">✓</span>}
           </div>
           <div className="flex flex-wrap gap-1.5 mt-1">
             {seance.zone_cible && (
@@ -469,7 +469,7 @@ export default function Programme() {
   const nbFaites = seancesVisibles.filter(s => s.journal?.completee).length;
 
   return (
-    <div className="p-4 md:p-8 max-w-2xl mx-auto space-y-5">
+    <div className="p-4 md:p-8 max-w-2xl mx-auto space-y-5 w-full min-w-0">
 
       {/* En-tête */}
       <div>
@@ -479,8 +479,9 @@ export default function Programme() {
         </p>
       </div>
 
-      {/* Sélecteur semaine */}
-      <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-0.5">
+      {/* Sélecteur semaine — scroll horizontal dans un conteneur bloc séparé */}
+      <div className="overflow-x-auto scrollbar-hide -mx-4 px-4">
+        <div className="flex gap-2 pb-0.5">
         {semaines.map((s, i) => {
           const nbFait = (s.seances ?? []).filter(x => x.journal?.completee).length;
           const nbTotal = (s.seances ?? []).filter(x => x.type !== "REPOS").length;
@@ -506,6 +507,7 @@ export default function Programme() {
             </button>
           );
         })}
+        </div>
       </div>
 
       {semaine && (
