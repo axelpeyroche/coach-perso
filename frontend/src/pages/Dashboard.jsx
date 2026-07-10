@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { getBiometrieRecuperation, getTendancesPhysiologiques, getObjectifCourse, setObjectifCourse, getStatutProgramme, initialiserProgramme, supprimerProgramme, resetOnboarding, getProfilFC, patchProfilFC, getAnalyseObjectif, recalibrerProgramme, getPreferences, patchPreferences } from "../api";
+import { getBiometrieRecuperation, getTendancesPhysiologiques, getObjectifCourse, setObjectifCourse, getStatutProgramme, initialiserProgramme, supprimerProgramme, resetOnboarding, getProfilFC, patchProfilFC, getAnalyseObjectif, recalibrerProgramme, getPreferences, patchPreferences, getAlerteFatigue, signalerBlessure } from "../api";
 import { useAuth } from "../AuthContext";
 import Card from "../components/Card";
 import StatTile from "../components/StatTile";
@@ -218,7 +218,13 @@ function BlocAnalyseObjectif() {
 
   if (isLoading || !analyse?.objectif) return null;
 
-  const { vma_actuelle, vma_requise, delta_vma, faisabilite, allures_entrainement, volume_pic_cible } = analyse;
+  const { vma_actuelle, vma_requise, delta_vma, faisabilite, allures_entrainement, volume_pic_cible, temps_predit_min } = analyse;
+
+  function fmtMin(min) {
+    if (!min) return null;
+    const h = Math.floor(min / 60), m = min % 60;
+    return h ? `${h}h${m ? String(m).padStart(2, "0") : ""}` : `${min} min`;
+  }
   const fs = FAISABILITE_STYLE[faisabilite] ?? FAISABILITE_STYLE["challenge"];
 
   return (
@@ -277,6 +283,20 @@ function BlocAnalyseObjectif() {
           </div>
         )}
 
+        {/* Prédiction chrono */}
+        {temps_predit_min && (
+          <div className="rounded-xl bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800 px-3 py-2.5 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs text-indigo-500 dark:text-indigo-400 font-medium">Temps prédit (VMA actuelle)</p>
+              <p className="text-base font-black text-indigo-800 dark:text-indigo-200">{fmtMin(temps_predit_min)}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-gray-400">Objectif visé</p>
+              <p className="text-base font-black text-gray-700 dark:text-gray-200">{analyse.objectif.objectif_temps_str}</p>
+            </div>
+          </div>
+        )}
+
         {/* Volume & recalibration */}
         <div className="flex items-center justify-between gap-3 pt-1">
           <p className="text-xs text-gray-400">
@@ -292,6 +312,89 @@ function BlocAnalyseObjectif() {
         </div>
       </div>
     </Card>
+  );
+}
+
+// ─── Alerte Fatigue RPE ────────────────────────────────────────────────────
+
+function AlerteFatigueRPE() {
+  const [dismissed, setDismissed] = useState(false);
+  const { data } = useQuery({
+    queryKey: ["alerte-fatigue"],
+    queryFn: getAlerteFatigue,
+    staleTime: 10 * 60 * 1000,
+    retry: 0,
+  });
+  if (!data?.alerte || dismissed) return null;
+  return (
+    <div className="rounded-2xl bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 px-4 py-3 flex items-start gap-3">
+      <span className="text-xl shrink-0">🔥</span>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-semibold text-orange-800 dark:text-orange-300">Fatigue accumulée détectée</p>
+        <p className="text-xs text-orange-600 dark:text-orange-400 mt-0.5">{data.message}</p>
+        <p className="text-xs text-orange-500 dark:text-orange-500 mt-1 font-medium">Envisage une semaine de décharge ou quelques jours de repos actif.</p>
+      </div>
+      <button onClick={() => setDismissed(true)} className="text-orange-400 hover:text-orange-600 text-xl leading-none shrink-0">×</button>
+    </div>
+  );
+}
+
+// ─── Modal Blessure ─────────────────────────────────────────────────────────
+
+function BlessureModal({ onClose }) {
+  const qc = useQueryClient();
+  const [duree, setDuree] = useState(7);
+  const [desc, setDesc] = useState("");
+  const mut = useMutation({
+    mutationFn: () => signalerBlessure(duree, desc || undefined),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["toutes-semaines"] });
+      qc.invalidateQueries({ queryKey: ["semaine-courante"] });
+      onClose();
+      const fin = new Date(data.fin_blessure);
+      const finStr = fin.toLocaleDateString("fr-FR", { day: "numeric", month: "long" });
+      alert(`Programme adapté — ${data.nb_seances_modifiees} séance(s) mises en repos jusqu'au ${finStr}.`);
+    },
+    onError: (e) => alert(e?.response?.data?.detail ?? "Erreur lors de la mise à jour"),
+  });
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white dark:bg-gray-900 rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-4">
+        <h2 className="text-base font-bold text-gray-900 dark:text-white">🩹 Signaler une blessure</h2>
+        <p className="text-sm text-gray-500 dark:text-gray-400">Combien de temps de repos est nécessaire ? Les séances sur cette période seront adaptées.</p>
+        <div className="grid grid-cols-2 gap-2">
+          {[
+            { val: 3, label: "3 jours" },
+            { val: 7, label: "1 semaine" },
+            { val: 14, label: "2 semaines" },
+            { val: 28, label: "4 semaines" },
+          ].map(({ val, label }) => (
+            <button key={val} onClick={() => setDuree(val)}
+              className={clsx("py-2.5 rounded-xl text-sm font-medium border transition-colors",
+                duree === val
+                  ? "bg-brand text-white border-brand"
+                  : "bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-brand/50")}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <div>
+          <label className="text-xs text-gray-400 block mb-1">Zone touchée (optionnel)</label>
+          <input type="text" value={desc} onChange={e => setDesc(e.target.value)}
+            placeholder="Cheville, genou, dos..."
+            className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
+        </div>
+        <div className="flex gap-2 pt-1">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+            Annuler
+          </button>
+          <button onClick={() => mut.mutate()} disabled={mut.isPending}
+            className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600 disabled:opacity-50 transition-colors">
+            {mut.isPending ? "Mise à jour…" : "Confirmer"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -725,6 +828,7 @@ export default function Dashboard() {
   const derniereVMA  = physio?.vma?.at(-1);
   const derniereACWA = recup?.acwa?.at(-1);
   const alerteActive = recup?.alerte_active;
+  const [showBlessureModal, setShowBlessureModal] = useState(false);
   const zones        = derniereVMA?.zones;
   const programmExiste = statut?.programme_existe;
 
@@ -766,6 +870,18 @@ export default function Dashboard() {
         </div>
         <ReconfigurerBtn />
       </div>
+
+      {/* Alertes fatigue RPE */}
+      <AlerteFatigueRPE />
+
+      {/* Bouton blessure */}
+      <div className="flex justify-end">
+        <button onClick={() => setShowBlessureModal(true)}
+          className="flex items-center gap-1.5 text-xs text-red-500 dark:text-red-400 border border-red-200 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-900/20 px-3 py-1.5 rounded-xl transition-colors font-medium">
+          🩹 Signaler une blessure
+        </button>
+      </div>
+      {showBlessureModal && <BlessureModal onClose={() => setShowBlessureModal(false)} />}
 
       {alerteActive && (
         <div className="rounded-xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 px-4 py-3 flex items-start gap-3">

@@ -45,6 +45,12 @@ export const getAnalyseObjectif = () =>
 export const recalibrerProgramme = () =>
   api.post("/programme/recalibrer").then((r) => r.data);
 
+export const getAlerteFatigue = () =>
+  api.get("/programme/alerte-fatigue").then((r) => r.data);
+
+export const signalerBlessure = (duree_jours, description) =>
+  api.post("/programme/blessure", { duree_jours, description }).then((r) => r.data);
+
 export const getPreferences = () =>
   api.get("/utilisateur/preferences").then((r) => r.data);
 

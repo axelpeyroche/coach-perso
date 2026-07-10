@@ -906,7 +906,8 @@ def journaliser_seance(
     db.add(journal)
     db.commit()
     db.refresh(journal)
-    return {"id": journal.id, "enregistre_le": str(journal.enregistre_le)}
+    conseil = _conseil_recuperation(payload.rpe) if payload.rpe and payload.completee else None
+    return {"id": journal.id, "enregistre_le": str(journal.enregistre_le), "conseil_recuperation": conseil}
 
 
 class PrefillSeanceSchema(BaseModel):
@@ -961,6 +962,25 @@ class ValiderRPESchema(BaseModel):
     notes: Optional[str] = None
 
 
+def _conseil_recuperation(rpe: float) -> dict:
+    r = int(round(rpe))
+    if r <= 4:
+        return {"niveau": "facile", "titre": "Récupération standard",
+                "conseil": "Belle séance légère ! Hydratation normale et 7-8h de sommeil suffisent."}
+    elif r <= 6:
+        return {"niveau": "modere", "titre": "Récupération classique",
+                "conseil": "Étirements 10 min ce soir. Dors 8h et bois au moins 2L d'eau."}
+    elif r <= 8:
+        return {"niveau": "intense", "titre": "Récupération active",
+                "conseil": "Protéines dans les 30 min (20-30 g). Étirements + foam roller. Vise 8-9h de sommeil."}
+    elif r == 9:
+        return {"niveau": "tres_intense", "titre": "Récupération prioritaire",
+                "conseil": "Repos actif ou complet demain. Jambes surélevées 15 min. Minimum 9h de sommeil."}
+    else:
+        return {"niveau": "depassement", "titre": "Repos obligatoire",
+                "conseil": "2 jours de repos minimum. Alimentation anti-inflammatoire. Consulte un médecin si douleurs persistantes."}
+
+
 @app.patch(
     "/api/seances/{seance_id}/journal/valider",
     summary="Finalise la séance avec le RPE — marque completee=True",
@@ -977,7 +997,7 @@ def valider_rpe(
     seance.journal.notes = payload.notes
     seance.journal.completee = True
     db.commit()
-    return {"ok": True}
+    return {"ok": True, "conseil_recuperation": _conseil_recuperation(payload.rpe)}
 
 
 @app.delete(
@@ -1181,6 +1201,10 @@ def semaine_courante(current_user: Utilisateur = Depends(get_current_user), db: 
                     "completee": s.journal.completee,
                     "rpe": s.journal.rpe,
                     "notes": s.journal.notes,
+                    "duree_reelle_min": s.journal.duree_reelle_min,
+                    "distance_reelle_km": s.journal.distance_reelle_km,
+                    "dplus_reel_m": s.journal.dplus_reel_m,
+                    "fc_moyenne_bpm": s.journal.fc_moyenne_bpm,
                 } if s.journal else None,
             }
             for s in sorted(semaine.seances, key=lambda x: x.date_seance)
@@ -1942,6 +1966,17 @@ def analyse_objectif(
         objectif_temps_str = f"{h}h{mn:02d}" if h else f"{mn} min"
         jours_restants = (obj.date_course - date.today()).days if obj.date_course else 0
 
+        # Prédiction chrono basée sur VMA actuelle
+        temps_predit_min = None
+        if vma_actuelle and dist > 0:
+            if dist <= 5:   pct_vma = 0.97
+            elif dist <= 12: pct_vma = 0.94
+            elif dist <= 22: pct_vma = 0.85
+            elif dist <= 45: pct_vma = 0.78
+            else:            pct_vma = 0.70
+            pace_predit_kmh = vma_actuelle * pct_vma
+            temps_predit_min = round(dist / pace_predit_kmh * 60)
+
         return {
             "objectif": {
                 "nom": obj.nom,
@@ -1957,12 +1992,75 @@ def analyse_objectif(
             "faisabilite": faisabilite,
             "allures_entrainement": allures_train,
             "volume_pic_cible": _calculer_volume_pic(dist),
+            "temps_predit_min": temps_predit_min,
         }
     except Exception as exc:
         import traceback
         traceback.print_exc()
         # Retourner un résultat vide plutôt qu'un 500 pour ne pas bloquer le Dashboard
         return {"objectif": None, "vma_actuelle": None, "vma_requise": None, "delta_vma": None, "_error": str(exc)}
+
+
+@app.get("/api/programme/alerte-fatigue", summary="Détecte une fatigue excessive sur les 3 dernières séances")
+def alerte_fatigue(
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(obtenir_session),
+):
+    derniers = (
+        db.query(JournalSeance)
+        .filter(
+            JournalSeance.utilisateur_id == current_user.id,
+            JournalSeance.rpe.isnot(None),
+            JournalSeance.completee == True,
+        )
+        .order_by(JournalSeance.enregistre_le.desc())
+        .limit(3)
+        .all()
+    )
+    if len(derniers) >= 3 and all(j.rpe > 8 for j in derniers):
+        rpe_moyen = round(sum(j.rpe for j in derniers) / len(derniers), 1)
+        return {
+            "alerte": True,
+            "rpe_moyen": rpe_moyen,
+            "message": f"RPE moyen de {rpe_moyen}/10 sur tes 3 dernières séances. Une semaine de décharge est recommandée.",
+        }
+    return {"alerte": False}
+
+
+class BlessureSchema(BaseModel):
+    duree_jours: int = Field(..., ge=1, le=90)
+    description: Optional[str] = None
+
+
+@app.post("/api/programme/blessure", summary="Signale une blessure et adapte le programme")
+def signaler_blessure(
+    payload: BlessureSchema,
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(obtenir_session),
+):
+    today = date.today()
+    fin = today + timedelta(days=payload.duree_jours)
+    seances = (
+        db.query(SeanceEntrainement)
+        .join(SemaineEntrainement)
+        .join(Macrocycle)
+        .filter(
+            Macrocycle.utilisateur_id == current_user.id,
+            SeanceEntrainement.date_seance >= today,
+            SeanceEntrainement.date_seance <= fin,
+            SeanceEntrainement.type_seance != TypeSeance.REPOS,
+            SeanceEntrainement.type_seance != TypeSeance.BLESSURE,
+        )
+        .all()
+    )
+    for s in seances:
+        s.type_seance = TypeSeance.BLESSURE
+        s.titre = "Repos — Blessure"
+        s.description = f"Repos forcé suite à une blessure ({payload.description or 'non précisée'}). Reprends progressivement après guérison."
+        for ex in s.exercices:
+            db.delete(ex)
+    db.commit()
+    return {"ok": True, "nb_seances_modifiees": len(seances), "fin_blessure": str(fin)}
 
 
 @app.post("/api/programme/recalibrer", summary="Recalibre les séances restantes après un test d'évaluation")

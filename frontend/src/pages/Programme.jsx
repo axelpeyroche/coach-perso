@@ -6,7 +6,7 @@ import clsx from "clsx";
 
 // ─── Constantes ────────────────────────────────────────────────────────────
 
-const TYPE_ICONS   = { COURSE: "🏃", AMRAP: "🔥", EMOM: "⏱️", EVALUATION: "🎯", DECHARGE: "🧘", REPOS: "😴", GYM_UPPER: "💪", GYM_LOWER: "🦵", GYM_FULL: "🏋️" };
+const TYPE_ICONS   = { COURSE: "🏃", AMRAP: "🔥", EMOM: "⏱️", EVALUATION: "🎯", DECHARGE: "🧘", REPOS: "😴", GYM_UPPER: "💪", GYM_LOWER: "🦵", GYM_FULL: "🏋️", BLESSURE: "🩹" };
 const GYM_TYPES    = ["GYM_UPPER", "GYM_LOWER", "GYM_FULL"];
 const GYM_LABEL    = { GYM_UPPER: "Upper Body", GYM_LOWER: "Lower Body", GYM_FULL: "Full Body" };
 const GYM_COLOR    = { GYM_UPPER: "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400", GYM_LOWER: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400", GYM_FULL: "bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400" };
@@ -123,7 +123,7 @@ function FormulaireLog({ seance, onClose, onDone, modeEdit = false }) {
       if (modeEdit) return modifierJournal(seance.id, payload);
       return journaliserSeance(seance.id, payload);
     },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["toutes-semaines"] }); onDone(); },
+    onSuccess: (data) => { qc.invalidateQueries({ queryKey: ["toutes-semaines"] }); if (!modeEdit) onDone(data?.conseil_recuperation); else onDone(); },
   });
 
   return (
@@ -250,12 +250,21 @@ function FormulaireLog({ seance, onClose, onDone, modeEdit = false }) {
 
 // ─── Carte séance ───────────────────────────────────────────────────────────
 
+const CONSEIL_COLORS = {
+  facile:      { bg: "bg-green-50 dark:bg-green-900/15", border: "border-green-200 dark:border-green-800", text: "text-green-800 dark:text-green-300", sub: "text-green-600 dark:text-green-400" },
+  modere:      { bg: "bg-blue-50 dark:bg-blue-900/15",  border: "border-blue-200 dark:border-blue-800",  text: "text-blue-800 dark:text-blue-300",  sub: "text-blue-600 dark:text-blue-400" },
+  intense:     { bg: "bg-orange-50 dark:bg-orange-900/15", border: "border-orange-200 dark:border-orange-800", text: "text-orange-800 dark:text-orange-300", sub: "text-orange-600 dark:text-orange-400" },
+  tres_intense:{ bg: "bg-red-50 dark:bg-red-900/15",    border: "border-red-200 dark:border-red-800",    text: "text-red-800 dark:text-red-300",    sub: "text-red-600 dark:text-red-400" },
+  depassement: { bg: "bg-red-100 dark:bg-red-900/25",   border: "border-red-300 dark:border-red-700",    text: "text-red-900 dark:text-red-200",    sub: "text-red-700 dark:text-red-400" },
+};
+
 function CarteSeance({ seance, zonesFC }) {
   const qc = useQueryClient();
   const [ouvert, setOuvert]     = useState(false);
   const [logOpen, setLogOpen]   = useState(false);
   const [valide, setValide]     = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [conseil, setConseil]   = useState(null);
 
   const isGym = GYM_TYPES.includes(seance.type);
   const fait = valide || seance.journal?.completee;
@@ -348,19 +357,54 @@ function CarteSeance({ seance, zonesFC }) {
 
       {/* ── Résumé si loggé ── */}
       {fait && seance.journal && (
-        <div className="px-4 py-1.5 border-t border-green-100 dark:border-green-900/20 flex flex-wrap gap-3 text-xs text-gray-500 bg-green-50/50 dark:bg-green-900/5">
-          {seance.journal.rpe && <span>RPE {seance.journal.rpe}/10</span>}
-          {seance.journal.fc_moyenne_bpm && <span>FC {seance.journal.fc_moyenne_bpm} bpm</span>}
-          {(() => {
-            const sig = signalCorrelationRPEFC(
-              seance.journal.rpe, seance.journal.fc_moyenne_bpm,
-              seance.zone_cible, zonesFC
-            );
-            return sig ? <span className={clsx("font-semibold", sig.color)}>⚡ {sig.label}</span> : null;
-          })()}
-          {seance.journal.notes && <span className="truncate italic w-full">{seance.journal.notes}</span>}
+        <div className="px-4 py-2 border-t border-green-100 dark:border-green-900/20 bg-green-50/50 dark:bg-green-900/5 space-y-1.5">
+          <div className="flex flex-wrap gap-3 text-xs text-gray-500">
+            {seance.journal.rpe && <span>RPE {seance.journal.rpe}/10</span>}
+            {seance.journal.fc_moyenne_bpm && <span>FC {seance.journal.fc_moyenne_bpm} bpm</span>}
+            {(() => {
+              const sig = signalCorrelationRPEFC(
+                seance.journal.rpe, seance.journal.fc_moyenne_bpm,
+                seance.zone_cible, zonesFC
+              );
+              return sig ? <span className={clsx("font-semibold", sig.color)}>⚡ {sig.label}</span> : null;
+            })()}
+            {seance.journal.notes && <span className="truncate italic w-full">{seance.journal.notes}</span>}
+          </div>
+          {/* Charge réelle vs planifiée */}
+          {(seance.journal.duree_reelle_min || seance.journal.distance_reelle_km || seance.journal.dplus_reel_m) && (
+            <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs">
+              {seance.duree_cible_min && seance.journal.duree_reelle_min && (
+                <span className={clsx("font-medium", seance.journal.duree_reelle_min >= seance.duree_cible_min * 0.9 ? "text-green-600 dark:text-green-400" : "text-orange-500")}>
+                  ⏱ {seance.journal.duree_reelle_min} / {seance.duree_cible_min} min
+                </span>
+              )}
+              {seance.journal.distance_reelle_km > 0 && (
+                <span className="text-gray-500">📍 {seance.journal.distance_reelle_km} km</span>
+              )}
+              {seance.dplus_cible_m > 0 && seance.journal.dplus_reel_m > 0 && (
+                <span className={clsx("font-medium", seance.journal.dplus_reel_m >= seance.dplus_cible_m * 0.9 ? "text-green-600 dark:text-green-400" : "text-orange-500")}>
+                  ↑ {seance.journal.dplus_reel_m} / {seance.dplus_cible_m} m D+
+                </span>
+              )}
+            </div>
+          )}
         </div>
       )}
+
+      {/* ── Conseil récupération ── */}
+      {conseil && (() => {
+        const c = CONSEIL_COLORS[conseil.niveau] ?? CONSEIL_COLORS.modere;
+        return (
+          <div className={clsx("px-4 py-3 border-t flex items-start gap-2.5", c.bg, c.border)}>
+            <span className="text-base shrink-0">💡</span>
+            <div className="flex-1 min-w-0">
+              <p className={clsx("text-xs font-semibold", c.text)}>{conseil.titre}</p>
+              <p className={clsx("text-xs mt-0.5", c.sub)}>{conseil.conseil}</p>
+            </div>
+            <button onClick={() => setConseil(null)} className={clsx("text-base leading-none shrink-0", c.sub)}>×</button>
+          </div>
+        );
+      })()}
 
       {/* ── Formulaire modification ── */}
       {editOpen && fait && (
@@ -434,7 +478,7 @@ function CarteSeance({ seance, zonesFC }) {
       {logOpen && !fait && (
         <FormulaireLog seance={seance}
           onClose={() => setLogOpen(false)}
-          onDone={() => { setLogOpen(false); setValide(true); }} />
+          onDone={(c) => { setLogOpen(false); setValide(true); if (c) setConseil(c); }} />
       )}
     </div>
   );

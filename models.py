@@ -71,6 +71,7 @@ class TypeSeance(str, enum.Enum):
     GYM_UPPER = "GYM_UPPER"
     GYM_LOWER = "GYM_LOWER"
     GYM_FULL  = "GYM_FULL"
+    BLESSURE  = "BLESSURE"
 
 
 class TypeMacrophase(str, enum.Enum):
