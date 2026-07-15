@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getToutesSemaines, journaliserSeance, validerRPE, getProfilFC, supprimerJournal, modifierJournal } from "../api";
+import { getToutesSemaines, journaliserSeance, validerRPE, getProfilFC, supprimerJournal, modifierJournal, planifierSeance } from "../api";
 import clsx from "clsx";
 
 
@@ -250,6 +250,141 @@ function FormulaireLog({ seance, onClose, onDone, modeEdit = false }) {
 
 // ─── Carte séance ───────────────────────────────────────────────────────────
 
+// ─── Modal planification ────────────────────────────────────────────────────
+
+const JOURS_COURT = ["L","M","M","J","V","S","D"];
+const MOIS_FR = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
+
+function PlanificationModal({ seance, onConfirm, onClose }) {
+  // Semaine de la séance (lundi → dimanche)
+  const seanceDate = new Date((seance.date || seance.date_seance) + "T00:00:00");
+  const dow = seanceDate.getDay(); // 0=dim
+  const lundiSem = new Date(seanceDate);
+  lundiSem.setDate(seanceDate.getDate() - ((dow + 6) % 7));
+  const dimancheSem = new Date(lundiSem);
+  dimancheSem.setDate(lundiSem.getDate() + 6);
+
+  const [annee, setAnnee]   = useState(lundiSem.getFullYear());
+  const [moisIdx, setMois]  = useState(lundiSem.getMonth());
+  const [jourSel, setJour]  = useState(null); // "YYYY-MM-DD"
+  const [heure, setHeure]   = useState("08");
+  const [minute, setMinute] = useState("00");
+
+  const today = new Date(); today.setHours(0,0,0,0);
+
+  function navMois(delta) {
+    let m = moisIdx + delta, a = annee;
+    if (m < 0)  { m = 11; a--; }
+    if (m > 11) { m = 0;  a++; }
+    setMois(m); setAnnee(a);
+  }
+
+  function dateKey(jour) {
+    return `${annee}-${String(moisIdx+1).padStart(2,"0")}-${String(jour).padStart(2,"0")}`;
+  }
+
+  function isInSemaine(jour) {
+    const d = new Date(annee, moisIdx, jour);
+    return d >= lundiSem && d <= dimancheSem;
+  }
+
+  function isPasse(jour) {
+    return new Date(annee, moisIdx, jour) < today;
+  }
+
+  const premierJour = new Date(annee, moisIdx, 1);
+  let offset = premierJour.getDay() - 1;
+  if (offset < 0) offset = 6;
+  const nbJours = new Date(annee, moisIdx + 1, 0).getDate();
+  const cellules = [...Array(offset).fill(null), ...Array.from({length: nbJours}, (_,i) => i+1)];
+
+  const jourSelObj = jourSel ? new Date(jourSel + "T00:00:00") : null;
+  const jourSelLabel = jourSelObj
+    ? jourSelObj.toLocaleDateString("fr-FR", { weekday:"short", day:"numeric", month:"short" })
+    : null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <div className="bg-white dark:bg-gray-900 rounded-2xl p-5 max-w-xs w-full shadow-2xl space-y-4" onClick={e => e.stopPropagation()}>
+
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs text-gray-400 font-medium uppercase tracking-wide">Planifier</p>
+            <p className="text-sm font-bold text-gray-900 dark:text-white truncate">{seance.titre}</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-2xl leading-none">×</button>
+        </div>
+
+        {/* Navigation mois */}
+        <div className="flex items-center justify-between">
+          <button onClick={() => navMois(-1)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500">◀</button>
+          <p className="text-sm font-semibold text-gray-900 dark:text-white capitalize">{MOIS_FR[moisIdx]} {annee}</p>
+          <button onClick={() => navMois(1)}  className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500">▶</button>
+        </div>
+
+        {/* En-têtes jours */}
+        <div className="grid grid-cols-7">
+          {JOURS_COURT.map((j,i) => <div key={i} className="text-center text-xs font-semibold text-gray-400 py-0.5">{j}</div>)}
+        </div>
+
+        {/* Grille */}
+        <div className="grid grid-cols-7 gap-0.5">
+          {cellules.map((jour, i) => {
+            if (!jour) return <div key={`e-${i}`} />;
+            const key = dateKey(jour);
+            const inSem  = isInSemaine(jour);
+            const passe  = isPasse(jour);
+            const sel    = jourSel === key;
+            return (
+              <button key={key} onClick={() => !passe && setJour(sel ? null : key)} disabled={passe}
+                className={clsx(
+                  "aspect-square flex items-center justify-center rounded-lg text-xs font-medium transition-colors",
+                  passe  ? "text-gray-300 dark:text-gray-600 cursor-not-allowed" :
+                  sel    ? "bg-brand text-white shadow-sm" :
+                  inSem  ? "bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-200 dark:hover:bg-indigo-800/50" :
+                           "text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
+                )}>
+                {jour}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Sélecteur heure */}
+        {jourSel && (
+          <div className="rounded-xl bg-gray-50 dark:bg-gray-800 px-3 py-2.5 flex items-center gap-3">
+            <span className="text-xs text-gray-500 dark:text-gray-400 shrink-0">🕐 {jourSelLabel}</span>
+            <div className="flex items-center gap-1 ml-auto">
+              <select value={heure} onChange={e => setHeure(e.target.value)}
+                className="px-2 py-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm font-mono text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand">
+                {Array.from({length:17},(_,i) => String(i+6).padStart(2,"0")).map(h => <option key={h} value={h}>{h}</option>)}
+              </select>
+              <span className="text-gray-400 font-bold">:</span>
+              <select value={minute} onChange={e => setMinute(e.target.value)}
+                className="px-2 py-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm font-mono text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand">
+                {["00","15","30","45"].map(m => <option key={m} value={m}>{m}</option>)}
+              </select>
+            </div>
+          </div>
+        )}
+
+        {/* Boutons */}
+        <div className="flex gap-2">
+          <button onClick={onClose}
+            className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+            Annuler
+          </button>
+          <button onClick={() => onConfirm(jourSel, `${heure}:${minute}`)} disabled={!jourSel}
+            className="flex-1 py-2.5 rounded-xl bg-brand text-white text-sm font-semibold hover:bg-brand-dark disabled:opacity-40 transition-colors">
+            Confirmer
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const CONSEIL_COLORS = {
   facile:      { bg: "bg-green-50 dark:bg-green-900/15", border: "border-green-200 dark:border-green-800", text: "text-green-800 dark:text-green-300", sub: "text-green-600 dark:text-green-400" },
   modere:      { bg: "bg-blue-50 dark:bg-blue-900/15",  border: "border-blue-200 dark:border-blue-800",  text: "text-blue-800 dark:text-blue-300",  sub: "text-blue-600 dark:text-blue-400" },
@@ -260,11 +395,17 @@ const CONSEIL_COLORS = {
 
 function CarteSeance({ seance, zonesFC }) {
   const qc = useQueryClient();
-  const [ouvert, setOuvert]     = useState(false);
-  const [logOpen, setLogOpen]   = useState(false);
-  const [valide, setValide]     = useState(false);
-  const [editOpen, setEditOpen] = useState(false);
-  const [conseil, setConseil]   = useState(null);
+  const [ouvert, setOuvert]         = useState(false);
+  const [logOpen, setLogOpen]       = useState(false);
+  const [valide, setValide]         = useState(false);
+  const [editOpen, setEditOpen]     = useState(false);
+  const [conseil, setConseil]       = useState(null);
+  const [planifOpen, setPlanifOpen] = useState(false);
+
+  const mutPlanifier = useMutation({
+    mutationFn: ({ date_planifiee, heure_planifiee }) => planifierSeance(seance.id, date_planifiee, heure_planifiee),
+    onSuccess: () => { setPlanifOpen(false); qc.invalidateQueries({ queryKey: ["toutes-semaines"] }); },
+  });
 
   const isGym = GYM_TYPES.includes(seance.type);
   const fait = valide || seance.journal?.completee;
@@ -338,15 +479,38 @@ function CarteSeance({ seance, zonesFC }) {
               </button>
             </>
           ) : (
-            <button onClick={() => { setLogOpen(v => !v); setOuvert(false); }}
-              className={clsx(
-                "px-3 py-1.5 rounded-xl text-white text-xs font-semibold transition-colors",
-                prefillEnAttente
-                  ? "bg-orange-500 hover:bg-orange-600"
-                  : "bg-brand hover:bg-brand-dark"
-              )}>
-              Valider
-            </button>
+            <div className="flex items-center gap-1">
+              {/* Planification */}
+              {seance.date_planifiee ? (
+                <button onClick={() => setPlanifOpen(true)}
+                  className="flex items-center gap-1 px-2 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-300 text-xs font-medium hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors group">
+                  <span>📅</span>
+                  <span className="hidden sm:inline">
+                    {new Date(seance.date_planifiee + "T00:00:00").toLocaleDateString("fr-FR", { weekday:"short", day:"numeric", month:"short" })}
+                    {seance.heure_planifiee ? ` ${seance.heure_planifiee}` : ""}
+                  </span>
+                  <span
+                    onClick={e => { e.stopPropagation(); mutPlanifier.mutate({ date_planifiee: null, heure_planifiee: null }); }}
+                    className="ml-0.5 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-all cursor-pointer">
+                    ×
+                  </span>
+                </button>
+              ) : (
+                <button onClick={() => setPlanifOpen(true)} title="Planifier"
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors text-base leading-none">
+                  📅
+                </button>
+              )}
+              <button onClick={() => { setLogOpen(v => !v); setOuvert(false); }}
+                className={clsx(
+                  "px-3 py-1.5 rounded-xl text-white text-xs font-semibold transition-colors",
+                  prefillEnAttente
+                    ? "bg-orange-500 hover:bg-orange-600"
+                    : "bg-brand hover:bg-brand-dark"
+                )}>
+                Valider
+              </button>
+            </div>
           )}
           <button onClick={() => { setOuvert(v => !v); setLogOpen(false); setEditOpen(false); }}
             className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
@@ -479,6 +643,15 @@ function CarteSeance({ seance, zonesFC }) {
         <FormulaireLog seance={seance}
           onClose={() => setLogOpen(false)}
           onDone={(c) => { setLogOpen(false); setValide(true); if (c) setConseil(c); }} />
+      )}
+
+      {/* ── Modal planification ── */}
+      {planifOpen && (
+        <PlanificationModal
+          seance={seance}
+          onClose={() => setPlanifOpen(false)}
+          onConfirm={(date_planifiee, heure_planifiee) => mutPlanifier.mutate({ date_planifiee, heure_planifiee })}
+        />
       )}
     </div>
   );

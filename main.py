@@ -1016,6 +1016,27 @@ def supprimer_journal_seance(
     return {"ok": True}
 
 
+class PlanifierSchema(BaseModel):
+    date_planifiee: Optional[str] = None   # "YYYY-MM-DD" ou null pour annuler
+    heure_planifiee: Optional[str] = None  # "HH:MM" ou null
+
+
+@app.patch("/api/seances/{seance_id}/planifier", summary="Planifie ou déplanifie une séance")
+def planifier_seance(
+    seance_id: int,
+    payload: PlanifierSchema,
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(obtenir_session),
+):
+    seance = db.get(SeanceEntrainement, seance_id)
+    if not seance:
+        raise HTTPException(404, "Séance introuvable")
+    seance.date_planifiee = date.fromisoformat(payload.date_planifiee) if payload.date_planifiee else None
+    seance.heure_planifiee = payload.heure_planifiee or None
+    db.commit()
+    return {"ok": True}
+
+
 @app.patch(
     "/api/seances/{seance_id}/journal",
     summary="Modifie les données d'un journal existant",
@@ -1197,6 +1218,8 @@ def semaine_courante(current_user: Utilisateur = Depends(get_current_user), db: 
                     }
                     for ex in s.exercices
                 ],
+                "date_planifiee": str(s.date_planifiee) if s.date_planifiee else None,
+                "heure_planifiee": s.heure_planifiee,
                 "journal": {
                     "completee": s.journal.completee,
                     "rpe": s.journal.rpe,
@@ -1366,6 +1389,8 @@ def toutes_semaines_programme(current_user: Utilisateur = Depends(get_current_us
                             }
                             for ex in seance.exercices
                         ],
+                        "date_planifiee": str(seance.date_planifiee) if seance.date_planifiee else None,
+                        "heure_planifiee": seance.heure_planifiee,
                         "journal": {
                             "completee": seance.journal.completee,
                             "rpe": seance.journal.rpe,

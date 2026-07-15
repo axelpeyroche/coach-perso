@@ -54,6 +54,9 @@ def creer_tables() -> None:
         "ALTER TABLE exercices_seance ADD COLUMN IF NOT EXISTS nom_affichage VARCHAR(200)",
         "ALTER TABLE exercices_seance ADD COLUMN IF NOT EXISTS series INTEGER",
         "ALTER TABLE exercices_seance ALTER COLUMN exercice_id DROP NOT NULL",
+        # Planification libre par l'utilisateur
+        "ALTER TABLE seances_entrainement ADD COLUMN IF NOT EXISTS date_planifiee DATE",
+        "ALTER TABLE seances_entrainement ADD COLUMN IF NOT EXISTS heure_planifiee VARCHAR(5)",
     ]
     with engine.begin() as conn:
         for stmt in _migrations:

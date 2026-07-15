@@ -84,6 +84,9 @@ export const supprimerJournal = (seance_id) =>
 export const modifierJournal = (seance_id, payload) =>
   api.patch(`/seances/${seance_id}/journal`, payload).then((r) => r.data);
 
+export const planifierSeance = (seance_id, date_planifiee, heure_planifiee) =>
+  api.patch(`/seances/${seance_id}/planifier`, { date_planifiee, heure_planifiee }).then((r) => r.data);
+
 // --- Évaluations ---
 export const getHistoriqueEvaluations = () =>
   api.get("/evaluations/historique").then((r) => r.data);

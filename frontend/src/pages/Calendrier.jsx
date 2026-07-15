@@ -41,15 +41,22 @@ export default function Calendrier() {
   });
   const semaines = raw?.semaines ?? [];
 
-  // Indexe les séances validées par date "YYYY-MM-DD"
+  // Indexe les séances par date "YYYY-MM-DD"
+  // — séances validées indexées sur leur date réelle
+  // — séances planifiées (non validées) indexées sur date_planifiee
   const seancesParDate = useMemo(() => {
     const map = {};
     for (const sem of semaines) {
       for (const s of sem.seances ?? []) {
-        if (!s.journal?.completee || !s.date) continue;
-        const key = s.date.slice(0, 10);
-        if (!map[key]) map[key] = [];
-        map[key].push(s);
+        if (s.journal?.completee && s.date) {
+          const key = s.date.slice(0, 10);
+          if (!map[key]) map[key] = [];
+          map[key].push(s);
+        } else if (!s.journal?.completee && s.date_planifiee) {
+          const key = s.date_planifiee.slice(0, 10);
+          if (!map[key]) map[key] = [];
+          map[key].push({ ...s, _planifie: true });
+        }
       }
     }
     return map;
@@ -60,7 +67,7 @@ export default function Calendrier() {
     let totalSeances = 0, totalKm = 0, totalDplus = 0;
     for (const seances of Object.values(seancesParDate)) {
       for (const s of seances) {
-        if (s.type === "REPOS") continue;
+        if (s.type === "REPOS" || s._planifie) continue;
         totalSeances++;
         totalKm   += s.journal?.distance_reelle_km ?? 0;
         totalDplus += s.journal?.dplus_reel_m ?? 0;
@@ -137,14 +144,17 @@ export default function Calendrier() {
               const key      = dateKey(jour);
               const seances  = seancesParDate[key] ?? [];
               const actives  = seances.filter(s => s.type !== "REPOS");
+              const hasValide   = actives.some(s => !s._planifie);
               const isToday  = key === todayKey;
               return (
                 <div key={key}
                   className={clsx(
                     "rounded-xl p-1.5 min-h-[56px] flex flex-col items-center transition-colors",
-                    actives.length > 0
+                    hasValide
                       ? "bg-brand/5 dark:bg-brand/10"
-                      : "hover:bg-gray-50 dark:hover:bg-gray-800/50",
+                      : actives.length > 0
+                        ? "bg-indigo-50/60 dark:bg-indigo-900/10"
+                        : "hover:bg-gray-50 dark:hover:bg-gray-800/50",
                     isToday && "ring-2 ring-brand ring-offset-1 dark:ring-offset-gray-900"
                   )}>
                   <span className={clsx(
@@ -157,10 +167,12 @@ export default function Calendrier() {
                     {actives.map((s, si) => (
                       <span key={si}
                         className={clsx(
-                          "w-full text-center text-[10px] leading-tight font-medium rounded px-0.5 py-0.5 text-white truncate",
-                          TYPE_COLORS[s.type] ?? "bg-gray-400"
+                          "w-full text-center text-[10px] leading-tight font-medium rounded px-0.5 py-0.5 truncate",
+                          s._planifie
+                            ? "border border-dashed border-gray-400 dark:border-gray-500 text-gray-500 dark:text-gray-400 bg-white/60 dark:bg-gray-800/40"
+                            : clsx("text-white", TYPE_COLORS[s.type] ?? "bg-gray-400")
                         )}
-                        title={s.titre}>
+                        title={s._planifie ? `📅 Planifié · ${s.titre}` : s.titre}>
                         {TYPE_ICONS[s.type]}
                       </span>
                     ))}
@@ -236,7 +248,7 @@ function StatsMois({ seancesParDate, annee, moisIdx, moisLabel }) {
     for (const [key, list] of Object.entries(seancesParDate)) {
       if (!key.startsWith(prefix)) continue;
       for (const s of list) {
-        if (s.type === "REPOS") continue;
+        if (s.type === "REPOS" || s._planifie) continue;
         seances++;
         km    += s.journal?.distance_reelle_km ?? 0;
         dplus += s.journal?.dplus_reel_m ?? 0;

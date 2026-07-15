@@ -449,6 +449,10 @@ class SeanceEntrainement(Base):
         Integer, comment="Durée limite EMOM ou AMRAP en minutes"
     )
 
+    # Planification libre (date choisie par l'utilisateur, indépendante de date_seance)
+    date_planifiee: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    heure_planifiee: Mapped[Optional[str]] = mapped_column(String(5), nullable=True)
+
     semaine: Mapped["SemaineEntrainement"] = relationship(back_populates="seances")
     exercices: Mapped[list["ExerciceSeance"]] = relationship(
         back_populates="seance",
