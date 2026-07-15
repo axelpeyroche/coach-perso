@@ -727,7 +727,7 @@ class AMRAPBenchmarkSchema(BaseModel):
 
 
 class JournalSeanceSchema(BaseModel):
-    utilisateur_id: int
+    utilisateur_id: Optional[int] = None  # ignoré — on utilise current_user.id
     completee: bool = True
     rpe: Optional[float] = Field(None, ge=1, le=10)
     rpe_cible: Optional[float] = Field(None, ge=1, le=10)
@@ -971,6 +971,9 @@ def journaliser_seance(
     seance = db.get(SeanceEntrainement, seance_id)
     if not seance:
         raise HTTPException(404, "Séance introuvable")
+
+    if seance.journal:
+        raise HTTPException(409, "Journal déjà créé pour cette séance — utilisez PATCH")
 
     journal = JournalSeance(
         utilisateur_id=current_user.id,
