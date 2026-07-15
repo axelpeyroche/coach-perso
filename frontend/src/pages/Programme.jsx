@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getToutesSemaines, journaliserSeance, validerRPE, getProfilFC, supprimerJournal, modifierJournal } from "../api";
 import clsx from "clsx";
@@ -529,6 +529,26 @@ export default function Programme() {
   const seancesVisibles = semaine?.seances?.filter(s => s.type !== "REPOS") ?? [];
   const nbFaites = seancesVisibles.filter(s => s.journal?.completee).length;
 
+  // Drag-to-scroll pour la barre de semaines (souris desktop)
+  const navRef = useRef(null);
+  const drag = useRef({ active: false, moved: false, startX: 0, scrollLeft: 0 });
+  const onMouseDown = useCallback((e) => {
+    const el = navRef.current;
+    drag.current = { active: true, moved: false, startX: e.pageX, scrollLeft: el.scrollLeft };
+    el.style.cursor = "grabbing";
+    el.style.userSelect = "none";
+  }, []);
+  const stopDrag = useCallback(() => {
+    drag.current.active = false;
+    if (navRef.current) { navRef.current.style.cursor = "grab"; navRef.current.style.userSelect = ""; }
+  }, []);
+  const onMouseMove = useCallback((e) => {
+    if (!drag.current.active) return;
+    const dx = e.pageX - drag.current.startX;
+    if (Math.abs(dx) > 3) drag.current.moved = true;
+    navRef.current.scrollLeft = drag.current.scrollLeft - dx;
+  }, []);
+
   return (
     <div className="p-4 md:p-8 max-w-2xl mx-auto space-y-5 w-full min-w-0">
 
@@ -540,8 +560,15 @@ export default function Programme() {
         </p>
       </div>
 
-      {/* Sélecteur semaine — scroll horizontal dans un conteneur bloc séparé */}
-      <div className="overflow-x-auto scrollbar-hide -mx-4 px-4">
+      {/* Sélecteur semaine — scroll horizontal, drag souris desktop */}
+      <div
+        ref={navRef}
+        className="overflow-x-auto scrollbar-hide -mx-4 px-4 cursor-grab select-none"
+        onMouseDown={onMouseDown}
+        onMouseUp={stopDrag}
+        onMouseLeave={stopDrag}
+        onMouseMove={onMouseMove}
+      >
         <div className="flex gap-2 pb-0.5">
         {semaines.map((s, i) => {
           const nbFait = (s.seances ?? []).filter(x => x.journal?.completee).length;
@@ -550,7 +577,7 @@ export default function Programme() {
           const estCourante = i === idxCourant;
           const selectionne = i === idx;
           return (
-            <button key={s.semaine_globale} onClick={() => setSemIdx(i)}
+            <button key={s.semaine_globale} onClick={() => { if (!drag.current.moved) setSemIdx(i); }}
               className={clsx(
                 "shrink-0 flex flex-col items-center px-3 py-2 rounded-xl border text-xs font-medium transition-colors",
                 selectionne
