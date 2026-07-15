@@ -529,7 +529,7 @@ def onboarding(
         n_muscu = current_user.seances_muscu_semaine or 2
         n_course = current_user.seances_course_semaine or 3
         muscu_adapter = adapter_contenu_gym if current_user.type_muscu == "salle" else adapter_contenu_muscu
-        adapted = adapter_contenu_course(muscu_adapter(content, n_muscu), n_course)
+        adapted = adapter_contenu_course(muscu_adapter(content, n_muscu, current_user.sexe), n_course)
         _inserer_seances_en_session(db, mc, adapted)
     else:
         # Programme standard 2 macrocycles avec sessions calibrées
@@ -554,7 +554,7 @@ def onboarding(
             calibrated = calibrer_module(module_data, kf, af, rf)
             if vma_for_paces and vma_for_paces >= 5.0:
                 calibrated = enrichir_paces_vma(calibrated, vma_for_paces)
-            adapted = adapter_contenu_course(muscu_adapter(calibrated, n_muscu), n_course)
+            adapted = adapter_contenu_course(muscu_adapter(calibrated, n_muscu, current_user.sexe), n_course)
             _inserer_seances_en_session(db, mc, adapted)
 
     db.commit()
@@ -1821,7 +1821,7 @@ def initialiser_programme(payload: InitProgrammePayload, current_user: Utilisate
             n_muscu = user.seances_muscu_semaine or 2
             n_course = user.seances_course_semaine or 3
             muscu_adapter = adapter_contenu_gym if user.type_muscu == "salle" else adapter_contenu_muscu
-            adapted = adapter_contenu_course(muscu_adapter(content, n_muscu), n_course)
+            adapted = adapter_contenu_course(muscu_adapter(content, n_muscu, user.sexe), n_course)
             _inserer_seances_en_session(db, mc, adapted)
             db.commit()
 
@@ -1890,7 +1890,7 @@ def initialiser_programme(payload: InitProgrammePayload, current_user: Utilisate
             calibrated_std = calibrer_module(module_data, kf_std, af_std, rf_std)
             if vma_std and vma_std >= 5.0:
                 calibrated_std = enrichir_paces_vma(calibrated_std, vma_std)
-            adapted_std = adapter_contenu_course(muscu_adapter(calibrated_std, n_muscu), n_course)
+            adapted_std = adapter_contenu_course(muscu_adapter(calibrated_std, n_muscu, user.sexe), n_course)
             _inserer_seances_en_session(db, mc, adapted_std)
             mcs_crees.append(numero_cycle)
 

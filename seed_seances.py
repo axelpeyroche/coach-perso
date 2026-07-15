@@ -1742,7 +1742,46 @@ _COMPLEMENT_EMOM_PULL = {
 }
 
 
-def adapter_contenu_muscu(content: dict, seances_muscu: int) -> dict:
+_PUSH_SLUGS = {
+    "traction-stricte", "traction-australienne", "curl-biceps-traction",
+    "dip-parallettes", "triceps-extension-dips",
+    "pompe-standard", "pompe-large", "pompe-genoux", "pompe-diamant",
+}
+_MOTS_GYM_PUSH_UPPER = ("développé", "écarté", "pec deck", "épaule", "élévation latérale", "triceps")
+_MOTS_GYM_LOWER_GLUTE = ("presse", "hack squat", "hip thrust", "abduction", "extension jambe", "fente", "curl jambe", "mollet")
+
+
+def _ajuster_pour_sexe(seances: list, sexe: str | None) -> list:
+    """Adapte reps selon le sexe : femme → -30 % sur push poids du corps, ajustements GYM."""
+    if not sexe or sexe.upper() != "F":
+        return seances
+    result = []
+    for seance in seances:
+        s = dict(seance)
+        ajustes = []
+        for ex in s.get("exercices", []):
+            ex = dict(ex)
+            slug = ex.get("slug") or ""
+            nom  = (ex.get("nom") or "").lower()
+            reps = ex.get("reps")
+            has_series = ex.get("series") is not None
+            if reps:
+                if slug in _PUSH_SLUGS:
+                    # Poids du corps — haut du corps poussée/tirage : −30 %
+                    ex["reps"] = max(1, round(reps * 0.70))
+                elif has_series and any(k in nom for k in _MOTS_GYM_PUSH_UPPER):
+                    # GYM machines — poussée haut : −2 reps (charge adaptée)
+                    ex["reps"] = max(8, reps - 2)
+                elif has_series and any(k in nom for k in _MOTS_GYM_LOWER_GLUTE):
+                    # GYM machines — jambes / fessiers : +2 reps
+                    ex["reps"] = reps + 2
+            ajustes.append(ex)
+        s["exercices"] = ajustes
+        result.append(s)
+    return result
+
+
+def adapter_contenu_muscu(content: dict, seances_muscu: int, sexe: str | None = None) -> dict:
     """Adapte le contenu d'un programme selon le nombre de séances muscu/semaine.
 
     - 1 séance  → supprime tous les EMOM, garde uniquement l'AMRAP
@@ -1769,6 +1808,9 @@ def adapter_contenu_muscu(content: dict, seances_muscu: int) -> dict:
                 result[sem] = seances
         else:
             result[sem] = seances
+    # Adaptation par sexe sur les séances muscu du résultat
+    if sexe:
+        result = {sem: _ajuster_pour_sexe(seances, sexe) for sem, seances in result.items()}
     return result
 
 
@@ -1882,7 +1924,7 @@ _GYM_FULL_DECHARGE = {
 }
 
 
-def adapter_contenu_gym(content: dict, n_muscu: int) -> dict:
+def adapter_contenu_gym(content: dict, n_muscu: int, sexe: str | None = None) -> dict:
     """Remplace les séances EMOM/AMRAP par des séances machines Upper/Lower/Full Body.
 
     - 1 séance → Full Body (J2)
@@ -1911,7 +1953,7 @@ def adapter_contenu_gym(content: dict, n_muscu: int) -> dict:
             else:
                 gym = [dict(_GYM_UPPER_BASE), dict(_GYM_LOWER_BASE), dict(_GYM_FULL_BASE)]
 
-        result[sem] = autres + gym
+        result[sem] = autres + (_ajuster_pour_sexe(gym, sexe) if sexe else gym)
     return result
 
 

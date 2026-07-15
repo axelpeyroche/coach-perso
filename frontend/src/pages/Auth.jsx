@@ -86,6 +86,7 @@ function FormRegister({ onSwitch, onSuccess }) {
   const [email, setEmail]         = useState("");
   const [password, setPassword]   = useState("");
   const [dateNaissance, setDN]    = useState("");
+  const [sexe, setSexe]           = useState("");
   const [err, setErr]             = useState("");
   const [loading, setLoading]     = useState(false);
 
@@ -96,6 +97,7 @@ function FormRegister({ onSwitch, onSuccess }) {
       const payload = {
         prenom, nom, email, password,
         date_naissance: dateNaissance || null,
+        sexe: sexe || null,
       };
       const r = await api.post("/auth/register", payload);
       onSuccess(r.data.access_token);
@@ -125,6 +127,25 @@ function FormRegister({ onSwitch, onSuccess }) {
       <Input label="Email" type="email" value={email} onChange={setEmail} placeholder="toi@exemple.fr" required />
       <Input label="Mot de passe" type="password" value={password} onChange={setPassword} placeholder="••••••••" required />
       <Input label="Date de naissance" type="date" value={dateNaissance} onChange={setDN} />
+      <div>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Sexe</label>
+        <div className="grid grid-cols-3 gap-2">
+          {[
+            { val: "M", label: "Homme" },
+            { val: "F", label: "Femme" },
+            { val: "",  label: "Non précisé" },
+          ].map(({ val, label }) => (
+            <button key={label} type="button" onClick={() => setSexe(val)}
+              className={`py-2 rounded-xl text-sm font-medium border-2 transition-colors ${
+                sexe === val
+                  ? "border-brand bg-brand/5 dark:bg-brand/10 text-brand"
+                  : "border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-gray-300"
+              }`}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
       {err && <p className="text-sm text-red-500">{err}</p>}
       <button type="submit" disabled={loading}
         className="w-full py-3 rounded-xl bg-brand text-white font-semibold hover:bg-brand-dark transition-colors disabled:opacity-50">
