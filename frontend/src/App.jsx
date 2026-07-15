@@ -11,6 +11,7 @@ import Calendrier from "./pages/Calendrier";
 import Profil from "./pages/Profil";
 import Auth from "./pages/Auth";
 import Onboarding from "./pages/Onboarding";
+import Timers from "./pages/Timers";
 
 // ── SVG Icons ──────────────────────────────────────────────────────────────
 const Icon = {
@@ -53,14 +54,22 @@ const Icon = {
       <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
     </svg>
   ),
+  Timers: () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+      <circle cx="12" cy="13" r="8" />
+      <path d="M12 9v4l2.5 2.5" />
+      <path d="M5 3l4 2M19 3l-4 2" />
+    </svg>
+  ),
 };
 
 const NAV = [
   { to: "/",           label: "Dashboard",  IconC: Icon.Dashboard },
   { to: "/programme",  label: "Programme",  IconC: Icon.Programme },
   { to: "/calendrier", label: "Calendrier", IconC: Icon.Calendrier },
-  { to: "/evaluation", label: "Évaluation", IconC: Icon.Evaluation },
-  { to: "/analytics",  label: "Stats",      IconC: Icon.Stats },
+  { to: "/evaluation", label: "Évaluation", IconC: Icon.Evaluation, mobileHide: true },
+  { to: "/analytics",  label: "Stats",      IconC: Icon.Stats,      mobileHide: true },
+  { to: "/timers",     label: "Timers",     IconC: Icon.Timers },
   { to: "/profil",     label: "Profil",     IconC: Icon.Profil },
 ];
 
@@ -168,6 +177,7 @@ export default function App() {
                   <Route path="/evaluation" element={<Evaluation />} />
                   <Route path="/calendrier" element={<Calendrier />} />
                   <Route path="/analytics"  element={<Analytics />} />
+                  <Route path="/timers"     element={<Timers />} />
                   <Route path="/profil"     element={<Profil dark={dark} setDark={setDark} />} />
                 </Routes>
               </main>
@@ -175,7 +185,7 @@ export default function App() {
               {/* ── Bottom nav mobile ── */}
               <nav className="md:hidden fixed bottom-0 left-0 right-0 z-20 flex bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800"
                 style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
-                {NAV.map(n => <BottomLink key={n.to} {...n} />)}
+                {NAV.filter(n => !n.mobileHide).map(n => <BottomLink key={n.to} {...n} />)}
               </nav>
 
             </div>

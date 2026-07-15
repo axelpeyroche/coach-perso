@@ -1,0 +1,531 @@
+import { useState, useEffect, useRef, useCallback } from "react";
+import clsx from "clsx";
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+function pad(n) { return String(n).padStart(2, "0"); }
+
+function fmtMS(totalSec) {
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${pad(m)}:${pad(s)}`;
+}
+
+function fmtMSms(ms) {
+  const totalSec = Math.floor(ms / 1000);
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  const cs = Math.floor((ms % 1000) / 10);
+  return { m: pad(m), s: pad(s), cs: pad(cs) };
+}
+
+// ─── Cercle SVG animé ────────────────────────────────────────────────────────
+
+function TimerCircle({ progress = 1, children, pulse = false }) {
+  const R = 110;
+  const C = 2 * Math.PI * R;
+  return (
+    <div className="relative flex items-center justify-center">
+      <svg width="260" height="260" className="absolute">
+        <circle cx="130" cy="130" r={R} fill="none" stroke="#e5e7eb" strokeWidth="10"
+          className="dark:stroke-gray-700" />
+        <circle cx="130" cy="130" r={R} fill="none" stroke="#f97316" strokeWidth="10"
+          strokeLinecap="round"
+          strokeDasharray={C}
+          strokeDashoffset={C * (1 - progress)}
+          transform="rotate(-90 130 130)"
+          className={clsx("transition-[stroke-dashoffset] duration-200", pulse && "animate-pulse")}
+        />
+      </svg>
+      <div className="relative z-10 flex flex-col items-center justify-center w-52 h-52">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// ─── Spinner numérique ───────────────────────────────────────────────────────
+
+function Spinner({ label, value, onChange, min = 0, max = 99, step = 1, unit = "" }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const inputRef = useRef(null);
+
+  function inc() { onChange(Math.min(max, value + step)); }
+  function dec() { onChange(Math.max(min, value - step)); }
+
+  function startEdit() {
+    setDraft(String(value));
+    setEditing(true);
+    setTimeout(() => inputRef.current?.select(), 0);
+  }
+
+  function commitEdit() {
+    const n = parseInt(draft, 10);
+    if (!isNaN(n)) onChange(Math.min(max, Math.max(min, n)));
+    setEditing(false);
+  }
+
+  return (
+    <div className="flex flex-col items-center gap-1">
+      {label && <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{label}</p>}
+      <button onClick={inc}
+        className="w-10 h-8 flex items-center justify-center text-gray-400 hover:text-accent transition-colors rounded-lg hover:bg-accent/10">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-4 h-4"><path d="M18 15l-6-6-6 6"/></svg>
+      </button>
+      <div className="w-20 h-16 bg-gray-100 dark:bg-gray-800 rounded-2xl flex flex-col items-center justify-center cursor-pointer select-none"
+        onClick={startEdit}>
+        {editing ? (
+          <input ref={inputRef} value={draft} onChange={e => setDraft(e.target.value)}
+            onBlur={commitEdit} onKeyDown={e => e.key === "Enter" && commitEdit()}
+            className="w-16 text-center text-3xl font-bold bg-transparent text-accent outline-none" autoFocus />
+        ) : (
+          <span className="text-3xl font-bold text-gray-900 dark:text-white">{value}</span>
+        )}
+        <span className="text-[10px] text-gray-400 mt-0.5">{unit}</span>
+      </div>
+      <button onClick={dec}
+        className="w-10 h-8 flex items-center justify-center text-gray-400 hover:text-accent transition-colors rounded-lg hover:bg-accent/10">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-4 h-4"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+    </div>
+  );
+}
+
+// ─── Boutons de contrôle ─────────────────────────────────────────────────────
+
+function BtnPlay({ running, onClick }) {
+  return (
+    <button onClick={onClick}
+      className="w-16 h-16 rounded-full bg-accent text-white flex items-center justify-center shadow-lg hover:bg-orange-500 active:scale-95 transition-transform">
+      {running
+        ? <svg viewBox="0 0 24 24" fill="currentColor" className="w-7 h-7"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+        : <svg viewBox="0 0 24 24" fill="currentColor" className="w-7 h-7"><path d="M8 5v14l11-7z"/></svg>
+      }
+    </button>
+  );
+}
+
+function BtnReset({ onClick }) {
+  return (
+    <button onClick={onClick}
+      className="w-12 h-12 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 flex items-center justify-center hover:bg-gray-200 dark:hover:bg-gray-700 active:scale-95 transition-transform">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="w-5 h-5">
+        <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+        <path d="M3 3v5h5"/>
+      </svg>
+    </button>
+  );
+}
+
+// ─── CHRONOMÈTRE ─────────────────────────────────────────────────────────────
+
+function Chronometre() {
+  const [running, setRunning] = useState(false);
+  const [ms, setMs]           = useState(0);
+  const [laps, setLaps]       = useState([]);
+  const startRef  = useRef(null);
+  const savedRef  = useRef(0);
+  const rafRef    = useRef(null);
+
+  const tick = useCallback(() => {
+    setMs(savedRef.current + (Date.now() - startRef.current));
+    rafRef.current = requestAnimationFrame(tick);
+  }, []);
+
+  function toggle() {
+    if (running) {
+      cancelAnimationFrame(rafRef.current);
+      savedRef.current += Date.now() - startRef.current;
+      setRunning(false);
+    } else {
+      startRef.current = Date.now();
+      rafRef.current = requestAnimationFrame(tick);
+      setRunning(true);
+    }
+  }
+
+  function reset() {
+    cancelAnimationFrame(rafRef.current);
+    setRunning(false);
+    setMs(0);
+    setLaps([]);
+    savedRef.current = 0;
+  }
+
+  function lap() {
+    if (!running) return;
+    setLaps(l => [...l, ms]);
+  }
+
+  useEffect(() => () => cancelAnimationFrame(rafRef.current), []);
+
+  const { m, s, cs } = fmtMSms(ms);
+  const status = running ? "EN COURS" : ms === 0 ? "PRÊT" : "PAUSE";
+
+  return (
+    <div className="flex flex-col items-center gap-8">
+      <TimerCircle progress={1} pulse={running}>
+        <div className="flex items-baseline gap-0.5">
+          <span className="text-5xl font-black text-gray-900 dark:text-white tabular-nums">{m}:{s}</span>
+          <span className="text-xl font-bold text-gray-400 tabular-nums">.{cs}</span>
+        </div>
+        <p className="text-xs font-bold tracking-widest text-gray-400 dark:text-gray-500 mt-1">{status}</p>
+      </TimerCircle>
+
+      <div className="flex items-center gap-6">
+        <BtnReset onClick={reset} />
+        <BtnPlay running={running} onClick={toggle} />
+        <button onClick={lap} disabled={!running}
+          className="text-sm font-semibold text-accent disabled:text-gray-300 dark:disabled:text-gray-600 w-12 text-center transition-colors">
+          Tour
+        </button>
+      </div>
+
+      {laps.length > 0 && (
+        <div className="w-full max-w-xs space-y-1 max-h-40 overflow-y-auto">
+          {[...laps].reverse().map((t, i) => {
+            const idx = laps.length - i;
+            const prev = idx > 1 ? laps[idx - 2] : 0;
+            const { m: lm, s: ls, cs: lcs } = fmtMSms(t - prev);
+            return (
+              <div key={i} className="flex justify-between items-center px-3 py-1.5 rounded-xl bg-gray-100 dark:bg-gray-800 text-sm">
+                <span className="text-gray-500 dark:text-gray-400 font-medium">Tour {idx}</span>
+                <span className="font-mono font-bold text-gray-900 dark:text-white">{lm}:{ls}<span className="text-gray-400 text-xs">.{lcs}</span></span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── MINUTEUR ────────────────────────────────────────────────────────────────
+
+function Minuteur() {
+  const [mins, setMins]     = useState(5);
+  const [secs, setSecs]     = useState(0);
+  const [running, setRunning] = useState(false);
+  const [remaining, setRemaining] = useState(null); // null = non démarré
+  const intervalRef = useRef(null);
+
+  const total = mins * 60 + secs;
+  const current = remaining ?? total;
+  const progress = total === 0 ? 1 : current / total;
+  const finished = running && current === 0;
+  const status = finished ? "TERMINÉ !" : running ? "EN COURS" : remaining !== null ? "PAUSE" : "PRÊT";
+
+  function toggle() {
+    if (finished) return;
+    if (running) {
+      clearInterval(intervalRef.current);
+      setRunning(false);
+    } else {
+      if (total === 0) return;
+      const start = remaining ?? total;
+      let left = start;
+      setRemaining(left);
+      setRunning(true);
+      intervalRef.current = setInterval(() => {
+        left--;
+        setRemaining(left);
+        if (left <= 0) {
+          clearInterval(intervalRef.current);
+          setRunning(false);
+        }
+      }, 1000);
+    }
+  }
+
+  function reset() {
+    clearInterval(intervalRef.current);
+    setRunning(false);
+    setRemaining(null);
+  }
+
+  useEffect(() => () => clearInterval(intervalRef.current), []);
+
+  // Mise à jour du total quand on change les spinners (seulement si pas en cours)
+  useEffect(() => {
+    if (!running && remaining === null) {
+      // ok, live preview dans le cercle
+    }
+  }, [mins, secs]);
+
+  return (
+    <div className="flex flex-col items-center gap-6">
+      <TimerCircle progress={progress} pulse={running}>
+        <span className={clsx(
+          "text-5xl font-black tabular-nums",
+          finished ? "text-accent" : "text-gray-900 dark:text-white"
+        )}>
+          {fmtMS(current)}
+        </span>
+        <p className="text-xs font-bold tracking-widest text-gray-400 dark:text-gray-500 mt-1">{status}</p>
+      </TimerCircle>
+
+      {!running && !finished && (
+        <div className="flex items-start gap-4">
+          <Spinner label="MIN" value={mins} onChange={v => { setMins(v); setRemaining(null); }} max={99} unit="min" />
+          <div className="flex items-center h-16 mt-8 text-2xl font-bold text-gray-300 dark:text-gray-600">:</div>
+          <Spinner label="SEC" value={secs} onChange={v => { setSecs(v); setRemaining(null); }} max={59} step={5} unit="sec" />
+        </div>
+      )}
+
+      <div className="flex items-center gap-6">
+        <BtnReset onClick={reset} />
+        <BtnPlay running={running} onClick={toggle} />
+      </div>
+    </div>
+  );
+}
+
+// ─── TABATA ───────────────────────────────────────────────────────────────────
+
+const PHASE = { PREP: "PRÉPA", WORK: "TRAVAIL", REST: "REPOS", DONE: "TERMINÉ" };
+const PHASE_COLORS = {
+  [PHASE.PREP]: "text-yellow-500",
+  [PHASE.WORK]: "text-accent",
+  [PHASE.REST]: "text-blue-500",
+  [PHASE.DONE]: "text-green-500",
+};
+
+function Tabata() {
+  const [prep,  setPrep]  = useState(5);
+  const [work,  setWork]  = useState(60);
+  const [rest,  setRest]  = useState(0);
+  const [tours, setTours] = useState(9);
+
+  const [running, setRunning] = useState(false);
+  const [phase,   setPhase]   = useState(null);  // null = config
+  const [left,    setLeft]    = useState(0);
+  const [tour,    setTour]    = useState(0);
+  const intervalRef = useRef(null);
+  const stateRef = useRef({});
+
+  const totalWork = work * tours;
+  const totalRest = rest * Math.max(0, tours - 1);
+  const totalSec  = prep + totalWork + totalRest;
+
+  function fmtT(s) { return `${pad(Math.floor(s / 60))}:${pad(s % 60)}`; }
+
+  const progress = phase === PHASE.DONE ? 1
+    : phase === PHASE.PREP ? left / prep
+    : phase === PHASE.WORK ? left / work
+    : phase === PHASE.REST ? left / rest
+    : 1;
+
+  const circleColor = phase === PHASE.REST ? "#3b82f6"
+    : phase === PHASE.PREP ? "#eab308"
+    : "#f97316";
+
+  function start() {
+    if (running) return;
+    const initialLeft = phase === null ? prep : stateRef.current.left;
+    const initialPhase = phase === null ? PHASE.PREP : stateRef.current.phase;
+    const initialTour  = phase === null ? 1 : stateRef.current.tour;
+    stateRef.current = { left: initialLeft, phase: initialPhase, tour: initialTour };
+    setPhase(initialPhase);
+    setLeft(initialLeft);
+    setTour(initialTour);
+    setRunning(true);
+    intervalRef.current = setInterval(() => {
+      stateRef.current.left--;
+      setLeft(stateRef.current.left);
+      if (stateRef.current.left <= 0) {
+        const ph = stateRef.current.phase;
+        const t  = stateRef.current.tour;
+        if (ph === PHASE.PREP) {
+          stateRef.current = { left: work, phase: PHASE.WORK, tour: t };
+        } else if (ph === PHASE.WORK) {
+          if (t >= tours) {
+            stateRef.current = { left: 0, phase: PHASE.DONE, tour: t };
+            clearInterval(intervalRef.current);
+            setRunning(false);
+          } else if (rest > 0) {
+            stateRef.current = { left: rest, phase: PHASE.REST, tour: t };
+          } else {
+            stateRef.current = { left: work, phase: PHASE.WORK, tour: t + 1 };
+          }
+        } else if (ph === PHASE.REST) {
+          stateRef.current = { left: work, phase: PHASE.WORK, tour: t + 1 };
+        }
+        setPhase(stateRef.current.phase);
+        setLeft(stateRef.current.left);
+        setTour(stateRef.current.tour);
+      }
+    }, 1000);
+  }
+
+  function pause() {
+    clearInterval(intervalRef.current);
+    setRunning(false);
+  }
+
+  function reset() {
+    clearInterval(intervalRef.current);
+    setRunning(false);
+    setPhase(null);
+    setLeft(0);
+    setTour(0);
+  }
+
+  useEffect(() => () => clearInterval(intervalRef.current), []);
+
+  if (phase !== null) {
+    const isDone = phase === PHASE.DONE;
+    return (
+      <div className="flex flex-col items-center gap-6">
+        <div className="text-xs font-bold uppercase tracking-widest text-gray-400">
+          {isDone ? "" : `Tour ${tour} / ${tours}`}
+        </div>
+        <div className="relative flex items-center justify-center">
+          <svg width="260" height="260" className="absolute">
+            <circle cx="130" cy="130" r="110" fill="none" stroke="#e5e7eb" strokeWidth="10" className="dark:stroke-gray-700" />
+            <circle cx="130" cy="130" r="110" fill="none" stroke={circleColor} strokeWidth="10"
+              strokeLinecap="round"
+              strokeDasharray={2 * Math.PI * 110}
+              strokeDashoffset={2 * Math.PI * 110 * (1 - Math.max(0, progress))}
+              transform="rotate(-90 130 130)"
+              className="transition-[stroke-dashoffset] duration-500"
+            />
+          </svg>
+          <div className="relative z-10 flex flex-col items-center justify-center w-52 h-52">
+            <p className={clsx("text-sm font-bold tracking-widest uppercase", PHASE_COLORS[phase])}>{phase}</p>
+            <span className="text-5xl font-black text-gray-900 dark:text-white tabular-nums mt-1">{isDone ? "🏁" : fmtT(left)}</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-6">
+          <BtnReset onClick={reset} />
+          {!isDone && <BtnPlay running={running} onClick={running ? pause : start} />}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col items-center gap-6 w-full max-w-sm">
+      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Configuration</p>
+      <div className="grid grid-cols-4 gap-3 w-full">
+        <Spinner label="Prépa"   value={prep}  onChange={setPrep}  max={60}  unit="sec" />
+        <Spinner label="Travail" value={work}  onChange={setWork}  max={300} step={5} unit="sec" />
+        <Spinner label="Repos"   value={rest}  onChange={setRest}  max={120} step={5} unit="sec" />
+        <Spinner label="Tours"   value={tours} onChange={setTours} min={1}   max={30} unit="tours" />
+      </div>
+
+      <div className="w-full rounded-2xl bg-gray-100 dark:bg-gray-800 p-4 space-y-2 text-sm">
+        <div className="flex justify-between">
+          <span className="text-gray-500 dark:text-gray-400">Durée estimée</span>
+          <span className="font-bold text-gray-900 dark:text-white">{fmtT(totalSec)}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-gray-500 dark:text-gray-400">Temps de travail</span>
+          <span className="font-bold text-accent">{fmtT(totalWork)}</span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-gray-500 dark:text-gray-400">Temps de repos</span>
+          <span className="font-bold text-blue-500">{fmtT(totalRest)}</span>
+        </div>
+      </div>
+
+      <BtnPlay running={false} onClick={start} />
+    </div>
+  );
+}
+
+// ─── Icônes modes ─────────────────────────────────────────────────────────────
+
+const MODE_ICONS = {
+  chrono: () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+      <circle cx="12" cy="12" r="9" />
+      <polyline points="12 7 12 12 15 15" />
+    </svg>
+  ),
+  minuteur: () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+      <circle cx="12" cy="13" r="8" />
+      <path d="M12 9v4l2 2" />
+      <path d="M5 3l4 2M19 3l-4 2" />
+    </svg>
+  ),
+  tabata: () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+    </svg>
+  ),
+};
+
+const MODES = [
+  { id: "chrono",   label: "Chronomètre", desc: "Mesure ton temps d'effort",    Icon: MODE_ICONS.chrono },
+  { id: "minuteur", label: "Minuteur",     desc: "Décompte une durée fixe",      Icon: MODE_ICONS.minuteur },
+  { id: "tabata",   label: "Tabata",       desc: "Intervalles travail / repos",  Icon: MODE_ICONS.tabata },
+];
+
+// ─── Page principale ──────────────────────────────────────────────────────────
+
+export default function Timers() {
+  const [mode, setMode] = useState("chrono");
+
+  return (
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-950">
+
+      {/* Layout desktop: sidebar gauche + contenu droit */}
+      <div className="flex flex-col md:flex-row min-h-screen">
+
+        {/* ── Panel modes ── */}
+        <div className="md:w-72 shrink-0 bg-white dark:bg-gray-900 border-b md:border-b-0 md:border-r border-gray-200 dark:border-gray-800 p-5 md:p-6 flex flex-col gap-3">
+          <div className="mb-1">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Minuteur</h1>
+            <p className="text-sm text-gray-400 dark:text-gray-500 mt-0.5">Chronomètre, minuteur &amp; Tabata</p>
+          </div>
+
+          {/* Boutons mode — horizontal sur mobile, vertical sur desktop */}
+          <div className="flex md:flex-col gap-2">
+            {MODES.map(({ id, label, desc, Icon }) => (
+              <button key={id} onClick={() => setMode(id)}
+                className={clsx(
+                  "flex items-center gap-3 px-4 py-3 rounded-2xl text-left transition-colors w-full",
+                  mode === id
+                    ? "bg-accent text-white shadow-md"
+                    : "bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700"
+                )}>
+                <div className={clsx(
+                  "p-1.5 rounded-xl shrink-0",
+                  mode === id ? "bg-white/20" : "bg-white dark:bg-gray-900 text-accent"
+                )}>
+                  <Icon />
+                </div>
+                <div className="min-w-0 hidden sm:block">
+                  <p className="font-semibold text-sm leading-tight">{label}</p>
+                  <p className={clsx("text-xs leading-tight mt-0.5 truncate", mode === id ? "text-white/70" : "text-gray-400 dark:text-gray-500")}>
+                    {desc}
+                  </p>
+                </div>
+                <div className="sm:hidden font-semibold text-xs">{label}</div>
+              </button>
+            ))}
+          </div>
+
+          {/* Hint */}
+          <div className="hidden md:block mt-auto pt-4 border-t border-gray-100 dark:border-gray-800">
+            <p className="text-xs text-gray-400 dark:text-gray-500">
+              Cliquer sur un chiffre pour le modifier manuellement au clavier.
+            </p>
+          </div>
+        </div>
+
+        {/* ── Zone timer ── */}
+        <div className="flex-1 flex items-center justify-center p-6 md:p-12 bg-gray-50 dark:bg-gray-950">
+          <div className="w-full max-w-md">
+            {mode === "chrono"   && <Chronometre />}
+            {mode === "minuteur" && <Minuteur />}
+            {mode === "tabata"   && <Tabata />}
+          </div>
+        </div>
+
+      </div>
+    </div>
+  );
+}
