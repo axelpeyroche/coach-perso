@@ -502,11 +502,15 @@ function CarteSeance({ seance, zonesFC }) {
                 </button>
               )}
               <button onClick={() => { setLogOpen(v => !v); setOuvert(false); }}
+                disabled={!seance.date_planifiee}
+                title={!seance.date_planifiee ? "Planifie la séance avant de la valider" : undefined}
                 className={clsx(
                   "px-3 py-1.5 rounded-xl text-white text-xs font-semibold transition-colors",
-                  prefillEnAttente
-                    ? "bg-orange-500 hover:bg-orange-600"
-                    : "bg-brand hover:bg-brand-dark"
+                  !seance.date_planifiee
+                    ? "bg-gray-300 dark:bg-gray-600 cursor-not-allowed"
+                    : prefillEnAttente
+                      ? "bg-orange-500 hover:bg-orange-600"
+                      : "bg-brand hover:bg-brand-dark"
                 )}>
                 Valider
               </button>

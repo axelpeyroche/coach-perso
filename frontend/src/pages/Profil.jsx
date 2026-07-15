@@ -1,4 +1,67 @@
 import { useAuth } from "../AuthContext";
+import { useState, useEffect } from "react";
+
+const VAPID_PUBLIC = import.meta.env.VITE_VAPID_PUBLIC_KEY;
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(base64);
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
+
+function PushToggle() {
+  const [status, setStatus] = useState("loading"); // loading | unsupported | denied | off | on | working
+
+  useEffect(() => {
+    if (!("Notification" in window) || !("serviceWorker" in navigator)) {
+      setStatus("unsupported"); return;
+    }
+    if (Notification.permission === "denied") { setStatus("denied"); return; }
+    navigator.serviceWorker.ready.then(reg => reg.pushManager.getSubscription()).then(sub => {
+      setStatus(sub ? "on" : "off");
+    });
+  }, []);
+
+  async function toggle() {
+    setStatus("working");
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const existing = await reg.pushManager.getSubscription();
+      if (existing) {
+        await existing.unsubscribe();
+        await fetch("/api/push/unsubscribe", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ endpoint: existing.endpoint }) });
+        setStatus("off");
+      } else {
+        const perm = await Notification.requestPermission();
+        if (perm !== "granted") { setStatus(perm === "denied" ? "denied" : "off"); return; }
+        const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC) });
+        const j = sub.toJSON();
+        await fetch("/api/push/subscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth }) });
+        setStatus("on");
+      }
+    } catch (e) {
+      console.error(e);
+      setStatus("off");
+    }
+  }
+
+  if (status === "unsupported") return (
+    <span className="text-xs text-gray-400 italic">Non supporté sur cet appareil</span>
+  );
+  if (status === "denied") return (
+    <span className="text-xs text-red-400">Bloquées dans les paramètres du navigateur</span>
+  );
+
+  const on = status === "on";
+  const working = status === "working" || status === "loading";
+  return (
+    <button onClick={toggle} disabled={working}
+      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-50 ${on ? "bg-brand" : "bg-gray-200 dark:bg-gray-700"}`}>
+      <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${on ? "translate-x-6" : "translate-x-1"}`} />
+    </button>
+  );
+}
 
 const PROG_LABEL = { course: "Course", muscu: "Musculation", hybride: "Hybride" };
 const MUSCU_LABEL = { poids_corps: "Poids du corps", salle: "Salle de sport" };
@@ -84,7 +147,7 @@ export default function Profil({ dark, setDark }) {
 
       {/* Apparence */}
       <Section title="Apparence">
-        <div className="flex items-center justify-between py-3">
+        <div className="flex items-center justify-between py-3 border-b border-gray-100 dark:border-gray-800">
           <span className="text-sm text-gray-700 dark:text-gray-300">Mode sombre</span>
           <button
             onClick={() => setDark(d => !d)}
@@ -92,6 +155,10 @@ export default function Profil({ dark, setDark }) {
           >
             <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${dark ? "translate-x-6" : "translate-x-1"}`} />
           </button>
+        </div>
+        <div className="flex items-center justify-between py-3">
+          <span className="text-sm text-gray-700 dark:text-gray-300">Notifications push</span>
+          <PushToggle />
         </div>
       </Section>
 
