@@ -9,6 +9,12 @@ services:
         sync: false
       - key: PYTHON_VERSION
         value: "3.12.0"
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: VAPID_EMAIL
+        sync: false
 
   - type: web
     name: coach-perso-frontend
@@ -22,3 +28,5 @@ services:
     envVars:
       - key: VITE_API_URL
         sync: false
+      - key: VITE_VAPID_PUBLIC_KEY
+        value: "BFRwG5AkqambpLWmQHJa0-6IGiNixgTD4QfmepqWLP6_Yv4FRxntYiMjBFZRQF1LpKGxD_JyUMjPnklLBcqiqrU"

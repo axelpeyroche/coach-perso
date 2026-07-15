@@ -29,6 +29,20 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from jose import JWTError, jwt
 
+try:
+    from apscheduler.schedulers.background import BackgroundScheduler
+    from pywebpush import webpush, WebPushException
+    import json as _json
+    _PUSH_ENABLED = True
+except ImportError:
+    _PUSH_ENABLED = False
+
+_VAPID_PRIVATE = os.getenv("VAPID_PRIVATE_KEY", "")
+_VAPID_PUBLIC  = os.getenv("VAPID_PUBLIC_KEY", "")
+_VAPID_EMAIL   = os.getenv("VAPID_EMAIL", "mailto:admin@example.com")
+
+_scheduler: "BackgroundScheduler | None" = None
+
 import analytics_service
 from database import creer_tables, obtenir_session
 from models import (
@@ -37,6 +51,7 @@ from models import (
     JournalSeance,
     Macrocycle,
     ObjectifCourse,
+    PushSubscription,
     ResultatAMRAPBenchmark,
     ResultatDemiCooper,
     ResultatMax1Min,
@@ -155,10 +170,80 @@ def get_current_user(
     return user
 
 
+def _envoyer_push_seance(seance_id: int) -> None:
+    """Envoi de la notification push pour une séance planifiée (appelé par APScheduler)."""
+    if not _PUSH_ENABLED or not _VAPID_PRIVATE:
+        return
+    db = next(obtenir_session())
+    try:
+        seance = db.get(SeanceEntrainement, seance_id)
+        if not seance or seance.journal and seance.journal.completee:
+            return
+        semaine = db.get(SemaineEntrainement, seance.semaine_id)
+        if not semaine:
+            return
+        subs = db.query(PushSubscription).filter_by(utilisateur_id=semaine.macrocycle.utilisateur_id).all()
+        payload = _json.dumps({
+            "title": f"🏃 Séance du jour : {seance.titre}",
+            "body": f"C'est l'heure de ta séance ! {seance.heure_planifiee or ''}".strip(),
+            "tag": f"seance-{seance_id}",
+            "url": "/programme",
+        })
+        for sub in subs:
+            try:
+                webpush(
+                    subscription_info={"endpoint": sub.endpoint, "keys": {"p256dh": sub.p256dh, "auth": sub.auth}},
+                    data=payload,
+                    vapid_private_key=_VAPID_PRIVATE,
+                    vapid_claims={"sub": _VAPID_EMAIL},
+                )
+            except WebPushException:
+                pass
+    finally:
+        db.close()
+
+
+def _planifier_notification(seance_id: int, date_planifiee, heure_planifiee: str | None) -> None:
+    """Ajoute ou supprime un job APScheduler pour la notification de la séance."""
+    if not _PUSH_ENABLED or _scheduler is None:
+        return
+    job_id = f"seance-{seance_id}"
+    _scheduler.remove_job(job_id) if _scheduler.get_job(job_id) else None
+    if not date_planifiee:
+        return
+    h, m = (int(x) for x in (heure_planifiee or "08:00").split(":"))
+    from datetime import datetime as _dt
+    run_at = _dt(date_planifiee.year, date_planifiee.month, date_planifiee.day, h, m)
+    if run_at > _dt.now():
+        _scheduler.add_job(
+            _envoyer_push_seance, "date",
+            run_date=run_at, args=[seance_id], id=job_id,
+            misfire_grace_time=3600,
+        )
+
+
 @app.on_event("startup")
 def demarrage():
+    global _scheduler
     creer_tables()
     _initialiser_donnees_demo()
+    if _PUSH_ENABLED:
+        _scheduler = BackgroundScheduler()
+        _scheduler.start()
+        # Re-planifie les notifications pour toutes les séances futures encore non validées
+        db = next(obtenir_session())
+        try:
+            from datetime import datetime as _dt
+            now = _dt.now()
+            seances = db.query(SeanceEntrainement).filter(
+                SeanceEntrainement.date_planifiee.isnot(None)
+            ).all()
+            for s in seances:
+                if s.journal and s.journal.completee:
+                    continue
+                _planifier_notification(s.id, s.date_planifiee, s.heure_planifiee)
+        finally:
+            db.close()
 
 
 # ---------------------------------------------------------------------------
@@ -1034,6 +1119,60 @@ def planifier_seance(
     seance.date_planifiee = date.fromisoformat(payload.date_planifiee) if payload.date_planifiee else None
     seance.heure_planifiee = payload.heure_planifiee or None
     db.commit()
+    _planifier_notification(seance.id, seance.date_planifiee, seance.heure_planifiee)
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# Push notifications
+# ---------------------------------------------------------------------------
+
+class PushSubscribeSchema(BaseModel):
+    endpoint: str
+    p256dh: str
+    auth: str
+
+
+@app.get("/api/push/vapid-public-key", summary="Retourne la clé publique VAPID")
+def get_vapid_public_key():
+    return {"publicKey": _VAPID_PUBLIC}
+
+
+@app.post("/api/push/subscribe", summary="Enregistre un endpoint push")
+def push_subscribe(
+    payload: PushSubscribeSchema,
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(obtenir_session),
+):
+    sub = db.query(PushSubscription).filter_by(endpoint=payload.endpoint).first()
+    if sub:
+        sub.p256dh = payload.p256dh
+        sub.auth   = payload.auth
+        sub.utilisateur_id = current_user.id
+    else:
+        sub = PushSubscription(
+            utilisateur_id=current_user.id,
+            endpoint=payload.endpoint,
+            p256dh=payload.p256dh,
+            auth=payload.auth,
+        )
+        db.add(sub)
+    db.commit()
+    return {"ok": True}
+
+
+@app.delete("/api/push/unsubscribe", summary="Supprime un endpoint push")
+def push_unsubscribe(
+    payload: PushSubscribeSchema,
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(obtenir_session),
+):
+    sub = db.query(PushSubscription).filter_by(
+        endpoint=payload.endpoint, utilisateur_id=current_user.id
+    ).first()
+    if sub:
+        db.delete(sub)
+        db.commit()
     return {"ok": True}
 
 

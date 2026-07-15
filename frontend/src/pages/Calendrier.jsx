@@ -34,6 +34,7 @@ export default function Calendrier() {
   const today = new Date();
   const [annee,  setAnnee]  = useState(today.getFullYear());
   const [moisIdx, setMoisIdx] = useState(today.getMonth());
+  const [jourSel, setJourSel] = useState(null); // "YYYY-MM-DD"
 
   const { data: raw } = useQuery({
     queryKey: ["toutes-semaines"],
@@ -96,6 +97,7 @@ export default function Calendrier() {
     if (m > 11) { m = 0;  a++; }
     setMoisIdx(m);
     setAnnee(a);
+    setJourSel(null);
   }
 
   function dateKey(jour) {
@@ -146,16 +148,19 @@ export default function Calendrier() {
               const actives  = seances.filter(s => s.type !== "REPOS");
               const hasValide   = actives.some(s => !s._planifie);
               const isToday  = key === todayKey;
+              const isSel    = key === jourSel;
               return (
-                <div key={key}
+                <div key={key} onClick={() => setJourSel(isSel ? null : key)}
                   className={clsx(
-                    "rounded-xl p-1.5 min-h-[56px] flex flex-col items-center transition-colors",
-                    hasValide
-                      ? "bg-brand/5 dark:bg-brand/10"
-                      : actives.length > 0
-                        ? "bg-indigo-50/60 dark:bg-indigo-900/10"
-                        : "hover:bg-gray-50 dark:hover:bg-gray-800/50",
-                    isToday && "ring-2 ring-brand ring-offset-1 dark:ring-offset-gray-900"
+                    "rounded-xl p-1.5 min-h-[56px] flex flex-col items-center transition-colors cursor-pointer",
+                    isSel
+                      ? "ring-2 ring-indigo-400 dark:ring-indigo-500 bg-indigo-50 dark:bg-indigo-900/20"
+                      : hasValide
+                        ? "bg-brand/5 dark:bg-brand/10 hover:bg-brand/10 dark:hover:bg-brand/20"
+                        : actives.length > 0
+                          ? "bg-indigo-50/60 dark:bg-indigo-900/10 hover:bg-indigo-100/60 dark:hover:bg-indigo-900/20"
+                          : "hover:bg-gray-50 dark:hover:bg-gray-800/50",
+                    isToday && !isSel && "ring-2 ring-brand ring-offset-1 dark:ring-offset-gray-900"
                   )}>
                   <span className={clsx(
                     "text-xs font-semibold mb-1",
@@ -181,6 +186,43 @@ export default function Calendrier() {
               );
             })}
           </div>
+
+          {/* Panel détail jour sélectionné */}
+          {jourSel && (() => {
+            const seancesDuJour = (seancesParDate[jourSel] ?? []).filter(s => s.type !== "REPOS");
+            if (seancesDuJour.length === 0) return null;
+            const d = new Date(jourSel + "T00:00:00");
+            const label = d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+            return (
+              <div className="mt-4 rounded-xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/20 p-3 space-y-2">
+                <p className="text-xs font-semibold text-indigo-500 dark:text-indigo-300 uppercase tracking-wide capitalize">{label}</p>
+                {seancesDuJour.map((s, i) => (
+                  <div key={i} className="flex items-center gap-3">
+                    <span className={clsx(
+                      "w-2 h-2 rounded-full shrink-0",
+                      s._planifie ? "bg-gray-400 dark:bg-gray-500" : (TYPE_COLORS[s.type] ?? "bg-gray-400").split(" ")[0]
+                    )} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+                        {TYPE_ICONS[s.type]} {s.titre}
+                      </p>
+                    </div>
+                    {s._planifie && s.heure_planifiee && (
+                      <span className="shrink-0 text-xs font-mono text-indigo-600 dark:text-indigo-400 bg-indigo-100 dark:bg-indigo-900/40 px-2 py-0.5 rounded-lg">
+                        🕐 {s.heure_planifiee}
+                      </span>
+                    )}
+                    {s._planifie && (
+                      <span className="shrink-0 text-[10px] text-gray-400 dark:text-gray-500 italic">planifiée</span>
+                    )}
+                    {!s._planifie && (
+                      <span className="shrink-0 text-[10px] text-green-600 dark:text-green-400 font-semibold">✓ validée</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
 
           {/* Légende — uniquement les types présents dans le programme */}
           <div className="mt-4 flex flex-wrap gap-3">

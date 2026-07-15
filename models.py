@@ -758,3 +758,18 @@ class ObjectifCourse(Base):
     objectif_temps_min: Mapped[int] = mapped_column(Integer, nullable=False, comment="Objectif en minutes")
     notes: Mapped[Optional[str]] = mapped_column(Text)
     cree_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+# ---------------------------------------------------------------------------
+# Push notifications
+# ---------------------------------------------------------------------------
+
+class PushSubscription(Base):
+    __tablename__ = "push_subscriptions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    utilisateur_id: Mapped[int] = mapped_column(ForeignKey("utilisateurs.id"), nullable=False)
+    endpoint: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    p256dh: Mapped[str] = mapped_column(Text, nullable=False)
+    auth: Mapped[str] = mapped_column(Text, nullable=False)
+    cree_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

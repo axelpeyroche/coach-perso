@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Routes, Route, NavLink, Navigate, useLocation } from "react-router-dom";
 import clsx from "clsx";
 import { useAuth } from "./AuthContext";
+import { usePushNotifications } from "./usePush";
 import Dashboard from "./pages/Dashboard";
 import Programme from "./pages/Programme";
 import Evaluation from "./pages/Evaluation";
@@ -114,6 +115,7 @@ function RequireOnboarding({ children }) {
 
 export default function App() {
   const { user } = useAuth();
+  usePushNotifications();
 
   const [dark, setDark] = useState(() => {
     const saved = localStorage.getItem("theme");
