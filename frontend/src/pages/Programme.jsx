@@ -505,6 +505,26 @@ function idxSemaineCourante(semaines) {
 export default function Programme() {
   const [semIdx, setSemIdx] = useState(null);
 
+  // Drag-to-scroll — déclaré avant tout early return (règles des hooks)
+  const navRef = useRef(null);
+  const drag = useRef({ active: false, moved: false, startX: 0, scrollLeft: 0 });
+  const onMouseDown = useCallback((e) => {
+    const el = navRef.current;
+    drag.current = { active: true, moved: false, startX: e.pageX, scrollLeft: el.scrollLeft };
+    el.style.cursor = "grabbing";
+    el.style.userSelect = "none";
+  }, []);
+  const stopDrag = useCallback(() => {
+    drag.current.active = false;
+    if (navRef.current) { navRef.current.style.cursor = "grab"; navRef.current.style.userSelect = ""; }
+  }, []);
+  const onMouseMove = useCallback((e) => {
+    if (!drag.current.active) return;
+    const dx = e.pageX - drag.current.startX;
+    if (Math.abs(dx) > 3) drag.current.moved = true;
+    navRef.current.scrollLeft = drag.current.scrollLeft - dx;
+  }, []);
+
   const { data, isLoading, error } = useQuery({
     queryKey: ["toutes-semaines"],
     queryFn: () => getToutesSemaines(),
@@ -528,26 +548,6 @@ export default function Programme() {
 
   const seancesVisibles = semaine?.seances?.filter(s => s.type !== "REPOS") ?? [];
   const nbFaites = seancesVisibles.filter(s => s.journal?.completee).length;
-
-  // Drag-to-scroll pour la barre de semaines (souris desktop)
-  const navRef = useRef(null);
-  const drag = useRef({ active: false, moved: false, startX: 0, scrollLeft: 0 });
-  const onMouseDown = useCallback((e) => {
-    const el = navRef.current;
-    drag.current = { active: true, moved: false, startX: e.pageX, scrollLeft: el.scrollLeft };
-    el.style.cursor = "grabbing";
-    el.style.userSelect = "none";
-  }, []);
-  const stopDrag = useCallback(() => {
-    drag.current.active = false;
-    if (navRef.current) { navRef.current.style.cursor = "grab"; navRef.current.style.userSelect = ""; }
-  }, []);
-  const onMouseMove = useCallback((e) => {
-    if (!drag.current.active) return;
-    const dx = e.pageX - drag.current.startX;
-    if (Math.abs(dx) > 3) drag.current.moved = true;
-    navRef.current.scrollLeft = drag.current.scrollLeft - dx;
-  }, []);
 
   return (
     <div className="p-4 md:p-8 max-w-2xl mx-auto space-y-5 w-full min-w-0">
