@@ -49,11 +49,13 @@ export default function Calendrier() {
     const map = {};
     for (const sem of semaines) {
       for (const s of sem.seances ?? []) {
-        if (s.journal?.completee && s.date) {
-          const key = s.date.slice(0, 10);
+        if (s.journal?.completee) {
+          // Si la séance avait été planifiée, on l'affiche à la date planifiée, sinon à la date du programme
+          const key = (s.date_planifiee ?? s.date ?? "").slice(0, 10);
+          if (!key) continue;
           if (!map[key]) map[key] = [];
           map[key].push(s);
-        } else if (!s.journal?.completee && s.date_planifiee) {
+        } else if (s.date_planifiee) {
           const key = s.date_planifiee.slice(0, 10);
           if (!map[key]) map[key] = [];
           map[key].push({ ...s, _planifie: true });
