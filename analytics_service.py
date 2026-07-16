@@ -10,6 +10,7 @@ Endpoints couverts :
 
 from __future__ import annotations
 
+import json as _json
 from collections import defaultdict
 from datetime import date, timedelta
 from typing import Any
@@ -185,24 +186,38 @@ def distribution_volume(
         semaine = row.SemaineEntrainement
 
         # Volume course depuis les journaux (séances validées uniquement)
-        # Si distance_reelle_km absente, on estime via duree_reelle_min × vitesse Z2 ≈ 10 km/h
-        stats_course = db.execute(
-            select(
-                func.sum(
-                    func.coalesce(
-                        JournalSeance.distance_reelle_km,
-                        func.coalesce(JournalSeance.duree_reelle_min, 0) * 10.0 / 60.0,
-                    )
-                ).label("km_total"),
-                func.sum(JournalSeance.dplus_reel_m).label("dplus_total"),
-            )
+        journaux_course = db.execute(
+            select(JournalSeance)
             .join(SeanceEntrainement, JournalSeance.seance_id == SeanceEntrainement.id)
             .where(
                 SeanceEntrainement.semaine_id == semaine.id,
                 SeanceEntrainement.type_seance == TypeSeance.COURSE,
                 JournalSeance.completee == True,
             )
-        ).one()
+        ).scalars().all()
+
+        km_total = 0.0
+        dplus_total = 0
+        for j in journaux_course:
+            dplus_total += j.dplus_reel_m or 0
+            if j.distance_reelle_km is not None:
+                km_total += j.distance_reelle_km
+            elif j.details_intervalles:
+                # Reconstruire depuis les blocs (séances fractionnées)
+                try:
+                    blocs = _json.loads(j.details_intervalles)
+                    km_total += sum(b.get("distance_km") or 0 for b in blocs)
+                except Exception:
+                    pass
+            elif j.duree_reelle_min:
+                # Estimation Z2 par défaut
+                km_total += j.duree_reelle_min * 10.0 / 60.0
+
+        class _StatsCourse:
+            def __init__(self, km, dplus):
+                self.km_total = km
+                self.dplus_total = dplus
+        stats_course = _StatsCourse(round(km_total, 2), dplus_total)
 
         volume_muscu = {cat.value: 0 for cat in CategorieMusculaire}
 

@@ -958,6 +958,7 @@ class JournalSeanceSchema(BaseModel):
     rpe: Optional[float] = Field(None, ge=1, le=10)
     rpe_cible: Optional[float] = Field(None, ge=1, le=10)
     distance_reelle_km: Optional[float] = None
+    distance_repos_km: Optional[float] = None  # récupération trottinée entre blocs
     duree_reelle_min: Optional[int] = None
     dplus_reel_m: Optional[int] = None
     fc_moyenne_bpm: Optional[int] = None
@@ -1216,13 +1217,26 @@ def journaliser_seance(
     if seance.journal:
         raise HTTPException(409, "Journal déjà créé pour cette séance — utilisez PATCH")
 
+    # Calcul automatique distance_reelle_km pour séances fractionnées
+    distance_km = payload.distance_reelle_km
+    if distance_km is None and payload.details_intervalles:
+        try:
+            import json as _json
+            blocs = _json.loads(payload.details_intervalles)
+            distance_km = sum(b.get("distance_km") or 0 for b in blocs)
+            if payload.distance_repos_km:
+                distance_km += payload.distance_repos_km
+            distance_km = round(distance_km, 3) if distance_km else None
+        except Exception:
+            pass
+
     journal = JournalSeance(
         utilisateur_id=current_user.id,
         seance_id=seance_id,
         completee=payload.completee,
         rpe=payload.rpe,
         rpe_cible=payload.rpe_cible,
-        distance_reelle_km=payload.distance_reelle_km,
+        distance_reelle_km=distance_km,
         duree_reelle_min=payload.duree_reelle_min,
         dplus_reel_m=payload.dplus_reel_m,
         fc_moyenne_bpm=payload.fc_moyenne_bpm,
@@ -1476,11 +1490,25 @@ def modifier_journal_seance(
     if payload.rpe is not None: j.rpe = payload.rpe
     if payload.notes is not None: j.notes = payload.notes
     if payload.duree_reelle_min is not None: j.duree_reelle_min = payload.duree_reelle_min
-    if payload.distance_reelle_km is not None: j.distance_reelle_km = payload.distance_reelle_km
     if payload.dplus_reel_m is not None: j.dplus_reel_m = payload.dplus_reel_m
     if payload.fc_moyenne_bpm is not None: j.fc_moyenne_bpm = payload.fc_moyenne_bpm
     if payload.fc_max_bpm is not None: j.fc_max_bpm = payload.fc_max_bpm
-    if payload.details_intervalles is not None: j.details_intervalles = payload.details_intervalles
+    if payload.details_intervalles is not None:
+        j.details_intervalles = payload.details_intervalles
+        # Recalculer distance_reelle_km depuis les blocs si non fournie explicitement
+        if payload.distance_reelle_km is None:
+            try:
+                import json as _json
+                blocs = _json.loads(payload.details_intervalles)
+                total = sum(b.get("distance_km") or 0 for b in blocs)
+                if payload.distance_repos_km:
+                    total += payload.distance_repos_km
+                if total > 0:
+                    j.distance_reelle_km = round(total, 3)
+            except Exception:
+                pass
+    if payload.distance_reelle_km is not None:
+        j.distance_reelle_km = payload.distance_reelle_km
     j.completee = True
     db.commit()
     return {"ok": True}
