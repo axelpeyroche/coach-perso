@@ -1,26 +1,26 @@
 import { useAuth } from "../AuthContext";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+import api from "../api";
 
 const VAPID_PUBLIC = import.meta.env.VITE_VAPID_PUBLIC_KEY;
 
-function urlBase64ToUint8Array(base64String) {
-  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
-  const raw = atob(base64);
+function urlBase64ToUint8Array(b64) {
+  const pad = "=".repeat((4 - (b64.length % 4)) % 4);
+  const raw = atob((b64 + pad).replace(/-/g, "+").replace(/_/g, "/"));
   return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
 }
 
+// ── Push toggle ────────────────────────────────────────────────────────────
 function PushToggle() {
-  const [status, setStatus] = useState("loading"); // loading | unsupported | denied | off | on | working
+  const [status, setStatus] = useState("loading");
 
   useEffect(() => {
-    if (!("Notification" in window) || !("serviceWorker" in navigator)) {
-      setStatus("unsupported"); return;
-    }
+    if (!("Notification" in window) || !("serviceWorker" in navigator)) { setStatus("unsupported"); return; }
     if (Notification.permission === "denied") { setStatus("denied"); return; }
-    navigator.serviceWorker.ready.then(reg => reg.pushManager.getSubscription()).then(sub => {
-      setStatus(sub ? "on" : "off");
-    });
+    navigator.serviceWorker.ready
+      .then(r => r.pushManager.getSubscription())
+      .then(sub => setStatus(sub ? "on" : "off"))
+      .catch(() => setStatus("off"));
   }, []);
 
   async function toggle() {
@@ -30,39 +30,281 @@ function PushToggle() {
       const existing = await reg.pushManager.getSubscription();
       if (existing) {
         await existing.unsubscribe();
-        await fetch("/api/push/unsubscribe", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ endpoint: existing.endpoint }) });
+        await api.delete("/push/unsubscribe", { data: { endpoint: existing.endpoint } });
         setStatus("off");
       } else {
         const perm = await Notification.requestPermission();
         if (perm !== "granted") { setStatus(perm === "denied" ? "denied" : "off"); return; }
-        const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC) });
+        const sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC),
+        });
         const j = sub.toJSON();
-        await fetch("/api/push/subscribe", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth }) });
+        await api.post("/push/subscribe", { endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth });
         setStatus("on");
       }
     } catch (e) {
-      console.error(e);
+      console.error("push error:", e);
       setStatus("off");
     }
   }
 
-  if (status === "unsupported") return (
-    <span className="text-xs text-gray-400 italic">Non supporté sur cet appareil</span>
-  );
-  if (status === "denied") return (
-    <span className="text-xs text-red-400">Bloquées dans les paramètres du navigateur</span>
-  );
-
+  if (status === "unsupported") return <span className="text-xs text-gray-400 italic">Non supporté</span>;
+  if (status === "denied") return <span className="text-xs text-red-400 text-right leading-tight">Bloquées dans les<br/>paramètres</span>;
   const on = status === "on";
-  const working = status === "working" || status === "loading";
   return (
-    <button onClick={toggle} disabled={working}
+    <button onClick={toggle} disabled={status === "working" || status === "loading"}
       className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-50 ${on ? "bg-brand" : "bg-gray-200 dark:bg-gray-700"}`}>
-      <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${on ? "translate-x-6" : "translate-x-1"}`} />
+      <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${on ? "translate-x-6" : "translate-x-1"}`} />
     </button>
   );
 }
 
+// ── Avatar ─────────────────────────────────────────────────────────────────
+function Avatar({ userId, initials }) {
+  const [photo, setPhoto] = useState(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const galleryRef = useRef(null);
+  const cameraRef = useRef(null);
+
+  useEffect(() => {
+    if (userId) {
+      const stored = localStorage.getItem(`profilePhoto_${userId}`);
+      if (stored) setPhoto(stored);
+    }
+  }, [userId]);
+
+  function handleFile(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const dataUrl = ev.target.result;
+      setPhoto(dataUrl);
+      localStorage.setItem(`profilePhoto_${userId}`, dataUrl);
+    };
+    reader.readAsDataURL(file);
+    setMenuOpen(false);
+    e.target.value = "";
+  }
+
+  function removePhoto() {
+    setPhoto(null);
+    localStorage.removeItem(`profilePhoto_${userId}`);
+    setMenuOpen(false);
+  }
+
+  return (
+    <div className="relative">
+      <button onClick={() => setMenuOpen(v => !v)}
+        className="relative w-20 h-20 rounded-full overflow-hidden focus:outline-none group">
+        {photo
+          ? <img src={photo} alt="avatar" className="w-full h-full object-cover" />
+          : <div className="w-full h-full bg-brand/10 dark:bg-brand/20 flex items-center justify-center">
+              <span className="text-3xl font-bold text-brand">{initials}</span>
+            </div>
+        }
+        <div className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+          <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        </div>
+      </button>
+
+      {menuOpen && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
+          <div className="absolute left-1/2 -translate-x-1/2 top-[88px] z-50 bg-white dark:bg-gray-900 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden min-w-[200px]">
+            <button onClick={() => { setMenuOpen(false); setTimeout(() => galleryRef.current?.click(), 50); }}
+              className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800">
+              <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              Importer depuis l'appareil
+            </button>
+            <button onClick={() => { setMenuOpen(false); setTimeout(() => cameraRef.current?.click(), 50); }}
+              className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800">
+              <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              Prendre une photo
+            </button>
+            {photo && (
+              <button onClick={removePhoto}
+                className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 border-t border-gray-100 dark:border-gray-800">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                Supprimer la photo
+              </button>
+            )}
+          </div>
+        </>
+      )}
+
+      <input ref={galleryRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
+      <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFile} />
+    </div>
+  );
+}
+
+// ── Shared ─────────────────────────────────────────────────────────────────
+function Modal({ title, onClose, children }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative w-full max-w-lg bg-white dark:bg-gray-900 rounded-t-3xl sm:rounded-2xl shadow-xl max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100 dark:border-gray-800">
+          <h2 className="text-base font-bold text-gray-900 dark:text-white">{title}</h2>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400 text-xl font-bold leading-none">×</button>
+        </div>
+        <div className="px-5 py-4">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+const inputCls = "w-full px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand";
+
+function Field({ label, children }) {
+  return (
+    <div className="mb-4">
+      <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wide">{label}</label>
+      {children}
+    </div>
+  );
+}
+
+// ── Edit infos modal ───────────────────────────────────────────────────────
+function EditInfosModal({ user, onClose, onSaved }) {
+  const [form, setForm] = useState({
+    prenom: user?.prenom || "",
+    nom: user?.nom || "",
+    email: user?.email || "",
+    sexe: user?.sexe || "",
+    date_naissance: user?.date_naissance || "",
+    poids_kg: user?.poids_kg ?? "",
+  });
+  const [err, setErr] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  function set(k) { return e => setForm(f => ({ ...f, [k]: e.target.value })); }
+
+  async function save() {
+    setSaving(true); setErr("");
+    try {
+      const payload = {};
+      if (form.prenom !== (user?.prenom || "")) payload.prenom = form.prenom;
+      if (form.nom !== (user?.nom || "")) payload.nom = form.nom;
+      if (form.email !== (user?.email || "")) payload.email = form.email;
+      if (form.sexe !== (user?.sexe || "")) payload.sexe = form.sexe;
+      if (form.date_naissance !== (user?.date_naissance || "")) payload.date_naissance = form.date_naissance || null;
+      const newPoids = form.poids_kg !== "" ? parseFloat(form.poids_kg) : null;
+      if (newPoids !== user?.poids_kg) payload.poids_kg = newPoids;
+      if (Object.keys(payload).length > 0) {
+        await api.patch("/utilisateur/infos", payload);
+        await onSaved();
+      }
+      onClose();
+    } catch (e) {
+      setErr(e?.response?.data?.detail || "Erreur — réessaie");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal title="Modifier mes informations" onClose={onClose}>
+      <Field label="Prénom">
+        <input className={inputCls} value={form.prenom} onChange={set("prenom")} />
+      </Field>
+      <Field label="Nom">
+        <input className={inputCls} value={form.nom} onChange={set("nom")} />
+      </Field>
+      <Field label="Email">
+        <input type="email" className={inputCls} value={form.email} onChange={set("email")} />
+      </Field>
+      <Field label="Sexe">
+        <select className={inputCls} value={form.sexe} onChange={set("sexe")}>
+          <option value="">—</option>
+          <option value="M">Homme</option>
+          <option value="F">Femme</option>
+        </select>
+      </Field>
+      <Field label="Date de naissance">
+        <input type="date" className={inputCls} value={form.date_naissance || ""} onChange={set("date_naissance")} />
+      </Field>
+      <Field label="Poids (kg)">
+        <input type="number" step="0.1" min="20" max="300" className={inputCls} value={form.poids_kg} onChange={set("poids_kg")} />
+      </Field>
+      {err && <p className="text-xs text-red-500 mb-3">{err}</p>}
+      <button onClick={save} disabled={saving}
+        className="w-full py-3 rounded-xl bg-brand text-white font-semibold text-sm disabled:opacity-50 hover:bg-brand-dark transition-colors">
+        {saving ? "Enregistrement…" : "Enregistrer"}
+      </button>
+    </Modal>
+  );
+}
+
+// ── Edit password modal ────────────────────────────────────────────────────
+function EditPasswordModal({ onClose }) {
+  const [form, setForm] = useState({ ancien: "", nouveau: "", confirmer: "" });
+  const [err, setErr] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [done, setDone] = useState(false);
+
+  function set(k) { return e => setForm(f => ({ ...f, [k]: e.target.value })); }
+
+  async function save() {
+    if (form.nouveau !== form.confirmer) { setErr("Les mots de passe ne correspondent pas"); return; }
+    if (form.nouveau.length < 8) { setErr("Minimum 8 caractères requis"); return; }
+    setSaving(true); setErr("");
+    try {
+      await api.patch("/utilisateur/password", {
+        ancien_mot_de_passe: form.ancien,
+        nouveau_mot_de_passe: form.nouveau,
+      });
+      setDone(true);
+    } catch (e) {
+      setErr(e?.response?.data?.detail || "Erreur — réessaie");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal title="Modifier le mot de passe" onClose={onClose}>
+      {done ? (
+        <div className="text-center py-6">
+          <div className="text-4xl mb-3">✓</div>
+          <p className="text-brand font-semibold mb-4">Mot de passe modifié</p>
+          <button onClick={onClose} className="px-6 py-2 rounded-xl bg-brand text-white text-sm font-medium">Fermer</button>
+        </div>
+      ) : (
+        <>
+          <Field label="Mot de passe actuel">
+            <input type="password" className={inputCls} value={form.ancien} onChange={set("ancien")} autoComplete="current-password" />
+          </Field>
+          <Field label="Nouveau mot de passe">
+            <input type="password" className={inputCls} value={form.nouveau} onChange={set("nouveau")} autoComplete="new-password" />
+          </Field>
+          <Field label="Confirmer le nouveau mot de passe">
+            <input type="password" className={inputCls} value={form.confirmer} onChange={set("confirmer")} autoComplete="new-password" />
+          </Field>
+          {err && <p className="text-xs text-red-500 mb-3">{err}</p>}
+          <button onClick={save} disabled={saving}
+            className="w-full py-3 rounded-xl bg-brand text-white font-semibold text-sm disabled:opacity-50 hover:bg-brand-dark transition-colors">
+            {saving ? "Enregistrement…" : "Modifier le mot de passe"}
+          </button>
+        </>
+      )}
+    </Modal>
+  );
+}
+
+// ── Layout components ──────────────────────────────────────────────────────
 const PROG_LABEL = { course: "Course", muscu: "Musculation", hybride: "Hybride" };
 const MUSCU_LABEL = { poids_corps: "Poids du corps", salle: "Salle de sport" };
 const COURSE_LABEL = { route: "Route", trail: "Trail" };
@@ -77,10 +319,15 @@ function Row({ label, value }) {
   );
 }
 
-function Section({ title, children }) {
+function Section({ title, action, children }) {
   return (
     <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 px-4 py-1 mb-4">
-      {title && <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest pt-3 pb-1">{title}</p>}
+      {title && (
+        <div className="flex items-center justify-between pt-3 pb-1">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">{title}</p>
+          {action}
+        </div>
+      )}
       {children}
     </div>
   );
@@ -98,30 +345,52 @@ function BioStat({ label, value, unit }) {
   );
 }
 
+// ── Page ───────────────────────────────────────────────────────────────────
 export default function Profil({ dark, setDark }) {
-  const { user, logout } = useAuth();
+  const { user, setUser, logout } = useAuth();
+  const [editInfos, setEditInfos] = useState(false);
+  const [editPwd, setEditPwd] = useState(false);
 
   const initials = [user?.prenom?.[0], user?.nom?.[0]].filter(Boolean).join("").toUpperCase() || "?";
 
+  async function refreshUser() {
+    const r = await api.get("/auth/me");
+    setUser(r.data);
+  }
+
   return (
     <div className="max-w-lg mx-auto px-4 py-6">
+
       {/* Avatar + nom */}
       <div className="flex flex-col items-center mb-6">
-        <div className="w-20 h-20 rounded-full bg-brand/10 dark:bg-brand/20 flex items-center justify-center mb-3">
-          <span className="text-3xl font-bold text-brand">{initials}</span>
-        </div>
-        <h1 className="text-xl font-bold text-gray-900 dark:text-white">{user?.prenom} {user?.nom}</h1>
+        <Avatar userId={user?.id} initials={initials} />
+        <h1 className="text-xl font-bold text-gray-900 dark:text-white mt-3">{user?.prenom} {user?.nom}</h1>
         <p className="text-sm text-gray-400 mt-0.5">{user?.email}</p>
       </div>
 
       {/* Infos personnelles */}
-      <Section title="Informations personnelles">
+      <Section title="Informations personnelles" action={
+        <button onClick={() => setEditInfos(true)}
+          className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+          title="Modifier">
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+          </svg>
+        </button>
+      }>
         <Row label="Prénom" value={user?.prenom} />
         <Row label="Nom" value={user?.nom} />
         <Row label="Email" value={user?.email} />
         <Row label="Âge" value={user?.age ? `${user.age} ans` : null} />
         <Row label="Sexe" value={user?.sexe === "M" ? "Homme" : user?.sexe === "F" ? "Femme" : null} />
         <Row label="Poids" value={user?.poids_kg ? `${user.poids_kg} kg` : null} />
+        <button onClick={() => setEditPwd(true)}
+          className="flex items-center gap-2 py-3 text-sm text-brand font-medium hover:opacity-75 transition-opacity">
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+          </svg>
+          Modifier le mot de passe
+        </button>
       </Section>
 
       {/* Programme */}
@@ -149,10 +418,8 @@ export default function Profil({ dark, setDark }) {
       <Section title="Apparence">
         <div className="flex items-center justify-between py-3 border-b border-gray-100 dark:border-gray-800">
           <span className="text-sm text-gray-700 dark:text-gray-300">Mode sombre</span>
-          <button
-            onClick={() => setDark(d => !d)}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${dark ? "bg-brand" : "bg-gray-200 dark:bg-gray-700"}`}
-          >
+          <button onClick={() => setDark(d => !d)}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${dark ? "bg-brand" : "bg-gray-200 dark:bg-gray-700"}`}>
             <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${dark ? "translate-x-6" : "translate-x-1"}`} />
           </button>
         </div>
@@ -163,15 +430,16 @@ export default function Profil({ dark, setDark }) {
       </Section>
 
       {/* Déconnexion */}
-      <button
-        onClick={logout}
-        className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border border-red-200 dark:border-red-900 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors text-sm font-medium"
-      >
+      <button onClick={logout}
+        className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border border-red-200 dark:border-red-900 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors text-sm font-medium">
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h6a2 2 0 012 2v1" />
         </svg>
         Se déconnecter
       </button>
+
+      {editInfos && <EditInfosModal user={user} onClose={() => setEditInfos(false)} onSaved={refreshUser} />}
+      {editPwd && <EditPasswordModal onClose={() => setEditPwd(false)} />}
     </div>
   );
 }

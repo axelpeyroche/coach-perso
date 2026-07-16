@@ -684,6 +684,65 @@ def patch_preferences(payload: PreferencesSchema, current_user: Utilisateur = De
         "frequence_tests_semaines": current_user.frequence_tests_semaines,
     }
 
+class ProfilInfosSchema(BaseModel):
+    prenom: Optional[str] = None
+    nom: Optional[str] = None
+    email: Optional[str] = None
+    sexe: Optional[str] = None
+    date_naissance: Optional[str] = None  # "YYYY-MM-DD" ou null pour effacer
+    poids_kg: Optional[float] = Field(None, gt=0, lt=300)
+
+@app.patch("/api/utilisateur/infos", summary="Met à jour les informations personnelles")
+def patch_utilisateur_infos(
+    payload: ProfilInfosSchema,
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(obtenir_session),
+):
+    if payload.prenom is not None:
+        current_user.prenom = payload.prenom
+    if payload.nom is not None:
+        current_user.nom = payload.nom
+    if payload.email is not None:
+        existing = db.query(Utilisateur).filter(
+            Utilisateur.email == payload.email,
+            Utilisateur.id != current_user.id,
+        ).first()
+        if existing:
+            raise HTTPException(409, "Cet email est déjà utilisé")
+        current_user.email = payload.email
+    if payload.sexe is not None:
+        current_user.sexe = payload.sexe
+    if payload.poids_kg is not None:
+        current_user.poids_kg = payload.poids_kg
+    if "date_naissance" in payload.model_fields_set:
+        if payload.date_naissance:
+            try:
+                current_user.date_naissance = date.fromisoformat(payload.date_naissance)
+            except ValueError:
+                raise HTTPException(400, "Format date invalide, attendu YYYY-MM-DD")
+        else:
+            current_user.date_naissance = None
+    db.commit()
+    return {"ok": True}
+
+
+class PasswordChangeSchema(BaseModel):
+    ancien_mot_de_passe: str
+    nouveau_mot_de_passe: str = Field(min_length=8)
+
+@app.patch("/api/utilisateur/password", summary="Change le mot de passe")
+def patch_password(
+    payload: PasswordChangeSchema,
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(obtenir_session),
+):
+    if not _verify_password(payload.ancien_mot_de_passe, current_user.password_hash):
+        raise HTTPException(400, "Mot de passe actuel incorrect")
+    current_user.password_hash = _hash_password(payload.nouveau_mot_de_passe)
+    db.commit()
+    return {"ok": True}
+
+
 @app.get("/api/utilisateur/preferences", summary="Récupère les préférences d'entraînement")
 def get_preferences(current_user: Utilisateur = Depends(get_current_user)):
     return {

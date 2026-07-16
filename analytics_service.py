@@ -225,14 +225,14 @@ def distribution_volume(
             )
             .group_by(SeanceEntrainement.type_seance)
         ).all()
-        for row in series_machines:
-            n = row.total_series or 0
-            if row.type_seance == TypeSeance.GYM_UPPER:
+        for mr in series_machines:
+            n = mr.total_series or 0
+            if mr.type_seance == TypeSeance.GYM_UPPER:
                 volume_muscu["push"] += n // 2
                 volume_muscu["pull"] += n - n // 2
-            elif row.type_seance == TypeSeance.GYM_LOWER:
+            elif mr.type_seance == TypeSeance.GYM_LOWER:
                 volume_muscu["jambes"] += n
-            elif row.type_seance == TypeSeance.GYM_FULL:
+            elif mr.type_seance == TypeSeance.GYM_FULL:
                 volume_muscu["push"] += n // 3
                 volume_muscu["pull"] += n // 3
                 volume_muscu["jambes"] += n - 2 * (n // 3)
