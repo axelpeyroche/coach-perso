@@ -655,6 +655,7 @@ def onboarding(
 # ---------------------------------------------------------------------------
 
 class UpdateProgrammeSchema(BaseModel):
+    type_programme: Optional[str] = None  # "hybride" | "muscu" | "course"
     seances_semaine: Optional[int] = Field(None, ge=1, le=14)
     seances_muscu_semaine: Optional[int] = Field(None, ge=0, le=14)
     seances_course_semaine: Optional[int] = Field(None, ge=0, le=14)
@@ -678,6 +679,8 @@ def update_programme(
     import json as _json
 
     # 1. Mettre à jour les préférences utilisateur
+    if payload.type_programme is not None:
+        current_user.type_programme = payload.type_programme
     if payload.seances_semaine is not None:
         current_user.seances_semaine = payload.seances_semaine
     if payload.seances_muscu_semaine is not None:

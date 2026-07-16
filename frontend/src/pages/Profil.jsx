@@ -333,6 +333,7 @@ function EditPasswordModal({ onClose }) {
 // ── Edit programme modal ───────────────────────────────────────────────────
 function EditProgrammeModal({ user, onClose, onSaved }) {
   const [form, setForm] = useState({
+    type_programme:         user?.type_programme || "hybride",
     seances_semaine:        user?.seances_semaine ?? 5,
     seances_muscu_semaine:  user?.seances_muscu_semaine ?? 3,
     seances_course_semaine: user?.seances_course_semaine ?? 2,
@@ -351,6 +352,7 @@ function EditProgrammeModal({ user, onClose, onSaved }) {
     setSaving(true); setErr("");
     try {
       const payload = {};
+      if (form.type_programme         !== user?.type_programme)         payload.type_programme         = form.type_programme;
       if (form.seances_semaine        !== user?.seances_semaine)        payload.seances_semaine        = form.seances_semaine;
       if (form.seances_muscu_semaine  !== user?.seances_muscu_semaine)  payload.seances_muscu_semaine  = form.seances_muscu_semaine;
       if (form.seances_course_semaine !== user?.seances_course_semaine) payload.seances_course_semaine = form.seances_course_semaine;
@@ -379,46 +381,91 @@ function EditProgrammeModal({ user, onClose, onSaved }) {
     </Modal>
   );
 
+  const showMuscu  = form.type_programme !== "course";
+  const showCourse = form.type_programme !== "muscu";
+
+  function handleTypeProgramme(newType) {
+    setForm(f => {
+      const total = f.seances_semaine;
+      let muscu  = f.seances_muscu_semaine;
+      let course = f.seances_course_semaine;
+      if (newType === "muscu")  { muscu = total; course = 0; }
+      if (newType === "course") { course = total; muscu = 0; }
+      if (newType === "hybride") {
+        muscu  = Math.round(total * 0.6);
+        course = total - muscu;
+      }
+      return { ...f, type_programme: newType, seances_muscu_semaine: muscu, seances_course_semaine: course };
+    });
+  }
+
   return (
     <Modal title="Modifier le programme" onClose={onClose}>
+      <Field label="Type de programme">
+        <div className="grid grid-cols-3 gap-2">
+          {[["hybride","Hybride"],["muscu","Muscu"],["course","Course"]].map(([val, label]) => (
+            <button key={val} onClick={() => handleTypeProgramme(val)}
+              className={`py-2 rounded-xl text-sm font-semibold border transition-colors ${form.type_programme === val ? "bg-brand text-white border-brand" : "border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-brand hover:text-brand"}`}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </Field>
       <Field label="Séances / semaine">
         <div className="flex items-center gap-3">
-          <input type="range" min={2} max={10} value={form.seances_semaine} onChange={setNum("seances_semaine")} className="flex-1 accent-brand" />
+          <input type="range" min={2} max={10} value={form.seances_semaine}
+            onChange={e => {
+              const total = parseInt(e.target.value);
+              setForm(f => {
+                if (f.type_programme === "muscu")  return { ...f, seances_semaine: total, seances_muscu_semaine: total, seances_course_semaine: 0 };
+                if (f.type_programme === "course") return { ...f, seances_semaine: total, seances_course_semaine: total, seances_muscu_semaine: 0 };
+                const muscu = Math.min(f.seances_muscu_semaine, total);
+                return { ...f, seances_semaine: total, seances_muscu_semaine: muscu, seances_course_semaine: total - muscu };
+              });
+            }} className="flex-1 accent-brand" />
           <span className="text-sm font-bold text-gray-900 dark:text-white w-4 text-right">{form.seances_semaine}</span>
         </div>
       </Field>
-      <Field label="Séances muscu / semaine">
-        <div className="flex items-center gap-3">
-          <input type="range" min={0} max={form.seances_semaine} value={form.seances_muscu_semaine}
-            onChange={e => {
-              const v = parseInt(e.target.value);
-              setForm(f => ({ ...f, seances_muscu_semaine: v, seances_course_semaine: Math.max(0, f.seances_semaine - v) }));
-            }} className="flex-1 accent-brand" />
-          <span className="text-sm font-bold text-gray-900 dark:text-white w-4 text-right">{form.seances_muscu_semaine}</span>
-        </div>
-      </Field>
-      <Field label="Séances course / semaine">
-        <div className="flex items-center gap-3">
-          <input type="range" min={0} max={form.seances_semaine} value={form.seances_course_semaine}
-            onChange={e => {
-              const v = parseInt(e.target.value);
-              setForm(f => ({ ...f, seances_course_semaine: v, seances_muscu_semaine: Math.max(0, f.seances_semaine - v) }));
-            }} className="flex-1 accent-brand" />
-          <span className="text-sm font-bold text-gray-900 dark:text-white w-4 text-right">{form.seances_course_semaine}</span>
-        </div>
-      </Field>
-      <Field label="Type de musculation">
-        <select className={inputCls} value={form.type_muscu} onChange={set("type_muscu")}>
-          <option value="poids_corps">Poids du corps</option>
-          <option value="salle">Salle de sport</option>
-        </select>
-      </Field>
-      <Field label="Type de course">
-        <select className={inputCls} value={form.type_course} onChange={set("type_course")}>
-          <option value="route">Route</option>
-          <option value="trail">Trail</option>
-        </select>
-      </Field>
+      {showMuscu && (
+        <Field label="Séances muscu / semaine">
+          <div className="flex items-center gap-3">
+            <input type="range" min={0} max={form.seances_semaine} value={form.seances_muscu_semaine}
+              onChange={e => {
+                const v = parseInt(e.target.value);
+                setForm(f => ({ ...f, seances_muscu_semaine: v, seances_course_semaine: Math.max(0, f.seances_semaine - v) }));
+              }} className="flex-1 accent-brand" />
+            <span className="text-sm font-bold text-gray-900 dark:text-white w-4 text-right">{form.seances_muscu_semaine}</span>
+          </div>
+        </Field>
+      )}
+      {showCourse && (
+        <Field label="Séances course / semaine">
+          <div className="flex items-center gap-3">
+            <input type="range" min={0} max={form.seances_semaine} value={form.seances_course_semaine}
+              onChange={e => {
+                const v = parseInt(e.target.value);
+                setForm(f => ({ ...f, seances_course_semaine: v, seances_muscu_semaine: Math.max(0, f.seances_semaine - v) }));
+              }} className="flex-1 accent-brand" />
+            <span className="text-sm font-bold text-gray-900 dark:text-white w-4 text-right">{form.seances_course_semaine}</span>
+          </div>
+        </Field>
+      )}
+      {showMuscu && (
+        <Field label="Type de musculation">
+          <select className={inputCls} value={form.type_muscu} onChange={set("type_muscu")}>
+            <option value="poids_corps">Poids du corps</option>
+            <option value="salle">Salle de sport</option>
+          </select>
+        </Field>
+      )}
+      {showCourse && (
+        <Field label="Type de course">
+          <select className={inputCls} value={form.type_course} onChange={set("type_course")}>
+            <option value="route">Route</option>
+            <option value="trail">Trail</option>
+          </select>
+        </Field>
+      )}
       <Field label="Tests d'évaluation toutes les">
         <div className="flex items-center gap-3">
           <input type="range" min={2} max={16} value={form.frequence_tests_semaines} onChange={setNum("frequence_tests_semaines")} className="flex-1 accent-brand" />
