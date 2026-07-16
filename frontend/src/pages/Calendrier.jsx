@@ -27,7 +27,8 @@ function getDistanceKm(journal) {
   if (journal.details_intervalles) {
     try {
       const blocs = JSON.parse(journal.details_intervalles);
-      return blocs.reduce((sum, b) => sum + (b.distance_km || 0), 0);
+      const blocsKm = blocs.reduce((sum, b) => sum + (b.distance_km || 0), 0);
+      return blocsKm + (journal.distance_repos_km || 0);
     } catch {}
   }
   return 0;

@@ -1237,6 +1237,7 @@ def journaliser_seance(
         rpe=payload.rpe,
         rpe_cible=payload.rpe_cible,
         distance_reelle_km=distance_km,
+        distance_repos_km=payload.distance_repos_km,
         duree_reelle_min=payload.duree_reelle_min,
         dplus_reel_m=payload.dplus_reel_m,
         fc_moyenne_bpm=payload.fc_moyenne_bpm,
@@ -1493,6 +1494,8 @@ def modifier_journal_seance(
     if payload.dplus_reel_m is not None: j.dplus_reel_m = payload.dplus_reel_m
     if payload.fc_moyenne_bpm is not None: j.fc_moyenne_bpm = payload.fc_moyenne_bpm
     if payload.fc_max_bpm is not None: j.fc_max_bpm = payload.fc_max_bpm
+    if payload.distance_repos_km is not None:
+        j.distance_repos_km = payload.distance_repos_km
     if payload.details_intervalles is not None:
         j.details_intervalles = payload.details_intervalles
         # Recalculer distance_reelle_km depuis les blocs si non fournie explicitement
@@ -1501,8 +1504,8 @@ def modifier_journal_seance(
                 import json as _json
                 blocs = _json.loads(payload.details_intervalles)
                 total = sum(b.get("distance_km") or 0 for b in blocs)
-                if payload.distance_repos_km:
-                    total += payload.distance_repos_km
+                repos = payload.distance_repos_km if payload.distance_repos_km is not None else (j.distance_repos_km or 0)
+                total += repos
                 if total > 0:
                     j.distance_reelle_km = round(total, 3)
             except Exception:
@@ -1886,6 +1889,7 @@ def toutes_semaines_programme(current_user: Utilisateur = Depends(get_current_us
                             "fc_moyenne_bpm": seance.journal.fc_moyenne_bpm,
                             "fc_max_bpm": seance.journal.fc_max_bpm,
                             "details_intervalles": seance.journal.details_intervalles,
+                            "distance_repos_km": seance.journal.distance_repos_km,
                         } if seance.journal else None,
                     }
                     for seance in s.seances

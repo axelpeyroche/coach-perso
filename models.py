@@ -555,6 +555,7 @@ class JournalSeance(Base):
 
     # Réels course
     distance_reelle_km: Mapped[Optional[float]] = mapped_column(Float)
+    distance_repos_km: Mapped[Optional[float]] = mapped_column(Float)
     duree_reelle_min: Mapped[Optional[int]] = mapped_column(Integer)
     dplus_reel_m: Mapped[Optional[int]] = mapped_column(Integer)
     fc_moyenne_bpm: Mapped[Optional[int]] = mapped_column(Integer)
