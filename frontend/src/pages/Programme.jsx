@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import api, { getToutesSemaines, journaliserSeance, validerRPE, getProfilFC, supprimerJournal, modifierJournal, planifierSeance, creerEvaluation, enregistrerDemiCooper, enregistrerMax1Min, enregistrerAmrapBenchmark, getExercicesEvaluation, getHistoriqueEvaluations, modifierEvaluation } from "../api";
+import api, { getToutesSemaines, journaliserSeance, validerRPE, getProfilFC, supprimerJournal, modifierJournal, planifierSeance, creerEvaluation, enregistrerDemiCooper, enregistrerMax1Min, enregistrerAmrapBenchmark, getExercicesEvaluation, getHistoriqueEvaluations, modifierEvaluation, supprimerEvaluation } from "../api";
 import clsx from "clsx";
 
 
@@ -697,8 +697,21 @@ function CarteSeance({ seance, zonesFC }) {
   const prefillEnAttente = !fait && seance.journal && !seance.journal.completee;
 
   const mutAnnuler = useMutation({
-    mutationFn: () => supprimerJournal(seance.id),
-    onSuccess: () => { setValide(false); qc.invalidateQueries({ queryKey: ["toutes-semaines"] }); },
+    mutationFn: async () => {
+      await supprimerJournal(seance.id);
+      if (seance.type === "EVALUATION") {
+        try {
+          const data = await getHistoriqueEvaluations();
+          const ev = (data?.evaluations ?? []).find(e => e.date === seance.date_planifiee);
+          if (ev) await supprimerEvaluation(ev.id);
+        } catch {}
+      }
+    },
+    onSuccess: () => {
+      setValide(false);
+      qc.invalidateQueries({ queryKey: ["toutes-semaines"] });
+      qc.invalidateQueries({ queryKey: ["evaluations-historique"] });
+    },
   });
 
   return (
