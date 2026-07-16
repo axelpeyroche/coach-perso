@@ -826,6 +826,11 @@ def supprimer_evaluation(evaluation_id: int, current_user: Utilisateur = Depends
     evaluation = db.get(JournalEvaluationSeance, evaluation_id)
     if not evaluation or evaluation.utilisateur_id != current_user.id:
         raise HTTPException(404, "Évaluation introuvable")
+    # Supprimer les biométries créées par le Demi-Cooper de cette évaluation
+    if evaluation.demi_cooper and evaluation.demi_cooper.id_biometrie_instantanee:
+        bio = db.get(BiometrieUtilisateur, evaluation.demi_cooper.id_biometrie_instantanee)
+        if bio:
+            db.delete(bio)
     db.delete(evaluation)
     db.commit()
     return {"supprime": evaluation_id}

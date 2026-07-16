@@ -56,12 +56,23 @@ def tendances_physiologiques(db: Session, utilisateur_id: int) -> dict[str, Any]
     }
     """
     # --- Historique VMA ---
+    # Seules les biométries issues d'un vrai test Demi-Cooper (liées à un ResultatDemiCooper)
     biometries = (
         db.query(BiometrieUtilisateur)
+        .join(ResultatDemiCooper, ResultatDemiCooper.id_biometrie_instantanee == BiometrieUtilisateur.id)
         .filter(BiometrieUtilisateur.utilisateur_id == utilisateur_id)
         .order_by(BiometrieUtilisateur.enregistre_le)
         .all()
     )
+    # Si aucun test réel, afficher la biométrie d'onboarding (la plus ancienne)
+    if not biometries:
+        bio_init = (
+            db.query(BiometrieUtilisateur)
+            .filter(BiometrieUtilisateur.utilisateur_id == utilisateur_id)
+            .order_by(BiometrieUtilisateur.enregistre_le)
+            .first()
+        )
+        biometries = [bio_init] if bio_init else []
 
     def _kmh_to_pace(kmh: float) -> str:
         if kmh <= 0:
