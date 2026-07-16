@@ -1,6 +1,6 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getToutesSemaines, journaliserSeance, validerRPE, getProfilFC, supprimerJournal, modifierJournal, planifierSeance } from "../api";
+import api, { getToutesSemaines, journaliserSeance, validerRPE, getProfilFC, supprimerJournal, modifierJournal, planifierSeance } from "../api";
 import clsx from "clsx";
 
 
@@ -701,6 +701,14 @@ export default function Programme() {
     if (Math.abs(dx) > 3) drag.current.moved = true;
     navRef.current.scrollLeft = drag.current.scrollLeft - dx;
   }, []);
+
+  const qc = useQueryClient();
+
+  useEffect(() => {
+    api.post("/programme/corriger-seances")
+      .then(() => qc.invalidateQueries({ queryKey: ["toutes-semaines"] }))
+      .catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["toutes-semaines"],
