@@ -1267,12 +1267,14 @@ def push_test(
             )
             sent += 1
         except WebPushException as e:
-            errors.append(str(e))
+            errors.append(f"WebPushException: {e}")
             db.delete(sub)
+        except Exception as e:
+            errors.append(f"{type(e).__name__}: {e}")
     db.commit()
     if sent == 0:
-        raise HTTPException(500, f"Échec envoi push : {errors}")
-    return {"ok": True, "sent": sent}
+        raise HTTPException(500, detail={"errors": errors, "subs_count": len(subs)})
+    return {"ok": True, "sent": sent, "errors": errors}
 
 
 @app.patch(
