@@ -681,6 +681,7 @@ function idxSemaineCourante(semaines) {
 
 export default function Programme() {
   const [semIdx, setSemIdx] = useState(null);
+  const [correctionMsg, setCorrectionMsg] = useState(null);
 
   // Drag-to-scroll — déclaré avant tout early return (règles des hooks)
   const navRef = useRef(null);
@@ -710,8 +711,20 @@ export default function Programme() {
     api.post("/programme/corriger-seances", undefined, {
       headers: { Authorization: `Bearer ${token}` },
     })
-      .then(() => qc.invalidateQueries({ queryKey: ["toutes-semaines"] }))
-      .catch(() => {});
+      .then((res) => {
+        console.log("[corriger-seances]", res.data);
+        if (res.data?.seances_supprimees > 0) {
+          setCorrectionMsg(`Programme corrigé : ${res.data.seances_supprimees} séance(s) en excès supprimée(s).`);
+          setTimeout(() => setCorrectionMsg(null), 5000);
+        }
+        return qc.invalidateQueries({ queryKey: ["toutes-semaines"] });
+      })
+      .catch((e) => {
+        const msg = e?.response?.data?.detail || e?.message || String(e);
+        console.error("[corriger-seances] erreur:", msg);
+        setCorrectionMsg(`Erreur correction: ${msg}`);
+        setTimeout(() => setCorrectionMsg(null), 8000);
+      });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { data, isLoading, error } = useQuery({
@@ -740,6 +753,18 @@ export default function Programme() {
 
   return (
     <div className="p-4 md:p-8 max-w-2xl mx-auto space-y-5 w-full min-w-0">
+
+      {/* Toast correction */}
+      {correctionMsg && (
+        <div className={clsx(
+          "rounded-xl px-4 py-3 text-sm font-medium",
+          correctionMsg.startsWith("Erreur")
+            ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
+            : "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300"
+        )}>
+          {correctionMsg}
+        </div>
+      )}
 
       {/* En-tête */}
       <div>
