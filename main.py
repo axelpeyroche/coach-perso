@@ -1982,7 +1982,7 @@ def corriger_seances(
 
         courses_nv = sorted(
             [s for s in non_validees if s.type_seance == TypeSeance.COURSE],
-            key=lambda s: s.date_planifiee or date(2099, 1, 1)
+            key=lambda s: s.date_seance
         )
         muscu_types = {TypeSeance.EMOM, TypeSeance.AMRAP, TypeSeance.GYM_UPPER, TypeSeance.GYM_LOWER, TypeSeance.GYM_FULL}
         muscu_nv = [s for s in non_validees if s.type_seance in muscu_types]
@@ -1993,8 +1993,8 @@ def corriger_seances(
             supprimees += 1
 
         # Supprimer l'excès de muscu (complément EMOM en priorité = titre contient '3e')
-        muscu_nv_sorted = sorted(muscu_nv, key=lambda s: (0 if "3e" in (s.nom or "") else 1))
         total_muscu_target = seances_total - n_course
+        muscu_nv_sorted = sorted(muscu_nv, key=lambda s: (0 if "3e" in (s.titre or "") else 1))
         while len(muscu_nv_sorted) > total_muscu_target:
             db.delete(muscu_nv_sorted.pop(0))
             supprimees += 1
