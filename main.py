@@ -1599,20 +1599,21 @@ def toutes_semaines_programme(current_user: Utilisateur = Depends(get_current_us
     user = current_user
     mcs = db.query(Macrocycle).filter(Macrocycle.utilisateur_id == user.id).order_by(Macrocycle.numero_cycle).all()
 
-    # Correction automatique du nombre de séances par semaine (silencieuse, bulk SQL)
+    # Correction automatique du nombre de séances par semaine (bulk SQL)
+    _debug = {"n_course": None, "muscu_target": None, "ids_supprimes": [], "erreur": None}
     try:
         n_muscu = user.seances_muscu_semaine or 2
         seances_total = user.seances_semaine or 5
         n_course = user.seances_course_semaine if user.seances_course_semaine is not None else max(1, seances_total - n_muscu)
         n_course = min(n_course, max(1, seances_total - n_muscu))
         total_muscu_target = seances_total - n_course
+        _debug["n_course"] = n_course
+        _debug["muscu_target"] = total_muscu_target
         muscu_types = {TypeSeance.EMOM, TypeSeance.AMRAP, TypeSeance.GYM_UPPER, TypeSeance.GYM_LOWER, TypeSeance.GYM_FULL}
         ids_a_supprimer: list[int] = []
-        print(f"[correction] n_course={n_course} muscu_target={total_muscu_target} mcs={len(mcs)}", flush=True)
         for mc in mcs:
             sems = db.query(SemaineEntrainement).filter(SemaineEntrainement.macrocycle_id == mc.id).all()
             for sem in sems:
-                # Séances sans journal via LEFT JOIN (évite lazy loading + autoflush)
                 seances_sem = (
                     db.query(SeanceEntrainement)
                     .outerjoin(JournalSeance, JournalSeance.seance_id == SeanceEntrainement.id)
@@ -1621,13 +1622,11 @@ def toutes_semaines_programme(current_user: Utilisateur = Depends(get_current_us
                 )
                 courses_nv = sorted([s for s in seances_sem if s.type_seance == TypeSeance.COURSE], key=lambda s: s.date_seance)
                 muscu_nv = sorted([s for s in seances_sem if s.type_seance in muscu_types], key=lambda s: (0 if "3e" in (s.titre or "") else 1))
-                if len(courses_nv) > n_course or len(muscu_nv) > total_muscu_target:
-                    print(f"[correction] sem {sem.id}: {len(courses_nv)} courses, {len(muscu_nv)} muscu → suppression", flush=True)
                 while len(courses_nv) > n_course:
                     ids_a_supprimer.append(courses_nv.pop(0).id)
                 while len(muscu_nv) > total_muscu_target:
                     ids_a_supprimer.append(muscu_nv.pop(0).id)
-        print(f"[correction] ids à supprimer: {ids_a_supprimer}", flush=True)
+        _debug["ids_supprimes"] = ids_a_supprimer
         if ids_a_supprimer:
             db.query(ExerciceSeance).filter(ExerciceSeance.seance_id.in_(ids_a_supprimer)).delete(synchronize_session=False)
             db.query(SeanceEntrainement).filter(SeanceEntrainement.id.in_(ids_a_supprimer)).delete(synchronize_session=False)
@@ -1635,7 +1634,7 @@ def toutes_semaines_programme(current_user: Utilisateur = Depends(get_current_us
             db.expire_all()
     except Exception as _e:
         import traceback; traceback.print_exc()
-        print(f"[corriger-seances inline] ERREUR: {_e}", flush=True)
+        _debug["erreur"] = str(_e)
         db.rollback()
 
     semaine_globale = 0
@@ -1691,7 +1690,7 @@ def toutes_semaines_programme(current_user: Utilisateur = Depends(get_current_us
                     for seance in s.seances
                 ],
             })
-    return {"semaines": result, "total": semaine_globale}
+    return {"semaines": result, "total": semaine_globale, "_debug_correction": _debug}
 
 
 @app.get("/api/macrocycles", summary="Liste tous les macrocycles de l'utilisateur")
