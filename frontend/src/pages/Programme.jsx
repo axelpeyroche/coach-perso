@@ -705,7 +705,11 @@ export default function Programme() {
   const qc = useQueryClient();
 
   useEffect(() => {
-    api.post("/programme/corriger-seances")
+    const token = localStorage.getItem("token");
+    if (!token) return;
+    api.post("/programme/corriger-seances", undefined, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
       .then(() => qc.invalidateQueries({ queryKey: ["toutes-semaines"] }))
       .catch(() => {});
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
