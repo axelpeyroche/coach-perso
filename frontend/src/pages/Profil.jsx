@@ -10,7 +10,7 @@ function urlBase64ToUint8Array(b64) {
 
 // ── Push toggle ────────────────────────────────────────────────────────────
 function PushToggle() {
-  const [status, setStatus] = useState("loading"); // loading|unsupported|denied|off|on|working
+  const [status, setStatus] = useState("off"); // off|on|working|unsupported|denied
   const [errMsg, setErrMsg] = useState("");
 
   useEffect(() => {
@@ -18,16 +18,23 @@ function PushToggle() {
       setStatus("unsupported"); return;
     }
     if (Notification.permission === "denied") { setStatus("denied"); return; }
+    // Vérifier abonnement existant en arrière-plan, bouton actif immédiatement
     navigator.serviceWorker.ready
       .then(r => r.pushManager.getSubscription())
-      .then(sub => setStatus(sub ? "on" : "off"))
-      .catch(e => { setStatus("off"); setErrMsg(String(e)); });
+      .then(sub => { if (sub) setStatus("on"); })
+      .catch(() => {});
   }, []);
 
   async function toggle() {
-    setErrMsg(""); setTestMsg("");
+    setErrMsg("");
     setStatus("working");
     try {
+      // Permission en premier — doit être proche du geste utilisateur sur mobile
+      if (Notification.permission !== "granted") {
+        const perm = await Notification.requestPermission();
+        if (perm === "denied") { setStatus("denied"); return; }
+        if (perm !== "granted") { setStatus("off"); return; }
+      }
       const reg = await navigator.serviceWorker.ready;
       const existing = await reg.pushManager.getSubscription();
       if (existing) {
@@ -35,10 +42,6 @@ function PushToggle() {
         await api.delete("/push/unsubscribe", { data: { endpoint: existing.endpoint } });
         setStatus("off");
       } else {
-        const perm = await Notification.requestPermission();
-        if (perm === "denied") { setStatus("denied"); return; }
-        if (perm !== "granted") { setStatus("off"); return; }
-        // Fetch VAPID key from API (more reliable than build-time env var)
         const { data: vapidData } = await api.get("/push/vapid-public-key");
         const vapidKey = vapidData?.publicKey || import.meta.env.VITE_VAPID_PUBLIC_KEY;
         if (!vapidKey) throw new Error("Clé VAPID manquante côté serveur");
@@ -57,7 +60,7 @@ function PushToggle() {
     }
   }
 
-if (status === "unsupported") return <span className="text-xs text-gray-400 italic">Non supporté sur cet appareil</span>;
+  if (status === "unsupported") return <span className="text-xs text-gray-400 italic">Non supporté sur cet appareil</span>;
 
   if (status === "denied") return (
     <div className="text-right">
@@ -66,7 +69,7 @@ if (status === "unsupported") return <span className="text-xs text-gray-400 ital
   );
 
   const on = status === "on";
-  const busy = status === "working" || status === "loading";
+  const busy = status === "working";
 
   return (
     <div className="flex flex-col items-end gap-1">
