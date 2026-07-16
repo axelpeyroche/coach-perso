@@ -186,8 +186,10 @@ def distribution_volume(
             )
         ).one()
 
-        # Volume musculaire — séries par catégorie (depuis les ExerciceSeance des séances validées)
-        series_par_categorie = db.execute(
+        volume_muscu = {cat.value: 0 for cat in CategorieMusculaire}
+
+        # Cas 1 — exercices liés à une VariationExercice (poids du corps, barre…) → catégorie musculaire connue
+        series_avec_cat = db.execute(
             select(
                 VariationExercice.categorie_musculaire,
                 func.sum(ExerciceSeance.series).label("total_series"),
@@ -198,13 +200,42 @@ def distribution_volume(
             .where(
                 SeanceEntrainement.semaine_id == semaine.id,
                 JournalSeance.completee == True,
+                ExerciceSeance.exercice_id.is_not(None),
             )
             .group_by(VariationExercice.categorie_musculaire)
         ).all()
+        for s in series_avec_cat:
+            volume_muscu[s.categorie_musculaire.value] += s.total_series or 0
 
-        volume_muscu = {cat.value: 0 for cat in CategorieMusculaire}
-        for s in series_par_categorie:
-            volume_muscu[s.categorie_musculaire.value] = s.total_series
+        # Cas 2 — exercices machines (exercice_id NULL) → catégorie inférée depuis le type de séance
+        series_machines = db.execute(
+            select(
+                SeanceEntrainement.type_seance,
+                func.sum(ExerciceSeance.series).label("total_series"),
+            )
+            .join(ExerciceSeance, ExerciceSeance.seance_id == SeanceEntrainement.id)
+            .join(JournalSeance, JournalSeance.seance_id == SeanceEntrainement.id)
+            .where(
+                SeanceEntrainement.semaine_id == semaine.id,
+                JournalSeance.completee == True,
+                ExerciceSeance.exercice_id.is_(None),
+                SeanceEntrainement.type_seance.in_([
+                    TypeSeance.GYM_UPPER, TypeSeance.GYM_LOWER, TypeSeance.GYM_FULL,
+                ]),
+            )
+            .group_by(SeanceEntrainement.type_seance)
+        ).all()
+        for row in series_machines:
+            n = row.total_series or 0
+            if row.type_seance == TypeSeance.GYM_UPPER:
+                volume_muscu["push"] += n // 2
+                volume_muscu["pull"] += n - n // 2
+            elif row.type_seance == TypeSeance.GYM_LOWER:
+                volume_muscu["jambes"] += n
+            elif row.type_seance == TypeSeance.GYM_FULL:
+                volume_muscu["push"] += n // 3
+                volume_muscu["pull"] += n // 3
+                volume_muscu["jambes"] += n - 2 * (n // 3)
 
         resultats.append(
             {
