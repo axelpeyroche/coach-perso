@@ -1221,7 +1221,13 @@ def journaliser_seance(
     if seance.journal:
         raise HTTPException(409, "Journal dÃ©jÃ  crÃ©Ã© pour cette sÃ©ance â€” utilisez PATCH")
 
-    # Calcul automatique distance_reelle_km pour sÃ©ances fractionnÃ©es
+    # RPE cible automatique depuis la zone de la séance si non fourni
+    _RPE_PAR_ZONE = {"Z1": 5.0, "Z2": 6.0, "Z3": 7.0, "Z4": 8.0, "Z5": 9.0}
+    rpe_cible_final = payload.rpe_cible
+    if rpe_cible_final is None and seance.zone_cible:
+        rpe_cible_final = _RPE_PAR_ZONE.get(seance.zone_cible.value)
+
+    # Calcul automatique distance_reelle_km pour séances fractionnées
     distance_km = payload.distance_reelle_km
     if distance_km is None and payload.details_intervalles:
         try:
@@ -1239,7 +1245,7 @@ def journaliser_seance(
         seance_id=seance_id,
         completee=payload.completee,
         rpe=payload.rpe,
-        rpe_cible=payload.rpe_cible,
+        rpe_cible=rpe_cible_final,
         distance_reelle_km=distance_km,
         distance_repos_km=round(payload.distance_repos_km, 2) if payload.distance_repos_km is not None else None,
         duree_reelle_min=payload.duree_reelle_min,

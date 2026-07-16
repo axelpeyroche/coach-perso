@@ -90,6 +90,20 @@ export default function Analytics() {
                 <Line type="monotone" dataKey="chronique" name="Chronique (km)" stroke="#3b82f6" strokeWidth={1.5} strokeDasharray="4 4" />
               </LineChart>
             </ResponsiveContainer>
+            <div className="mt-3 px-1 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs text-gray-500 dark:text-gray-400">
+              <div className="flex items-start gap-1.5">
+                <span className="mt-0.5 shrink-0 w-3 h-3 rounded-full bg-orange-400" />
+                <span><strong className="text-gray-700 dark:text-gray-300">ACWA</strong> — ratio charge semaine / moyenne 4 sem. Entre 0.8 et 1.3 : charge équilibrée.</span>
+              </div>
+              <div className="flex items-start gap-1.5">
+                <span className="mt-1 shrink-0 w-3 h-0.5 bg-red-500" style={{ borderTop: "2px dashed #ef4444" }} />
+                <span><strong className="text-red-500">Limite 1.5</strong> — au-delà, la charge hebdo est trop élevée vs tes habitudes → risque de blessure.</span>
+              </div>
+              <div className="flex items-start gap-1.5">
+                <span className="mt-0.5 shrink-0 w-3 h-0.5 bg-green-400 mt-1" />
+                <span><strong className="text-gray-700 dark:text-gray-300">Aiguë / Chronique</strong> — km parcourus cette semaine vs moyenne glissante des 4 dernières semaines.</span>
+              </div>
+            </div>
           </div>
         ) : <Vide />}
       </Card>
@@ -102,12 +116,22 @@ export default function Analytics() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                 <XAxis dataKey="date" tick={{ fontSize: 11 }} />
                 <YAxis domain={[0, 10]} tick={{ fontSize: 11 }} width={32} />
-                <Tooltip />
+                <Tooltip formatter={(v, name) => [v?.toFixed(1) ?? "—", name]} />
                 <Legend />
+                <Line type="monotone" dataKey="cible" name="RPE cible" stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="4 4" dot={{ r: 3 }} connectNulls={false} />
                 <Line type="monotone" dataKey="reel" name="RPE réel" stroke="#ef4444" strokeWidth={2} dot={{ r: 3 }} />
-                <Line type="monotone" dataKey="cible" name="RPE cible" stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="4 4" />
               </LineChart>
             </ResponsiveContainer>
+            <div className="mt-3 px-1 grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-gray-500 dark:text-gray-400">
+              <div className="flex items-start gap-1.5">
+                <span className="mt-0.5 shrink-0 w-3 h-3 rounded-full bg-red-500" />
+                <span><strong className="text-gray-700 dark:text-gray-300">RPE réel</strong> — effort ressenti après la séance (1 = très facile, 10 = effort maximal).</span>
+              </div>
+              <div className="flex items-start gap-1.5">
+                <span className="mt-0.5 shrink-0 w-3 h-3 rounded-full bg-slate-400" />
+                <span><strong className="text-gray-700 dark:text-gray-300">RPE cible</strong> — effort prévu par le programme selon la zone (Z1→5, Z2→6, Z3→7, Z4→8, Z5→9). Si le réel dépasse régulièrement la cible, tu accumules de la fatigue.</span>
+              </div>
+            </div>
           </div>
         ) : <Vide />}
       </Card>
