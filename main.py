@@ -1680,8 +1680,10 @@ def semaine_courante(current_user: Utilisateur = Depends(get_current_user), db: 
                     "notes": s.journal.notes,
                     "duree_reelle_min": s.journal.duree_reelle_min,
                     "distance_reelle_km": s.journal.distance_reelle_km,
+                    "distance_repos_km": s.journal.distance_repos_km,
                     "dplus_reel_m": s.journal.dplus_reel_m,
                     "fc_moyenne_bpm": s.journal.fc_moyenne_bpm,
+                    "details_intervalles": s.journal.details_intervalles,
                 } if s.journal else None,
             }
             for s in sorted(semaine.seances, key=lambda x: x.date_seance)

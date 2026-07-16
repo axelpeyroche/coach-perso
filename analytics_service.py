@@ -207,6 +207,7 @@ def distribution_volume(
                 try:
                     blocs = _json.loads(j.details_intervalles)
                     km_total += sum(b.get("distance_km") or 0 for b in blocs)
+                    km_total += j.distance_repos_km or 0
                 except Exception:
                     pass
             elif j.duree_reelle_min:
