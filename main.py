@@ -1601,15 +1601,12 @@ def toutes_semaines_programme(current_user: Utilisateur = Depends(get_current_us
     mcs = db.query(Macrocycle).filter(Macrocycle.utilisateur_id == user.id).order_by(Macrocycle.numero_cycle).all()
 
     # Correction automatique du nombre de séances par semaine (bulk SQL)
-    _debug = {"n_course": None, "muscu_target": None, "ids_supprimes": [], "erreur": None}
     try:
         n_muscu = user.seances_muscu_semaine or 2
         seances_total = user.seances_semaine or 5
         n_course = user.seances_course_semaine if user.seances_course_semaine is not None else max(1, seances_total - n_muscu)
         n_course = min(n_course, max(1, seances_total - n_muscu))
         total_muscu_target = seances_total - n_course
-        _debug["n_course"] = n_course
-        _debug["muscu_target"] = total_muscu_target
         muscu_types = {TypeSeance.EMOM, TypeSeance.AMRAP, TypeSeance.GYM_UPPER, TypeSeance.GYM_LOWER, TypeSeance.GYM_FULL}
         ids_a_supprimer: list[int] = []
         for mc in mcs:
@@ -1627,15 +1624,12 @@ def toutes_semaines_programme(current_user: Utilisateur = Depends(get_current_us
                     ids_a_supprimer.append(courses_nv.pop(0).id)
                 while len(muscu_nv) > total_muscu_target:
                     ids_a_supprimer.append(muscu_nv.pop(0).id)
-        _debug["ids_supprimes"] = ids_a_supprimer
         if ids_a_supprimer:
             db.query(ExerciceSeance).filter(ExerciceSeance.seance_id.in_(ids_a_supprimer)).delete(synchronize_session=False)
             db.query(SeanceEntrainement).filter(SeanceEntrainement.id.in_(ids_a_supprimer)).delete(synchronize_session=False)
             db.commit()
             db.expire_all()
     except Exception as _e:
-        import traceback; traceback.print_exc()
-        _debug["erreur"] = str(_e)
         db.rollback()
 
     semaine_globale = 0
@@ -1691,7 +1685,7 @@ def toutes_semaines_programme(current_user: Utilisateur = Depends(get_current_us
                     for seance in s.seances
                 ],
             })
-    return {"semaines": result, "total": semaine_globale, "_debug_correction": _debug}
+    return {"semaines": result, "total": semaine_globale}
 
 
 @app.get("/api/macrocycles", summary="Liste tous les macrocycles de l'utilisateur")
