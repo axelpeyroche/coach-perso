@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import api, { getToutesSemaines, journaliserSeance, validerRPE, getProfilFC, supprimerJournal, modifierJournal, planifierSeance, creerEvaluation, enregistrerDemiCooper, enregistrerMax1Min, enregistrerAmrapBenchmark, getExercicesEvaluation } from "../api";
+import api, { getToutesSemaines, journaliserSeance, validerRPE, getProfilFC, supprimerJournal, modifierJournal, planifierSeance, creerEvaluation, enregistrerDemiCooper, enregistrerMax1Min, enregistrerAmrapBenchmark, getExercicesEvaluation, getHistoriqueEvaluations, modifierEvaluation } from "../api";
 import clsx from "clsx";
 
 
@@ -61,6 +61,136 @@ function signalCorrelationRPEFC(rpe, fcMoy, zone, zonesFC) {
 }
 
 // ─── Formulaire évaluation ─────────────────────────────────────────────────
+
+// ─── Formulaire édition évaluation ─────────────────────────────────────────
+
+function FormulaireEditEvaluation({ seance, onClose }) {
+  const qc = useQueryClient();
+  const evalType = detectEvalType(seance.titre);
+
+  const { data: historiqueData } = useQuery({
+    queryKey: ["evaluations-historique"],
+    queryFn: getHistoriqueEvaluations,
+  });
+  const { data: mouvements = [] } = useQuery({
+    queryKey: ["exercices-evaluation"],
+    queryFn: getExercicesEvaluation,
+    enabled: evalType === "max1min",
+  });
+
+  // Trouver l'évaluation correspondant à la date de la séance
+  const datePlanifiee = seance.date_planifiee; // "YYYY-MM-DD"
+  const historique = historiqueData?.evaluations ?? [];
+  const ev = historique.find(e => e.date === datePlanifiee) ?? historique[0] ?? null;
+
+  const [distance, setDistance] = useState("");
+  const [fcMax, setFcMax]       = useState("");
+  const [amrap, setAmrap]       = useState("");
+  const [reps, setReps]         = useState({});
+
+  // Initialiser les champs quand l'évaluation est trouvée
+  const [initialized, setInitialized] = useState(false);
+  if (ev && !initialized) {
+    if (evalType === "cooper" && ev.distance_m != null) setDistance(String(ev.distance_m));
+    if (evalType === "amrap" && ev.amrap_tours != null) setAmrap(String(ev.amrap_tours));
+    if (evalType === "max1min" && ev.max_1min.length > 0)
+      setReps(Object.fromEntries(ev.max_1min.map(m => [m.nom, String(m.reps)])));
+    setInitialized(true);
+  }
+
+  const saveMut = useMutation({
+    mutationFn: () => {
+      if (!ev) return Promise.resolve();
+      const payload = {};
+      if (evalType === "cooper" && distance) payload.distance_metres = parseFloat(distance);
+      if (evalType === "amrap" && amrap)     payload.amrap_tours = parseFloat(amrap);
+      if (evalType === "max1min" && ev.max_1min.length > 0)
+        payload.max_1min = ev.max_1min.map(m => ({
+          exercice_id: m.exercice_id,
+          repetitions: parseInt(reps[m.nom] ?? m.reps),
+        }));
+      return modifierEvaluation(ev.id, payload);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["evaluations-historique"] });
+      qc.invalidateQueries({ queryKey: ["tendances"] });
+      onClose();
+    },
+  });
+
+  if (!ev) return (
+    <div className="border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40 px-4 py-4 text-center text-sm text-gray-400">
+      Évaluation introuvable pour cette date.
+      <button onClick={onClose} className="ml-3 text-xs text-brand underline">Fermer</button>
+    </div>
+  );
+
+  return (
+    <div className="border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40 px-4 py-4 space-y-4">
+      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Modifier les résultats — {ev.date.split("-").reverse().join("/")}</p>
+
+      {evalType === "cooper" && (
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Distance (m)</label>
+            <input type="number" value={distance} onChange={e => setDistance(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
+            {distance && <p className="text-xs text-brand mt-1">VMA → {(parseFloat(distance)/100).toFixed(1)} km/h</p>}
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">FC max (optionnel)</label>
+            <input type="number" placeholder="192" value={fcMax} onChange={e => setFcMax(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
+          </div>
+        </div>
+      )}
+
+      {evalType === "amrap" && (
+        <div>
+          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">AMRAP 10' (tours)</label>
+          <input type="number" step="0.1" value={amrap} onChange={e => setAmrap(e.target.value)}
+            className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
+        </div>
+      )}
+
+      {evalType === "max1min" && ev.max_1min.length > 0 && (
+        <div className="grid grid-cols-2 gap-2">
+          {ev.max_1min.map(m => (
+            <div key={m.nom}>
+              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1 truncate">{m.nom}</label>
+              <input type="number" value={reps[m.nom] ?? ""} onChange={e => setReps(r => ({ ...r, [m.nom]: e.target.value }))}
+                className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {evalType === "max1min" && ev.max_1min.length === 0 && mouvements.length > 0 && (
+        <div className="grid grid-cols-2 gap-2">
+          {mouvements.map(m => (
+            <div key={m.slug}>
+              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1 truncate">{m.nom}</label>
+              <input type="number" value={reps[m.nom] ?? ""} onChange={e => setReps(r => ({ ...r, [m.nom]: e.target.value }))}
+                className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="flex justify-between items-center gap-2">
+        <button onClick={onClose} className="px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+          Annuler
+        </button>
+        <button onClick={() => saveMut.mutate()} disabled={saveMut.isPending}
+          className="px-6 py-2.5 rounded-xl bg-brand text-white font-semibold text-sm hover:bg-brand-dark transition-colors disabled:opacity-50">
+          {saveMut.isPending ? "..." : "Enregistrer ✓"}
+        </button>
+      </div>
+      {saveMut.isError && <p className="text-xs text-red-500 text-center">Erreur — réessaie.</p>}
+    </div>
+  );
+}
+
 
 function detectEvalType(titre) {
   const t = (titre || "").toLowerCase();
@@ -730,7 +860,10 @@ function CarteSeance({ seance, zonesFC }) {
       })()}
 
       {/* ── Formulaire modification ── */}
-      {editOpen && fait && (
+      {editOpen && fait && seance.type === "EVALUATION" && (
+        <FormulaireEditEvaluation seance={seance} onClose={() => setEditOpen(false)} />
+      )}
+      {editOpen && fait && seance.type !== "EVALUATION" && (
         <FormulaireLog
           seance={seance}
           onClose={() => setEditOpen(false)}
