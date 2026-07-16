@@ -2868,13 +2868,14 @@ def import_seances_recentes(
 
     seances = (
         db.query(SeanceEntrainement)
-        .join(SemaineEntrainement)
+        .join(SemaineEntrainement, SeanceEntrainement.semaine_id == SemaineEntrainement.id)
+        .join(Macrocycle, SemaineEntrainement.macrocycle_id == Macrocycle.id)
         .filter(
-            SeanceEntrainement.utilisateur_id == user.id,
-            SeanceEntrainement.date_planifiee >= str(depuis),
-            SeanceEntrainement.date_planifiee <= str(demain),
+            Macrocycle.utilisateur_id == user.id,
+            SeanceEntrainement.date_seance >= depuis,
+            SeanceEntrainement.date_seance <= demain,
         )
-        .order_by(SeanceEntrainement.date_planifiee.desc())
+        .order_by(SeanceEntrainement.date_seance.desc())
         .all()
     )
 
