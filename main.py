@@ -612,7 +612,9 @@ def onboarding(
             content = enrichir_paces_vma(content, vma_for_paces)
 
         n_muscu = current_user.seances_muscu_semaine or 2
-        n_course = current_user.seances_course_semaine or 3
+        seances_total = current_user.seances_semaine or 5
+        n_course = current_user.seances_course_semaine if current_user.seances_course_semaine is not None else max(1, seances_total - n_muscu)
+        n_course = min(n_course, max(1, seances_total - n_muscu))
         muscu_adapter = adapter_contenu_gym if current_user.type_muscu == "salle" else adapter_contenu_muscu
         adapted = adapter_contenu_course(muscu_adapter(content, n_muscu, current_user.sexe), n_course)
         _inserer_seances_en_session(db, mc, adapted)
@@ -2085,7 +2087,9 @@ def initialiser_programme(payload: InitProgrammePayload, current_user: Utilisate
                 content = enrichir_paces_vma(content, vma_init)
 
             n_muscu = user.seances_muscu_semaine or 2
-            n_course = user.seances_course_semaine or 3
+            seances_total = user.seances_semaine or 5
+            n_course = user.seances_course_semaine if user.seances_course_semaine is not None else max(1, seances_total - n_muscu)
+            n_course = min(n_course, max(1, seances_total - n_muscu))
             muscu_adapter = adapter_contenu_gym if user.type_muscu == "salle" else adapter_contenu_muscu
             adapted = adapter_contenu_course(muscu_adapter(content, n_muscu, user.sexe), n_course)
             _inserer_seances_en_session(db, mc, adapted)
@@ -2126,7 +2130,9 @@ def initialiser_programme(payload: InitProgrammePayload, current_user: Utilisate
                 vma_std = bio_std.vma_kmh
 
         n_muscu = user.seances_muscu_semaine or 2
-        n_course = user.seances_course_semaine or 3
+        seances_total = user.seances_semaine or 5
+        n_course = user.seances_course_semaine if user.seances_course_semaine is not None else max(1, seances_total - n_muscu)
+        n_course = min(n_course, max(1, seances_total - n_muscu))
         muscu_adapter = adapter_contenu_gym if user.type_muscu == "salle" else adapter_contenu_muscu
         mcs_crees = []
         for numero_cycle in range(1, 4):
