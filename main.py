@@ -1629,7 +1629,9 @@ def toutes_semaines_programme(current_user: Utilisateur = Depends(get_current_us
             db.query(SeanceEntrainement).filter(SeanceEntrainement.id.in_(ids_a_supprimer)).delete(synchronize_session=False)
             db.commit()
             mcs = db.query(Macrocycle).filter(Macrocycle.utilisateur_id == user.id).order_by(Macrocycle.numero_cycle).all()
-    except Exception:
+    except Exception as _e:
+        import traceback; traceback.print_exc()
+        print(f"[corriger-seances inline] ERREUR: {_e}", flush=True)
         db.rollback()
 
     semaine_globale = 0
