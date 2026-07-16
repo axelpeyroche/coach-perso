@@ -94,6 +94,9 @@ export const getHistoriqueEvaluations = () =>
 export const supprimerEvaluationsIncompletes = () =>
   api.delete("/evaluations/incompletes").then((r) => r.data);
 
+export const supprimerEvaluation = (evaluation_id) =>
+  api.delete(`/evaluations/${evaluation_id}`).then((r) => r.data);
+
 export const modifierEvaluation = (evaluation_id, payload) =>
   api.patch(`/evaluations/${evaluation_id}`, payload).then((r) => r.data);
 

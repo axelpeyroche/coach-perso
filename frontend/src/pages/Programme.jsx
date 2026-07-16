@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import api, { getToutesSemaines, journaliserSeance, validerRPE, getProfilFC, supprimerJournal, modifierJournal, planifierSeance } from "../api";
+import api, { getToutesSemaines, journaliserSeance, validerRPE, getProfilFC, supprimerJournal, modifierJournal, planifierSeance, creerEvaluation, enregistrerDemiCooper, enregistrerMax1Min, enregistrerAmrapBenchmark, getExercicesEvaluation } from "../api";
 import clsx from "clsx";
 
 
@@ -59,6 +59,157 @@ function signalCorrelationRPEFC(rpe, fcMoy, zone, zonesFC) {
   if (fcMoy > fcMax + 5)        return { label: "FC au-dessus de la zone", color: "text-red-500" };
   return null;
 }
+
+// ─── Formulaire évaluation ─────────────────────────────────────────────────
+
+function FormulaireEvaluation({ seance, onClose, onDone }) {
+  const qc = useQueryClient();
+
+  const { data: mouvements = [] } = useQuery({
+    queryKey: ["exercices-evaluation"],
+    queryFn: getExercicesEvaluation,
+  });
+
+  const [distance, setDistance] = useState("");
+  const [fcMax, setFcMax]       = useState("");
+  const [reps, setReps]         = useState({});
+  const [tours, setTours]       = useState("");
+  const [rpe, setRpe]           = useState(7);
+  const [notes, setNotes]       = useState("");
+  const [step, setStep]         = useState("saisie"); // "saisie" | "saving"
+
+  const RPE_LABEL = { 1:"Très facile",2:"Facile",3:"Modéré",4:"Assez facile",5:"Moyen",6:"Un peu difficile",7:"Difficile",8:"Très difficile",9:"Extrêmement difficile",10:"Maximum" };
+  const RPE_COLOR = { 1:"text-green-500",2:"text-green-500",3:"text-green-500",4:"text-lime-500",5:"text-yellow-500",6:"text-orange-400",7:"text-orange-500",8:"text-red-500",9:"text-red-600",10:"text-red-700" };
+
+  const [saving, setSaving] = useState(false);
+  const [error, setError]   = useState(null);
+
+  async function handleSubmit() {
+    setSaving(true);
+    setError(null);
+    try {
+      // 1. Créer l'évaluation
+      const { id: evalId } = await creerEvaluation({ est_induction: false });
+
+      // 2. Demi-Cooper
+      if (distance) {
+        await enregistrerDemiCooper(evalId, {
+          distance_metres: parseFloat(distance),
+          fc_max: fcMax ? parseInt(fcMax) : undefined,
+        });
+      }
+
+      // 3. Max 1 min
+      const repsPayload = mouvements
+        .filter(m => reps[m.slug])
+        .map(m => ({ exercice_id: m.id, repetitions_realisees: parseInt(reps[m.slug]) }));
+      if (repsPayload.length > 0) {
+        await enregistrerMax1Min(evalId, repsPayload);
+      }
+
+      // 4. AMRAP
+      if (tours) {
+        await amrapPost(evalId, tours);
+      }
+
+      // 5. Journaliser la séance (marquer comme faite)
+      await journaliserSeance(seance.id, { rpe, notes: notes || undefined });
+
+      qc.invalidateQueries({ queryKey: ["toutes-semaines"] });
+      qc.invalidateQueries({ queryKey: ["evaluations-historique"] });
+      onDone();
+    } catch (e) {
+      setError("Erreur — réessaie.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function amrapPost(evalId, toursVal) {
+    await enregistrerAmrapBenchmark(evalId, { tours_completes: parseFloat(toursVal) });
+  }
+
+  return (
+    <div className="border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40 px-4 py-4 space-y-5">
+      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Résultats de l'évaluation</p>
+
+      {/* Demi-Cooper */}
+      <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-3 space-y-2">
+        <p className="text-xs font-semibold text-gray-700 dark:text-gray-200">🏃 Demi-Cooper</p>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Distance (m)</label>
+            <input type="number" placeholder="1450" value={distance} onChange={e => setDistance(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
+            {distance && <p className="text-xs text-brand mt-1">VMA → {(parseFloat(distance)/100).toFixed(1)} km/h</p>}
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">FC max (optionnel)</label>
+            <input type="number" placeholder="192" value={fcMax} onChange={e => setFcMax(e.target.value)}
+              className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
+          </div>
+        </div>
+      </div>
+
+      {/* Max 1 min */}
+      {mouvements.length > 0 && (
+        <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-3 space-y-2">
+          <p className="text-xs font-semibold text-gray-700 dark:text-gray-200">💪 Max 1 min</p>
+          <div className="grid grid-cols-2 gap-2">
+            {mouvements.map(m => (
+              <div key={m.slug}>
+                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1 truncate">{m.nom}</label>
+                <input type="number" min={0} placeholder="reps" value={reps[m.slug] ?? ""}
+                  onChange={e => setReps(r => ({ ...r, [m.slug]: e.target.value }))}
+                  className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white text-center focus:outline-none focus:ring-2 focus:ring-brand" />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* AMRAP */}
+      <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-3 space-y-2">
+        <p className="text-xs font-semibold text-gray-700 dark:text-gray-200">🔥 AMRAP 10 min</p>
+        <div>
+          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Tours (ex. 2.9)</label>
+          <input type="number" step="0.1" placeholder="2.9" value={tours} onChange={e => setTours(e.target.value)}
+            className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
+        </div>
+      </div>
+
+      {/* RPE */}
+      <div>
+        <div className="flex justify-between items-baseline mb-2">
+          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Effort perçu (RPE)</span>
+          <span className={clsx("text-sm font-bold", RPE_COLOR[Math.round(rpe)])}>{rpe}/10 — {RPE_LABEL[Math.round(rpe)]}</span>
+        </div>
+        <input type="range" min={1} max={10} step={0.5} value={rpe} onChange={e => setRpe(parseFloat(e.target.value))} className="w-full accent-brand" />
+        <div className="flex justify-between text-xs text-gray-400 mt-0.5"><span>1 facile</span><span>10 max</span></div>
+      </div>
+
+      {/* Notes */}
+      <div>
+        <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-1">Notes</label>
+        <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2}
+          placeholder="Sensations, conditions, observations..."
+          className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white resize-none focus:outline-none focus:ring-2 focus:ring-brand" />
+      </div>
+
+      <div className="flex justify-between items-center gap-2">
+        <button onClick={onClose} className="px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+          Annuler
+        </button>
+        <button onClick={handleSubmit} disabled={saving}
+          className="px-6 py-2.5 rounded-xl bg-brand text-white font-semibold text-sm hover:bg-brand-dark transition-colors disabled:opacity-50">
+          {saving ? "Enregistrement..." : "Valider ✓"}
+        </button>
+      </div>
+      {error && <p className="text-xs text-red-500 text-center">{error}</p>}
+    </div>
+  );
+}
+
 
 // ─── Formulaire de journalisation ──────────────────────────────────────────
 
@@ -643,7 +794,12 @@ function CarteSeance({ seance, zonesFC }) {
       )}
 
       {/* ── Formulaire log ── */}
-      {logOpen && !fait && (
+      {logOpen && !fait && seance.type === "EVALUATION" && (
+        <FormulaireEvaluation seance={seance}
+          onClose={() => setLogOpen(false)}
+          onDone={() => { setLogOpen(false); setValide(true); }} />
+      )}
+      {logOpen && !fait && seance.type !== "EVALUATION" && (
         <FormulaireLog seance={seance}
           onClose={() => setLogOpen(false)}
           onDone={(c) => { setLogOpen(false); setValide(true); if (c) setConseil(c); }} />

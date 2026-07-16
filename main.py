@@ -821,6 +821,16 @@ def supprimer_evaluations_incompletes(current_user: Utilisateur = Depends(get_cu
     return {"supprimes": supprimes}
 
 
+@app.delete("/api/evaluations/{evaluation_id}", summary="Supprimer une évaluation")
+def supprimer_evaluation(evaluation_id: int, current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
+    evaluation = db.get(JournalEvaluationSeance, evaluation_id)
+    if not evaluation or evaluation.utilisateur_id != current_user.id:
+        raise HTTPException(404, "Évaluation introuvable")
+    db.delete(evaluation)
+    db.commit()
+    return {"supprime": evaluation_id}
+
+
 class ModifierEvaluationSchema(BaseModel):
     distance_metres: Optional[float] = None
     amrap_tours: Optional[float] = None

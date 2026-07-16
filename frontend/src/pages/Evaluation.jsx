@@ -1,11 +1,9 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { creerEvaluation, enregistrerDemiCooper, enregistrerMax1Min, enregistrerAmrapBenchmark, getExercicesEvaluation, getHistoriqueEvaluations, supprimerEvaluationsIncompletes, modifierEvaluation } from "../api";
+import { getHistoriqueEvaluations, modifierEvaluation, supprimerEvaluation } from "../api";
 import Card from "../components/Card";
 import clsx from "clsx";
 
-
-const ETAPES = ["intro", "demi_cooper", "max_1min", "amrap", "resultats"];
 
 function ModalEditerEval({ ev, onClose }) {
   const qc = useQueryClient();
@@ -15,7 +13,7 @@ function ModalEditerEval({ ev, onClose }) {
     Object.fromEntries(ev.max_1min.map(m => [m.nom, String(m.reps)]))
   );
 
-  const mut = useMutation({
+  const saveMut = useMutation({
     mutationFn: () => {
       const payload = {};
       if (distance !== "" && parseFloat(distance) !== ev.distance_m)
@@ -36,12 +34,29 @@ function ModalEditerEval({ ev, onClose }) {
     },
   });
 
+  const deleteMut = useMutation({
+    mutationFn: () => supprimerEvaluation(ev.id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["evaluations-historique"] });
+      qc.invalidateQueries({ queryKey: ["tendances"] });
+      onClose();
+    },
+  });
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={onClose}>
       <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4" onClick={e => e.stopPropagation()}>
-        <h3 className="text-base font-bold text-gray-900 dark:text-white">
-          Modifier — {ev.date.split("-").reverse().join("/")}
-        </h3>
+        <div className="flex items-center justify-between">
+          <h3 className="text-base font-bold text-gray-900 dark:text-white">
+            Modifier — {ev.date.split("-").reverse().join("/")}
+          </h3>
+          <button
+            onClick={() => { if (window.confirm("Supprimer cette évaluation ?")) deleteMut.mutate(); }}
+            disabled={deleteMut.isPending}
+            className="text-red-400 hover:text-red-600 transition-colors text-sm font-medium px-2 py-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50">
+            {deleteMut.isPending ? "…" : "Supprimer"}
+          </button>
+        </div>
 
         {ev.distance_m != null && (
           <div>
@@ -77,38 +92,19 @@ function ModalEditerEval({ ev, onClose }) {
 
         <div className="flex justify-end gap-2 pt-1">
           <button onClick={onClose} className="px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-sm text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800">Annuler</button>
-          <button onClick={() => mut.mutate()} disabled={mut.isPending}
+          <button onClick={() => saveMut.mutate()} disabled={saveMut.isPending}
             className="px-5 py-2 rounded-xl bg-brand text-white font-semibold text-sm disabled:opacity-50">
-            {mut.isPending ? "…" : "Enregistrer"}
+            {saveMut.isPending ? "…" : "Enregistrer"}
           </button>
         </div>
-        {mut.isError && <p className="text-xs text-red-500 text-center">Erreur — réessaie.</p>}
+        {(saveMut.isError || deleteMut.isError) && <p className="text-xs text-red-500 text-center">Erreur — réessaie.</p>}
       </div>
     </div>
   );
 }
 
 export default function Evaluation() {
-  const [etape, setEtape] = useState("intro");
-  const [evaluationId, setEvaluationId] = useState(null);
-  const [resultats, setResultats] = useState({});
   const [evalEnEdition, setEvalEnEdition] = useState(null);
-
-  // Demi-Cooper
-  const [distance, setDistance] = useState("");
-  const [fcMax, setFcMax] = useState("");
-  const [vmaResultat, setVmaResultat] = useState(null);
-
-  // Max 1 min
-  const [reps, setReps] = useState({});
-
-  // AMRAP
-  const [tours, setTours] = useState("");
-
-  const { data: mouvements = [] } = useQuery({
-    queryKey: ["exercices-evaluation"],
-    queryFn: getExercicesEvaluation,
-  });
 
   const { data: historiqueData } = useQuery({
     queryKey: ["evaluations-historique"],
@@ -116,71 +112,9 @@ export default function Evaluation() {
   });
   const historique = historiqueData?.evaluations ?? [];
 
-  const qc = useQueryClient();
-  const creerMut = useMutation({ mutationFn: creerEvaluation });
-  const nettoyerMut = useMutation({
-    mutationFn: () => supprimerEvaluationsIncompletes(),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["evaluations-historique"] }),
-  });
-  const cooperMut = useMutation({ mutationFn: ({ id, data }) => enregistrerDemiCooper(id, data) });
-  const max1MinMut = useMutation({ mutationFn: ({ id, data }) => enregistrerMax1Min(id, data) });
-  const amrapMut = useMutation({ mutationFn: ({ id, data }) => enregistrerAmrapBenchmark(id, data) });
-
-  function annuler() {
-    qc.invalidateQueries({ queryKey: ["evaluations-historique"] });
-    setEtape("intro");
-  }
-
-  function demarrer() {
-    // Ne crée rien en DB — l'évaluation est créée lors de la première sauvegarde
-    setEtape("demi_cooper");
-  }
-
-  function reprendreEval(ev) {
-    setEvaluationId(ev.id);
-    if (!ev.distance_m) setEtape("demi_cooper");
-    else if (ev.max_1min.length === 0) setEtape("max_1min");
-    else setEtape("amrap");
-  }
-
-  async function validerCooper(quitter = false) {
-    // Crée l'évaluation en DB au moment de la première sauvegarde réelle
-    let id = evaluationId;
-    if (!id) {
-      const eval_ = await creerMut.mutateAsync({ est_induction: true });
-      id = eval_.id;
-      setEvaluationId(id);
-    }
-    const res = await cooperMut.mutateAsync({
-      id,
-      data: { distance_metres: parseFloat(distance), fc_max: fcMax ? parseInt(fcMax) : undefined },
-    });
-    setVmaResultat(res);
-    setResultats((r) => ({ ...r, cooper: res }));
-    if (quitter) { qc.invalidateQueries({ queryKey: ["evaluations-historique"] }); setEtape("intro"); }
-    else setEtape("max_1min");
-  }
-
-  async function valider1Min(quitter = false) {
-    const payload = mouvements.map((m) => ({
-      exercice_id: m.id,
-      repetitions_realisees: parseInt(reps[m.slug] || 0),
-    }));
-    await max1MinMut.mutateAsync({ id: evaluationId, data: payload });
-    setResultats((r) => ({ ...r, max1min: reps }));
-    if (quitter) { qc.invalidateQueries({ queryKey: ["evaluations-historique"] }); setEtape("intro"); }
-    else setEtape("amrap");
-  }
-
-  async function validerAmrap(quitter = false) {
-    await amrapMut.mutateAsync({
-      id: evaluationId,
-      data: { tours_completes: parseFloat(tours) },
-    });
-    setResultats((r) => ({ ...r, amrap: tours }));
-    if (quitter) { qc.invalidateQueries({ queryKey: ["evaluations-historique"] }); setEtape("intro"); }
-    else setEtape("resultats");
-  }
+  // Aligner les évaluations par date : une ligne = une date où au moins un test a été fait
+  // On groupe par date (même si chaque éval peut avoir les 3 tests ou seulement certains)
+  // En pratique chaque entrée de historique contient potentiellement les 3 types
 
   return (
     <div className="p-4 md:p-8 max-w-2xl mx-auto space-y-6">
@@ -189,250 +123,124 @@ export default function Evaluation() {
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Tests — VMA, force & conditionnement</p>
       </div>
 
-      {/* Stepper */}
-      <div className="flex items-center gap-2">
-        {["Intro", "Demi-Cooper", "Max 1 min", "AMRAP 10'", "Résultats"].map((label, i) => {
-          const etapes = ["intro", "demi_cooper", "max_1min", "amrap", "resultats"];
-          const actif = etapes.indexOf(etape) >= i;
-          return (
-            <div key={label} className="flex items-center gap-2">
-              <div className={clsx("w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold", actif ? "bg-brand text-white" : "bg-gray-200 dark:bg-gray-700 text-gray-400")}>
-                {i + 1}
-              </div>
-              {i < 4 && <div className={clsx("h-0.5 w-6 md:w-10", actif ? "bg-brand" : "bg-gray-200 dark:bg-gray-700")} />}
-            </div>
-          );
-        })}
-      </div>
-
-      {etape === "intro" && (
-        <Card title="Protocole — Semaine 8">
-          <div className="space-y-3 text-sm text-gray-600 dark:text-gray-400">
-            <p>Cette session comprend 3 tests enchaînés :</p>
-            <div className="space-y-2">
-              <div className="flex gap-3"><span>🏃</span><span><strong className="text-gray-900 dark:text-white">Demi-Cooper</strong> — 6 min à allure maximale. Calcule ta VMA.</span></div>
-              <div className="flex gap-3"><span>💪</span><span><strong className="text-gray-900 dark:text-white">Max 1 min</strong> — 7 mouvements, 3 min de récup entre chaque.</span></div>
-              <div className="flex gap-3"><span>🔥</span><span><strong className="text-gray-900 dark:text-white">AMRAP 10 min</strong> — circuit fixe, score en tours.</span></div>
+      {/* Explication des 3 tests */}
+      <Card title="Protocole d'évaluation">
+        <div className="space-y-4 text-sm text-gray-600 dark:text-gray-400">
+          <div className="flex gap-3">
+            <span className="text-xl shrink-0">🏃</span>
+            <div>
+              <p className="font-semibold text-gray-900 dark:text-white">Demi-Cooper — 6 minutes</p>
+              <p className="mt-0.5">Cours à allure maximale pendant 6 minutes. Mesure la distance parcourue pour calculer ta VMA (formule : distance en mètres ÷ 100).</p>
             </div>
           </div>
-          <button onClick={demarrer} disabled={creerMut.isPending} className="mt-5 w-full py-3 rounded-xl bg-brand text-white font-semibold text-sm hover:bg-brand-dark transition-colors disabled:opacity-50">
-            {creerMut.isPending ? "Création..." : "Démarrer l'évaluation"}
-          </button>
-        </Card>
-      )}
+          <div className="flex gap-3">
+            <span className="text-xl shrink-0">💪</span>
+            <div>
+              <p className="font-semibold text-gray-900 dark:text-white">Max 1 min — 7 mouvements</p>
+              <p className="mt-0.5">Maximum de répétitions en 1 minute par exercice (Tractions, Dips, Pompes, Abdos, Squats, Pistol G & D). 3 minutes de récupération entre chaque mouvement.</p>
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <span className="text-xl shrink-0">🔥</span>
+            <div>
+              <p className="font-semibold text-gray-900 dark:text-white">AMRAP 10 min — circuit fixe</p>
+              <p className="mt-0.5">Maximum de tours en 10 minutes : 10 Tractions · 10 Pompes · 10 Squats · 10 Dips · 10 Burpees · 10 Mountain Climbers. Score en tours (ex. 2.9).</p>
+            </div>
+          </div>
+        </div>
+      </Card>
 
-      {evalEnEdition && (
-        <ModalEditerEval ev={evalEnEdition} onClose={() => setEvalEnEdition(null)} />
-      )}
-
-      {etape === "intro" && historique.length > 0 && (
+      {/* Historique des performances */}
+      {historique.length > 0 && (
         <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-base font-semibold text-gray-800 dark:text-white">Historique</h3>
-            {historique.some(ev => ev.amrap_tours == null && ev.max_1min.length === 0) && (
-              <button
-                onClick={() => { if (window.confirm("Supprimer toutes les évaluations incomplètes ?")) nettoyerMut.mutate(); }}
-                disabled={nettoyerMut.isPending}
-                className="text-xs text-red-500 hover:text-red-600 dark:text-red-400 font-medium disabled:opacity-50">
-                {nettoyerMut.isPending ? "Suppression..." : "Nettoyer les incomplets"}
-              </button>
-            )}
-          </div>
-          {historique.map((ev, i) => (
-            <div key={ev.id} className="rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 overflow-hidden">
-              {/* En-tête éval */}
-              <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-800">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-gray-900 dark:text-white">
+          <h3 className="text-base font-semibold text-gray-800 dark:text-white">Historique des performances</h3>
+
+          {/* Table 3 colonnes */}
+          <div className="rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+            {/* En-tête */}
+            <div className="grid grid-cols-4 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+              <div className="px-3 py-2.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Date</div>
+              <div className="px-3 py-2.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide text-center">🏃 Demi-Cooper</div>
+              <div className="px-3 py-2.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide text-center">💪 Max 1 min</div>
+              <div className="px-3 py-2.5 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide text-center">🔥 AMRAP 10'</div>
+            </div>
+
+            {/* Lignes */}
+            {historique.map((ev, i) => (
+              <div key={ev.id}
+                className={clsx(
+                  "grid grid-cols-4 items-start border-b border-gray-100 dark:border-gray-800 last:border-0",
+                  i % 2 === 0 ? "bg-white dark:bg-gray-900" : "bg-gray-50/50 dark:bg-gray-800/30"
+                )}>
+                {/* Date + bouton modifier */}
+                <div className="px-3 py-3 flex flex-col gap-1">
+                  <span className="text-xs font-semibold text-gray-800 dark:text-white">
                     {ev.date.split("-").reverse().join("/")}
                   </span>
                   {i === 0 && (
-                    <span className="px-2 py-0.5 rounded-full text-xs bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 font-medium">Dernière</span>
-                  )}
-                </div>
-                <div className="flex items-center gap-3">
-                  {i > 0 && historique[i - 1].vma_kmh && ev.vma_kmh && (
-                    <span className={clsx("text-xs font-semibold", historique[i - 1].vma_kmh > ev.vma_kmh ? "text-red-500" : "text-green-500")}>
-                      {historique[i - 1].vma_kmh > ev.vma_kmh ? "▼" : "▲"} {Math.abs(historique[i - 1].vma_kmh - ev.vma_kmh).toFixed(1)} km/h
+                    <span className="inline-block px-1.5 py-0.5 rounded-full text-xs bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 font-medium w-fit">
+                      Dernière
                     </span>
                   )}
-                  {(ev.distance_m == null || ev.max_1min.length === 0 || ev.amrap_tours == null) && (
-                    <button onClick={() => reprendreEval(ev)}
-                      className="text-xs font-semibold text-brand border border-brand/30 hover:bg-brand/10 px-2.5 py-1 rounded-lg transition-colors">
-                      Reprendre →
-                    </button>
-                  )}
-                  <button onClick={() => setEvalEnEdition(ev)}
-                    className="text-gray-400 hover:text-brand transition-colors p-1 rounded-lg hover:bg-brand/10"
+                  <button
+                    onClick={() => setEvalEnEdition(ev)}
+                    className="text-gray-400 hover:text-brand transition-colors p-0.5 rounded w-fit"
                     title="Modifier">
                     ✏️
                   </button>
                 </div>
-              </div>
-              {/* Métriques principales */}
-              <div className="grid grid-cols-3 divide-x divide-gray-100 dark:divide-gray-800">
-                <div className="px-4 py-3 text-center">
-                  <p className="text-xs text-gray-400 mb-1">VMA</p>
-                  <p className="text-lg font-bold text-brand">{ev.vma_kmh != null ? `${ev.vma_kmh} km/h` : "—"}</p>
-                  {ev.distance_m && <p className="text-xs text-gray-400">{ev.distance_m} m</p>}
+
+                {/* Demi-Cooper */}
+                <div className="px-3 py-3 text-center">
+                  {ev.vma_kmh != null ? (
+                    <>
+                      <p className="text-sm font-bold text-brand">{ev.vma_kmh} km/h</p>
+                      {ev.distance_m && <p className="text-xs text-gray-400 mt-0.5">{ev.distance_m} m</p>}
+                    </>
+                  ) : (
+                    <span className="text-sm text-gray-300 dark:text-gray-600">—</span>
+                  )}
                 </div>
-                <div className="px-4 py-3 text-center">
-                  <p className="text-xs text-gray-400 mb-1">AMRAP 10'</p>
-                  <p className="text-lg font-bold text-orange-500">{ev.amrap_tours != null ? `${ev.amrap_tours} tours` : "—"}</p>
-                </div>
-                <div className="px-4 py-3 text-center">
-                  <p className="text-xs text-gray-400 mb-1">Max 1 min</p>
-                  <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">{ev.max_1min.length > 0 ? `${ev.max_1min.length} mvts` : "—"}</p>
-                </div>
-              </div>
-              {/* Détail Max 1 min */}
-              {ev.max_1min.length > 0 && (
-                <div className="px-4 py-3 border-t border-gray-100 dark:border-gray-800 grid grid-cols-2 gap-x-4 gap-y-1.5">
-                  {ev.max_1min.map((m) => (
-                    <div key={m.nom} className="flex justify-between text-xs">
-                      <span className="text-gray-500 dark:text-gray-400 truncate">{m.nom}</span>
-                      <span className="font-semibold text-gray-800 dark:text-gray-200 ml-2 shrink-0">{m.reps} reps</span>
+
+                {/* Max 1 min */}
+                <div className="px-3 py-3">
+                  {ev.max_1min.length > 0 ? (
+                    <div className="space-y-0.5">
+                      {ev.max_1min.map(m => (
+                        <div key={m.nom} className="flex justify-between text-xs gap-1">
+                          <span className="text-gray-500 dark:text-gray-400 truncate">{m.nom}</span>
+                          <span className="font-semibold text-gray-800 dark:text-gray-200 shrink-0">{m.reps}</span>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  ) : (
+                    <span className="text-sm text-gray-300 dark:text-gray-600">—</span>
+                  )}
                 </div>
-              )}
-            </div>
-          ))}
+
+                {/* AMRAP */}
+                <div className="px-3 py-3 text-center">
+                  {ev.amrap_tours != null ? (
+                    <p className="text-sm font-bold text-orange-500">{ev.amrap_tours} tours</p>
+                  ) : (
+                    <span className="text-sm text-gray-300 dark:text-gray-600">—</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
-      {etape === "demi_cooper" && (
-        <Card title="🏃 Demi-Cooper — 6 minutes">
-          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Cours à allure maximale pendant 6 minutes puis entre la distance parcourue.</p>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Distance parcourue (mètres)</label>
-              <input type="number" value={distance} onChange={(e) => setDistance(e.target.value)} placeholder="ex. 1450" className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
-              {distance && <p className="text-xs text-brand mt-1">VMA estimée : {(parseFloat(distance) / 100).toFixed(1)} km/h</p>}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">FC max (optionnel)</label>
-              <input type="number" value={fcMax} onChange={(e) => setFcMax(e.target.value)} placeholder="ex. 192" className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
-            </div>
-            <div className="flex gap-2 pt-1">
-              <button onClick={annuler} className="px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-                Annuler
-              </button>
-              <button onClick={() => validerCooper(true)} disabled={!distance || cooperMut.isPending}
-                className="flex-1 py-2.5 rounded-xl border border-brand text-brand text-sm font-semibold hover:bg-brand/5 transition-colors disabled:opacity-50">
-                {cooperMut.isPending ? "…" : "Enregistrer & quitter"}
-              </button>
-              <button onClick={() => validerCooper(false)} disabled={!distance || cooperMut.isPending}
-                className="flex-1 py-2.5 rounded-xl bg-brand text-white text-sm font-semibold hover:bg-brand-dark transition-colors disabled:opacity-50">
-                {cooperMut.isPending ? "…" : "Étape suivante →"}
-              </button>
-            </div>
-          </div>
-        </Card>
+      {historique.length === 0 && (
+        <div className="text-center py-10 text-gray-400 dark:text-gray-600 text-sm">
+          Aucune évaluation enregistrée.<br />
+          Valide une séance d'évaluation dans le Programme pour saisir tes performances.
+        </div>
       )}
 
-      {etape === "max_1min" && (
-        <Card title="💪 Max Répétitions — 1 minute par mouvement">
-          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">3 minutes de récupération entre chaque mouvement.</p>
-          {mouvements.length === 0 ? (
-            <p className="text-sm text-amber-500 py-4 text-center animate-pulse">Chargement des exercices...</p>
-          ) : (
-            <div className="space-y-3">
-              {mouvements.map((m) => (
-                <div key={m.slug} className="flex items-center justify-between gap-4">
-                  <span className="text-sm font-medium text-gray-800 dark:text-gray-200 w-28">{m.nom}</span>
-                  <input
-                    type="number"
-                    min={0}
-                    value={reps[m.slug] || ""}
-                    onChange={(e) => setReps((r) => ({ ...r, [m.slug]: e.target.value }))}
-                    placeholder="reps"
-                    className="w-24 px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-center focus:outline-none focus:ring-2 focus:ring-brand"
-                  />
-                </div>
-              ))}
-              <div className="flex gap-2 mt-5">
-                <button onClick={annuler} className="px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-                  Annuler
-                </button>
-                <button onClick={() => valider1Min(true)} disabled={max1MinMut.isPending || mouvements.some((m) => !reps[m.slug])}
-                  className="flex-1 py-2.5 rounded-xl border border-brand text-brand text-sm font-semibold hover:bg-brand/5 transition-colors disabled:opacity-50">
-                  {max1MinMut.isPending ? "…" : "Enregistrer & quitter"}
-                </button>
-                <button onClick={() => valider1Min(false)} disabled={max1MinMut.isPending || mouvements.some((m) => !reps[m.slug])}
-                  className="flex-1 py-2.5 rounded-xl bg-brand text-white text-sm font-semibold hover:bg-brand-dark transition-colors disabled:opacity-50">
-                  {max1MinMut.isPending ? "…" : "Étape suivante →"}
-                </button>
-              </div>
-              {mouvements.some((m) => !reps[m.slug]) && (
-                <p className="text-xs text-gray-400 text-center">Remplis tous les champs avant de valider.</p>
-              )}
-            </div>
-          )}
-        </Card>
-      )}
-
-      {etape === "amrap" && (
-        <Card title="🔥 AMRAP Benchmark — 10 minutes">
-          <div className="text-sm text-gray-600 dark:text-gray-400 space-y-1 mb-4">
-            <p className="font-medium text-gray-800 dark:text-gray-200 mb-2">Circuit fixe :</p>
-            {["10 Tractions", "10 Pompes", "10 Squats", "10 Dips", "10 Burpees", "10 Mountain Climbers"].map((ex) => (
-              <div key={ex} className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-brand" /><span>{ex}</span></div>
-            ))}
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Score (tours) — ex. 2.9</label>
-            <input type="number" step="0.1" value={tours} onChange={(e) => setTours(e.target.value)} placeholder="2.9" className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
-          </div>
-          <div className="flex gap-2 mt-5">
-            <button onClick={annuler} className="px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-              Annuler
-            </button>
-            <button onClick={() => validerAmrap(true)} disabled={!tours || amrapMut.isPending}
-              className="flex-1 py-2.5 rounded-xl border border-brand text-brand text-sm font-semibold hover:bg-brand/5 transition-colors disabled:opacity-50">
-              {amrapMut.isPending ? "…" : "Enregistrer & quitter"}
-            </button>
-            <button onClick={() => validerAmrap(false)} disabled={!tours || amrapMut.isPending}
-              className="flex-1 py-2.5 rounded-xl bg-brand text-white text-sm font-semibold hover:bg-brand-dark transition-colors disabled:opacity-50">
-              {amrapMut.isPending ? "…" : "Terminer →"}
-            </button>
-          </div>
-        </Card>
-      )}
-
-      {etape === "resultats" && (
-        <Card title="✅ Évaluation complète">
-          <div className="space-y-3 text-sm">
-            {resultats.cooper && (
-              <div className="flex justify-between items-center py-2 border-b border-gray-100 dark:border-gray-800">
-                <span className="text-gray-600 dark:text-gray-400">VMA calculée</span>
-                <span className="font-bold text-brand text-lg">{resultats.cooper.vma_kmh} km/h</span>
-              </div>
-            )}
-            {resultats.amrap && (
-              <div className="flex justify-between items-center py-2 border-b border-gray-100 dark:border-gray-800">
-                <span className="text-gray-600 dark:text-gray-400">Score AMRAP 10'</span>
-                <span className="font-bold text-orange-500 text-lg">{resultats.amrap} tours</span>
-              </div>
-            )}
-            {resultats.max1min && (
-              <div className="pt-2">
-                <p className="text-gray-500 dark:text-gray-400 mb-2">Max 1 minute :</p>
-                <div className="grid grid-cols-2 gap-2">
-                  {mouvements.map((m) => (
-                    <div key={m.slug} className="flex justify-between bg-gray-50 dark:bg-gray-800 px-3 py-2 rounded-lg">
-                      <span className="text-gray-600 dark:text-gray-400">{m.nom}</span>
-                      <span className="font-semibold text-gray-900 dark:text-white">{resultats.max1min?.[m.slug] || 0}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-          <button onClick={() => setEtape("intro")} className="mt-5 w-full py-3 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 font-medium text-sm hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-            Nouvelle évaluation
-          </button>
-        </Card>
+      {evalEnEdition && (
+        <ModalEditerEval ev={evalEnEdition} onClose={() => setEvalEnEdition(null)} />
       )}
     </div>
   );
