@@ -567,7 +567,7 @@ function ShortcutIOS() {
           <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Raccourci iOS (Apple Watch)</p>
           <p className="text-xs text-gray-400 mt-0.5">Importe tes séances depuis l'app Santé</p>
         </div>
-        <button onClick={chargerToken} disabled={loading}
+        <button onClick={visible ? () => setVisible(false) : chargerToken} disabled={loading}
           className="text-xs px-3 py-1.5 rounded-xl bg-brand text-white font-semibold hover:bg-brand-dark transition-colors disabled:opacity-50">
           {loading ? "…" : visible ? "Masquer" : "Configurer"}
         </button>
