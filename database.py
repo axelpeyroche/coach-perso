@@ -57,6 +57,7 @@ def creer_tables() -> None:
         # Planification libre par l'utilisateur
         "ALTER TABLE seances_entrainement ADD COLUMN IF NOT EXISTS date_planifiee DATE",
         "ALTER TABLE seances_entrainement ADD COLUMN IF NOT EXISTS heure_planifiee VARCHAR(5)",
+        "ALTER TABLE journaux_seances ADD COLUMN IF NOT EXISTS distance_repos_km FLOAT",
     ]
     with engine.begin() as conn:
         for stmt in _migrations:
