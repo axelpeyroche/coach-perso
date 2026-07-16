@@ -607,50 +607,170 @@ function ShortcutIOS() {
             </div>
           </div>
 
-          {/* Instructions */}
-          <div className="space-y-2">
-            <p className="font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Comment configurer</p>
-            <ol className="space-y-1.5 text-gray-600 dark:text-gray-400 list-decimal list-inside">
-              <li>Ouvre l'app <strong>Raccourcis</strong> sur iPhone</li>
-              <li>Crée un nouveau raccourci → bouton <strong>+</strong></li>
-              <li>Ajoute les actions dans l'ordre ci-dessous</li>
-              <li>Configure ton token et l'URL dans les étapes indiquées</li>
-            </ol>
-            <div className="mt-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-3 space-y-2">
-              <p className="font-semibold text-gray-700 dark:text-gray-300 text-xs uppercase tracking-wide">Actions du raccourci</p>
+          {/* Instructions détaillées */}
+          <div className="space-y-3">
+            <p className="font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide text-xs">Guide de configuration — 13 étapes</p>
+            <p className="text-gray-500 dark:text-gray-400">Ouvre l'app <strong className="text-gray-700 dark:text-gray-300">Raccourcis</strong> sur iPhone, crée un nouveau raccourci (bouton <strong className="text-gray-700 dark:text-gray-300">+</strong>), puis ajoute les actions dans l'ordre ci-dessous.</p>
+
+            {/* Section 1 */}
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <div className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
+                <span className="text-xs font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">Section 1 — Configuration initiale</span>
+                <div className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
+              </div>
               {[
-                ["1", "Variable", "Définir variable → Nom : TOKEN → Valeur : (colle ton token)"],
-                ["2", "Variable", "Définir variable → Nom : API_URL → Valeur : (colle l'URL)"],
-                ["3", "Santé", "Rechercher échantillons de santé → Type : Entraînement → Tri : Date (desc) → Limite : 5"],
-                ["4", "Script", "Choisir dans la liste → (résultats de l'étape 3) → Invite : Quelle séance ?"],
-                ["5", "Santé", "Obtenir détails → Durée / Distance / Fréquence cardiaque moy. / D+ total"],
-                ["6", "Web", `GET ${apiUrl}/api/import/seances-recentes?token=[TOKEN]`],
-                ["7", "Script", "Obtenir valeur pour la clé → seances → depuis le résultat JSON"],
-                ["8", "Script", "Choisir dans la liste → (séances) → Afficher : titre + date"],
-                ["9", "Web", `POST ${apiUrl}/api/import/workout → Corps JSON (voir ci-dessous)`],
-                ["10", "Script", "Afficher résultat → Message de confirmation"],
-              ].map(([n, cat, desc]) => (
-                <div key={n} className="flex gap-2">
-                  <span className="shrink-0 w-5 h-5 rounded-full bg-brand text-white flex items-center justify-center text-xs font-bold">{n}</span>
-                  <div>
-                    <span className="text-brand font-semibold">[{cat}]</span>{" "}
-                    <span className="text-gray-600 dark:text-gray-400">{desc}</span>
+                { n: "1", title: "Action : Texte", body: "Ajoute une action Texte. Colle ton token dans le champ.", note: "Appuie sur la flèche en bas → \"Mémoriser dans la variable\" → nomme-la TOKEN" },
+                { n: "2", title: "Action : Texte", body: `Ajoute une action Texte. Colle l'URL : ${apiUrl}`, note: "Mémorise dans la variable API_URL" },
+              ].map(({ n, title, body, note }) => (
+                <div key={n} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-3 flex gap-3">
+                  <span className="shrink-0 w-6 h-6 rounded-lg bg-brand text-white flex items-center justify-center text-xs font-bold">{n}</span>
+                  <div className="space-y-0.5 min-w-0">
+                    <p className="text-xs font-semibold text-brand uppercase tracking-wide">{title}</p>
+                    <p className="text-gray-700 dark:text-gray-300">{body}</p>
+                    {note && <p className="text-gray-400 italic">{note}</p>}
                   </div>
                 </div>
               ))}
             </div>
-            <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-3">
-              <p className="font-semibold text-gray-700 dark:text-gray-300 text-xs uppercase tracking-wide mb-1.5">Corps JSON de l'étape 9</p>
-              <pre className="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-mono">{`{
-  "token": "[TOKEN]",
-  "seance_id": [id de la séance choisie],
-  "duree_min": [Durée en minutes],
-  "distance_km": [Distance en km],
-  "dplus_m": [D+ en mètres],
-  "fc_moyenne_bpm": [FC moyenne],
-  "fc_max_bpm": [FC max],
-  "rpe": 7
-}`}</pre>
+
+            {/* Section 2 */}
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <div className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
+                <span className="text-xs font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">Section 2 — Choisir la séance</span>
+                <div className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
+              </div>
+              {[
+                { n: "3", title: "Action : Contenu d'une URL", body: null, fields: [["URL", "Variable API_URL + /api/import/seances-recentes?token= + Variable TOKEN"], ["Méthode", "GET"]], note: "Pour insérer une variable : appuie longuement dans le champ URL → \"Insérer une variable\"" },
+                { n: "4", title: "Action : Valeur du dictionnaire", body: "L'entrée est le résultat de l'étape 3.", fields: [["Clé", "seances"]], note: "Mémorise le résultat dans la variable SEANCES" },
+                { n: "5", title: "Action : Choisir dans une liste", body: null, fields: [["Liste", "Variable SEANCES"], ["Invite", "Quelle séance valider ?"]], note: "Mémorise dans la variable SEANCE" },
+                { n: "6", title: "Action : Valeur du dictionnaire", body: null, fields: [["Dictionnaire", "Variable SEANCE"], ["Clé", "id"]], note: "Mémorise dans la variable SEANCE_ID" },
+              ].map(({ n, title, body, fields, note }) => (
+                <div key={n} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-3 flex gap-3">
+                  <span className="shrink-0 w-6 h-6 rounded-lg bg-brand text-white flex items-center justify-center text-xs font-bold">{n}</span>
+                  <div className="space-y-1.5 min-w-0 w-full">
+                    <p className="text-xs font-semibold text-brand uppercase tracking-wide">{title}</p>
+                    {body && <p className="text-gray-700 dark:text-gray-300">{body}</p>}
+                    {fields && (
+                      <div className="space-y-1">
+                        {fields.map(([k, v]) => (
+                          <div key={k} className="flex gap-2 bg-gray-50 dark:bg-gray-800 rounded-lg px-2.5 py-1.5">
+                            <span className="text-gray-400 shrink-0 w-16">{k}</span>
+                            <span className="text-gray-700 dark:text-gray-300 font-mono text-xs break-all">{v}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {note && <p className="text-gray-400 italic">{note}</p>}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Section 3 */}
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <div className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
+                <span className="text-xs font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">Section 3 — Données Apple Watch</span>
+                <div className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
+              </div>
+              {[
+                { n: "7", title: "Action : Rechercher des échantillons de santé", body: null, fields: [["Type", "Entraînement"], ["Trier par", "Date de début (décroissant)"], ["Limite", "5"]], note: null },
+                { n: "8", title: "Action : Choisir dans une liste", body: null, fields: [["Liste", "Résultats de l'étape 7"], ["Invite", "Quel workout Apple Watch ?"]], note: "Mémorise dans la variable WORKOUT" },
+                { n: "9", title: "Action : Obtenir les détails d'un échantillon de santé × 3", body: "Répète cette action 3 fois. L'entrée doit être la variable WORKOUT à chaque fois.", fields: [["Détail 1", "Durée (en secondes) → Variable DUREE_SEC"], ["Détail 2", "Distance → Variable DISTANCE_KM"], ["Détail 3", "Fréquence cardiaque moy. → Variable FC_MOY"]], note: null },
+                { n: "10", title: "Action : Calculer", body: "La durée est en secondes, il faut la convertir en minutes.", fields: [["Opération", "Variable DUREE_SEC ÷ 60"]], note: "Mémorise dans la variable DUREE_MIN" },
+              ].map(({ n, title, body, fields, note }) => (
+                <div key={n} className="bg-white dark:bg-gray-900 border border-orange-200 dark:border-orange-900/50 rounded-xl p-3 flex gap-3">
+                  <span className="shrink-0 w-6 h-6 rounded-lg bg-orange-500 text-white flex items-center justify-center text-xs font-bold">{n}</span>
+                  <div className="space-y-1.5 min-w-0 w-full">
+                    <p className="text-xs font-semibold text-orange-500 uppercase tracking-wide">{title}</p>
+                    {body && <p className="text-gray-700 dark:text-gray-300">{body}</p>}
+                    {fields && (
+                      <div className="space-y-1">
+                        {fields.map(([k, v]) => (
+                          <div key={k} className="flex gap-2 bg-gray-50 dark:bg-gray-800 rounded-lg px-2.5 py-1.5">
+                            <span className="text-gray-400 shrink-0 w-20">{k}</span>
+                            <span className="text-gray-700 dark:text-gray-300 font-mono text-xs break-all">{v}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {note && <p className="text-gray-400 italic">{note}</p>}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Section 4 */}
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2">
+                <div className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
+                <span className="text-xs font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">Section 4 — Envoyer au coach</span>
+                <div className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
+              </div>
+
+              {/* Étape 11 : Dictionnaire */}
+              <div className="bg-white dark:bg-gray-900 border border-green-200 dark:border-green-900/50 rounded-xl p-3 flex gap-3">
+                <span className="shrink-0 w-6 h-6 rounded-lg bg-green-500 text-white flex items-center justify-center text-xs font-bold">11</span>
+                <div className="space-y-1.5 min-w-0 w-full">
+                  <p className="text-xs font-semibold text-green-600 dark:text-green-400 uppercase tracking-wide">Action : Dictionnaire</p>
+                  <p className="text-gray-700 dark:text-gray-300">Crée un dictionnaire avec les paires clé/valeur suivantes. Pour chaque valeur, appuie sur le champ → "Insérer une variable".</p>
+                  <div className="bg-gray-900 rounded-lg p-2.5 overflow-x-auto">
+                    <pre className="font-mono text-xs text-gray-100 whitespace-pre">{`token          → Variable TOKEN
+seance_id      → Variable SEANCE_ID
+duree_min      → Variable DUREE_MIN
+distance_km    → Variable DISTANCE_KM
+fc_moyenne_bpm → Variable FC_MOY
+rpe            → 7`}</pre>
+                  </div>
+                </div>
+              </div>
+
+              {/* Étape 12 : POST */}
+              <div className="bg-white dark:bg-gray-900 border border-green-200 dark:border-green-900/50 rounded-xl p-3 flex gap-3">
+                <span className="shrink-0 w-6 h-6 rounded-lg bg-green-500 text-white flex items-center justify-center text-xs font-bold">12</span>
+                <div className="space-y-1.5 min-w-0 w-full">
+                  <p className="text-xs font-semibold text-green-600 dark:text-green-400 uppercase tracking-wide">Action : Contenu d'une URL</p>
+                  <div className="space-y-1">
+                    {[
+                      ["URL", `Variable API_URL + /api/import/workout`],
+                      ["Méthode", "POST"],
+                      ["Corps de la requête", "JSON"],
+                      ["Corps JSON", "Dictionnaire (étape 11)"],
+                    ].map(([k, v]) => (
+                      <div key={k} className="flex gap-2 bg-gray-50 dark:bg-gray-800 rounded-lg px-2.5 py-1.5">
+                        <span className="text-gray-400 shrink-0 w-28">{k}</span>
+                        <span className="text-gray-700 dark:text-gray-300 font-mono text-xs break-all">{v}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Étape 13 : Confirmation */}
+              <div className="bg-white dark:bg-gray-900 border border-green-200 dark:border-green-900/50 rounded-xl p-3 flex gap-3">
+                <span className="shrink-0 w-6 h-6 rounded-lg bg-green-500 text-white flex items-center justify-center text-xs font-bold">13</span>
+                <div className="space-y-1.5 min-w-0 w-full">
+                  <p className="text-xs font-semibold text-green-600 dark:text-green-400 uppercase tracking-wide">Action : Afficher le résultat</p>
+                  <div className="flex gap-2 bg-gray-50 dark:bg-gray-800 rounded-lg px-2.5 py-1.5">
+                    <span className="text-gray-400 shrink-0 w-16">Texte</span>
+                    <span className="text-gray-700 dark:text-gray-300 font-mono text-xs">✓ Séance importée dans le coach !</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Résumé utilisation */}
+            <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-3 space-y-1.5">
+              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Utilisation au quotidien</p>
+              <ol className="space-y-1 text-gray-600 dark:text-gray-400 list-decimal list-inside">
+                <li>Tu finis ton entraînement (la Watch enregistre automatiquement)</li>
+                <li>Tu ouvres le raccourci sur iPhone</li>
+                <li>Tu choisis la séance dans ton programme</li>
+                <li>Tu choisis le bon workout Watch</li>
+                <li>Tout s'importe — durée, distance, FC ✓</li>
+              </ol>
             </div>
           </div>
         </div>
