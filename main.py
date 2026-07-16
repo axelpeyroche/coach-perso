@@ -1595,7 +1595,33 @@ SLUGS_EVALUATION = [
 
 @app.get("/api/programme/toutes-semaines", summary="Toutes les semaines du programme — vue à plat sans notion de module")
 def toutes_semaines_programme(current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
-    mcs = db.query(Macrocycle).filter(Macrocycle.utilisateur_id == current_user.id).order_by(Macrocycle.numero_cycle).all()
+    user = current_user
+    mcs = db.query(Macrocycle).filter(Macrocycle.utilisateur_id == user.id).order_by(Macrocycle.numero_cycle).all()
+
+    # Correction automatique du nombre de séances par semaine
+    n_muscu = user.seances_muscu_semaine or 2
+    seances_total = user.seances_semaine or 5
+    n_course = user.seances_course_semaine if user.seances_course_semaine is not None else max(1, seances_total - n_muscu)
+    n_course = min(n_course, max(1, seances_total - n_muscu))
+    total_muscu_target = seances_total - n_course
+    muscu_types = {TypeSeance.EMOM, TypeSeance.AMRAP, TypeSeance.GYM_UPPER, TypeSeance.GYM_LOWER, TypeSeance.GYM_FULL}
+    _modifie = False
+    for mc in mcs:
+        semaines = db.query(SemaineEntrainement).filter(SemaineEntrainement.macrocycle_id == mc.id).all()
+        for sem in semaines:
+            seances = db.query(SeanceEntrainement).filter(SeanceEntrainement.semaine_id == sem.id).all()
+            non_validees = [s for s in seances if not s.journal]
+            courses_nv = sorted([s for s in non_validees if s.type_seance == TypeSeance.COURSE], key=lambda s: s.date_seance)
+            muscu_nv = sorted([s for s in non_validees if s.type_seance in muscu_types], key=lambda s: (0 if "3e" in (s.titre or "") else 1))
+            while len(courses_nv) > n_course:
+                db.delete(courses_nv.pop(0)); _modifie = True
+            while len(muscu_nv) > total_muscu_target:
+                db.delete(muscu_nv.pop(0)); _modifie = True
+    if _modifie:
+        db.commit()
+        # Recharger les macrocycles après correction
+        mcs = db.query(Macrocycle).filter(Macrocycle.utilisateur_id == user.id).order_by(Macrocycle.numero_cycle).all()
+
     semaine_globale = 0
     result = []
     for mc in mcs:
