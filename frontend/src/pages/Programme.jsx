@@ -708,9 +708,8 @@ export default function Programme() {
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (!token) return;
-    api.post("/programme/corriger-seances", undefined, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
+    api.post("/programme/corriger-seances")
       .then((res) => {
         console.log("[corriger-seances]", res.data);
         if (res.data?.seances_supprimees > 0) {
