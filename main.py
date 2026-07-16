@@ -1238,6 +1238,20 @@ def push_unsubscribe(
     return {"ok": True}
 
 
+@app.get("/api/push/debug", summary="Debug: liste les souscriptions push de l'utilisateur")
+def push_debug(
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(obtenir_session),
+):
+    subs = db.query(PushSubscription).filter_by(utilisateur_id=current_user.id).all()
+    return {
+        "push_enabled": _PUSH_ENABLED,
+        "vapid_configured": bool(_VAPID_PRIVATE),
+        "subs_count": len(subs),
+        "subs": [{"endpoint_prefix": s.endpoint[:60]} for s in subs],
+    }
+
+
 @app.post("/api/push/test", summary="Envoie une notification push de test à l'utilisateur connecté")
 def push_test(
     current_user: Utilisateur = Depends(get_current_user),
