@@ -1237,7 +1237,7 @@ def journaliser_seance(
         rpe=payload.rpe,
         rpe_cible=payload.rpe_cible,
         distance_reelle_km=distance_km,
-        distance_repos_km=payload.distance_repos_km,
+        distance_repos_km=round(payload.distance_repos_km, 2) if payload.distance_repos_km is not None else None,
         duree_reelle_min=payload.duree_reelle_min,
         dplus_reel_m=payload.dplus_reel_m,
         fc_moyenne_bpm=payload.fc_moyenne_bpm,
@@ -1495,7 +1495,7 @@ def modifier_journal_seance(
     if payload.fc_moyenne_bpm is not None: j.fc_moyenne_bpm = payload.fc_moyenne_bpm
     if payload.fc_max_bpm is not None: j.fc_max_bpm = payload.fc_max_bpm
     if payload.distance_repos_km is not None:
-        j.distance_repos_km = payload.distance_repos_km
+        j.distance_repos_km = round(payload.distance_repos_km, 2)
     if payload.details_intervalles is not None:
         j.details_intervalles = payload.details_intervalles
         # Recalculer distance_reelle_km depuis les blocs si non fournie explicitement

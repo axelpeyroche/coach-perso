@@ -382,7 +382,11 @@ function FormulaireLog({ seance, onClose, onDone, modeEdit = false }) {
     }
     return Array.from({ length: nbBlocs }, () => ({ distance_km: "", fc_moyenne_bpm: "" }));
   });
-  const [distRepos, setDistRepos] = useState(() => modeEdit && j?.distance_repos_km != null ? String(j.distance_repos_km) : "");
+  const [distRepos, setDistRepos] = useState(() => {
+    if (!modeEdit || j?.distance_repos_km == null) return "";
+    const v = Math.round(j.distance_repos_km * 100) / 100;
+    return String(v);
+  });
   const setBloc = (i, k, v) => setBlocs(b => b.map((bloc, idx) => idx === i ? { ...bloc, [k]: v } : bloc));
 
   const mut = useMutation({
