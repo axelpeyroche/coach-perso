@@ -1238,6 +1238,43 @@ def push_unsubscribe(
     return {"ok": True}
 
 
+@app.post("/api/push/test", summary="Envoie une notification push de test à l'utilisateur connecté")
+def push_test(
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(obtenir_session),
+):
+    if not _PUSH_ENABLED or not _VAPID_PRIVATE:
+        raise HTTPException(503, "Push non configuré sur ce serveur")
+    subs = db.query(PushSubscription).filter_by(utilisateur_id=current_user.id).all()
+    if not subs:
+        raise HTTPException(404, "Aucun abonnement push enregistré pour cet utilisateur")
+    import json as _json
+    payload = _json.dumps({
+        "title": "Coach EPC — Test 🔔",
+        "body": "Les notifications push fonctionnent correctement !",
+        "tag": "test-push",
+        "url": "/profil",
+    })
+    sent = 0
+    errors = []
+    for sub in subs:
+        try:
+            webpush(
+                subscription_info={"endpoint": sub.endpoint, "keys": {"p256dh": sub.p256dh, "auth": sub.auth}},
+                data=payload,
+                vapid_private_key=_VAPID_PRIVATE,
+                vapid_claims={"sub": _VAPID_EMAIL},
+            )
+            sent += 1
+        except WebPushException as e:
+            errors.append(str(e))
+            db.delete(sub)
+    db.commit()
+    if sent == 0:
+        raise HTTPException(500, f"Échec envoi push : {errors}")
+    return {"ok": True, "sent": sent}
+
+
 @app.patch(
     "/api/seances/{seance_id}/journal",
     summary="Modifie les données d'un journal existant",

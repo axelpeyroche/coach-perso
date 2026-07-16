@@ -12,18 +12,24 @@ function urlBase64ToUint8Array(b64) {
 
 // ── Push toggle ────────────────────────────────────────────────────────────
 function PushToggle() {
-  const [status, setStatus] = useState("loading");
+  const [status, setStatus] = useState("loading"); // loading|unsupported|denied|off|on|working
+  const [errMsg, setErrMsg] = useState("");
+  const [testing, setTesting] = useState(false);
+  const [testMsg, setTestMsg] = useState("");
 
   useEffect(() => {
-    if (!("Notification" in window) || !("serviceWorker" in navigator)) { setStatus("unsupported"); return; }
+    if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) {
+      setStatus("unsupported"); return;
+    }
     if (Notification.permission === "denied") { setStatus("denied"); return; }
     navigator.serviceWorker.ready
       .then(r => r.pushManager.getSubscription())
       .then(sub => setStatus(sub ? "on" : "off"))
-      .catch(() => setStatus("off"));
+      .catch(e => { setStatus("off"); setErrMsg(String(e)); });
   }, []);
 
   async function toggle() {
+    setErrMsg(""); setTestMsg("");
     setStatus("working");
     try {
       const reg = await navigator.serviceWorker.ready;
@@ -34,7 +40,8 @@ function PushToggle() {
         setStatus("off");
       } else {
         const perm = await Notification.requestPermission();
-        if (perm !== "granted") { setStatus(perm === "denied" ? "denied" : "off"); return; }
+        if (perm === "denied") { setStatus("denied"); return; }
+        if (perm !== "granted") { setStatus("off"); return; }
         const sub = await reg.pushManager.subscribe({
           userVisibleOnly: true,
           applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC),
@@ -44,19 +51,49 @@ function PushToggle() {
         setStatus("on");
       }
     } catch (e) {
-      console.error("push error:", e);
+      const msg = e?.response?.data?.detail || e?.message || String(e);
+      setErrMsg(msg);
       setStatus("off");
     }
   }
 
-  if (status === "unsupported") return <span className="text-xs text-gray-400 italic">Non supporté</span>;
-  if (status === "denied") return <span className="text-xs text-red-400 text-right leading-tight">Bloquées dans les<br/>paramètres</span>;
+  async function sendTest() {
+    setTesting(true); setTestMsg("");
+    try {
+      await api.post("/push/test");
+      setTestMsg("Notification envoyée ✓");
+    } catch (e) {
+      setTestMsg(e?.response?.data?.detail || "Échec envoi");
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  if (status === "unsupported") return <span className="text-xs text-gray-400 italic">Non supporté sur cet appareil</span>;
+
+  if (status === "denied") return (
+    <div className="text-right">
+      <span className="text-xs text-red-400 leading-tight">Bloquées — à autoriser<br/>dans les paramètres du navigateur</span>
+    </div>
+  );
+
   const on = status === "on";
+  const busy = status === "working" || status === "loading";
+
   return (
-    <button onClick={toggle} disabled={status === "working" || status === "loading"}
-      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-50 ${on ? "bg-brand" : "bg-gray-200 dark:bg-gray-700"}`}>
-      <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${on ? "translate-x-6" : "translate-x-1"}`} />
-    </button>
+    <div className="flex flex-col items-end gap-1">
+      <button onClick={toggle} disabled={busy}
+        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-50 ${on ? "bg-brand" : "bg-gray-200 dark:bg-gray-700"}`}>
+        <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${on ? "translate-x-6" : "translate-x-1"}`} />
+      </button>
+      {errMsg && <p className="text-[10px] text-red-400 max-w-[180px] text-right leading-tight">{errMsg}</p>}
+      {on && (
+        <button onClick={sendTest} disabled={testing}
+          className="text-[10px] text-brand underline underline-offset-2 disabled:opacity-50">
+          {testing ? "Envoi…" : testMsg || "Tester"}
+        </button>
+      )}
+    </div>
   );
 }
 
