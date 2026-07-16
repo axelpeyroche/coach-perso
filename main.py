@@ -58,6 +58,7 @@ from models import (
     ResultatMax1Min,
     SeanceEntrainement,
     SemaineEntrainement,
+    TypeSeance,
     Utilisateur,
     VariationExercice,
 )
