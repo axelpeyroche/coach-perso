@@ -527,7 +527,7 @@ function BioStat({ label, value, unit }) {
 }
 
 // ── Page ───────────────────────────────────────────────────────────────────
-function iOSShortcutSection() {
+function ShortcutIOS() {
   const [token, setToken] = useState(null);
   const [visible, setVisible] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -738,7 +738,7 @@ export default function Profil({ dark, setDark }) {
 
       {/* Intégrations */}
       <Section title="Intégrations">
-        <iOSShortcutSection />
+        <ShortcutIOS />
       </Section>
 
       {/* Apparence */}
