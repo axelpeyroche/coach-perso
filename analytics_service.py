@@ -22,7 +22,6 @@ from models import (
     CategorieMusculaire,
     ExerciceSeance,
     JournalEvaluationSeance,
-    JournalExercice,
     JournalSeance,
     Macrocycle,
     ResultatDemiCooper,
@@ -187,17 +186,19 @@ def distribution_volume(
             )
         ).one()
 
-        # Volume musculaire — séries par catégorie
+        # Volume musculaire — séries par catégorie (depuis les ExerciceSeance des séances validées)
         series_par_categorie = db.execute(
             select(
                 VariationExercice.categorie_musculaire,
-                func.count(JournalExercice.id).label("total_series"),
+                func.sum(ExerciceSeance.series).label("total_series"),
             )
-            .join(ExerciceSeance, JournalExercice.exercice_seance_id == ExerciceSeance.id)
+            .join(SeanceEntrainement, ExerciceSeance.seance_id == SeanceEntrainement.id)
             .join(VariationExercice, ExerciceSeance.exercice_id == VariationExercice.id)
-            .join(JournalSeance, JournalExercice.journal_seance_id == JournalSeance.id)
-            .join(SeanceEntrainement, JournalSeance.seance_id == SeanceEntrainement.id)
-            .where(SeanceEntrainement.semaine_id == semaine.id)
+            .join(JournalSeance, JournalSeance.seance_id == SeanceEntrainement.id)
+            .where(
+                SeanceEntrainement.semaine_id == semaine.id,
+                JournalSeance.completee == True,
+            )
             .group_by(VariationExercice.categorie_musculaire)
         ).all()
 
