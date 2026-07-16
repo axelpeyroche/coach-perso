@@ -651,6 +651,166 @@ def onboarding(
 
 
 # ---------------------------------------------------------------------------
+# Mise à jour des paramètres programme + régénération des séances à venir
+# ---------------------------------------------------------------------------
+
+class UpdateProgrammeSchema(BaseModel):
+    seances_semaine: Optional[int] = Field(None, ge=1, le=14)
+    seances_muscu_semaine: Optional[int] = Field(None, ge=0, le=14)
+    seances_course_semaine: Optional[int] = Field(None, ge=0, le=14)
+    type_muscu: Optional[str] = None   # "poids_corps" | "salle"
+    type_course: Optional[str] = None  # "route" | "trail"
+    frequence_tests_semaines: Optional[int] = Field(None, ge=1, le=52)
+
+
+@app.patch("/api/utilisateur/programme", summary="Modifier les paramètres programme et régénérer les séances futures")
+def update_programme(
+    payload: UpdateProgrammeSchema,
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(obtenir_session),
+):
+    from seed_seances import (
+        MODULE1, MODULE2, MODULE3,
+        _inserer_seances_en_session, calibrer_module,
+        adapter_contenu_muscu, adapter_contenu_gym, adapter_contenu_course,
+        enrichir_paces_vma,
+    )
+    import json as _json
+
+    # 1. Mettre à jour les préférences utilisateur
+    if payload.seances_semaine is not None:
+        current_user.seances_semaine = payload.seances_semaine
+    if payload.seances_muscu_semaine is not None:
+        current_user.seances_muscu_semaine = payload.seances_muscu_semaine
+    if payload.seances_course_semaine is not None:
+        current_user.seances_course_semaine = payload.seances_course_semaine
+    if payload.type_muscu is not None:
+        current_user.type_muscu = payload.type_muscu
+    if payload.type_course is not None:
+        current_user.type_course = payload.type_course
+    if payload.frequence_tests_semaines is not None:
+        current_user.frequence_tests_semaines = payload.frequence_tests_semaines
+    db.flush()
+
+    # 2. Identifier les semaines non démarrées (aucune séance avec journal)
+    today = date.today()
+    mcs = db.query(Macrocycle).filter(Macrocycle.utilisateur_id == current_user.id).all()
+
+    n_muscu = current_user.seances_muscu_semaine or 2
+    seances_total = current_user.seances_semaine or 5
+    n_course = current_user.seances_course_semaine if current_user.seances_course_semaine is not None else max(1, seances_total - n_muscu)
+    n_course = min(n_course, max(1, seances_total - n_muscu))
+    muscu_adapter = adapter_contenu_gym if current_user.type_muscu == "salle" else adapter_contenu_muscu
+
+    calib = {"km_factor": 1.0, "amrap_factor": 1.0, "reps_factor": 1.0}
+    if current_user.historique_perf:
+        try:
+            hist = _json.loads(current_user.historique_perf)
+            calib = _calculer_calibration(hist)
+        except Exception:
+            pass
+    kf, af, rf = calib["km_factor"], calib["amrap_factor"], calib["reps_factor"]
+
+    # VMA actuelle pour enrichissement descriptions
+    vma_for_paces = None
+    derniere_bio = (
+        db.query(BiometrieUtilisateur)
+        .filter(BiometrieUtilisateur.utilisateur_id == current_user.id)
+        .order_by(BiometrieUtilisateur.enregistre_le.desc())
+        .first()
+    )
+    if derniere_bio and derniere_bio.vma_kmh >= 5.0:
+        vma_for_paces = derniere_bio.vma_kmh
+
+    modules = {1: MODULE1, 2: MODULE2, 3: MODULE3}
+
+    exercices_map = {e.slug: e for e in db.query(VariationExercice).all()}
+
+    for mc in mcs:
+        sems = (
+            db.query(SemaineEntrainement)
+            .filter(SemaineEntrainement.macrocycle_id == mc.id)
+            .order_by(SemaineEntrainement.date_debut)
+            .all()
+        )
+
+        # Numéros des semaines futures non démarrées à régénérer
+        nums_a_regenerer: set[int] = set()
+        for sem in sems:
+            if sem.date_debut < today:
+                continue
+            seances_sem = db.query(SeanceEntrainement).filter(SeanceEntrainement.semaine_id == sem.id).all()
+            has_journal = any(
+                db.query(JournalSeance).filter(JournalSeance.seance_id == s.id).first()
+                for s in seances_sem
+            )
+            if has_journal:
+                continue
+            # Supprimer les séances non validées de cette semaine
+            ids_seances = [s.id for s in seances_sem]
+            if ids_seances:
+                db.query(ExerciceSeance).filter(ExerciceSeance.seance_id.in_(ids_seances)).delete(synchronize_session=False)
+                db.query(SeanceEntrainement).filter(SeanceEntrainement.semaine_id == sem.id).delete(synchronize_session=False)
+            nums_a_regenerer.add(sem.numero_semaine)
+
+        db.flush()
+
+        if not nums_a_regenerer:
+            continue
+
+        # Préparer le contenu calibré pour ce macrocycle
+        module_data = modules.get(mc.numero_cycle, MODULE1)
+        calibrated = calibrer_module(module_data, kf, af, rf)
+        if vma_for_paces:
+            calibrated = enrichir_paces_vma(calibrated, vma_for_paces)
+        adapted = adapter_contenu_course(muscu_adapter(calibrated, n_muscu, current_user.sexe), n_course)
+
+        # Injecter uniquement les semaines vidées (sans toucher aux semaines passées)
+        semaines_map = {s.numero_semaine: s for s in sems}
+        for num_sem, seances_data in adapted.items():
+            if num_sem not in nums_a_regenerer:
+                continue
+            semaine = semaines_map.get(num_sem)
+            if not semaine:
+                continue
+            for ordre, s in enumerate(seances_data, 1):
+                seance = SeanceEntrainement(
+                    semaine_id=semaine.id,
+                    date_seance=semaine.date_debut + timedelta(days=s["jour"] - 1),
+                    type_seance=s["type"],
+                    titre=s["titre"],
+                    description=s.get("description"),
+                    ordre_dans_semaine=ordre,
+                    zone_cible=s.get("zone"),
+                    duree_cible_min=s.get("duree_min"),
+                    dplus_cible_m=s.get("dplus_m"),
+                    temps_limite_min=s.get("temps_limite"),
+                )
+                db.add(seance)
+                db.flush()
+                for pos, ex_data in enumerate(s.get("exercices", []), 1):
+                    slug = ex_data.get("slug")
+                    nom_libre = ex_data.get("nom")
+                    exercice = exercices_map.get(slug) if slug else None
+                    if not exercice and not nom_libre:
+                        continue
+                    db.add(ExerciceSeance(
+                        seance_id=seance.id,
+                        exercice_id=exercice.id if exercice else None,
+                        nom_affichage=nom_libre if not exercice else None,
+                        ordre=pos,
+                        series=ex_data.get("series"),
+                        repetitions=ex_data.get("reps"),
+                        tempo_override=ex_data.get("tempo"),
+                        pause_isometrique_override_sec=ex_data.get("pause_iso"),
+                        duree_bloc_min=ex_data.get("duree_min"),
+                    ))
+
+    db.commit()
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
 # Schémas Pydantic
 # ---------------------------------------------------------------------------
 

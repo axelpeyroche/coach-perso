@@ -330,6 +330,113 @@ function EditPasswordModal({ onClose }) {
   );
 }
 
+// ── Edit programme modal ───────────────────────────────────────────────────
+function EditProgrammeModal({ user, onClose, onSaved }) {
+  const [form, setForm] = useState({
+    seances_semaine:        user?.seances_semaine ?? 5,
+    seances_muscu_semaine:  user?.seances_muscu_semaine ?? 3,
+    seances_course_semaine: user?.seances_course_semaine ?? 2,
+    type_muscu:             user?.type_muscu || "poids_corps",
+    type_course:            user?.type_course || "route",
+    frequence_tests_semaines: user?.frequence_tests_semaines ?? 8,
+  });
+  const [err, setErr] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [done, setDone] = useState(false);
+
+  function set(k) { return e => setForm(f => ({ ...f, [k]: typeof e === "object" ? e.target.value : e })); }
+  function setNum(k) { return e => setForm(f => ({ ...f, [k]: parseInt(e.target.value) || 0 })); }
+
+  async function save() {
+    setSaving(true); setErr("");
+    try {
+      const payload = {};
+      if (form.seances_semaine        !== user?.seances_semaine)        payload.seances_semaine        = form.seances_semaine;
+      if (form.seances_muscu_semaine  !== user?.seances_muscu_semaine)  payload.seances_muscu_semaine  = form.seances_muscu_semaine;
+      if (form.seances_course_semaine !== user?.seances_course_semaine) payload.seances_course_semaine = form.seances_course_semaine;
+      if (form.type_muscu             !== user?.type_muscu)             payload.type_muscu             = form.type_muscu;
+      if (form.type_course            !== user?.type_course)            payload.type_course            = form.type_course;
+      if (form.frequence_tests_semaines !== user?.frequence_tests_semaines) payload.frequence_tests_semaines = form.frequence_tests_semaines;
+      if (Object.keys(payload).length > 0) {
+        await api.patch("/utilisateur/programme", payload);
+        await onSaved();
+      }
+      setDone(true);
+    } catch (e) {
+      setErr(e?.response?.data?.detail || "Erreur — réessaie");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (done) return (
+    <Modal title="Programme mis à jour" onClose={onClose}>
+      <div className="text-center py-6 space-y-3">
+        <div className="text-4xl">✓</div>
+        <p className="text-brand font-semibold">Les séances à venir ont été régénérées.</p>
+        <button onClick={onClose} className="px-6 py-2 rounded-xl bg-brand text-white text-sm font-medium">Fermer</button>
+      </div>
+    </Modal>
+  );
+
+  return (
+    <Modal title="Modifier le programme" onClose={onClose}>
+      <Field label="Séances / semaine">
+        <div className="flex items-center gap-3">
+          <input type="range" min={2} max={10} value={form.seances_semaine} onChange={setNum("seances_semaine")} className="flex-1 accent-brand" />
+          <span className="text-sm font-bold text-gray-900 dark:text-white w-4 text-right">{form.seances_semaine}</span>
+        </div>
+      </Field>
+      <Field label="Séances muscu / semaine">
+        <div className="flex items-center gap-3">
+          <input type="range" min={0} max={form.seances_semaine} value={form.seances_muscu_semaine}
+            onChange={e => {
+              const v = parseInt(e.target.value);
+              setForm(f => ({ ...f, seances_muscu_semaine: v, seances_course_semaine: Math.max(0, f.seances_semaine - v) }));
+            }} className="flex-1 accent-brand" />
+          <span className="text-sm font-bold text-gray-900 dark:text-white w-4 text-right">{form.seances_muscu_semaine}</span>
+        </div>
+      </Field>
+      <Field label="Séances course / semaine">
+        <div className="flex items-center gap-3">
+          <input type="range" min={0} max={form.seances_semaine} value={form.seances_course_semaine}
+            onChange={e => {
+              const v = parseInt(e.target.value);
+              setForm(f => ({ ...f, seances_course_semaine: v, seances_muscu_semaine: Math.max(0, f.seances_semaine - v) }));
+            }} className="flex-1 accent-brand" />
+          <span className="text-sm font-bold text-gray-900 dark:text-white w-4 text-right">{form.seances_course_semaine}</span>
+        </div>
+      </Field>
+      <Field label="Type de musculation">
+        <select className={inputCls} value={form.type_muscu} onChange={set("type_muscu")}>
+          <option value="poids_corps">Poids du corps</option>
+          <option value="salle">Salle de sport</option>
+        </select>
+      </Field>
+      <Field label="Type de course">
+        <select className={inputCls} value={form.type_course} onChange={set("type_course")}>
+          <option value="route">Route</option>
+          <option value="trail">Trail</option>
+        </select>
+      </Field>
+      <Field label="Tests d'évaluation toutes les">
+        <div className="flex items-center gap-3">
+          <input type="range" min={2} max={16} value={form.frequence_tests_semaines} onChange={setNum("frequence_tests_semaines")} className="flex-1 accent-brand" />
+          <span className="text-sm font-bold text-gray-900 dark:text-white w-16 text-right">{form.frequence_tests_semaines} sem.</span>
+        </div>
+      </Field>
+      <p className="text-xs text-amber-500 dark:text-amber-400 mb-3">
+        ⚠️ Les séances futures non validées seront régénérées selon les nouveaux paramètres.
+      </p>
+      {err && <p className="text-xs text-red-500 mb-3">{err}</p>}
+      <button onClick={save} disabled={saving}
+        className="w-full py-3 rounded-xl bg-brand text-white font-semibold text-sm disabled:opacity-50 hover:bg-brand-dark transition-colors">
+        {saving ? "Mise à jour en cours…" : "Mettre à jour le programme"}
+      </button>
+    </Modal>
+  );
+}
+
 // ── Layout components ──────────────────────────────────────────────────────
 const PROG_LABEL = { course: "Course", muscu: "Musculation", hybride: "Hybride" };
 const MUSCU_LABEL = { poids_corps: "Poids du corps", salle: "Salle de sport" };
@@ -376,6 +483,7 @@ export default function Profil({ dark, setDark }) {
   const { user, setUser, logout } = useAuth();
   const [editInfos, setEditInfos] = useState(false);
   const [editPwd, setEditPwd] = useState(false);
+  const [editProgramme, setEditProgramme] = useState(false);
 
   const initials = [user?.prenom?.[0], user?.nom?.[0]].filter(Boolean).join("").toUpperCase() || "?";
 
@@ -420,7 +528,15 @@ export default function Profil({ dark, setDark }) {
       </Section>
 
       {/* Programme */}
-      <Section title="Programme">
+      <Section title="Programme" action={
+        <button onClick={() => setEditProgramme(true)}
+          className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+          title="Modifier">
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+          </svg>
+        </button>
+      }>
         <Row label="Type" value={PROG_LABEL[user?.type_programme] ?? user?.type_programme} />
         <Row label="Musculation" value={MUSCU_LABEL[user?.type_muscu] ?? user?.type_muscu} />
         <Row label="Course" value={COURSE_LABEL[user?.type_course] ?? user?.type_course} />
@@ -466,6 +582,7 @@ export default function Profil({ dark, setDark }) {
 
       {editInfos && <EditInfosModal user={user} onClose={() => setEditInfos(false)} onSaved={refreshUser} />}
       {editPwd && <EditPasswordModal onClose={() => setEditPwd(false)} />}
+      {editProgramme && <EditProgrammeModal user={user} onClose={() => setEditProgramme(false)} onSaved={refreshUser} />}
     </div>
   );
 }
