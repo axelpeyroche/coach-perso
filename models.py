@@ -116,11 +116,8 @@ class Utilisateur(Base):
     objectif_type: Mapped[Optional[str]] = mapped_column(String(20))     # "course" | "muscu" | "aucun"
     historique_perf: Mapped[Optional[str]] = mapped_column(Text)          # JSON serialisé
 
-    # Strava OAuth
-    strava_athlete_id: Mapped[Optional[int]] = mapped_column(Integer)
-    strava_access_token: Mapped[Optional[str]] = mapped_column(String(255))
-    strava_refresh_token: Mapped[Optional[str]] = mapped_column(String(255))
-    strava_token_expires_at: Mapped[Optional[int]] = mapped_column(Integer)  # Unix timestamp
+    # Token d'import (iOS Shortcuts)
+    import_token: Mapped[Optional[str]] = mapped_column(String(64))
 
     # Physiologie
     fc_max: Mapped[Optional[int]] = mapped_column(Integer, comment="FC max mesurée (bpm)")

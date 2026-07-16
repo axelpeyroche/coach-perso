@@ -1,7 +1,7 @@
 import { useAuth } from "../AuthContext";
 import { useState, useEffect, useRef } from "react";
 import api from "../api";
-import { getStravaAuthUrl, stravaDisconnect } from "../api";
+import { getImportToken, regenererImportToken } from "../api";
 
 function urlBase64ToUint8Array(b64) {
   const pad = "=".repeat((4 - (b64.length % 4)) % 4);
@@ -527,53 +527,133 @@ function BioStat({ label, value, unit }) {
 }
 
 // ── Page ───────────────────────────────────────────────────────────────────
-function StravaConnect({ user, onRefresh }) {
+function iOSShortcutSection() {
+  const [token, setToken] = useState(null);
+  const [visible, setVisible] = useState(false);
   const [loading, setLoading] = useState(false);
-  const connected = user?.strava_connecte;
+  const [copied, setCopied] = useState(false);
+  const apiUrl = (import.meta.env.VITE_API_URL || "/api").replace(/\/api$/, "");
 
-  async function connecter() {
+  async function chargerToken() {
     setLoading(true);
     try {
-      const { url } = await getStravaAuthUrl();
-      window.location.href = url;
-    } catch {
-      setLoading(false);
-    }
-  }
-
-  async function deconnecter() {
-    if (!window.confirm("Déconnecter Strava ?")) return;
-    setLoading(true);
-    try {
-      await stravaDisconnect();
-      await onRefresh();
+      const data = await getImportToken();
+      setToken(data.import_token);
+      setVisible(true);
     } finally {
       setLoading(false);
     }
   }
 
+  async function regenerer() {
+    if (!window.confirm("Regénérer le token ? L'ancien ne fonctionnera plus dans le raccourci.")) return;
+    setLoading(true);
+    try {
+      const data = await regenererImportToken();
+      setToken(data.import_token);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function copier(text) {
+    navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
+  }
+
   return (
-    <div className="flex items-center justify-between py-3">
-      <div className="flex items-center gap-2">
-        <img src="https://upload.wikimedia.org/wikipedia/commons/c/cb/Strava_Logo.svg"
-          alt="Strava" className="h-5 w-auto" onError={e => { e.target.style.display="none"; }} />
-        <span className="text-sm text-gray-700 dark:text-gray-300">Strava</span>
-        {connected && (
-          <span className="text-xs px-2 py-0.5 rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 font-medium">
-            Connecté
-          </span>
-        )}
+    <div className="py-3 space-y-3">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Raccourci iOS (Apple Watch)</p>
+          <p className="text-xs text-gray-400 mt-0.5">Importe tes séances depuis l'app Santé</p>
+        </div>
+        <button onClick={chargerToken} disabled={loading}
+          className="text-xs px-3 py-1.5 rounded-xl bg-brand text-white font-semibold hover:bg-brand-dark transition-colors disabled:opacity-50">
+          {loading ? "…" : visible ? "Masquer" : "Configurer"}
+        </button>
       </div>
-      {connected ? (
-        <button onClick={deconnecter} disabled={loading}
-          className="text-xs px-3 py-1.5 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors disabled:opacity-50">
-          {loading ? "..." : "Déconnecter"}
-        </button>
-      ) : (
-        <button onClick={connecter} disabled={loading}
-          className="text-xs px-3 py-1.5 rounded-xl bg-orange-500 text-white font-semibold hover:bg-orange-600 transition-colors disabled:opacity-50">
-          {loading ? "..." : "Connecter"}
-        </button>
+
+      {visible && token && (
+        <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 space-y-4 text-xs">
+          {/* Token */}
+          <div>
+            <p className="font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1.5">Ton token d'accès</p>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-xs font-mono text-gray-800 dark:text-gray-200 break-all">
+                {token}
+              </code>
+              <button onClick={() => copier(token)}
+                className="shrink-0 px-3 py-2 rounded-lg bg-brand text-white font-semibold hover:bg-brand-dark transition-colors">
+                {copied ? "✓" : "Copier"}
+              </button>
+            </div>
+            <button onClick={regenerer} disabled={loading}
+              className="mt-1.5 text-gray-400 hover:text-red-500 transition-colors underline text-xs">
+              Regénérer le token
+            </button>
+          </div>
+
+          {/* URL API */}
+          <div>
+            <p className="font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1.5">URL de ton coach</p>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-xs font-mono text-gray-800 dark:text-gray-200 break-all">
+                {apiUrl}
+              </code>
+              <button onClick={() => copier(apiUrl)}
+                className="shrink-0 px-3 py-2 rounded-lg bg-brand text-white font-semibold hover:bg-brand-dark transition-colors">
+                Copier
+              </button>
+            </div>
+          </div>
+
+          {/* Instructions */}
+          <div className="space-y-2">
+            <p className="font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Comment configurer</p>
+            <ol className="space-y-1.5 text-gray-600 dark:text-gray-400 list-decimal list-inside">
+              <li>Ouvre l'app <strong>Raccourcis</strong> sur iPhone</li>
+              <li>Crée un nouveau raccourci → bouton <strong>+</strong></li>
+              <li>Ajoute les actions dans l'ordre ci-dessous</li>
+              <li>Configure ton token et l'URL dans les étapes indiquées</li>
+            </ol>
+            <div className="mt-3 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-3 space-y-2">
+              <p className="font-semibold text-gray-700 dark:text-gray-300 text-xs uppercase tracking-wide">Actions du raccourci</p>
+              {[
+                ["1", "Variable", "Définir variable → Nom : TOKEN → Valeur : (colle ton token)"],
+                ["2", "Variable", "Définir variable → Nom : API_URL → Valeur : (colle l'URL)"],
+                ["3", "Santé", "Rechercher échantillons de santé → Type : Entraînement → Tri : Date (desc) → Limite : 5"],
+                ["4", "Script", "Choisir dans la liste → (résultats de l'étape 3) → Invite : Quelle séance ?"],
+                ["5", "Santé", "Obtenir détails → Durée / Distance / Fréquence cardiaque moy. / D+ total"],
+                ["6", "Web", `GET ${apiUrl}/api/import/seances-recentes?token=[TOKEN]`],
+                ["7", "Script", "Obtenir valeur pour la clé → seances → depuis le résultat JSON"],
+                ["8", "Script", "Choisir dans la liste → (séances) → Afficher : titre + date"],
+                ["9", "Web", `POST ${apiUrl}/api/import/workout → Corps JSON (voir ci-dessous)`],
+                ["10", "Script", "Afficher résultat → Message de confirmation"],
+              ].map(([n, cat, desc]) => (
+                <div key={n} className="flex gap-2">
+                  <span className="shrink-0 w-5 h-5 rounded-full bg-brand text-white flex items-center justify-center text-xs font-bold">{n}</span>
+                  <div>
+                    <span className="text-brand font-semibold">[{cat}]</span>{" "}
+                    <span className="text-gray-600 dark:text-gray-400">{desc}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-3">
+              <p className="font-semibold text-gray-700 dark:text-gray-300 text-xs uppercase tracking-wide mb-1.5">Corps JSON de l'étape 9</p>
+              <pre className="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-mono">{`{
+  "token": "[TOKEN]",
+  "seance_id": [id de la séance choisie],
+  "duree_min": [Durée en minutes],
+  "distance_km": [Distance en km],
+  "dplus_m": [D+ en mètres],
+  "fc_moyenne_bpm": [FC moyenne],
+  "fc_max_bpm": [FC max],
+  "rpe": 7
+}`}</pre>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -658,7 +738,7 @@ export default function Profil({ dark, setDark }) {
 
       {/* Intégrations */}
       <Section title="Intégrations">
-        <StravaConnect user={user} onRefresh={refreshUser} />
+        <iOSShortcutSection />
       </Section>
 
       {/* Apparence */}

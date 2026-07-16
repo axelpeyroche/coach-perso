@@ -1,16 +1,16 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+﻿import { useState, useRef, useCallback, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import api, { getToutesSemaines, journaliserSeance, validerRPE, getProfilFC, supprimerJournal, modifierJournal, planifierSeance, creerEvaluation, enregistrerDemiCooper, enregistrerMax1Min, enregistrerAmrapBenchmark, getExercicesEvaluation, getHistoriqueEvaluations, modifierEvaluation, supprimerEvaluation, getStravaActivites, stravaImporter } from "../api";
+import api, { getToutesSemaines, journaliserSeance, validerRPE, getProfilFC, supprimerJournal, modifierJournal, planifierSeance, creerEvaluation, enregistrerDemiCooper, enregistrerMax1Min, enregistrerAmrapBenchmark, getExercicesEvaluation, getHistoriqueEvaluations, modifierEvaluation, supprimerEvaluation } from "../api";
 import clsx from "clsx";
 
 
-// ─── Constantes ────────────────────────────────────────────────────────────
+// â”€â”€â”€ Constantes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-const TYPE_ICONS   = { COURSE: "🏃", AMRAP: "🔥", EMOM: "⏱️", EVALUATION: "🎯", DECHARGE: "🧘", REPOS: "😴", GYM_UPPER: "💪", GYM_LOWER: "🦵", GYM_FULL: "🏋️", BLESSURE: "🩹" };
+const TYPE_ICONS   = { COURSE: "ðŸƒ", AMRAP: "ðŸ”¥", EMOM: "â±ï¸", EVALUATION: "ðŸŽ¯", DECHARGE: "ðŸ§˜", REPOS: "ðŸ˜´", GYM_UPPER: "ðŸ’ª", GYM_LOWER: "ðŸ¦µ", GYM_FULL: "ðŸ‹ï¸", BLESSURE: "ðŸ©¹" };
 const GYM_TYPES    = ["GYM_UPPER", "GYM_LOWER", "GYM_FULL"];
 const GYM_LABEL    = { GYM_UPPER: "Upper Body", GYM_LOWER: "Lower Body", GYM_FULL: "Full Body" };
 const GYM_COLOR    = { GYM_UPPER: "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400", GYM_LOWER: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400", GYM_FULL: "bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400" };
-const PHASE_LABEL  = { surcharge: "Surcharge ↑", decharge: "Décharge ↓", evaluation: "Évaluation ★" };
+const PHASE_LABEL  = { surcharge: "Surcharge â†‘", decharge: "DÃ©charge â†“", evaluation: "Ã‰valuation â˜…" };
 const PHASE_COLORS = {
   surcharge:  "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
   decharge:   "bg-blue-100  text-blue-700  dark:bg-blue-900/30  dark:text-blue-400",
@@ -25,8 +25,8 @@ const ZONE_PILL = {
 };
 const RPE_COLOR = ["","text-green-400","text-green-500","text-green-600","text-yellow-400",
   "text-yellow-500","text-yellow-600","text-orange-400","text-orange-500","text-red-400","text-red-500"];
-const RPE_LABEL = ["","Facile","Facile","Facile","Modéré",
-  "Modéré","Modéré","Difficile","Difficile","Maximum","Maximum"];
+const RPE_LABEL = ["","Facile","Facile","Facile","ModÃ©rÃ©",
+  "ModÃ©rÃ©","ModÃ©rÃ©","Difficile","Difficile","Maximum","Maximum"];
 
 function fmt(min) {
   if (!min) return null;
@@ -34,7 +34,7 @@ function fmt(min) {
   return h ? `${h}h${m ? String(m).padStart(2,"0") : ""}` : `${min} min`;
 }
 
-// ─── Zones FC (Karvonen) ───────────────────────────────────────────────────
+// â”€â”€â”€ Zones FC (Karvonen) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const BORNES_PCT = {
   Z1: [0.60, 0.65], Z2: [0.65, 0.75], Z3: [0.75, 0.85],
   Z4: [0.85, 0.95], Z5: [0.95, 1.00],
@@ -53,16 +53,16 @@ function calcZonesFC(fcMax, fcRepos) {
 function signalCorrelationRPEFC(rpe, fcMoy, zone, zonesFC) {
   if (!rpe || !fcMoy || !zone || !zonesFC?.[zone]) return null;
   const [fcMin, fcMax] = zonesFC[zone];
-  const ratio = fcMoy / ((fcMin + fcMax) / 2); // rapport FC réelle / FC cible milieu zone
-  if (rpe <= 4 && ratio > 1.08) return { label: "FC élevée pour RPE bas", color: "text-orange-500" };
-  if (rpe >= 7 && ratio < 0.92) return { label: "FC basse pour RPE élevé", color: "text-blue-500" };
+  const ratio = fcMoy / ((fcMin + fcMax) / 2); // rapport FC rÃ©elle / FC cible milieu zone
+  if (rpe <= 4 && ratio > 1.08) return { label: "FC Ã©levÃ©e pour RPE bas", color: "text-orange-500" };
+  if (rpe >= 7 && ratio < 0.92) return { label: "FC basse pour RPE Ã©levÃ©", color: "text-blue-500" };
   if (fcMoy > fcMax + 5)        return { label: "FC au-dessus de la zone", color: "text-red-500" };
   return null;
 }
 
-// ─── Formulaire évaluation ─────────────────────────────────────────────────
+// â”€â”€â”€ Formulaire Ã©valuation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-// ─── Formulaire édition évaluation ─────────────────────────────────────────
+// â”€â”€â”€ Formulaire Ã©dition Ã©valuation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function FormulaireEditEvaluation({ seance, onClose }) {
   const qc = useQueryClient();
@@ -78,7 +78,7 @@ function FormulaireEditEvaluation({ seance, onClose }) {
     enabled: evalType === "max1min",
   });
 
-  // Trouver l'évaluation correspondant à la date de la séance
+  // Trouver l'Ã©valuation correspondant Ã  la date de la sÃ©ance
   const datePlanifiee = seance.date_planifiee; // "YYYY-MM-DD"
   const historique = historiqueData?.evaluations ?? [];
   const ev = historique.find(e => e.date === datePlanifiee) ?? historique[0] ?? null;
@@ -88,7 +88,7 @@ function FormulaireEditEvaluation({ seance, onClose }) {
   const [amrap, setAmrap]       = useState("");
   const [reps, setReps]         = useState({});
 
-  // Initialiser les champs quand l'évaluation est trouvée
+  // Initialiser les champs quand l'Ã©valuation est trouvÃ©e
   const [initialized, setInitialized] = useState(false);
   if (ev && !initialized) {
     if (evalType === "cooper" && ev.distance_m != null) setDistance(String(ev.distance_m));
@@ -120,14 +120,14 @@ function FormulaireEditEvaluation({ seance, onClose }) {
 
   if (!ev) return (
     <div className="border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40 px-4 py-4 text-center text-sm text-gray-400">
-      Évaluation introuvable pour cette date.
+      Ã‰valuation introuvable pour cette date.
       <button onClick={onClose} className="ml-3 text-xs text-brand underline">Fermer</button>
     </div>
   );
 
   return (
     <div className="border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40 px-4 py-4 space-y-4">
-      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Modifier les résultats — {ev.date.split("-").reverse().join("/")}</p>
+      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Modifier les rÃ©sultats â€” {ev.date.split("-").reverse().join("/")}</p>
 
       {evalType === "cooper" && (
         <div className="grid grid-cols-2 gap-2">
@@ -135,7 +135,7 @@ function FormulaireEditEvaluation({ seance, onClose }) {
             <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Distance (m)</label>
             <input type="number" value={distance} onChange={e => setDistance(e.target.value)}
               className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
-            {distance && <p className="text-xs text-brand mt-1">VMA → {(parseFloat(distance)/100).toFixed(1)} km/h</p>}
+            {distance && <p className="text-xs text-brand mt-1">VMA â†’ {(parseFloat(distance)/100).toFixed(1)} km/h</p>}
           </div>
           <div>
             <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">FC max (optionnel)</label>
@@ -183,10 +183,10 @@ function FormulaireEditEvaluation({ seance, onClose }) {
         </button>
         <button onClick={() => saveMut.mutate()} disabled={saveMut.isPending}
           className="px-6 py-2.5 rounded-xl bg-brand text-white font-semibold text-sm hover:bg-brand-dark transition-colors disabled:opacity-50">
-          {saveMut.isPending ? "..." : "Enregistrer ✓"}
+          {saveMut.isPending ? "..." : "Enregistrer âœ“"}
         </button>
       </div>
-      {saveMut.isError && <p className="text-xs text-red-500 text-center">Erreur — réessaie.</p>}
+      {saveMut.isError && <p className="text-xs text-red-500 text-center">Erreur â€” rÃ©essaie.</p>}
     </div>
   );
 }
@@ -217,7 +217,7 @@ function FormulaireEvaluation({ seance, onClose, onDone }) {
   const [rpe, setRpe]           = useState(7);
   const [notes, setNotes]       = useState("");
 
-  const RPE_LABEL = { 1:"Très facile",2:"Facile",3:"Modéré",4:"Assez facile",5:"Moyen",6:"Un peu difficile",7:"Difficile",8:"Très difficile",9:"Extrêmement difficile",10:"Maximum" };
+  const RPE_LABEL = { 1:"TrÃ¨s facile",2:"Facile",3:"ModÃ©rÃ©",4:"Assez facile",5:"Moyen",6:"Un peu difficile",7:"Difficile",8:"TrÃ¨s difficile",9:"ExtrÃªmement difficile",10:"Maximum" };
   const RPE_COLOR = { 1:"text-green-500",2:"text-green-500",3:"text-green-500",4:"text-lime-500",5:"text-yellow-500",6:"text-orange-400",7:"text-orange-500",8:"text-red-500",9:"text-red-600",10:"text-red-700" };
 
   const [saving, setSaving] = useState(false);
@@ -253,7 +253,7 @@ function FormulaireEvaluation({ seance, onClose, onDone }) {
       qc.invalidateQueries({ queryKey: ["evaluations-historique"] });
       onDone();
     } catch (e) {
-      setError("Erreur — réessaie.");
+      setError("Erreur â€” rÃ©essaie.");
     } finally {
       setSaving(false);
     }
@@ -261,18 +261,18 @@ function FormulaireEvaluation({ seance, onClose, onDone }) {
 
   return (
     <div className="border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40 px-4 py-4 space-y-5">
-      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Résultats de l'évaluation</p>
+      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">RÃ©sultats de l'Ã©valuation</p>
 
       {/* Demi-Cooper */}
       {evalType === "cooper" && (
       <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-3 space-y-2">
-        <p className="text-xs font-semibold text-gray-700 dark:text-gray-200">🏃 Demi-Cooper</p>
+        <p className="text-xs font-semibold text-gray-700 dark:text-gray-200">ðŸƒ Demi-Cooper</p>
         <div className="grid grid-cols-2 gap-2">
           <div>
             <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Distance (m)</label>
             <input type="number" placeholder="1450" value={distance} onChange={e => setDistance(e.target.value)}
               className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
-            {distance && <p className="text-xs text-brand mt-1">VMA → {(parseFloat(distance)/100).toFixed(1)} km/h</p>}
+            {distance && <p className="text-xs text-brand mt-1">VMA â†’ {(parseFloat(distance)/100).toFixed(1)} km/h</p>}
           </div>
           <div>
             <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">FC max (optionnel)</label>
@@ -286,7 +286,7 @@ function FormulaireEvaluation({ seance, onClose, onDone }) {
       {/* Max 1 min */}
       {evalType === "max1min" && mouvements.length > 0 && (
         <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-3 space-y-2">
-          <p className="text-xs font-semibold text-gray-700 dark:text-gray-200">💪 Max 1 min</p>
+          <p className="text-xs font-semibold text-gray-700 dark:text-gray-200">ðŸ’ª Max 1 min</p>
           <div className="grid grid-cols-2 gap-2">
             {mouvements.map(m => (
               <div key={m.slug}>
@@ -303,7 +303,7 @@ function FormulaireEvaluation({ seance, onClose, onDone }) {
       {/* AMRAP */}
       {evalType === "amrap" && (
       <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-3 space-y-2">
-        <p className="text-xs font-semibold text-gray-700 dark:text-gray-200">🔥 AMRAP 10 min</p>
+        <p className="text-xs font-semibold text-gray-700 dark:text-gray-200">ðŸ”¥ AMRAP 10 min</p>
         <div>
           <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Tours (ex. 2.9)</label>
           <input type="number" step="0.1" placeholder="2.9" value={tours} onChange={e => setTours(e.target.value)}
@@ -315,8 +315,8 @@ function FormulaireEvaluation({ seance, onClose, onDone }) {
       {/* RPE */}
       <div>
         <div className="flex justify-between items-baseline mb-2">
-          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Effort perçu (RPE)</span>
-          <span className={clsx("text-sm font-bold", RPE_COLOR[Math.round(rpe)])}>{rpe}/10 — {RPE_LABEL[Math.round(rpe)]}</span>
+          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Effort perÃ§u (RPE)</span>
+          <span className={clsx("text-sm font-bold", RPE_COLOR[Math.round(rpe)])}>{rpe}/10 â€” {RPE_LABEL[Math.round(rpe)]}</span>
         </div>
         <input type="range" min={1} max={10} step={0.5} value={rpe} onChange={e => setRpe(parseFloat(e.target.value))} className="w-full accent-brand" />
         <div className="flex justify-between text-xs text-gray-400 mt-0.5"><span>1 facile</span><span>10 max</span></div>
@@ -336,7 +336,7 @@ function FormulaireEvaluation({ seance, onClose, onDone }) {
         </button>
         <button onClick={handleSubmit} disabled={saving}
           className="px-6 py-2.5 rounded-xl bg-brand text-white font-semibold text-sm hover:bg-brand-dark transition-colors disabled:opacity-50">
-          {saving ? "Enregistrement..." : "Valider ✓"}
+          {saving ? "Enregistrement..." : "Valider âœ“"}
         </button>
       </div>
       {error && <p className="text-xs text-red-500 text-center">{error}</p>}
@@ -345,7 +345,7 @@ function FormulaireEvaluation({ seance, onClose, onDone }) {
 }
 
 
-// ─── Formulaire de journalisation ──────────────────────────────────────────
+// â”€â”€â”€ Formulaire de journalisation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function FormulaireLog({ seance, onClose, onDone, modeEdit = false }) {
   const qc = useQueryClient();
@@ -366,8 +366,8 @@ function FormulaireLog({ seance, onClose, onDone, modeEdit = false }) {
   const isMuscu  = seance.type === "AMRAP" || seance.type === "EMOM";
   const isGym    = GYM_TYPES.includes(seance.type);
 
-  // Détection séance seuil/fractionné : COURSE en Z4 ou Z5 avec pattern N×D min
-  const mIntervalles = seance.titre?.match(/(\d+)\s*[×x\*]\s*(\d+)\s*min/i);
+  // DÃ©tection sÃ©ance seuil/fractionnÃ© : COURSE en Z4 ou Z5 avec pattern NÃ—D min
+  const mIntervalles = seance.titre?.match(/(\d+)\s*[Ã—x\*]\s*(\d+)\s*min/i);
   const isIntervalles = isCourse && (seance.zone_cible === "Z4" || seance.zone_cible === "Z5") && !!mIntervalles;
   const nbBlocs = isIntervalles ? parseInt(mIntervalles[1]) : 0;
   const dureeBloc = isIntervalles ? parseInt(mIntervalles[2]) : 0;
@@ -418,7 +418,7 @@ function FormulaireLog({ seance, onClose, onDone, modeEdit = false }) {
   return (
     <div className="border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40 px-4 py-4 space-y-4">
 
-      {/* COURSE SEUIL / FRACTIONNÉ : blocs par répétition */}
+      {/* COURSE SEUIL / FRACTIONNÃ‰ : blocs par rÃ©pÃ©tition */}
       {isIntervalles && (
         <div className="space-y-3">
           {blocs.map((bloc, i) => {
@@ -427,7 +427,7 @@ function FormulaireLog({ seance, onClose, onDone, modeEdit = false }) {
             return (
               <div key={i} className="rounded-xl border border-gray-200 dark:border-gray-700 p-3 space-y-2">
                 <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">
-                  Répétition {i + 1} / {nbBlocs}
+                  RÃ©pÃ©tition {i + 1} / {nbBlocs}
                 </p>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
@@ -436,7 +436,7 @@ function FormulaireLog({ seance, onClose, onDone, modeEdit = false }) {
                       value={bloc.distance_km}
                       onChange={e => setBloc(i, "distance_km", e.target.value)}
                       className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
-                    {vitesse && <p className="text-xs text-brand mt-1">→ {vitesse} km/h</p>}
+                    {vitesse && <p className="text-xs text-brand mt-1">â†’ {vitesse} km/h</p>}
                   </div>
                   <div>
                     <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">FC moy (bpm)</label>
@@ -450,7 +450,7 @@ function FormulaireLog({ seance, onClose, onDone, modeEdit = false }) {
             );
           })}
           <div>
-            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Distance récupération totale (km)</label>
+            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Distance rÃ©cupÃ©ration totale (km)</label>
             <input type="number" step="0.01" placeholder="0.8"
               value={distRepos}
               onChange={e => setDistRepos(e.target.value)}
@@ -459,11 +459,11 @@ function FormulaireLog({ seance, onClose, onDone, modeEdit = false }) {
         </div>
       )}
 
-      {/* COURSE CLASSIQUE : métriques manuelles */}
+      {/* COURSE CLASSIQUE : mÃ©triques manuelles */}
       {isCourse && !isIntervalles && (
         <div className="grid grid-cols-2 gap-3">
           {[
-            { key: "duree_reelle_min",   label: "Durée (min)",   ph: "40" },
+            { key: "duree_reelle_min",   label: "DurÃ©e (min)",   ph: "40" },
             { key: "distance_reelle_km", label: "Distance (km)", ph: "6.2" },
             { key: "dplus_reel_m",       label: "D+ (m)",        ph: "50" },
             { key: "fc_moyenne_bpm",     label: "FC moy (bpm)",  ph: "153" },
@@ -480,11 +480,11 @@ function FormulaireLog({ seance, onClose, onDone, modeEdit = false }) {
         </div>
       )}
 
-      {/* MUSCULATION : durée + FC moyenne manuelles */}
+      {/* MUSCULATION : durÃ©e + FC moyenne manuelles */}
       {isMuscu && (
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Durée (min)</label>
+            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">DurÃ©e (min)</label>
             <input type="number" placeholder="45" value={champs.duree_reelle_min ?? ""}
               onChange={e => setC("duree_reelle_min", e.target.value)}
               className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
@@ -501,9 +501,9 @@ function FormulaireLog({ seance, onClose, onDone, modeEdit = false }) {
       {/* Slider RPE */}
       <div>
         <div className="flex justify-between items-baseline mb-2">
-          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Effort perçu (RPE)</span>
+          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Effort perÃ§u (RPE)</span>
           <span className={clsx("text-sm font-bold", RPE_COLOR[Math.round(rpe)])}>
-            {rpe}/10 — {RPE_LABEL[Math.round(rpe)]}
+            {rpe}/10 â€” {RPE_LABEL[Math.round(rpe)]}
           </span>
         </div>
         <input type="range" min={1} max={10} step={0.5} value={rpe}
@@ -529,23 +529,23 @@ function FormulaireLog({ seance, onClose, onDone, modeEdit = false }) {
         </button>
         <button onClick={() => mut.mutate()} disabled={mut.isPending}
           className="px-6 py-2.5 rounded-xl bg-brand text-white font-semibold text-sm hover:bg-brand-dark transition-colors disabled:opacity-50">
-          {mut.isPending ? "..." : modeEdit ? "Enregistrer ✓" : "Valider ✓"}
+          {mut.isPending ? "..." : modeEdit ? "Enregistrer âœ“" : "Valider âœ“"}
         </button>
       </div>
-      {mut.isError && <p className="text-xs text-red-500 text-center">Erreur — réessaie.</p>}
+      {mut.isError && <p className="text-xs text-red-500 text-center">Erreur â€” rÃ©essaie.</p>}
     </div>
   );
 }
 
-// ─── Carte séance ───────────────────────────────────────────────────────────
+// â”€â”€â”€ Carte sÃ©ance â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-// ─── Modal planification ────────────────────────────────────────────────────
+// â”€â”€â”€ Modal planification â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const JOURS_COURT = ["L","M","M","J","V","S","D"];
-const MOIS_FR = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
+const MOIS_FR = ["Janvier","FÃ©vrier","Mars","Avril","Mai","Juin","Juillet","AoÃ»t","Septembre","Octobre","Novembre","DÃ©cembre"];
 
 function PlanificationModal({ seance, onConfirm, onClose }) {
-  // Semaine de la séance (lundi → dimanche)
+  // Semaine de la sÃ©ance (lundi â†’ dimanche)
   const seanceDate = new Date((seance.date || seance.date_seance) + "T00:00:00");
   const dow = seanceDate.getDay(); // 0=dim
   const lundiSem = new Date(seanceDate);
@@ -602,17 +602,17 @@ function PlanificationModal({ seance, onConfirm, onClose }) {
             <p className="text-xs text-gray-400 font-medium uppercase tracking-wide">Planifier</p>
             <p className="text-sm font-bold text-gray-900 dark:text-white truncate">{seance.titre}</p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-2xl leading-none">×</button>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-2xl leading-none">Ã—</button>
         </div>
 
         {/* Navigation mois */}
         <div className="flex items-center justify-between">
-          <button onClick={() => navMois(-1)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500">◀</button>
+          <button onClick={() => navMois(-1)} className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500">â—€</button>
           <p className="text-sm font-semibold text-gray-900 dark:text-white capitalize">{MOIS_FR[moisIdx]} {annee}</p>
-          <button onClick={() => navMois(1)}  className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500">▶</button>
+          <button onClick={() => navMois(1)}  className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500">â–¶</button>
         </div>
 
-        {/* En-têtes jours */}
+        {/* En-tÃªtes jours */}
         <div className="grid grid-cols-7">
           {JOURS_COURT.map((j,i) => <div key={i} className="text-center text-xs font-semibold text-gray-400 py-0.5">{j}</div>)}
         </div>
@@ -640,10 +640,10 @@ function PlanificationModal({ seance, onConfirm, onClose }) {
           })}
         </div>
 
-        {/* Sélecteur heure */}
+        {/* SÃ©lecteur heure */}
         {jourSel && (
           <div className="rounded-xl bg-gray-50 dark:bg-gray-800 px-3 py-2.5 flex items-center gap-3">
-            <span className="text-xs text-gray-500 dark:text-gray-400 shrink-0">🕐 {jourSelLabel}</span>
+            <span className="text-xs text-gray-500 dark:text-gray-400 shrink-0">ðŸ• {jourSelLabel}</span>
             <div className="flex items-center gap-1 ml-auto">
               <select value={heure} onChange={e => setHeure(e.target.value)}
                 className="px-2 py-1 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 text-sm font-mono text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand">
@@ -682,124 +682,6 @@ const CONSEIL_COLORS = {
   depassement: { bg: "bg-red-100 dark:bg-red-900/25",   border: "border-red-300 dark:border-red-700",    text: "text-red-900 dark:text-red-200",    sub: "text-red-700 dark:text-red-400" },
 };
 
-// ─── Modal import Strava ────────────────────────────────────────────────────
-
-const STRAVA_TYPE_COMPAT = {
-  COURSE:    ["Run", "TrailRun"],
-  GYM_UPPER: ["WeightTraining", "Workout", "HIIT", "CrossFit"],
-  GYM_LOWER: ["WeightTraining", "Workout", "HIIT", "CrossFit"],
-  GYM_FULL:  ["WeightTraining", "Workout", "HIIT", "CrossFit"],
-  EMOM:      ["WeightTraining", "Workout", "HIIT", "CrossFit"],
-  AMRAP:     ["WeightTraining", "Workout", "HIIT", "CrossFit"],
-  DECHARGE:  ["Walk", "Hike", "Yoga"],
-};
-
-function ModalStravaImport({ seance, onClose, onDone }) {
-  const qc = useQueryClient();
-  const [rpe, setRpe] = useState(7);
-  const [selected, setSelected] = useState(null);
-
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ["strava-activites"],
-    queryFn: () => getStravaActivites(21),
-    staleTime: 60_000,
-  });
-
-  // Filtrer par date (±1 jour) et type compatible
-  const dateSeance = seance.date_planifiee?.slice(0, 10);
-  const compatSports = STRAVA_TYPE_COMPAT[seance.type] ?? [];
-
-  const activitesFiltrees = (data?.activites ?? []).filter(a => {
-    const diff = Math.abs(new Date(a.date) - new Date(dateSeance)) / 86400000;
-    return diff <= 1 && compatSports.includes(a.sport_type);
-  });
-
-  const mutImport = useMutation({
-    mutationFn: () => stravaImporter({
-      seance_id:      seance.id,
-      strava_id:      selected.id,
-      duree_min:      selected.duree_min,
-      distance_km:    selected.distance_km,
-      dplus_m:        selected.dplus_m,
-      fc_moyenne_bpm: selected.fc_moyenne_bpm,
-      fc_max_bpm:     selected.fc_max_bpm,
-      rpe,
-    }),
-    onSuccess: onDone,
-  });
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/40" onClick={onClose}>
-      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-sm p-5 space-y-4" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-base font-bold text-gray-900 dark:text-white">Importer depuis Strava</h3>
-            <p className="text-xs text-gray-400 mt-0.5">{seance.titre}</p>
-          </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-lg leading-none">×</button>
-        </div>
-
-        {isLoading && <p className="text-sm text-gray-400 text-center py-4">Chargement…</p>}
-        {isError   && <p className="text-sm text-red-500 text-center py-4">Erreur Strava — vérifie la connexion dans Profil.</p>}
-
-        {!isLoading && !isError && activitesFiltrees.length === 0 && (
-          <p className="text-sm text-gray-400 text-center py-4">
-            Aucune activité Strava compatible trouvée autour du {dateSeance}.<br />
-            <span className="text-xs">Types attendus : {compatSports.join(", ")}</span>
-          </p>
-        )}
-
-        {activitesFiltrees.length > 0 && (
-          <div className="space-y-2 max-h-60 overflow-y-auto">
-            {activitesFiltrees.map(a => (
-              <button key={a.id} onClick={() => setSelected(s => s?.id === a.id ? null : a)}
-                className={clsx(
-                  "w-full text-left rounded-xl border-2 px-3 py-2.5 transition-colors",
-                  selected?.id === a.id
-                    ? "border-orange-400 bg-orange-50 dark:bg-orange-900/20"
-                    : "border-gray-200 dark:border-gray-700 hover:border-orange-300 dark:hover:border-orange-700"
-                )}>
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{a.nom}</p>
-                  <span className="text-xs text-gray-400 shrink-0 ml-2">{a.date}</span>
-                </div>
-                <div className="flex flex-wrap gap-2 mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  <span>⏱ {a.duree_min} min</span>
-                  {a.distance_km  && <span>📍 {a.distance_km} km</span>}
-                  {a.dplus_m > 0  && <span>⛰ {a.dplus_m} m D+</span>}
-                  {a.fc_moyenne_bpm && <span>❤️ {a.fc_moyenne_bpm} bpm</span>}
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {selected && (
-          <div>
-            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">RPE ressenti (1–10)</label>
-            <div className="flex items-center gap-3">
-              <input type="range" min={1} max={10} step={0.5} value={rpe}
-                onChange={e => setRpe(parseFloat(e.target.value))}
-                className="flex-1 accent-orange-500" />
-              <span className="text-sm font-bold text-orange-500 w-6 text-center">{rpe}</span>
-            </div>
-          </div>
-        )}
-
-        <div className="flex justify-end gap-2 pt-1">
-          <button onClick={onClose} className="px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-sm text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800">
-            Annuler
-          </button>
-          <button onClick={() => mutImport.mutate()} disabled={!selected || mutImport.isPending}
-            className="px-5 py-2 rounded-xl bg-orange-500 text-white font-semibold text-sm hover:bg-orange-600 disabled:opacity-40 transition-colors">
-            {mutImport.isPending ? "…" : "Importer ✓"}
-          </button>
-        </div>
-        {mutImport.isError && <p className="text-xs text-red-500 text-center">Erreur — réessaie.</p>}
-      </div>
-    </div>
-  );
-}
 
 function CarteSeance({ seance, zonesFC }) {
   const qc = useQueryClient();
@@ -809,7 +691,6 @@ function CarteSeance({ seance, zonesFC }) {
   const [editOpen, setEditOpen]     = useState(false);
   const [conseil, setConseil]       = useState(null);
   const [planifOpen, setPlanifOpen] = useState(false);
-  const [stravaOpen, setStravaOpen] = useState(false);
 
   const mutPlanifier = useMutation({
     mutationFn: ({ date_planifiee, heure_planifiee }) => planifierSeance(seance.id, date_planifiee, heure_planifiee),
@@ -845,17 +726,17 @@ function CarteSeance({ seance, zonesFC }) {
         ? "border-green-400 dark:border-green-600 shadow-[0_0_0_3px_rgba(34,197,94,0.15)]"
         : "border-gray-200 dark:border-gray-700"
     )}>
-      {/* ── Ligne principale ── */}
+      {/* â”€â”€ Ligne principale â”€â”€ */}
       <div className={clsx(
         "flex items-center gap-3 px-4 py-3",
         fait ? "bg-green-50 dark:bg-green-900/15" : "bg-white dark:bg-gray-900"
       )}>
-        <span className="text-xl shrink-0">{TYPE_ICONS[seance.type] ?? "📌"}</span>
+        <span className="text-xl shrink-0">{TYPE_ICONS[seance.type] ?? "ðŸ“Œ"}</span>
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 min-w-0">
             <p className="text-sm font-semibold text-gray-900 dark:text-white leading-snug truncate">{seance.titre}</p>
-            {fait && <span className="text-green-500 dark:text-green-400 font-bold text-base leading-none shrink-0">✓</span>}
+            {fait && <span className="text-green-500 dark:text-green-400 font-bold text-base leading-none shrink-0">âœ“</span>}
           </div>
           <div className="flex flex-wrap gap-1.5 mt-1">
             {seance.zone_cible && (
@@ -865,12 +746,12 @@ function CarteSeance({ seance, zonesFC }) {
             )}
             {seance.duree_cible_min && (
               <span className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-xs text-gray-600 dark:text-gray-400">
-                ⏱ {fmt(seance.duree_cible_min)}
+                â± {fmt(seance.duree_cible_min)}
               </span>
             )}
             {seance.dplus_cible_m > 0 && (
               <span className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-xs text-gray-600 dark:text-gray-400">
-                ↑ {seance.dplus_cible_m} m
+                â†‘ {seance.dplus_cible_m} m
               </span>
             )}
             {isGym && (
@@ -892,12 +773,12 @@ function CarteSeance({ seance, zonesFC }) {
             <>
               <button onClick={() => { setEditOpen(v => !v); setOuvert(false); }}
                 className="p-1.5 rounded-lg text-sm text-gray-400 hover:text-brand hover:bg-brand/10 transition-colors" title="Modifier">
-                ✏️
+                âœï¸
               </button>
-              <button onClick={() => { if (window.confirm("Annuler cette séance ?")) mutAnnuler.mutate(); }}
+              <button onClick={() => { if (window.confirm("Annuler cette sÃ©ance ?")) mutAnnuler.mutate(); }}
                 disabled={mutAnnuler.isPending}
                 className="p-1.5 rounded-lg text-sm text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-40" title="Annuler la validation">
-                🗑
+                ðŸ—‘
               </button>
             </>
           ) : (
@@ -906,7 +787,7 @@ function CarteSeance({ seance, zonesFC }) {
               {seance.date_planifiee ? (
                 <button onClick={() => setPlanifOpen(true)}
                   className="flex items-center gap-1 px-2 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-300 text-xs font-medium hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors group">
-                  <span>📅</span>
+                  <span>ðŸ“…</span>
                   <span className="hidden sm:inline">
                     {new Date(seance.date_planifiee + "T00:00:00").toLocaleDateString("fr-FR", { weekday:"short", day:"numeric", month:"short" })}
                     {seance.heure_planifiee ? ` ${seance.heure_planifiee}` : ""}
@@ -914,29 +795,18 @@ function CarteSeance({ seance, zonesFC }) {
                   <span
                     onClick={e => { e.stopPropagation(); mutPlanifier.mutate({ date_planifiee: null, heure_planifiee: null }); }}
                     className="ml-0.5 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-all cursor-pointer">
-                    ×
+                    Ã—
                   </span>
                 </button>
               ) : (
                 <button onClick={() => setPlanifOpen(true)} title="Planifier"
                   className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors text-base leading-none">
-                  📅
+                  ðŸ“…
                 </button>
               )}
-              <button onClick={() => { setStravaOpen(true); setOuvert(false); }}
+<button onClick={() => { setLogOpen(v => !v); setOuvert(false); }}
                 disabled={!seance.date_planifiee}
-                title="Importer depuis Strava"
-                className={clsx(
-                  "px-2 py-1.5 rounded-xl text-xs font-semibold transition-colors border",
-                  !seance.date_planifiee
-                    ? "border-gray-200 dark:border-gray-700 text-gray-300 cursor-not-allowed"
-                    : "border-orange-300 dark:border-orange-700 text-orange-500 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20"
-                )}>
-                Strava
-              </button>
-              <button onClick={() => { setLogOpen(v => !v); setOuvert(false); }}
-                disabled={!seance.date_planifiee}
-                title={!seance.date_planifiee ? "Planifie la séance avant de la valider" : undefined}
+                title={!seance.date_planifiee ? "Planifie la sÃ©ance avant de la valider" : undefined}
                 className={clsx(
                   "px-3 py-1.5 rounded-xl text-white text-xs font-semibold transition-colors",
                   !seance.date_planifiee
@@ -951,12 +821,12 @@ function CarteSeance({ seance, zonesFC }) {
           )}
           <button onClick={() => { setOuvert(v => !v); setLogOpen(false); setEditOpen(false); }}
             className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
-            <span className={clsx("inline-block transition-transform text-xs", ouvert ? "rotate-180" : "")}>▼</span>
+            <span className={clsx("inline-block transition-transform text-xs", ouvert ? "rotate-180" : "")}>â–¼</span>
           </button>
         </div>
       </div>
 
-      {/* ── Résumé si loggé ── */}
+      {/* â”€â”€ RÃ©sumÃ© si loggÃ© â”€â”€ */}
       {fait && seance.journal && (
         <div className="px-4 py-2 border-t border-green-100 dark:border-green-900/20 bg-green-50/50 dark:bg-green-900/5 space-y-1.5">
           <div className="flex flex-wrap gap-3 text-xs text-gray-500">
@@ -967,24 +837,24 @@ function CarteSeance({ seance, zonesFC }) {
                 seance.journal.rpe, seance.journal.fc_moyenne_bpm,
                 seance.zone_cible, zonesFC
               );
-              return sig ? <span className={clsx("font-semibold", sig.color)}>⚡ {sig.label}</span> : null;
+              return sig ? <span className={clsx("font-semibold", sig.color)}>âš¡ {sig.label}</span> : null;
             })()}
             {seance.journal.notes && <span className="truncate italic w-full">{seance.journal.notes}</span>}
           </div>
-          {/* Charge réelle vs planifiée */}
+          {/* Charge rÃ©elle vs planifiÃ©e */}
           {(seance.journal.duree_reelle_min || seance.journal.distance_reelle_km || seance.journal.dplus_reel_m) && (
             <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs">
               {seance.duree_cible_min && seance.journal.duree_reelle_min && (
                 <span className={clsx("font-medium", seance.journal.duree_reelle_min >= seance.duree_cible_min * 0.9 ? "text-green-600 dark:text-green-400" : "text-orange-500")}>
-                  ⏱ {seance.journal.duree_reelle_min} / {seance.duree_cible_min} min
+                  â± {seance.journal.duree_reelle_min} / {seance.duree_cible_min} min
                 </span>
               )}
               {seance.journal.distance_reelle_km > 0 && (
-                <span className="text-gray-500">📍 {seance.journal.distance_reelle_km} km</span>
+                <span className="text-gray-500">ðŸ“ {seance.journal.distance_reelle_km} km</span>
               )}
               {seance.dplus_cible_m > 0 && seance.journal.dplus_reel_m > 0 && (
                 <span className={clsx("font-medium", seance.journal.dplus_reel_m >= seance.dplus_cible_m * 0.9 ? "text-green-600 dark:text-green-400" : "text-orange-500")}>
-                  ↑ {seance.journal.dplus_reel_m} / {seance.dplus_cible_m} m D+
+                  â†‘ {seance.journal.dplus_reel_m} / {seance.dplus_cible_m} m D+
                 </span>
               )}
             </div>
@@ -992,31 +862,22 @@ function CarteSeance({ seance, zonesFC }) {
         </div>
       )}
 
-      {/* ── Conseil récupération ── */}
+      {/* â”€â”€ Conseil rÃ©cupÃ©ration â”€â”€ */}
       {conseil && (() => {
         const c = CONSEIL_COLORS[conseil.niveau] ?? CONSEIL_COLORS.modere;
         return (
           <div className={clsx("px-4 py-3 border-t flex items-start gap-2.5", c.bg, c.border)}>
-            <span className="text-base shrink-0">💡</span>
+            <span className="text-base shrink-0">ðŸ’¡</span>
             <div className="flex-1 min-w-0">
               <p className={clsx("text-xs font-semibold", c.text)}>{conseil.titre}</p>
               <p className={clsx("text-xs mt-0.5", c.sub)}>{conseil.conseil}</p>
             </div>
-            <button onClick={() => setConseil(null)} className={clsx("text-base leading-none shrink-0", c.sub)}>×</button>
+            <button onClick={() => setConseil(null)} className={clsx("text-base leading-none shrink-0", c.sub)}>Ã—</button>
           </div>
         );
       })()}
 
-      {/* ── Import Strava ── */}
-      {stravaOpen && (
-        <ModalStravaImport
-          seance={seance}
-          onClose={() => setStravaOpen(false)}
-          onDone={() => { setStravaOpen(false); setValide(true); qc.invalidateQueries({ queryKey: ["toutes-semaines"] }); }}
-        />
-      )}
-
-      {/* ── Formulaire modification ── */}
+      {/* â”€â”€ Formulaire modification â”€â”€ */}
       {editOpen && fait && seance.type === "EVALUATION" && (
         <FormulaireEditEvaluation seance={seance} onClose={() => setEditOpen(false)} />
       )}
@@ -1029,7 +890,7 @@ function CarteSeance({ seance, zonesFC }) {
         />
       )}
 
-      {/* ── Détail séance ── */}
+      {/* â”€â”€ DÃ©tail sÃ©ance â”€â”€ */}
       {ouvert && (
         <div className="border-t border-gray-100 dark:border-gray-800 px-4 py-4 space-y-3 bg-white dark:bg-gray-900">
 
@@ -1039,7 +900,7 @@ function CarteSeance({ seance, zonesFC }) {
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
                 {seance.type === "AMRAP"     ? `Circuit AMRAP ${seance.temps_limite_min} min` :
                  seance.type === "EMOM"      ? `EMOM ${seance.temps_limite_min} min` :
-                 isGym                       ? `${GYM_LABEL[seance.type]} — ${seance.temps_limite_min} min` :
+                 isGym                       ? `${GYM_LABEL[seance.type]} â€” ${seance.temps_limite_min} min` :
                  "Exercices"}
               </p>
               <div className="divide-y divide-gray-50 dark:divide-gray-800 rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
@@ -1057,7 +918,7 @@ function CarteSeance({ seance, zonesFC }) {
                       )}
                       {ex.series && ex.repetitions && (
                         <span className="px-2 py-0.5 rounded bg-brand/10 text-brand text-xs font-bold">
-                          {ex.series}×{ex.repetitions}
+                          {ex.series}Ã—{ex.repetitions}
                         </span>
                       )}
                       {!ex.series && ex.repetitions && (
@@ -1087,7 +948,7 @@ function CarteSeance({ seance, zonesFC }) {
         </div>
       )}
 
-      {/* ── Formulaire log ── */}
+      {/* â”€â”€ Formulaire log â”€â”€ */}
       {logOpen && !fait && seance.type === "EVALUATION" && (
         <FormulaireEvaluation seance={seance}
           onClose={() => setLogOpen(false)}
@@ -1099,7 +960,7 @@ function CarteSeance({ seance, zonesFC }) {
           onDone={(c) => { setLogOpen(false); setValide(true); if (c) setConseil(c); }} />
       )}
 
-      {/* ── Modal planification ── */}
+      {/* â”€â”€ Modal planification â”€â”€ */}
       {planifOpen && (
         <PlanificationModal
           seance={seance}
@@ -1111,7 +972,7 @@ function CarteSeance({ seance, zonesFC }) {
   );
 }
 
-// ─── Page principale ────────────────────────────────────────────────────────
+// â”€â”€â”€ Page principale â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function idxSemaineCourante(semaines) {
   const today = new Date();
@@ -1123,7 +984,7 @@ function idxSemaineCourante(semaines) {
     fin.setDate(fin.getDate() + 7);
     if (today >= debut && today < fin) return i;
   }
-  // Pas encore commencé → première semaine ; terminé → dernière
+  // Pas encore commencÃ© â†’ premiÃ¨re semaine ; terminÃ© â†’ derniÃ¨re
   const premiere = semaines[0]?.date_debut ? new Date(semaines[0].date_debut) : null;
   if (premiere && today < premiere) return 0;
   return semaines.length - 1;
@@ -1132,7 +993,7 @@ function idxSemaineCourante(semaines) {
 export default function Programme() {
   const [semIdx, setSemIdx] = useState(null);
 
-  // Drag-to-scroll — déclaré avant tout early return (règles des hooks)
+  // Drag-to-scroll â€” dÃ©clarÃ© avant tout early return (rÃ¨gles des hooks)
   const navRef = useRef(null);
   const drag = useRef({ active: false, moved: false, startX: 0, scrollLeft: 0 });
   const onMouseDown = useCallback((e) => {
@@ -1170,7 +1031,7 @@ export default function Programme() {
 
   const semaines = data?.semaines ?? [];
   if (semaines.length === 0)
-    return <Erreur msg="Aucun programme. Génère-en un depuis le tableau de bord." />;
+    return <Erreur msg="Aucun programme. GÃ©nÃ¨re-en un depuis le tableau de bord." />;
 
   const idxCourant = idxSemaineCourante(semaines);
   const idx = semIdx !== null ? semIdx : idxCourant;
@@ -1182,7 +1043,7 @@ export default function Programme() {
   return (
     <div className="p-4 md:p-8 max-w-2xl mx-auto space-y-5 w-full min-w-0">
 
-      {/* En-tête */}
+      {/* En-tÃªte */}
       <div>
         <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Programme</h2>
         <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
@@ -1190,7 +1051,7 @@ export default function Programme() {
         </p>
       </div>
 
-      {/* Sélecteur semaine — scroll horizontal, drag souris desktop */}
+      {/* SÃ©lecteur semaine â€” scroll horizontal, drag souris desktop */}
       <div
         ref={navRef}
         className="overflow-x-auto scrollbar-hide -mx-4 px-4 cursor-grab select-none"
@@ -1220,7 +1081,7 @@ export default function Programme() {
               )}>
               <span className="font-bold">S{s.semaine_globale}</span>
               <span className="opacity-70 mt-0.5">
-                {complet ? "✓" : estCourante && !selectionne ? "●" : s.macrophase === "surcharge" ? "↑" : s.macrophase === "decharge" ? "↓" : "★"}
+                {complet ? "âœ“" : estCourante && !selectionne ? "â—" : s.macrophase === "surcharge" ? "â†‘" : s.macrophase === "decharge" ? "â†“" : "â˜…"}
               </span>
             </button>
           );
@@ -1241,11 +1102,11 @@ export default function Programme() {
             )}
           </div>
 
-          {/* Séances */}
+          {/* SÃ©ances */}
           <div className="space-y-3">
             {seancesVisibles.length > 0
               ? seancesVisibles.map(s => <CarteSeance key={s.id} seance={s} zonesFC={zonesFC} />)
-              : <p className="text-sm text-gray-400 text-center py-8">Aucune séance cette semaine.</p>
+              : <p className="text-sm text-gray-400 text-center py-8">Aucune sÃ©ance cette semaine.</p>
             }
           </div>
         </>
