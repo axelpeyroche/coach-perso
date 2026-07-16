@@ -29,19 +29,23 @@ function PushToggle() {
     setErrMsg("");
     setStatus("working");
     try {
-      // Permission en premier — doit être proche du geste utilisateur sur mobile
-      if (Notification.permission !== "granted") {
-        const perm = await Notification.requestPermission();
-        if (perm === "denied") { setStatus("denied"); return; }
-        if (perm !== "granted") { setStatus("off"); return; }
-      }
       const reg = await navigator.serviceWorker.ready;
       const existing = await reg.pushManager.getSubscription();
+
       if (existing) {
+        // DÉSABONNEMENT — aucune demande de permission, juste désinscrire
         await existing.unsubscribe();
-        await api.delete("/push/unsubscribe", { data: { endpoint: existing.endpoint } });
+        try {
+          await api.delete("/push/unsubscribe", { data: { endpoint: existing.endpoint } });
+        } catch (_) { /* subscription déjà absente en base, ignoré */ }
         setStatus("off");
       } else {
+        // ABONNEMENT — demander la permission en premier (proche du geste)
+        if (Notification.permission !== "granted") {
+          const perm = await Notification.requestPermission();
+          if (perm === "denied") { setStatus("denied"); return; }
+          if (perm !== "granted") { setStatus("off"); return; }
+        }
         const { data: vapidData } = await api.get("/push/vapid-public-key");
         const vapidKey = vapidData?.publicKey || import.meta.env.VITE_VAPID_PUBLIC_KEY;
         if (!vapidKey) throw new Error("Clé VAPID manquante côté serveur");
