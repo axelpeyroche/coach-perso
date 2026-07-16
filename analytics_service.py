@@ -184,26 +184,34 @@ def distribution_volume(
     for row in semaines:
         semaine = row.SemaineEntrainement
 
-        # Volume course depuis les journaux
+        # Volume course depuis les journaux (séances validées uniquement)
+        # Si distance_reelle_km absente, on estime via duree_reelle_min × vitesse Z2 ≈ 10 km/h
         stats_course = db.execute(
             select(
-                func.sum(JournalSeance.distance_reelle_km).label("km_total"),
+                func.sum(
+                    func.coalesce(
+                        JournalSeance.distance_reelle_km,
+                        func.coalesce(JournalSeance.duree_reelle_min, 0) * 10.0 / 60.0,
+                    )
+                ).label("km_total"),
                 func.sum(JournalSeance.dplus_reel_m).label("dplus_total"),
             )
             .join(SeanceEntrainement, JournalSeance.seance_id == SeanceEntrainement.id)
             .where(
                 SeanceEntrainement.semaine_id == semaine.id,
                 SeanceEntrainement.type_seance == TypeSeance.COURSE,
+                JournalSeance.completee == True,
             )
         ).one()
 
         volume_muscu = {cat.value: 0 for cat in CategorieMusculaire}
 
-        # Cas 1 — exercices liés à une VariationExercice (poids du corps, barre…) → catégorie musculaire connue
+        # Cas 1 — exercices liés à une VariationExercice (poids du corps, barre, EMOM, AMRAP…)
+        # COALESCE(series, 1) : pour EMOM/AMRAP où series=NULL, on compte 1 passage par exercice
         series_avec_cat = db.execute(
             select(
                 VariationExercice.categorie_musculaire,
-                func.sum(ExerciceSeance.series).label("total_series"),
+                func.sum(func.coalesce(ExerciceSeance.series, 1)).label("total_series"),
             )
             .join(SeanceEntrainement, ExerciceSeance.seance_id == SeanceEntrainement.id)
             .join(VariationExercice, ExerciceSeance.exercice_id == VariationExercice.id)
@@ -222,7 +230,7 @@ def distribution_volume(
         series_machines = db.execute(
             select(
                 SeanceEntrainement.type_seance,
-                func.sum(ExerciceSeance.series).label("total_series"),
+                func.sum(func.coalesce(ExerciceSeance.series, 1)).label("total_series"),
             )
             .join(ExerciceSeance, ExerciceSeance.seance_id == SeanceEntrainement.id)
             .join(JournalSeance, JournalSeance.seance_id == SeanceEntrainement.id)
