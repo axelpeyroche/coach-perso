@@ -2,8 +2,6 @@ import { useAuth } from "../AuthContext";
 import { useState, useEffect, useRef } from "react";
 import api from "../api";
 
-const VAPID_PUBLIC = import.meta.env.VITE_VAPID_PUBLIC_KEY;
-
 function urlBase64ToUint8Array(b64) {
   const pad = "=".repeat((4 - (b64.length % 4)) % 4);
   const raw = atob((b64 + pad).replace(/-/g, "+").replace(/_/g, "/"));
@@ -42,9 +40,13 @@ function PushToggle() {
         const perm = await Notification.requestPermission();
         if (perm === "denied") { setStatus("denied"); return; }
         if (perm !== "granted") { setStatus("off"); return; }
+        // Fetch VAPID key from API (more reliable than build-time env var)
+        const { data: vapidData } = await api.get("/push/vapid-public-key");
+        const vapidKey = vapidData?.publicKey || import.meta.env.VITE_VAPID_PUBLIC_KEY;
+        if (!vapidKey) throw new Error("Clé VAPID manquante côté serveur");
         const sub = await reg.pushManager.subscribe({
           userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC),
+          applicationServerKey: urlBase64ToUint8Array(vapidKey),
         });
         const j = sub.toJSON();
         await api.post("/push/subscribe", { endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth });
