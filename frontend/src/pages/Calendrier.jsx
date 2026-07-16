@@ -21,6 +21,18 @@ const TYPE_ICONS = {
   GYM_UPPER: "💪", GYM_LOWER: "🦵", GYM_FULL: "🏋️", BLESSURE: "🩹",
 };
 
+function getDistanceKm(journal) {
+  if (!journal) return 0;
+  if (journal.distance_reelle_km != null) return journal.distance_reelle_km;
+  if (journal.details_intervalles) {
+    try {
+      const blocs = JSON.parse(journal.details_intervalles);
+      return blocs.reduce((sum, b) => sum + (b.distance_km || 0), 0);
+    } catch {}
+  }
+  return 0;
+}
+
 const JOURS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
 const MOIS  = ["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
 
@@ -64,18 +76,6 @@ export default function Calendrier() {
     }
     return map;
   }, [semaines]);
-
-  function getDistanceKm(journal) {
-    if (!journal) return 0;
-    if (journal.distance_reelle_km != null) return journal.distance_reelle_km;
-    if (journal.details_intervalles) {
-      try {
-        const blocs = JSON.parse(journal.details_intervalles);
-        return blocs.reduce((sum, b) => sum + (b.distance_km || 0), 0);
-      } catch {}
-    }
-    return 0;
-  }
 
   // Statistiques globales (toutes dates confondues)
   const stats = useMemo(() => {
