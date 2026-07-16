@@ -12,8 +12,6 @@ function urlBase64ToUint8Array(b64) {
 function PushToggle() {
   const [status, setStatus] = useState("loading"); // loading|unsupported|denied|off|on|working
   const [errMsg, setErrMsg] = useState("");
-  const [testing, setTesting] = useState(false);
-  const [testMsg, setTestMsg] = useState("");
 
   useEffect(() => {
     if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) {
@@ -59,19 +57,7 @@ function PushToggle() {
     }
   }
 
-  async function sendTest() {
-    setTesting(true); setTestMsg("");
-    try {
-      await api.post("/push/test");
-      setTestMsg("Notification envoyée ✓");
-    } catch (e) {
-      setTestMsg(e?.response?.data?.detail || "Échec envoi");
-    } finally {
-      setTesting(false);
-    }
-  }
-
-  if (status === "unsupported") return <span className="text-xs text-gray-400 italic">Non supporté sur cet appareil</span>;
+if (status === "unsupported") return <span className="text-xs text-gray-400 italic">Non supporté sur cet appareil</span>;
 
   if (status === "denied") return (
     <div className="text-right">
@@ -89,12 +75,6 @@ function PushToggle() {
         <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${on ? "translate-x-6" : "translate-x-1"}`} />
       </button>
       {errMsg && <p className="text-[10px] text-red-400 max-w-[180px] text-right leading-tight">{errMsg}</p>}
-      {on && (
-        <button onClick={sendTest} disabled={testing}
-          className="text-[10px] text-brand underline underline-offset-2 disabled:opacity-50">
-          {testing ? "Envoi…" : testMsg || "Tester"}
-        </button>
-      )}
     </div>
   );
 }
