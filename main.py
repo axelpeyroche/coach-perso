@@ -1951,6 +1951,58 @@ def statut_programme(current_user: Utilisateur = Depends(get_current_user), db: 
     }
 
 
+@app.post("/api/programme/corriger-seances", summary="Supprime les séances en excès pour respecter seances_semaine")
+def corriger_seances(
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(obtenir_session),
+):
+    """
+    Sans recréer le programme, retire les séances course et muscu en surnombre
+    pour que chaque semaine respecte seances_semaine total.
+    Priorité de suppression course : EF Z2 (jour le plus tôt) en premier.
+    Priorité de suppression muscu  : complément EMOM (titre contient '3e séance') en premier.
+    Séances déjà validées (journal) : jamais supprimées.
+    """
+    user = current_user
+    n_muscu = user.seances_muscu_semaine or 2
+    seances_total = user.seances_semaine or 5
+    n_course = user.seances_course_semaine if user.seances_course_semaine is not None else max(1, seances_total - n_muscu)
+    n_course = min(n_course, max(1, seances_total - n_muscu))
+
+    mcs = db.query(Macrocycle).filter(Macrocycle.utilisateur_id == user.id).all()
+    semaines = []
+    for mc in mcs:
+        semaines.extend(db.query(SemaineEntrainement).filter(SemaineEntrainement.macrocycle_id == mc.id).all())
+
+    supprimees = 0
+    for sem in semaines:
+        seances = db.query(SeanceEntrainement).filter(SeanceEntrainement.semaine_id == sem.id).all()
+        # Ne touche pas aux séances déjà validées
+        non_validees = [s for s in seances if not s.journal]
+
+        courses_nv = sorted(
+            [s for s in non_validees if s.type_seance == TypeSeance.COURSE],
+            key=lambda s: s.date_planifiee or date(2099, 1, 1)
+        )
+        muscu_types = {TypeSeance.EMOM, TypeSeance.AMRAP, TypeSeance.GYM_UPPER, TypeSeance.GYM_LOWER, TypeSeance.GYM_FULL}
+        muscu_nv = [s for s in non_validees if s.type_seance in muscu_types]
+
+        # Supprimer l'excès de course (du plus tôt = EF au plus tard)
+        while len(courses_nv) > n_course:
+            db.delete(courses_nv.pop(0))
+            supprimees += 1
+
+        # Supprimer l'excès de muscu (complément EMOM en priorité = titre contient '3e')
+        muscu_nv_sorted = sorted(muscu_nv, key=lambda s: (0 if "3e" in (s.nom or "") else 1))
+        total_muscu_target = seances_total - n_course
+        while len(muscu_nv_sorted) > total_muscu_target:
+            db.delete(muscu_nv_sorted.pop(0))
+            supprimees += 1
+
+    db.commit()
+    return {"ok": True, "seances_supprimees": supprimees, "n_course_cible": n_course, "n_muscu_cible": total_muscu_target}
+
+
 @app.delete("/api/programme", summary="Supprime tous les macrocycles et séances de l'utilisateur")
 def supprimer_programme(current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
     mcs = db.query(Macrocycle).filter(Macrocycle.utilisateur_id == current_user.id).all()
