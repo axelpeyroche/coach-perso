@@ -1608,6 +1608,7 @@ def toutes_semaines_programme(current_user: Utilisateur = Depends(get_current_us
         total_muscu_target = seances_total - n_course
         muscu_types = {TypeSeance.EMOM, TypeSeance.AMRAP, TypeSeance.GYM_UPPER, TypeSeance.GYM_LOWER, TypeSeance.GYM_FULL}
         ids_a_supprimer: list[int] = []
+        print(f"[correction] n_course={n_course} muscu_target={total_muscu_target} mcs={len(mcs)}", flush=True)
         for mc in mcs:
             sems = db.query(SemaineEntrainement).filter(SemaineEntrainement.macrocycle_id == mc.id).all()
             for sem in sems:
@@ -1620,10 +1621,13 @@ def toutes_semaines_programme(current_user: Utilisateur = Depends(get_current_us
                 )
                 courses_nv = sorted([s for s in seances_sem if s.type_seance == TypeSeance.COURSE], key=lambda s: s.date_seance)
                 muscu_nv = sorted([s for s in seances_sem if s.type_seance in muscu_types], key=lambda s: (0 if "3e" in (s.titre or "") else 1))
+                if len(courses_nv) > n_course or len(muscu_nv) > total_muscu_target:
+                    print(f"[correction] sem {sem.id}: {len(courses_nv)} courses, {len(muscu_nv)} muscu → suppression", flush=True)
                 while len(courses_nv) > n_course:
                     ids_a_supprimer.append(courses_nv.pop(0).id)
                 while len(muscu_nv) > total_muscu_target:
                     ids_a_supprimer.append(muscu_nv.pop(0).id)
+        print(f"[correction] ids à supprimer: {ids_a_supprimer}", flush=True)
         if ids_a_supprimer:
             db.query(ExerciceSeance).filter(ExerciceSeance.seance_id.in_(ids_a_supprimer)).delete(synchronize_session=False)
             db.query(SeanceEntrainement).filter(SeanceEntrainement.id.in_(ids_a_supprimer)).delete(synchronize_session=False)
