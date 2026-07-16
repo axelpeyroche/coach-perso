@@ -65,6 +65,18 @@ export default function Calendrier() {
     return map;
   }, [semaines]);
 
+  function getDistanceKm(journal) {
+    if (!journal) return 0;
+    if (journal.distance_reelle_km != null) return journal.distance_reelle_km;
+    if (journal.details_intervalles) {
+      try {
+        const blocs = JSON.parse(journal.details_intervalles);
+        return blocs.reduce((sum, b) => sum + (b.distance_km || 0), 0);
+      } catch {}
+    }
+    return 0;
+  }
+
   // Statistiques globales (toutes dates confondues)
   const stats = useMemo(() => {
     let totalSeances = 0, totalKm = 0, totalDplus = 0;
@@ -72,7 +84,7 @@ export default function Calendrier() {
       for (const s of seances) {
         if (s.type === "REPOS" || s._planifie) continue;
         totalSeances++;
-        totalKm   += s.journal?.distance_reelle_km ?? 0;
+        totalKm   += getDistanceKm(s.journal);
         totalDplus += s.journal?.dplus_reel_m ?? 0;
       }
     }
@@ -294,7 +306,7 @@ function StatsMois({ seancesParDate, annee, moisIdx, moisLabel }) {
       for (const s of list) {
         if (s.type === "REPOS" || s._planifie) continue;
         seances++;
-        km    += s.journal?.distance_reelle_km ?? 0;
+        km    += getDistanceKm(s.journal);
         dplus += s.journal?.dplus_reel_m ?? 0;
       }
     }
