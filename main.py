@@ -17,6 +17,10 @@ from __future__ import annotations
 
 from datetime import datetime, date, timedelta
 from typing import Optional
+import time as _time
+import urllib.parse as _urlparse
+import urllib.request as _urlrequest
+import json as _json_mod
 
 import io
 import os
@@ -359,6 +363,7 @@ def me(current_user: Utilisateur = Depends(get_current_user), db: Session = Depe
         "seances_muscu_semaine": current_user.seances_muscu_semaine,
         "frequence_tests_semaines": current_user.frequence_tests_semaines,
         "objectif_type": current_user.objectif_type,
+        "strava_connecte": bool(current_user.strava_access_token),
     }
 
 
@@ -2784,3 +2789,200 @@ def migrer_donnees(
 
     db.commit()
     return {"ok": True, "migre": stats, "vers": nouveau_id}
+
+
+# ---------------------------------------------------------------------------
+# Strava OAuth + import d'activitÃ©s
+# ---------------------------------------------------------------------------
+
+STRAVA_CLIENT_ID     = os.getenv("STRAVA_CLIENT_ID", "")
+STRAVA_CLIENT_SECRET = os.getenv("STRAVA_CLIENT_SECRET", "")
+FRONTEND_URL         = os.getenv("FRONTEND_URL", "https://coach-perso-frontend.onrender.com")
+
+# Mapping sport_type Strava -> types sÃ©ance coach
+_STRAVA_TYPE_MAP = {
+    "Run":            ["COURSE"],
+    "TrailRun":       ["COURSE"],
+    "WeightTraining": ["GYM_UPPER", "GYM_LOWER", "GYM_FULL", "EMOM", "AMRAP"],
+    "Workout":        ["GYM_UPPER", "GYM_LOWER", "GYM_FULL", "EMOM", "AMRAP"],
+    "HIIT":           ["EMOM", "AMRAP"],
+    "CrossFit":       ["EMOM", "AMRAP"],
+    "Walk":           ["DECHARGE"],
+    "Hike":           ["DECHARGE"],
+    "Yoga":           ["DECHARGE"],
+}
+
+
+def _strava_token_valide(user: Utilisateur) -> bool:
+    return bool(
+        user.strava_access_token
+        and user.strava_token_expires_at
+        and user.strava_token_expires_at > int(_time.time()) + 60
+    )
+
+
+def _strava_refresh(user: Utilisateur, db: Session) -> str:
+    if _strava_token_valide(user):
+        return user.strava_access_token
+    data = _urlparse.urlencode({
+        "client_id":     STRAVA_CLIENT_ID,
+        "client_secret": STRAVA_CLIENT_SECRET,
+        "grant_type":    "refresh_token",
+        "refresh_token": user.strava_refresh_token,
+    }).encode()
+    req = _urlrequest.Request("https://www.strava.com/oauth/token", data=data, method="POST")
+    with _urlrequest.urlopen(req, timeout=10) as resp:
+        body = _json_mod.loads(resp.read())
+    user.strava_access_token     = body["access_token"]
+    user.strava_refresh_token    = body["refresh_token"]
+    user.strava_token_expires_at = body["expires_at"]
+    db.commit()
+    return user.strava_access_token
+
+
+@app.get("/api/strava/auth", summary="Genere l URL d autorisation Strava")
+def strava_auth(current_user: Utilisateur = Depends(get_current_user)):
+    if not STRAVA_CLIENT_ID:
+        raise HTTPException(503, "Strava non configure (STRAVA_CLIENT_ID manquant)")
+    redirect_uri = f"{FRONTEND_URL}/strava/callback"
+    params = _urlparse.urlencode({
+        "client_id":       STRAVA_CLIENT_ID,
+        "redirect_uri":    redirect_uri,
+        "response_type":   "code",
+        "approval_prompt": "auto",
+        "scope":           "activity:read_all",
+        "state":           current_user.id,
+    })
+    return {"url": f"https://www.strava.com/oauth/authorize?{params}"}
+
+
+@app.get("/api/strava/callback", summary="Callback OAuth Strava")
+def strava_callback(
+    code: str = Query(...),
+    state: str = Query(...),
+    db: Session = Depends(obtenir_session),
+):
+    from fastapi.responses import RedirectResponse
+    user = db.query(Utilisateur).filter(Utilisateur.id == int(state)).first()
+    if not user:
+        raise HTTPException(404, "Utilisateur non trouve")
+    data = _urlparse.urlencode({
+        "client_id":     STRAVA_CLIENT_ID,
+        "client_secret": STRAVA_CLIENT_SECRET,
+        "code":          code,
+        "grant_type":    "authorization_code",
+    }).encode()
+    req = _urlrequest.Request("https://www.strava.com/oauth/token", data=data, method="POST")
+    with _urlrequest.urlopen(req, timeout=10) as resp:
+        body = _json_mod.loads(resp.read())
+    user.strava_athlete_id       = body["athlete"]["id"]
+    user.strava_access_token     = body["access_token"]
+    user.strava_refresh_token    = body["refresh_token"]
+    user.strava_token_expires_at = body["expires_at"]
+    db.commit()
+    return RedirectResponse(url=f"{FRONTEND_URL}?strava=ok")
+
+
+@app.delete("/api/strava/disconnect", summary="Deconnecte Strava")
+def strava_disconnect(
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(obtenir_session),
+):
+    current_user.strava_athlete_id       = None
+    current_user.strava_access_token     = None
+    current_user.strava_refresh_token    = None
+    current_user.strava_token_expires_at = None
+    db.commit()
+    return {"ok": True}
+
+
+@app.get("/api/strava/activites", summary="Activites Strava recentes")
+def strava_activites(
+    jours: int = Query(14, ge=1, le=60),
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(obtenir_session),
+):
+    if not current_user.strava_access_token:
+        raise HTTPException(403, "Strava non connecte")
+    token = _strava_refresh(current_user, db)
+    after = int(_time.time()) - jours * 86400
+    req = _urlrequest.Request(
+        f"https://www.strava.com/api/v3/athlete/activities?after={after}&per_page=50",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    with _urlrequest.urlopen(req, timeout=15) as resp:
+        activities = _json_mod.loads(resp.read())
+
+    result = []
+    for a in activities:
+        sport = a.get("sport_type") or a.get("type", "")
+        types_compatibles = _STRAVA_TYPE_MAP.get(sport, [])
+        if not types_compatibles:
+            continue
+        result.append({
+            "id":             a["id"],
+            "nom":            a["name"],
+            "sport_type":     sport,
+            "types_coach":    types_compatibles,
+            "date":           a["start_date_local"][:10],
+            "heure":          a["start_date_local"][11:16],
+            "duree_min":      round(a["elapsed_time"] / 60),
+            "distance_km":    round(a["distance"] / 1000, 2) if a.get("distance") else None,
+            "dplus_m":        round(a.get("total_elevation_gain") or 0),
+            "fc_moyenne_bpm": round(a["average_heartrate"]) if a.get("average_heartrate") else None,
+            "fc_max_bpm":     round(a["max_heartrate"]) if a.get("max_heartrate") else None,
+            "url_strava":     f"https://www.strava.com/activities/{a['id']}",
+        })
+    return {"activites": result}
+
+
+class StravaImportSchema(BaseModel):
+    seance_id:      int
+    strava_id:      int
+    duree_min:      Optional[int]   = None
+    distance_km:    Optional[float] = None
+    dplus_m:        Optional[int]   = None
+    fc_moyenne_bpm: Optional[int]   = None
+    fc_max_bpm:     Optional[int]   = None
+    rpe:            Optional[float] = Field(None, ge=1, le=10)
+    notes:          Optional[str]   = None
+
+
+@app.post("/api/strava/importer", summary="Importe une activite Strava dans une seance")
+def strava_importer(
+    payload: StravaImportSchema,
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(obtenir_session),
+):
+    seance = db.query(SeanceEntrainement).filter(
+        SeanceEntrainement.id == payload.seance_id,
+        SeanceEntrainement.utilisateur_id == current_user.id,
+    ).first()
+    if not seance:
+        raise HTTPException(404, "Seance introuvable")
+    if seance.journal:
+        j = seance.journal
+        if payload.duree_min is not None:      j.duree_reelle_min   = payload.duree_min
+        if payload.distance_km is not None:    j.distance_reelle_km = payload.distance_km
+        if payload.dplus_m is not None:        j.dplus_reel_m       = payload.dplus_m
+        if payload.fc_moyenne_bpm is not None: j.fc_moyenne_bpm     = payload.fc_moyenne_bpm
+        if payload.fc_max_bpm is not None:     j.fc_max_bpm         = payload.fc_max_bpm
+        if payload.rpe is not None:            j.rpe                = payload.rpe
+        if payload.notes is not None:          j.notes              = payload.notes
+        j.completee = True
+    else:
+        j = JournalSeance(
+            utilisateur_id=current_user.id,
+            seance_id=payload.seance_id,
+            completee=True,
+            duree_reelle_min=payload.duree_min,
+            distance_reelle_km=payload.distance_km,
+            dplus_reel_m=payload.dplus_m,
+            fc_moyenne_bpm=payload.fc_moyenne_bpm,
+            fc_max_bpm=payload.fc_max_bpm,
+            rpe=payload.rpe,
+            notes=payload.notes,
+        )
+        db.add(j)
+    db.commit()
+    return {"ok": True}

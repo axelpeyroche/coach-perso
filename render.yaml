@@ -15,6 +15,12 @@ services:
         sync: false
       - key: VAPID_EMAIL
         sync: false
+      - key: STRAVA_CLIENT_ID
+        sync: false
+      - key: STRAVA_CLIENT_SECRET
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
 
   - type: web
     name: coach-perso-frontend

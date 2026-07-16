@@ -58,6 +58,11 @@ def creer_tables() -> None:
         "ALTER TABLE seances_entrainement ADD COLUMN IF NOT EXISTS date_planifiee DATE",
         "ALTER TABLE seances_entrainement ADD COLUMN IF NOT EXISTS heure_planifiee VARCHAR(5)",
         "ALTER TABLE journaux_seances ADD COLUMN IF NOT EXISTS distance_repos_km FLOAT",
+        # Strava OAuth
+        "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS strava_athlete_id INTEGER",
+        "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS strava_access_token VARCHAR(255)",
+        "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS strava_refresh_token VARCHAR(255)",
+        "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS strava_token_expires_at INTEGER",
     ]
     with engine.begin() as conn:
         for stmt in _migrations:

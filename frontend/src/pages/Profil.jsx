@@ -1,6 +1,7 @@
 import { useAuth } from "../AuthContext";
 import { useState, useEffect, useRef } from "react";
 import api from "../api";
+import { getStravaAuthUrl, stravaDisconnect } from "../api";
 
 function urlBase64ToUint8Array(b64) {
   const pad = "=".repeat((4 - (b64.length % 4)) % 4);
@@ -526,6 +527,58 @@ function BioStat({ label, value, unit }) {
 }
 
 // ── Page ───────────────────────────────────────────────────────────────────
+function StravaConnect({ user, onRefresh }) {
+  const [loading, setLoading] = useState(false);
+  const connected = user?.strava_connecte;
+
+  async function connecter() {
+    setLoading(true);
+    try {
+      const { url } = await getStravaAuthUrl();
+      window.location.href = url;
+    } catch {
+      setLoading(false);
+    }
+  }
+
+  async function deconnecter() {
+    if (!window.confirm("Déconnecter Strava ?")) return;
+    setLoading(true);
+    try {
+      await stravaDisconnect();
+      await onRefresh();
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center justify-between py-3">
+      <div className="flex items-center gap-2">
+        <img src="https://upload.wikimedia.org/wikipedia/commons/c/cb/Strava_Logo.svg"
+          alt="Strava" className="h-5 w-auto" onError={e => { e.target.style.display="none"; }} />
+        <span className="text-sm text-gray-700 dark:text-gray-300">Strava</span>
+        {connected && (
+          <span className="text-xs px-2 py-0.5 rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 font-medium">
+            Connecté
+          </span>
+        )}
+      </div>
+      {connected ? (
+        <button onClick={deconnecter} disabled={loading}
+          className="text-xs px-3 py-1.5 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors disabled:opacity-50">
+          {loading ? "..." : "Déconnecter"}
+        </button>
+      ) : (
+        <button onClick={connecter} disabled={loading}
+          className="text-xs px-3 py-1.5 rounded-xl bg-orange-500 text-white font-semibold hover:bg-orange-600 transition-colors disabled:opacity-50">
+          {loading ? "..." : "Connecter"}
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function Profil({ dark, setDark }) {
   const { user, setUser, logout } = useAuth();
   const [editInfos, setEditInfos] = useState(false);
@@ -601,6 +654,11 @@ export default function Profil({ dark, setDark }) {
           <BioStat label="VMA"      value={user?.vma_kmh}  unit="km/h" />
           <BioStat label="Poids"    value={user?.poids_kg} unit="kg" />
         </div>
+      </Section>
+
+      {/* Intégrations */}
+      <Section title="Intégrations">
+        <StravaConnect user={user} onRefresh={refreshUser} />
       </Section>
 
       {/* Apparence */}

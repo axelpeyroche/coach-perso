@@ -123,8 +123,18 @@ function RequireOnboarding({ children }) {
 }
 
 export default function App() {
-  const { user } = useAuth();
+  const { user, setUser } = useAuth();
   usePushNotifications();
+
+  // Retour OAuth Strava : rafraîchit le profil et nettoie l'URL
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("strava") === "ok") {
+      import("./api").then(({ default: api }) =>
+        api.get("/auth/me").then(r => setUser(r.data))
+      );
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
 
   const [dark, setDark] = useState(() => {
     const saved = localStorage.getItem("theme");

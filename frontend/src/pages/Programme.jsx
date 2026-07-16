@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import api, { getToutesSemaines, journaliserSeance, validerRPE, getProfilFC, supprimerJournal, modifierJournal, planifierSeance, creerEvaluation, enregistrerDemiCooper, enregistrerMax1Min, enregistrerAmrapBenchmark, getExercicesEvaluation, getHistoriqueEvaluations, modifierEvaluation, supprimerEvaluation } from "../api";
+import api, { getToutesSemaines, journaliserSeance, validerRPE, getProfilFC, supprimerJournal, modifierJournal, planifierSeance, creerEvaluation, enregistrerDemiCooper, enregistrerMax1Min, enregistrerAmrapBenchmark, getExercicesEvaluation, getHistoriqueEvaluations, modifierEvaluation, supprimerEvaluation, getStravaActivites, stravaImporter } from "../api";
 import clsx from "clsx";
 
 
@@ -682,6 +682,125 @@ const CONSEIL_COLORS = {
   depassement: { bg: "bg-red-100 dark:bg-red-900/25",   border: "border-red-300 dark:border-red-700",    text: "text-red-900 dark:text-red-200",    sub: "text-red-700 dark:text-red-400" },
 };
 
+// ─── Modal import Strava ────────────────────────────────────────────────────
+
+const STRAVA_TYPE_COMPAT = {
+  COURSE:    ["Run", "TrailRun"],
+  GYM_UPPER: ["WeightTraining", "Workout", "HIIT", "CrossFit"],
+  GYM_LOWER: ["WeightTraining", "Workout", "HIIT", "CrossFit"],
+  GYM_FULL:  ["WeightTraining", "Workout", "HIIT", "CrossFit"],
+  EMOM:      ["WeightTraining", "Workout", "HIIT", "CrossFit"],
+  AMRAP:     ["WeightTraining", "Workout", "HIIT", "CrossFit"],
+  DECHARGE:  ["Walk", "Hike", "Yoga"],
+};
+
+function ModalStravaImport({ seance, onClose, onDone }) {
+  const qc = useQueryClient();
+  const [rpe, setRpe] = useState(7);
+  const [selected, setSelected] = useState(null);
+
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["strava-activites"],
+    queryFn: () => getStravaActivites(21),
+    staleTime: 60_000,
+  });
+
+  // Filtrer par date (±1 jour) et type compatible
+  const dateSeance = seance.date_planifiee?.slice(0, 10);
+  const compatSports = STRAVA_TYPE_COMPAT[seance.type] ?? [];
+
+  const activitesFiltrees = (data?.activites ?? []).filter(a => {
+    const diff = Math.abs(new Date(a.date) - new Date(dateSeance)) / 86400000;
+    return diff <= 1 && compatSports.includes(a.sport_type);
+  });
+
+  const mutImport = useMutation({
+    mutationFn: () => stravaImporter({
+      seance_id:      seance.id,
+      strava_id:      selected.id,
+      duree_min:      selected.duree_min,
+      distance_km:    selected.distance_km,
+      dplus_m:        selected.dplus_m,
+      fc_moyenne_bpm: selected.fc_moyenne_bpm,
+      fc_max_bpm:     selected.fc_max_bpm,
+      rpe,
+    }),
+    onSuccess: onDone,
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/40" onClick={onClose}>
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-sm p-5 space-y-4" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-base font-bold text-gray-900 dark:text-white">Importer depuis Strava</h3>
+            <p className="text-xs text-gray-400 mt-0.5">{seance.titre}</p>
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-lg leading-none">×</button>
+        </div>
+
+        {isLoading && <p className="text-sm text-gray-400 text-center py-4">Chargement…</p>}
+        {isError   && <p className="text-sm text-red-500 text-center py-4">Erreur Strava — vérifie la connexion dans Profil.</p>}
+
+        {!isLoading && !isError && activitesFiltrees.length === 0 && (
+          <p className="text-sm text-gray-400 text-center py-4">
+            Aucune activité Strava compatible trouvée autour du {dateSeance}.<br />
+            <span className="text-xs">Types attendus : {compatSports.join(", ")}</span>
+          </p>
+        )}
+
+        {activitesFiltrees.length > 0 && (
+          <div className="space-y-2 max-h-60 overflow-y-auto">
+            {activitesFiltrees.map(a => (
+              <button key={a.id} onClick={() => setSelected(s => s?.id === a.id ? null : a)}
+                className={clsx(
+                  "w-full text-left rounded-xl border-2 px-3 py-2.5 transition-colors",
+                  selected?.id === a.id
+                    ? "border-orange-400 bg-orange-50 dark:bg-orange-900/20"
+                    : "border-gray-200 dark:border-gray-700 hover:border-orange-300 dark:hover:border-orange-700"
+                )}>
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">{a.nom}</p>
+                  <span className="text-xs text-gray-400 shrink-0 ml-2">{a.date}</span>
+                </div>
+                <div className="flex flex-wrap gap-2 mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  <span>⏱ {a.duree_min} min</span>
+                  {a.distance_km  && <span>📍 {a.distance_km} km</span>}
+                  {a.dplus_m > 0  && <span>⛰ {a.dplus_m} m D+</span>}
+                  {a.fc_moyenne_bpm && <span>❤️ {a.fc_moyenne_bpm} bpm</span>}
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {selected && (
+          <div>
+            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">RPE ressenti (1–10)</label>
+            <div className="flex items-center gap-3">
+              <input type="range" min={1} max={10} step={0.5} value={rpe}
+                onChange={e => setRpe(parseFloat(e.target.value))}
+                className="flex-1 accent-orange-500" />
+              <span className="text-sm font-bold text-orange-500 w-6 text-center">{rpe}</span>
+            </div>
+          </div>
+        )}
+
+        <div className="flex justify-end gap-2 pt-1">
+          <button onClick={onClose} className="px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-sm text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800">
+            Annuler
+          </button>
+          <button onClick={() => mutImport.mutate()} disabled={!selected || mutImport.isPending}
+            className="px-5 py-2 rounded-xl bg-orange-500 text-white font-semibold text-sm hover:bg-orange-600 disabled:opacity-40 transition-colors">
+            {mutImport.isPending ? "…" : "Importer ✓"}
+          </button>
+        </div>
+        {mutImport.isError && <p className="text-xs text-red-500 text-center">Erreur — réessaie.</p>}
+      </div>
+    </div>
+  );
+}
+
 function CarteSeance({ seance, zonesFC }) {
   const qc = useQueryClient();
   const [ouvert, setOuvert]         = useState(false);
@@ -690,6 +809,7 @@ function CarteSeance({ seance, zonesFC }) {
   const [editOpen, setEditOpen]     = useState(false);
   const [conseil, setConseil]       = useState(null);
   const [planifOpen, setPlanifOpen] = useState(false);
+  const [stravaOpen, setStravaOpen] = useState(false);
 
   const mutPlanifier = useMutation({
     mutationFn: ({ date_planifiee, heure_planifiee }) => planifierSeance(seance.id, date_planifiee, heure_planifiee),
@@ -803,6 +923,17 @@ function CarteSeance({ seance, zonesFC }) {
                   📅
                 </button>
               )}
+              <button onClick={() => { setStravaOpen(true); setOuvert(false); }}
+                disabled={!seance.date_planifiee}
+                title="Importer depuis Strava"
+                className={clsx(
+                  "px-2 py-1.5 rounded-xl text-xs font-semibold transition-colors border",
+                  !seance.date_planifiee
+                    ? "border-gray-200 dark:border-gray-700 text-gray-300 cursor-not-allowed"
+                    : "border-orange-300 dark:border-orange-700 text-orange-500 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20"
+                )}>
+                Strava
+              </button>
               <button onClick={() => { setLogOpen(v => !v); setOuvert(false); }}
                 disabled={!seance.date_planifiee}
                 title={!seance.date_planifiee ? "Planifie la séance avant de la valider" : undefined}
@@ -875,6 +1006,15 @@ function CarteSeance({ seance, zonesFC }) {
           </div>
         );
       })()}
+
+      {/* ── Import Strava ── */}
+      {stravaOpen && (
+        <ModalStravaImport
+          seance={seance}
+          onClose={() => setStravaOpen(false)}
+          onDone={() => { setStravaOpen(false); setValide(true); qc.invalidateQueries({ queryKey: ["toutes-semaines"] }); }}
+        />
+      )}
 
       {/* ── Formulaire modification ── */}
       {editOpen && fait && seance.type === "EVALUATION" && (

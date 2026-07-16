@@ -124,3 +124,11 @@ export const getDistributionVolume = (macrocycle_id) =>
 
 export const getBiometrieRecuperation = (macrocycle_id) =>
   api.get("/analytics/biometrie-recuperation", { params: macrocycle_id ? { macrocycle_id } : {} }).then((r) => r.data);
+
+// --- Strava ---
+export const getStravaAuthUrl  = () => api.get("/strava/auth").then((r) => r.data);
+export const stravaDisconnect  = () => api.delete("/strava/disconnect").then((r) => r.data);
+export const getStravaActivites = (jours = 14) =>
+  api.get("/strava/activites", { params: { jours } }).then((r) => r.data);
+export const stravaImporter = (payload) =>
+  api.post("/strava/importer", payload).then((r) => r.data);
