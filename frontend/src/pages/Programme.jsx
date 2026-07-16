@@ -62,12 +62,22 @@ function signalCorrelationRPEFC(rpe, fcMoy, zone, zonesFC) {
 
 // ─── Formulaire évaluation ─────────────────────────────────────────────────
 
+function detectEvalType(titre) {
+  const t = (titre || "").toLowerCase();
+  if (t.includes("cooper") || t.includes("vma")) return "cooper";
+  if (t.includes("max") && t.includes("min") || t.includes("1 min") || t.includes("1min")) return "max1min";
+  if (t.includes("amrap") || t.includes("benchmark") || t.includes("circuit")) return "amrap";
+  return "cooper"; // fallback
+}
+
 function FormulaireEvaluation({ seance, onClose, onDone }) {
   const qc = useQueryClient();
+  const evalType = detectEvalType(seance.titre);
 
   const { data: mouvements = [] } = useQuery({
     queryKey: ["exercices-evaluation"],
     queryFn: getExercicesEvaluation,
+    enabled: evalType === "max1min",
   });
 
   const [distance, setDistance] = useState("");
@@ -76,7 +86,6 @@ function FormulaireEvaluation({ seance, onClose, onDone }) {
   const [tours, setTours]       = useState("");
   const [rpe, setRpe]           = useState(7);
   const [notes, setNotes]       = useState("");
-  const [step, setStep]         = useState("saisie"); // "saisie" | "saving"
 
   const RPE_LABEL = { 1:"Très facile",2:"Facile",3:"Modéré",4:"Assez facile",5:"Moyen",6:"Un peu difficile",7:"Difficile",8:"Très difficile",9:"Extrêmement difficile",10:"Maximum" };
   const RPE_COLOR = { 1:"text-green-500",2:"text-green-500",3:"text-green-500",4:"text-lime-500",5:"text-yellow-500",6:"text-orange-400",7:"text-orange-500",8:"text-red-500",9:"text-red-600",10:"text-red-700" };
@@ -88,31 +97,26 @@ function FormulaireEvaluation({ seance, onClose, onDone }) {
     setSaving(true);
     setError(null);
     try {
-      // 1. Créer l'évaluation
       const { id: evalId } = await creerEvaluation({ est_induction: false });
 
-      // 2. Demi-Cooper
-      if (distance) {
+      if (evalType === "cooper" && distance) {
         await enregistrerDemiCooper(evalId, {
           distance_metres: parseFloat(distance),
           fc_max: fcMax ? parseInt(fcMax) : undefined,
         });
       }
 
-      // 3. Max 1 min
-      const repsPayload = mouvements
-        .filter(m => reps[m.slug])
-        .map(m => ({ exercice_id: m.id, repetitions_realisees: parseInt(reps[m.slug]) }));
-      if (repsPayload.length > 0) {
-        await enregistrerMax1Min(evalId, repsPayload);
+      if (evalType === "max1min") {
+        const repsPayload = mouvements
+          .filter(m => reps[m.slug])
+          .map(m => ({ exercice_id: m.id, repetitions_realisees: parseInt(reps[m.slug]) }));
+        if (repsPayload.length > 0) await enregistrerMax1Min(evalId, repsPayload);
       }
 
-      // 4. AMRAP
-      if (tours) {
-        await amrapPost(evalId, tours);
+      if (evalType === "amrap" && tours) {
+        await enregistrerAmrapBenchmark(evalId, { tours_completes: parseFloat(tours) });
       }
 
-      // 5. Journaliser la séance (marquer comme faite)
       await journaliserSeance(seance.id, { rpe, notes: notes || undefined });
 
       qc.invalidateQueries({ queryKey: ["toutes-semaines"] });
@@ -125,15 +129,12 @@ function FormulaireEvaluation({ seance, onClose, onDone }) {
     }
   }
 
-  async function amrapPost(evalId, toursVal) {
-    await enregistrerAmrapBenchmark(evalId, { tours_completes: parseFloat(toursVal) });
-  }
-
   return (
     <div className="border-t border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-800/40 px-4 py-4 space-y-5">
       <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Résultats de l'évaluation</p>
 
       {/* Demi-Cooper */}
+      {evalType === "cooper" && (
       <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-3 space-y-2">
         <p className="text-xs font-semibold text-gray-700 dark:text-gray-200">🏃 Demi-Cooper</p>
         <div className="grid grid-cols-2 gap-2">
@@ -150,9 +151,10 @@ function FormulaireEvaluation({ seance, onClose, onDone }) {
           </div>
         </div>
       </div>
+      )}
 
       {/* Max 1 min */}
-      {mouvements.length > 0 && (
+      {evalType === "max1min" && mouvements.length > 0 && (
         <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-3 space-y-2">
           <p className="text-xs font-semibold text-gray-700 dark:text-gray-200">💪 Max 1 min</p>
           <div className="grid grid-cols-2 gap-2">
@@ -169,6 +171,7 @@ function FormulaireEvaluation({ seance, onClose, onDone }) {
       )}
 
       {/* AMRAP */}
+      {evalType === "amrap" && (
       <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-3 space-y-2">
         <p className="text-xs font-semibold text-gray-700 dark:text-gray-200">🔥 AMRAP 10 min</p>
         <div>
@@ -177,6 +180,7 @@ function FormulaireEvaluation({ seance, onClose, onDone }) {
             className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
         </div>
       </div>
+      )}
 
       {/* RPE */}
       <div>
