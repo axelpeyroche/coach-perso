@@ -475,18 +475,34 @@ export default function Timers() {
   const [mode, setMode] = useState("chrono");
   const circleSize = useTimerSize();
 
+  // Verrouille tout scroll de la page (body + html) pendant que Timers est affiché.
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+    const prevHtmlOY = html.style.overflowY;
+    const prevBodyOY = body.style.overflowY;
+    html.style.overflowY = "hidden";
+    body.style.overflowY = "hidden";
+    return () => {
+      html.style.overflowY = prevHtmlOY;
+      body.style.overflowY = prevBodyOY;
+    };
+  }, []);
+
+  // Sur mobile (<768px), on applique position:fixed pour ancrer le contenu
+  const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
+
   return (
-    /*
-      Sur mobile : top bar = 56px (pt-14), bottom nav ≈ 64px + safe-area.
-      On soustrait ces deux zones de 100dvh pour obtenir la hauteur exacte disponible.
-      Sur desktop (md+) : sidebar fixe, pas de bottom nav → on utilise 100dvh.
-    */
     <div
       className="flex flex-col overflow-hidden bg-gray-50 dark:bg-gray-950"
-      style={{
-        // mobile: header 56px + bottom nav 64px + safe-area bottom
-        // desktop (md+): pas de ces barres, mais le hook useTimerSize s'ajuste
-        height: "calc(100dvh - 56px - 64px - env(safe-area-inset-bottom, 0px))",
+      style={isMobile ? {
+        position: "fixed",
+        left: 0,
+        right: 0,
+        top: "56px",
+        bottom: "calc(64px + env(safe-area-inset-bottom, 0px))",
+      } : {
+        height: "100%",
       }}
     >
 
