@@ -128,9 +128,9 @@ export default function Analytics({ dark }) {
         {acwaData.length ? (
           <div className="w-full overflow-x-hidden">
             <ResponsiveContainer width="100%" height={240}>
-              <LineChart data={acwaData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
+              <LineChart data={acwaData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="sem" height={40} padding={{ left: 15, right: 15 }} tick={<WeekTick data={acwaData} dark={dark} />} />
+                <XAxis dataKey="sem" height={40} padding={{ left: 30, right: 30 }} tick={<WeekTick data={acwaData} dark={dark} />} />
                 <YAxis tick={{ fontSize: 11 }} width={32} />
                 <Tooltip formatter={(v, name) => [v != null ? Number(v).toFixed(2) : "—", name]} contentStyle={ttStyle} labelStyle={ttLabelStyle} />
                 <Legend />
@@ -162,9 +162,9 @@ export default function Analytics({ dark }) {
         {rpeData.length ? (
           <div className="w-full overflow-x-hidden">
             <ResponsiveContainer width="100%" height={220}>
-              <LineChart data={rpeData} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
+              <LineChart data={rpeData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="sem" height={40} padding={{ left: 15, right: 15 }} tick={<WeekTick data={rpeData} dark={dark} />} />
+                <XAxis dataKey="sem" height={40} padding={{ left: 30, right: 30 }} tick={<WeekTick data={rpeData} dark={dark} />} />
                 <YAxis domain={[0, 10]} tick={{ fontSize: 11 }} width={32} />
                 <Tooltip formatter={(v, name) => [v != null ? v.toFixed(1) : "—", name]} contentStyle={ttStyle} labelStyle={ttLabelStyle} />
                 <Legend />
