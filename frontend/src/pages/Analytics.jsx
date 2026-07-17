@@ -6,17 +6,8 @@ import {
 import { getTendancesPhysiologiques, getDistributionVolume, getBiometrieRecuperation } from "../api";
 import Card from "../components/Card";
 
-function DashedCursor({ x, y, width, height }) {
-  return (
-    <line
-      x1={x + width / 2} y1={y}
-      x2={x + width / 2} y2={y + height}
-      stroke="#6b7280"
-      strokeWidth={1.5}
-      strokeDasharray="4 4"
-      opacity={0.7}
-    />
-  );
+function LineCursor({ x, y, width, height }) {
+  return <line x1={x + width / 2} y1={y} x2={x + width / 2} y2={y + height} stroke="#9ca3af" strokeWidth={1} />;
 }
 
 function WeekTick({ x, y, payload, data, dark }) {
@@ -108,7 +99,7 @@ export default function Analytics({ dark }) {
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                 <XAxis dataKey="sem" height={40} tick={<WeekTick data={volumeData} dark={dark} />} />
                 <YAxis tick={{ fontSize: 11 }} width={32} />
-                <Tooltip formatter={(v, name) => [`${v} km`, name]} contentStyle={ttStyle} labelStyle={ttLabelStyle} cursor={<DashedCursor />} />
+                <Tooltip formatter={(v, name) => [`${v} km`, name]} contentStyle={ttStyle} labelStyle={ttLabelStyle} cursor={<LineCursor />} />
                 <Legend />
                 <Bar dataKey="km_route" name="Route" stackId="a" fill="#22c55e" radius={[0, 0, 0, 0]} activeBar={{ fill: '#16a34a' }} />
                 <Bar dataKey="km_trail" name="Trail" stackId="a" fill="#f97316" radius={[4, 4, 0, 0]} activeBar={{ fill: '#ea580c' }} />
@@ -126,7 +117,7 @@ export default function Analytics({ dark }) {
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                 <XAxis dataKey="sem" height={40} tick={<WeekTick data={volumeData} dark={dark} />} />
                 <YAxis tick={{ fontSize: 11 }} width={32} />
-                <Tooltip contentStyle={ttStyle} labelStyle={ttLabelStyle} cursor={<DashedCursor />} />
+                <Tooltip contentStyle={ttStyle} labelStyle={ttLabelStyle} cursor={<LineCursor />} />
                 <Legend />
                 <Bar dataKey="push" name="Push" fill="#f97316" radius={[4, 4, 0, 0]} activeBar={{ fill: '#ea580c' }} />
                 <Bar dataKey="pull" name="Pull" fill="#3b82f6" radius={[4, 4, 0, 0]} activeBar={{ fill: '#2563eb' }} />
