@@ -128,7 +128,7 @@ export default function Analytics({ dark }) {
         {acwaData.length ? (
           <div className="w-full overflow-x-hidden">
             <ResponsiveContainer width="100%" height={240}>
-              <LineChart data={acwaData}>
+              <LineChart data={acwaData} margin={{ right: 30 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                 <XAxis dataKey="sem" height={40} tick={<WeekTick data={acwaData} dark={dark} />} />
                 <YAxis tick={{ fontSize: 11 }} width={32} />
@@ -162,7 +162,7 @@ export default function Analytics({ dark }) {
         {rpeData.length ? (
           <div className="w-full overflow-x-hidden">
             <ResponsiveContainer width="100%" height={220}>
-              <LineChart data={rpeData}>
+              <LineChart data={rpeData} margin={{ right: 30 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                 <XAxis dataKey="sem" height={40} tick={<WeekTick data={rpeData} dark={dark} />} />
                 <YAxis domain={[0, 10]} tick={{ fontSize: 11 }} width={32} />
