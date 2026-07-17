@@ -8,10 +8,12 @@ import Card from "../components/Card";
 
 function WeekTick({ x, y, payload, data, dark }) {
   const entry = data?.find(d => d.sem === payload.value);
+  const c1 = dark ? "#9ca3af" : "#6b7280";
+  const c2 = dark ? "#6b7280" : "#9ca3af";
   return (
-    <g transform={`translate(${x},${y})`}>
-      <text x={0} y={0} dy={12} textAnchor="middle" fontSize={11} fill={dark ? "#9ca3af" : "#6b7280"}>{payload.value}</text>
-      {entry?.label && <text x={0} y={0} dy={24} textAnchor="middle" fontSize={9} fill={dark ? "#6b7280" : "#9ca3af"}>{entry.label}</text>}
+    <g transform={`translate(${x},${y + 4})`}>
+      <text x={0} y={0} dy={0} textAnchor="middle" fontSize={11} fontWeight={600} fill={c1}>{payload.value}</text>
+      {entry?.label && <text x={0} y={0} dy={14} textAnchor="middle" fontSize={9} fill={c2}>{entry.label}</text>}
     </g>
   );
 }
@@ -36,7 +38,10 @@ export default function Analytics({ dark }) {
   const addDays = (iso, n) => { const d = new Date(iso); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
 
   const vmaData = physio?.vma?.map((v) => ({ date: fmtDate(v.date), vma: v.valeur })) ?? [];
-  const volumeData = volume?.semaines?.map((s) => ({ sem: `S${s.numero_semaine}`, dateDebut: s.date_debut, km_route: s.km_route ?? s.km_course ?? 0, km_trail: s.km_trail ?? 0, push: s.volume_muscu?.push ?? 0, pull: s.volume_muscu?.pull ?? 0, jambes: s.volume_muscu?.jambes ?? 0 })) ?? [];
+  const volumeData = volume?.semaines?.map((s) => {
+    const label = s.date_debut ? `${fmtJM(s.date_debut)} - ${fmtJM(addDays(s.date_debut, 6))}` : "";
+    return { sem: `S${s.numero_semaine}`, dateDebut: s.date_debut, label, km_route: s.km_route ?? s.km_course ?? 0, km_trail: s.km_trail ?? 0, push: s.volume_muscu?.push ?? 0, pull: s.volume_muscu?.pull ?? 0, jambes: s.volume_muscu?.jambes ?? 0 };
+  }) ?? [];
 
   // Plage de semaines commune à tous les graphiques (S1…Sn)
   const allSems = volumeData.map(s => s.sem);
@@ -85,10 +90,10 @@ export default function Analytics({ dark }) {
       <Card title="🏃 Volume course hebdomadaire (km)">
         {volumeData.length ? (
           <div className="w-full overflow-x-hidden">
-            <ResponsiveContainer width="100%" height={200}>
+            <ResponsiveContainer width="100%" height={220}>
               <BarChart data={volumeData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="sem" tick={{ fontSize: 11 }} />
+                <XAxis dataKey="sem" height={40} tick={<WeekTick data={volumeData} dark={dark} />} />
                 <YAxis tick={{ fontSize: 11 }} width={32} />
                 <Tooltip formatter={(v, name) => [`${v} km`, name]} contentStyle={ttStyle} labelStyle={ttLabelStyle} />
                 <Legend />
@@ -103,10 +108,10 @@ export default function Analytics({ dark }) {
       <Card title="💪 Répartition musculaire (séries)">
         {volumeData.length ? (
           <div className="w-full overflow-x-hidden">
-            <ResponsiveContainer width="100%" height={200}>
+            <ResponsiveContainer width="100%" height={220}>
               <BarChart data={volumeData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="sem" tick={{ fontSize: 11 }} />
+                <XAxis dataKey="sem" height={40} tick={<WeekTick data={volumeData} dark={dark} />} />
                 <YAxis tick={{ fontSize: 11 }} width={32} />
                 <Tooltip contentStyle={ttStyle} labelStyle={ttLabelStyle} />
                 <Legend />
