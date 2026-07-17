@@ -24,8 +24,24 @@ export default function Analytics({ dark }) {
   const fmtDate = (iso) => { const [y,m,d] = iso.split("-"); return `${d}/${m}/${y}`; };
   const vmaData = physio?.vma?.map((v) => ({ date: v.date.slice(5), fullDate: v.date, vma: v.valeur })) ?? [];
   const volumeData = volume?.semaines?.map((s) => ({ sem: `S${s.numero_semaine}`, km_route: s.km_route ?? s.km_course ?? 0, km_trail: s.km_trail ?? 0, push: s.volume_muscu?.push ?? 0, pull: s.volume_muscu?.pull ?? 0, jambes: s.volume_muscu?.jambes ?? 0 })) ?? [];
-  const acwaData = recup?.acwa?.map((a) => ({ sem: `S${a.semaine}`, ratio: a.ratio, aigue: a.charge_aigue_km, chronique: a.charge_chronique_km })) ?? [];
-  const rpeData = recup?.tendance_rpe?.map((r) => ({ sem: `S${r.semaine}`, reel: r.rpe_reel, cible: r.rpe_cible })) ?? [];
+
+  // Plage de semaines commune à tous les graphiques (S1…Sn)
+  const allSems = volumeData.map(s => s.sem);
+
+  const acwaByWeek = Object.fromEntries((recup?.acwa ?? []).map(a => [`S${a.semaine}`, a]));
+  const acwaData = allSems.map(sem => ({
+    sem,
+    ratio:     acwaByWeek[sem]?.ratio           ?? null,
+    aigue:     acwaByWeek[sem]?.charge_aigue_km ?? null,
+    chronique: acwaByWeek[sem]?.charge_chronique_km ?? null,
+  }));
+
+  const rpeByWeek = Object.fromEntries((recup?.tendance_rpe ?? []).map(r => [`S${r.semaine}`, r]));
+  const rpeData = allSems.map(sem => ({
+    sem,
+    reel:  rpeByWeek[sem]?.rpe_reel  ?? null,
+    cible: rpeByWeek[sem]?.rpe_cible ?? null,
+  }));
 
   return (
     <div className="p-4 md:p-8 max-w-4xl mx-auto space-y-6">
