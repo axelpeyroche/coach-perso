@@ -95,7 +95,7 @@ export default function Analytics({ dark }) {
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                 <XAxis dataKey="sem" height={40} tick={<WeekTick data={volumeData} dark={dark} />} />
                 <YAxis tick={{ fontSize: 11 }} width={32} />
-                <Tooltip formatter={(v, name) => [`${v} km`, name]} contentStyle={ttStyle} labelStyle={ttLabelStyle} />
+                <Tooltip formatter={(v, name) => [`${v} km`, name]} contentStyle={ttStyle} labelStyle={ttLabelStyle} cursor={{ fill: 'transparent' }} />
                 <Legend />
                 <Bar dataKey="km_route" name="Route" stackId="a" fill="#22c55e" radius={[0, 0, 0, 0]} />
                 <Bar dataKey="km_trail" name="Trail" stackId="a" fill="#f97316" radius={[4, 4, 0, 0]} />
@@ -113,7 +113,7 @@ export default function Analytics({ dark }) {
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                 <XAxis dataKey="sem" height={40} tick={<WeekTick data={volumeData} dark={dark} />} />
                 <YAxis tick={{ fontSize: 11 }} width={32} />
-                <Tooltip contentStyle={ttStyle} labelStyle={ttLabelStyle} />
+                <Tooltip contentStyle={ttStyle} labelStyle={ttLabelStyle} cursor={{ fill: 'transparent' }} />
                 <Legend />
                 <Bar dataKey="push" name="Push" fill="#f97316" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="pull" name="Pull" fill="#3b82f6" radius={[4, 4, 0, 0]} />
