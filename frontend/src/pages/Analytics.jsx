@@ -97,8 +97,8 @@ export default function Analytics({ dark }) {
                 <YAxis tick={{ fontSize: 11 }} width={32} />
                 <Tooltip formatter={(v, name) => [`${v} km`, name]} contentStyle={ttStyle} labelStyle={ttLabelStyle} cursor={{ fill: 'transparent' }} />
                 <Legend />
-                <Bar dataKey="km_route" name="Route" stackId="a" fill="#22c55e" radius={[0, 0, 0, 0]} />
-                <Bar dataKey="km_trail" name="Trail" stackId="a" fill="#f97316" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="km_route" name="Route" stackId="a" fill="#22c55e" radius={[0, 0, 0, 0]} activeBar={{ fill: '#16a34a' }} />
+                <Bar dataKey="km_trail" name="Trail" stackId="a" fill="#f97316" radius={[4, 4, 0, 0]} activeBar={{ fill: '#ea580c' }} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -115,9 +115,9 @@ export default function Analytics({ dark }) {
                 <YAxis tick={{ fontSize: 11 }} width={32} />
                 <Tooltip contentStyle={ttStyle} labelStyle={ttLabelStyle} cursor={{ fill: 'transparent' }} />
                 <Legend />
-                <Bar dataKey="push" name="Push" fill="#f97316" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="pull" name="Pull" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="jambes" name="Jambes" fill="#a855f7" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="push" name="Push" fill="#f97316" radius={[4, 4, 0, 0]} activeBar={{ fill: '#ea580c' }} />
+                <Bar dataKey="pull" name="Pull" fill="#3b82f6" radius={[4, 4, 0, 0]} activeBar={{ fill: '#2563eb' }} />
+                <Bar dataKey="jambes" name="Jambes" fill="#a855f7" radius={[4, 4, 0, 0]} activeBar={{ fill: '#9333ea' }} />
               </BarChart>
             </ResponsiveContainer>
           </div>
