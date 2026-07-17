@@ -653,14 +653,19 @@ def prediction_course(db: Session, utilisateur_id: int) -> dict[str, Any]:
         .order_by(BiometrieUtilisateur.enregistre_le)
         .all()
     )
-    predictions = []
+    # Déduplique par date : garde le dernier enregistrement de chaque jour
+    seen: dict = {}
     for b in biometries:
-        if not b.vma_kmh or b.vma_kmh <= 0:
-            continue
+        if b.vma_kmh and b.vma_kmh > 0:
+            seen[b.enregistre_le.date()] = b
+
+    predictions = []
+    for date_key in sorted(seen):
+        b = seen[date_key]
         temps_min = distance_eff / (b.vma_kmh * fraction) * 60.0
         predictions.append(
             {
-                "date": str(b.enregistre_le.date()),
+                "date": str(date_key),
                 "vma": b.vma_kmh,
                 "temps_predit_min": round(temps_min, 1),
             }
