@@ -351,19 +351,21 @@ def biometrie_recuperation(
         .all()
     )
 
+    # Agréger par semaine (moyenne RPE réel et cible)
+    from collections import defaultdict
+    _rpe_par_sem: dict[int, dict] = defaultdict(lambda: {"rpe_reel": [], "rpe_cible": []})
+    for j in journaux:
+        _rpe_par_sem[j.JournalSeance.seance.semaine.numero_semaine]["rpe_reel"].append(j.JournalSeance.rpe)
+        if j.JournalSeance.rpe_cible is not None:
+            _rpe_par_sem[j.JournalSeance.seance.semaine.numero_semaine]["rpe_cible"].append(j.JournalSeance.rpe_cible)
+
     tendance_rpe = [
         {
-            "date": str(j.date_seance),
-            "titre_seance": j.titre or "Séance",
-            "rpe_reel": j.JournalSeance.rpe,
-            "rpe_cible": j.JournalSeance.rpe_cible,
-            "ecart": (
-                round(j.JournalSeance.rpe - j.JournalSeance.rpe_cible, 1)
-                if j.JournalSeance.rpe_cible
-                else None
-            ),
+            "semaine": sem,
+            "rpe_reel": round(sum(v["rpe_reel"]) / len(v["rpe_reel"]), 1) if v["rpe_reel"] else None,
+            "rpe_cible": round(sum(v["rpe_cible"]) / len(v["rpe_cible"]), 1) if v["rpe_cible"] else None,
         }
-        for j in journaux
+        for sem, v in sorted(_rpe_par_sem.items())
     ]
 
     # --- Calcul ACWA ---
