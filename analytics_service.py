@@ -433,10 +433,566 @@ def biometrie_recuperation(
             }
         )
 
+    # --- Score de forme (readiness 0-100) ---
+    # Basé sur le ratio ACWA courant et l'écart RPE réel/cible de la dernière semaine
+    forme = None
+    if acwa_data:
+        dernier = acwa_data[-1]
+        ratio_courant = dernier["ratio"]
+        score = 100.0
+        # Pénalité surcharge : ratio > 1.0 → jusqu'à -50 pts à ratio 1.5
+        if ratio_courant > 1.0:
+            score -= min(50.0, (ratio_courant - 1.0) * 100.0)
+        # Pénalité sous-entraînement léger : ratio < 0.8 → -10 pts max
+        elif ratio_courant < 0.8:
+            score -= min(10.0, (0.8 - ratio_courant) * 50.0)
+        # Pénalité RPE : réel > cible sur la dernière semaine → jusqu'à -30 pts
+        if tendance_rpe:
+            dernier_rpe = tendance_rpe[-1]
+            if dernier_rpe["rpe_reel"] is not None and dernier_rpe["rpe_cible"] is not None:
+                ecart = dernier_rpe["rpe_reel"] - dernier_rpe["rpe_cible"]
+                if ecart > 0:
+                    score -= min(30.0, ecart * 15.0)
+        score = max(5.0, round(score))
+        if score >= 75:
+            message_forme = "Bonne forme — tu peux pousser 💪"
+        elif score >= 50:
+            message_forme = "Forme correcte — séance normale"
+        elif score >= 30:
+            message_forme = "Fatigue notable — allège la séance"
+        else:
+            message_forme = "Récupération recommandée — repos ou Z1"
+        forme = {"score": int(score), "message": message_forme, "ratio": ratio_courant}
+
     return {
         "tendance_rpe": tendance_rpe,
         "acwa": acwa_data,
         "alerte_active": alerte_active,
         "message_alerte": message_alerte,
         "seuil_acwa": SEUIL_ACWA_RISQUE,
+        "forme": forme,
     }
+
+
+# ---------------------------------------------------------------------------
+# Zones FC hebdomadaires — temps passé par zone cardiaque
+# ---------------------------------------------------------------------------
+
+def zones_fc_hebdo(db: Session, utilisateur_id: int) -> dict[str, Any]:
+    """
+    Minutes passées par zone FC (Z1-Z5) et par semaine, estimées depuis la FC
+    moyenne des séances course (ou des blocs d'intervalles quand disponibles).
+    """
+    from models import Utilisateur
+
+    # Bornes FC : dernière biométrie, sinon % FCmax utilisateur
+    bio = (
+        db.query(BiometrieUtilisateur)
+        .filter(BiometrieUtilisateur.utilisateur_id == utilisateur_id)
+        .order_by(BiometrieUtilisateur.enregistre_le.desc())
+        .first()
+    )
+    user = db.get(Utilisateur, utilisateur_id)
+    fc_max = (user.fc_max if user else None) or (bio.fc_max if bio else None)
+
+    def _zone_depuis_fc(fc: float) -> str | None:
+        if fc is None:
+            return None
+        if bio and bio.z1_fc_max:
+            for z, borne in [("Z1", bio.z1_fc_max), ("Z2", bio.z2_fc_max), ("Z3", bio.z3_fc_max), ("Z4", bio.z4_fc_max)]:
+                if fc <= borne:
+                    return z
+            return "Z5"
+        if fc_max:
+            pct = fc / fc_max
+            if pct < 0.65: return "Z1"
+            if pct < 0.75: return "Z2"
+            if pct < 0.82: return "Z3"
+            if pct < 0.89: return "Z4"
+            return "Z5"
+        return None
+
+    journaux = (
+        db.execute(
+            select(JournalSeance, SemaineEntrainement.numero_semaine)
+            .join(SeanceEntrainement, JournalSeance.seance_id == SeanceEntrainement.id)
+            .join(SemaineEntrainement, SeanceEntrainement.semaine_id == SemaineEntrainement.id)
+            .join(Macrocycle, SemaineEntrainement.macrocycle_id == Macrocycle.id)
+            .where(
+                Macrocycle.utilisateur_id == utilisateur_id,
+                JournalSeance.completee == True,
+                SeanceEntrainement.type_seance == TypeSeance.COURSE,
+            )
+        )
+        .all()
+    )
+
+    minutes_par_sem: dict[int, dict[str, float]] = defaultdict(lambda: {z: 0.0 for z in ["Z1", "Z2", "Z3", "Z4", "Z5"]})
+    for row in journaux:
+        j = row.JournalSeance
+        sem = row.numero_semaine
+        # Blocs d'intervalles détaillés : durée = distance / vitesse
+        blocs_traites = False
+        if j.details_intervalles:
+            try:
+                blocs = _json.loads(j.details_intervalles)
+                for b in blocs:
+                    fc = b.get("fc_moyenne_bpm")
+                    dist = b.get("distance_km") or 0
+                    vit = b.get("vitesse_kmh") or 0
+                    if fc and dist and vit:
+                        zone = _zone_depuis_fc(fc)
+                        if zone:
+                            minutes_par_sem[sem][zone] += dist / vit * 60.0
+                            blocs_traites = True
+            except Exception:
+                pass
+        if not blocs_traites and j.fc_moyenne_bpm and j.duree_reelle_min:
+            zone = _zone_depuis_fc(j.fc_moyenne_bpm)
+            if zone:
+                minutes_par_sem[sem][zone] += j.duree_reelle_min
+
+    return {
+        "semaines": [
+            {"numero_semaine": sem, **{z: round(v, 1) for z, v in zones.items()}}
+            for sem, zones in sorted(minutes_par_sem.items())
+        ],
+        "fc_max_utilisee": fc_max,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Allure endurance — progression de l'allure en Z1/Z2
+# ---------------------------------------------------------------------------
+
+def allure_endurance(db: Session, utilisateur_id: int) -> dict[str, Any]:
+    """
+    Allure moyenne (min/km) des sorties Z1/Z2 complétées, dans le temps.
+    Meilleur indicateur de progression aérobie entre deux tests VMA.
+    """
+    journaux = (
+        db.execute(
+            select(JournalSeance, SeanceEntrainement.date_seance, SeanceEntrainement.zone_cible)
+            .join(SeanceEntrainement, JournalSeance.seance_id == SeanceEntrainement.id)
+            .join(SemaineEntrainement, SeanceEntrainement.semaine_id == SemaineEntrainement.id)
+            .join(Macrocycle, SemaineEntrainement.macrocycle_id == Macrocycle.id)
+            .where(
+                Macrocycle.utilisateur_id == utilisateur_id,
+                JournalSeance.completee == True,
+                SeanceEntrainement.type_seance == TypeSeance.COURSE,
+                JournalSeance.distance_reelle_km.is_not(None),
+                JournalSeance.duree_reelle_min.is_not(None),
+            )
+            .order_by(SeanceEntrainement.date_seance)
+        )
+        .all()
+    )
+
+    points = []
+    for row in journaux:
+        j = row.JournalSeance
+        zone = row.zone_cible.value if row.zone_cible else None
+        if zone not in ("Z1", "Z2"):
+            continue
+        if not j.distance_reelle_km or j.distance_reelle_km <= 0:
+            continue
+        allure = j.duree_reelle_min / j.distance_reelle_km  # min/km
+        if allure < 2.5 or allure > 12:  # valeurs aberrantes
+            continue
+        points.append(
+            {
+                "date": str(row.date_seance),
+                "allure_min_km": round(allure, 2),
+                "fc_moyenne": j.fc_moyenne_bpm,
+                "distance_km": j.distance_reelle_km,
+            }
+        )
+    return {"points": points}
+
+
+# ---------------------------------------------------------------------------
+# Prédiction de temps de course depuis la VMA
+# ---------------------------------------------------------------------------
+
+def _fraction_vma_soutenable(distance_km: float) -> float:
+    """Fraction de VMA soutenable selon la distance (interpolation linéaire)."""
+    reperes = [(5.0, 0.92), (10.0, 0.86), (21.1, 0.80), (42.2, 0.74)]
+    if distance_km <= reperes[0][0]:
+        return reperes[0][1]
+    if distance_km >= reperes[-1][0]:
+        return reperes[-1][1]
+    for (d1, f1), (d2, f2) in zip(reperes, reperes[1:]):
+        if d1 <= distance_km <= d2:
+            return f1 + (f2 - f1) * (distance_km - d1) / (d2 - d1)
+    return 0.80
+
+
+def prediction_course(db: Session, utilisateur_id: int) -> dict[str, Any]:
+    """
+    Temps prédit sur l'objectif course pour chaque test VMA historique.
+    Permet de tracer la convergence prédiction → objectif.
+    """
+    from models import ObjectifCourse
+
+    objectif = (
+        db.query(ObjectifCourse)
+        .filter(ObjectifCourse.utilisateur_id == utilisateur_id)
+        .order_by(ObjectifCourse.cree_le.desc())
+        .first()
+    )
+    if not objectif:
+        return {"objectif": None, "predictions": []}
+
+    # Distance équivalente plat : +1 km par 100 m de D+
+    distance_eff = objectif.distance_km + (objectif.dplus_m or 0) / 100.0
+    fraction = _fraction_vma_soutenable(distance_eff)
+
+    biometries = (
+        db.query(BiometrieUtilisateur)
+        .filter(BiometrieUtilisateur.utilisateur_id == utilisateur_id)
+        .order_by(BiometrieUtilisateur.enregistre_le)
+        .all()
+    )
+    predictions = []
+    for b in biometries:
+        if not b.vma_kmh or b.vma_kmh <= 0:
+            continue
+        temps_min = distance_eff / (b.vma_kmh * fraction) * 60.0
+        predictions.append(
+            {
+                "date": str(b.enregistre_le.date()),
+                "vma": b.vma_kmh,
+                "temps_predit_min": round(temps_min, 1),
+            }
+        )
+
+    return {
+        "objectif": {
+            "nom": objectif.nom,
+            "date_course": str(objectif.date_course),
+            "distance_km": objectif.distance_km,
+            "dplus_m": objectif.dplus_m,
+            "objectif_temps_min": objectif.objectif_temps_min,
+        },
+        "predictions": predictions,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Records personnels
+# ---------------------------------------------------------------------------
+
+def records_personnels(db: Session, utilisateur_id: int) -> dict[str, Any]:
+    """Meilleures performances toutes séances confondues + jalons."""
+    journaux = (
+        db.execute(
+            select(JournalSeance, SeanceEntrainement.date_seance, SemaineEntrainement.numero_semaine, SemaineEntrainement.id.label("semaine_id"))
+            .join(SeanceEntrainement, JournalSeance.seance_id == SeanceEntrainement.id)
+            .join(SemaineEntrainement, SeanceEntrainement.semaine_id == SemaineEntrainement.id)
+            .join(Macrocycle, SemaineEntrainement.macrocycle_id == Macrocycle.id)
+            .where(
+                Macrocycle.utilisateur_id == utilisateur_id,
+                JournalSeance.completee == True,
+            )
+            .order_by(SeanceEntrainement.date_seance)
+        )
+        .all()
+    )
+
+    plus_longue = None       # (km, date)
+    plus_gros_dplus = None   # (m, date)
+    plus_longue_duree = None # (min, date)
+    km_par_semaine: dict[int, float] = defaultdict(float)
+    semaines_actives: set[int] = set()
+
+    for row in journaux:
+        j = row.JournalSeance
+        d = str(row.date_seance)
+        semaines_actives.add(row.semaine_id)
+        if j.distance_reelle_km:
+            km_par_semaine[row.numero_semaine] += j.distance_reelle_km
+            if plus_longue is None or j.distance_reelle_km > plus_longue[0]:
+                plus_longue = (j.distance_reelle_km, d)
+        if j.dplus_reel_m:
+            if plus_gros_dplus is None or j.dplus_reel_m > plus_gros_dplus[0]:
+                plus_gros_dplus = (j.dplus_reel_m, d)
+        if j.duree_reelle_min:
+            if plus_longue_duree is None or j.duree_reelle_min > plus_longue_duree[0]:
+                plus_longue_duree = (j.duree_reelle_min, d)
+
+    meilleure_semaine = max(km_par_semaine.items(), key=lambda kv: kv[1]) if km_par_semaine else None
+
+    # VMA max historique
+    vma_max = (
+        db.query(func.max(BiometrieUtilisateur.vma_kmh))
+        .filter(BiometrieUtilisateur.utilisateur_id == utilisateur_id)
+        .scalar()
+    )
+
+    # Streak : semaines consécutives (par date_debut) avec au moins une séance complétée
+    semaines_toutes = (
+        db.execute(
+            select(SemaineEntrainement.id, SemaineEntrainement.date_debut)
+            .join(Macrocycle, SemaineEntrainement.macrocycle_id == Macrocycle.id)
+            .where(
+                Macrocycle.utilisateur_id == utilisateur_id,
+                SemaineEntrainement.date_debut <= date.today(),
+            )
+            .order_by(SemaineEntrainement.date_debut)
+        )
+        .all()
+    )
+    streak = 0
+    for s in reversed(semaines_toutes):
+        # ignorer la semaine en cours si pas encore de séance faite
+        if s.id in semaines_actives:
+            streak += 1
+        elif s.date_debut <= date.today() - timedelta(days=7):
+            break
+
+    return {
+        "plus_longue_sortie": {"km": round(plus_longue[0], 2), "date": plus_longue[1]} if plus_longue else None,
+        "plus_gros_dplus": {"m": plus_gros_dplus[0], "date": plus_gros_dplus[1]} if plus_gros_dplus else None,
+        "plus_longue_duree": {"min": plus_longue_duree[0], "date": plus_longue_duree[1]} if plus_longue_duree else None,
+        "meilleure_semaine": {"semaine": meilleure_semaine[0], "km": round(meilleure_semaine[1], 2)} if meilleure_semaine else None,
+        "vma_max": vma_max,
+        "streak_semaines": streak,
+        "seances_completees": len(journaux),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Semaine en cours — prévu vs réalisé
+# ---------------------------------------------------------------------------
+
+def semaine_en_cours(db: Session, utilisateur_id: int) -> dict[str, Any]:
+    """Progression de la semaine calendaire en cours : km et séances, prévu vs fait."""
+    aujourd_hui = date.today()
+    semaine = (
+        db.execute(
+            select(SemaineEntrainement)
+            .join(Macrocycle, SemaineEntrainement.macrocycle_id == Macrocycle.id)
+            .where(
+                Macrocycle.utilisateur_id == utilisateur_id,
+                SemaineEntrainement.date_debut <= aujourd_hui,
+                SemaineEntrainement.date_debut > aujourd_hui - timedelta(days=7),
+            )
+        )
+        .scalars()
+        .first()
+    )
+    if not semaine:
+        return {"semaine": None}
+
+    seances = (
+        db.execute(
+            select(SeanceEntrainement)
+            .where(
+                SeanceEntrainement.semaine_id == semaine.id,
+                SeanceEntrainement.type_seance.not_in([TypeSeance.REPOS]),
+            )
+        )
+        .scalars()
+        .all()
+    )
+    km_prevu = sum(s.distance_cible_km or 0 for s in seances if s.type_seance == TypeSeance.COURSE)
+    seances_prevues = len(seances)
+
+    journaux = (
+        db.execute(
+            select(JournalSeance)
+            .join(SeanceEntrainement, JournalSeance.seance_id == SeanceEntrainement.id)
+            .where(
+                SeanceEntrainement.semaine_id == semaine.id,
+                JournalSeance.completee == True,
+            )
+        )
+        .scalars()
+        .all()
+    )
+    km_fait = sum(j.distance_reelle_km or 0 for j in journaux)
+    seances_faites = len(journaux)
+    jours_restants = (semaine.date_debut + timedelta(days=7) - aujourd_hui).days
+
+    return {
+        "semaine": {
+            "numero_semaine": semaine.numero_semaine,
+            "date_debut": str(semaine.date_debut),
+            "macrophase": semaine.macrophase.value,
+            "km_prevu": round(km_prevu, 1),
+            "km_fait": round(km_fait, 1),
+            "seances_prevues": seances_prevues,
+            "seances_faites": seances_faites,
+            "jours_restants": jours_restants,
+        }
+    }
+
+
+# ---------------------------------------------------------------------------
+# Résumé hebdomadaire — bilan de la dernière semaine terminée
+# ---------------------------------------------------------------------------
+
+def resume_hebdo(db: Session, utilisateur_id: int) -> dict[str, Any]:
+    """Bilan de la dernière semaine terminée + tendance vs la précédente."""
+    aujourd_hui = date.today()
+    semaines = (
+        db.execute(
+            select(SemaineEntrainement)
+            .join(Macrocycle, SemaineEntrainement.macrocycle_id == Macrocycle.id)
+            .where(
+                Macrocycle.utilisateur_id == utilisateur_id,
+                SemaineEntrainement.date_debut <= aujourd_hui - timedelta(days=7),
+            )
+            .order_by(SemaineEntrainement.date_debut.desc())
+            .limit(2)
+        )
+        .scalars()
+        .all()
+    )
+    if not semaines:
+        return {"resume": None}
+
+    def _stats_semaine(sem: SemaineEntrainement) -> dict:
+        journaux = (
+            db.execute(
+                select(JournalSeance)
+                .join(SeanceEntrainement, JournalSeance.seance_id == SeanceEntrainement.id)
+                .where(SeanceEntrainement.semaine_id == sem.id, JournalSeance.completee == True)
+            )
+            .scalars()
+            .all()
+        )
+        seances_prevues = (
+            db.execute(
+                select(func.count(SeanceEntrainement.id))
+                .where(
+                    SeanceEntrainement.semaine_id == sem.id,
+                    SeanceEntrainement.type_seance.not_in([TypeSeance.REPOS]),
+                )
+            )
+            .scalar()
+        )
+        km = sum(j.distance_reelle_km or 0 for j in journaux)
+        rpes = [j.rpe for j in journaux if j.rpe is not None]
+        return {
+            "km": round(km, 1),
+            "seances_faites": len(journaux),
+            "seances_prevues": seances_prevues or 0,
+            "rpe_moyen": round(sum(rpes) / len(rpes), 1) if rpes else None,
+        }
+
+    courante = _stats_semaine(semaines[0])
+    precedente = _stats_semaine(semaines[1]) if len(semaines) > 1 else None
+    delta_km = round(courante["km"] - precedente["km"], 1) if precedente else None
+
+    # Message de synthèse
+    taux = courante["seances_faites"] / courante["seances_prevues"] if courante["seances_prevues"] else 0
+    if taux >= 1:
+        message = "Semaine complète, bravo ✅"
+    elif taux >= 0.7:
+        message = "Bonne semaine — presque toutes les séances faites"
+    elif taux > 0:
+        message = "Semaine partielle — essaie de caler les séances manquées"
+    else:
+        message = "Aucune séance validée la semaine dernière"
+
+    return {
+        "resume": {
+            "numero_semaine": semaines[0].numero_semaine,
+            "date_debut": str(semaines[0].date_debut),
+            **courante,
+            "delta_km": delta_km,
+            "message": message,
+        }
+    }
+
+
+# ---------------------------------------------------------------------------
+# Événements — tests, courses, pour annoter les graphiques
+# ---------------------------------------------------------------------------
+
+def evenements(db: Session, utilisateur_id: int) -> dict[str, Any]:
+    """Événements (tests d'évaluation, objectif course) mappés sur les numéros de semaine."""
+    from models import JournalEvaluationSeance as _JES, ObjectifCourse
+
+    semaines = (
+        db.execute(
+            select(SemaineEntrainement.numero_semaine, SemaineEntrainement.date_debut)
+            .join(Macrocycle, SemaineEntrainement.macrocycle_id == Macrocycle.id)
+            .where(Macrocycle.utilisateur_id == utilisateur_id)
+            .order_by(SemaineEntrainement.date_debut)
+        )
+        .all()
+    )
+
+    def _semaine_pour(d: date) -> int | None:
+        for s in semaines:
+            if s.date_debut <= d < s.date_debut + timedelta(days=7):
+                return s.numero_semaine
+        return None
+
+    evts = []
+    evaluations = (
+        db.query(_JES)
+        .filter(_JES.utilisateur_id == utilisateur_id)
+        .order_by(_JES.evalue_le)
+        .all()
+    )
+    for ev in evaluations:
+        sem = _semaine_pour(ev.evalue_le.date())
+        if sem is not None:
+            evts.append({"semaine": sem, "type": "test", "label": "🧪 Test", "date": str(ev.evalue_le.date())})
+
+    objectif = (
+        db.query(ObjectifCourse)
+        .filter(ObjectifCourse.utilisateur_id == utilisateur_id)
+        .order_by(ObjectifCourse.cree_le.desc())
+        .first()
+    )
+    if objectif:
+        sem = _semaine_pour(objectif.date_course)
+        if sem is not None:
+            evts.append({"semaine": sem, "type": "course", "label": "🏁 Course", "date": str(objectif.date_course)})
+
+    return {"evenements": evts}
+
+
+# ---------------------------------------------------------------------------
+# Détail des séances d'une semaine (pour le clic sur un graphique)
+# ---------------------------------------------------------------------------
+
+def seances_semaine(db: Session, utilisateur_id: int, numero_semaine: int) -> dict[str, Any]:
+    """Liste des séances (planifiées + réalisées) de la semaine donnée."""
+    rows = (
+        db.execute(
+            select(SeanceEntrainement, SemaineEntrainement.date_debut)
+            .join(SemaineEntrainement, SeanceEntrainement.semaine_id == SemaineEntrainement.id)
+            .join(Macrocycle, SemaineEntrainement.macrocycle_id == Macrocycle.id)
+            .where(
+                Macrocycle.utilisateur_id == utilisateur_id,
+                SemaineEntrainement.numero_semaine == numero_semaine,
+            )
+            .order_by(SeanceEntrainement.date_seance)
+        )
+        .all()
+    )
+    seances = []
+    for row in rows:
+        s = row.SeanceEntrainement
+        if s.type_seance == TypeSeance.REPOS:
+            continue
+        j = s.journal
+        seances.append(
+            {
+                "id": s.id,
+                "date": str(s.date_seance),
+                "titre": s.titre,
+                "type_seance": s.type_seance.value,
+                "zone_cible": s.zone_cible.value if s.zone_cible else None,
+                "completee": bool(j and j.completee),
+                "distance_km": j.distance_reelle_km if j else None,
+                "duree_min": j.duree_reelle_min if j else None,
+                "rpe": j.rpe if j else None,
+            }
+        )
+    return {"numero_semaine": numero_semaine, "seances": seances}

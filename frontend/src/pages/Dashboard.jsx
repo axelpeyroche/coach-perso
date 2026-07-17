@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { getBiometrieRecuperation, getTendancesPhysiologiques, getObjectifCourse, setObjectifCourse, getStatutProgramme, initialiserProgramme, supprimerProgramme, resetOnboarding, getProfilFC, patchProfilFC, getAnalyseObjectif, recalibrerProgramme, getPreferences, patchPreferences, getAlerteFatigue, signalerBlessure } from "../api";
+import { getBiometrieRecuperation, getTendancesPhysiologiques, getObjectifCourse, setObjectifCourse, getStatutProgramme, initialiserProgramme, supprimerProgramme, resetOnboarding, getProfilFC, patchProfilFC, getAnalyseObjectif, recalibrerProgramme, getPreferences, patchPreferences, getAlerteFatigue, signalerBlessure, getSemaineEnCours, getResumeHebdo } from "../api";
 import { useAuth } from "../AuthContext";
 import Card from "../components/Card";
 import StatTile from "../components/StatTile";
@@ -312,6 +312,96 @@ function BlocAnalyseObjectif() {
         </div>
       </div>
     </Card>
+  );
+}
+
+// ─── Score de forme ─────────────────────────────────────────────────────────
+
+function ScoreForme({ forme }) {
+  if (!forme) return null;
+  const { score, message } = forme;
+  const couleur = score >= 75 ? "#22c55e" : score >= 50 ? "#eab308" : score >= 30 ? "#f97316" : "#ef4444";
+  // Jauge circulaire SVG
+  const r = 34, c = 2 * Math.PI * r;
+  return (
+    <Card title="">
+      <div className="flex items-center gap-4">
+        <div className="relative shrink-0" style={{ width: 84, height: 84 }}>
+          <svg width="84" height="84" viewBox="0 0 84 84">
+            <circle cx="42" cy="42" r={r} fill="none" stroke="currentColor" className="text-gray-100 dark:text-gray-800" strokeWidth="8" />
+            <circle cx="42" cy="42" r={r} fill="none" stroke={couleur} strokeWidth="8" strokeLinecap="round"
+              strokeDasharray={c} strokeDashoffset={c * (1 - score / 100)}
+              transform="rotate(-90 42 42)" style={{ transition: "stroke-dashoffset 0.6s ease" }} />
+          </svg>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="text-2xl font-black text-gray-900 dark:text-white">{score}</span>
+          </div>
+        </div>
+        <div className="min-w-0">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Forme du jour</p>
+          <p className="text-sm font-bold text-gray-900 dark:text-white mt-0.5">{message}</p>
+          <p className="text-xs text-gray-400 mt-1">Calculé depuis ta charge d'entraînement (ACWA) et tes RPE récents.</p>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+// ─── Jauge semaine en cours ─────────────────────────────────────────────────
+
+function JaugeSemaine() {
+  const { data } = useQuery({ queryKey: ["semaine-en-cours"], queryFn: getSemaineEnCours, staleTime: 5 * 60 * 1000 });
+  const s = data?.semaine;
+  if (!s) return null;
+  const pctKm = s.km_prevu > 0 ? Math.min(100, (s.km_fait / s.km_prevu) * 100) : 0;
+  const pctSeances = s.seances_prevues > 0 ? Math.min(100, (s.seances_faites / s.seances_prevues) * 100) : 0;
+  return (
+    <Card title={`📅 Semaine ${s.numero_semaine} en cours`}>
+      <div className="space-y-3">
+        {s.km_prevu > 0 && (
+          <div>
+            <div className="flex items-baseline justify-between mb-1">
+              <span className="text-xs text-gray-500 dark:text-gray-400">Kilomètres course</span>
+              <span className="text-sm font-bold text-gray-900 dark:text-white">{s.km_fait} <span className="text-gray-400 font-normal">/ {s.km_prevu} km</span></span>
+            </div>
+            <div className="h-2.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+              <div className="h-full rounded-full bg-brand transition-all" style={{ width: `${pctKm}%` }} />
+            </div>
+          </div>
+        )}
+        <div>
+          <div className="flex items-baseline justify-between mb-1">
+            <span className="text-xs text-gray-500 dark:text-gray-400">Séances validées</span>
+            <span className="text-sm font-bold text-gray-900 dark:text-white">{s.seances_faites} <span className="text-gray-400 font-normal">/ {s.seances_prevues}</span></span>
+          </div>
+          <div className="h-2.5 rounded-full bg-gray-100 dark:bg-gray-800 overflow-hidden">
+            <div className="h-full rounded-full bg-green-500 transition-all" style={{ width: `${pctSeances}%` }} />
+          </div>
+        </div>
+        <p className="text-xs text-gray-400">
+          {s.jours_restants} jour{s.jours_restants > 1 ? "s" : ""} restant{s.jours_restants > 1 ? "s" : ""} · phase {s.macrophase}
+        </p>
+      </div>
+    </Card>
+  );
+}
+
+// ─── Résumé hebdo ───────────────────────────────────────────────────────────
+
+function ResumeHebdo() {
+  const { data } = useQuery({ queryKey: ["resume-hebdo"], queryFn: getResumeHebdo, staleTime: 30 * 60 * 1000 });
+  const r = data?.resume;
+  if (!r || r.seances_faites === 0) return null;
+  return (
+    <div className="rounded-2xl bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800 px-4 py-3">
+      <p className="text-xs font-semibold text-indigo-500 dark:text-indigo-400 uppercase tracking-wide">Bilan semaine {r.numero_semaine}</p>
+      <p className="text-sm text-indigo-900 dark:text-indigo-200 mt-1">
+        <strong>{r.km} km</strong> · {r.seances_faites}/{r.seances_prevues} séances
+        {r.rpe_moyen != null ? <> · RPE moyen <strong>{r.rpe_moyen}</strong></> : null}
+        {r.delta_km != null ? <> · {r.delta_km >= 0 ? "+" : ""}{r.delta_km} km vs sem. précédente</> : null}
+      </p>
+      <p className="text-xs text-indigo-600 dark:text-indigo-400 mt-1">{r.message}</p>
+    </div>
   );
 }
 
@@ -873,6 +963,15 @@ export default function Dashboard() {
 
       {/* Alertes fatigue RPE */}
       <AlerteFatigueRPE />
+
+      {/* Bilan de la semaine passée */}
+      <ResumeHebdo />
+
+      {/* Forme du jour + progression de la semaine */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <ScoreForme forme={recup?.forme} />
+        <JaugeSemaine />
+      </div>
 
       {/* Bouton blessure */}
       <div className="flex justify-end">

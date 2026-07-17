@@ -125,6 +125,30 @@ export const getDistributionVolume = (macrocycle_id) =>
 export const getBiometrieRecuperation = (macrocycle_id) =>
   api.get("/analytics/biometrie-recuperation", { params: macrocycle_id ? { macrocycle_id } : {} }).then((r) => r.data);
 
+export const getZonesFC = () =>
+  api.get("/analytics/zones-fc").then((r) => r.data);
+
+export const getAllureEndurance = () =>
+  api.get("/analytics/allure-endurance").then((r) => r.data);
+
+export const getPredictionCourse = () =>
+  api.get("/analytics/prediction-course").then((r) => r.data);
+
+export const getRecords = () =>
+  api.get("/analytics/records").then((r) => r.data);
+
+export const getSemaineEnCours = () =>
+  api.get("/analytics/semaine-en-cours").then((r) => r.data);
+
+export const getResumeHebdo = () =>
+  api.get("/analytics/resume-hebdo").then((r) => r.data);
+
+export const getEvenements = () =>
+  api.get("/analytics/evenements").then((r) => r.data);
+
+export const getSeancesSemaine = (numero_semaine) =>
+  api.get(`/analytics/semaine/${numero_semaine}/seances`).then((r) => r.data);
+
 // --- Import iOS Shortcuts ---
 export const getImportToken      = () => api.get("/auth/import-token").then((r) => r.data);
 export const regenererImportToken = () => api.post("/auth/import-token/regenerer").then((r) => r.data);
