@@ -856,11 +856,6 @@ export default function Profil({ dark, setDark }) {
         </div>
       </Section>
 
-      {/* Intégrations */}
-      <Section title="Intégrations">
-        <ShortcutIOS />
-      </Section>
-
       {/* Apparence */}
       <Section title="Apparence">
         <div className="flex items-center justify-between py-3 border-b border-gray-100 dark:border-gray-800">
