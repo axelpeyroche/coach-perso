@@ -961,8 +961,9 @@ class JournalSeanceSchema(BaseModel):
     completee: bool = True
     rpe: Optional[float] = Field(None, ge=1, le=10)
     rpe_cible: Optional[float] = Field(None, ge=1, le=10)
+    type_course: Optional[str] = None  # "route" | "trail"
     distance_reelle_km: Optional[float] = None
-    distance_repos_km: Optional[float] = None  # rÃ©cupÃ©ration trottinÃ©e entre blocs
+    distance_repos_km: Optional[float] = None  # récupération trottinée entre blocs
     duree_reelle_min: Optional[int] = None
     dplus_reel_m: Optional[int] = None
     fc_moyenne_bpm: Optional[int] = None
@@ -1246,6 +1247,7 @@ def journaliser_seance(
         completee=payload.completee,
         rpe=payload.rpe,
         rpe_cible=rpe_cible_final,
+        type_course=payload.type_course or current_user.type_course,
         distance_reelle_km=distance_km,
         distance_repos_km=round(payload.distance_repos_km, 2) if payload.distance_repos_km is not None else None,
         duree_reelle_min=payload.duree_reelle_min,
@@ -1498,6 +1500,7 @@ def modifier_journal_seance(
     if not seance or not seance.journal:
         raise HTTPException(404, "Journal introuvable")
     j = seance.journal
+    if payload.type_course is not None: j.type_course = payload.type_course
     if payload.rpe is not None: j.rpe = payload.rpe
     if payload.notes is not None: j.notes = payload.notes
     if payload.duree_reelle_min is not None: j.duree_reelle_min = payload.duree_reelle_min

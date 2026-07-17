@@ -387,6 +387,7 @@ function FormulaireLog({ seance, onClose, onDone, modeEdit = false }) {
     const v = Math.round(j.distance_repos_km * 100) / 100;
     return String(v);
   });
+  const [typeCourse, setTypeCourse] = useState(() => (modeEdit && j?.type_course) ? j.type_course : "route");
   const setBloc = (i, k, v) => setBlocs(b => b.map((bloc, idx) => idx === i ? { ...bloc, [k]: v } : bloc));
 
   const mut = useMutation({
@@ -408,7 +409,7 @@ function FormulaireLog({ seance, onClose, onDone, modeEdit = false }) {
         }));
         if (distRepos) nums.distance_repos_km = parseFloat(distRepos);
       }
-      const payload = { rpe, notes: notes || undefined, ...nums, details_intervalles: detailsIntervalles };
+      const payload = { rpe, notes: notes || undefined, ...nums, details_intervalles: detailsIntervalles, ...(isCourse ? { type_course: typeCourse } : {}) };
       if (modeEdit) return modifierJournal(seance.id, payload);
       return journaliserSeance(seance.id, payload);
     },
@@ -456,6 +457,18 @@ function FormulaireLog({ seance, onClose, onDone, modeEdit = false }) {
               onChange={e => setDistRepos(e.target.value)}
               className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
           </div>
+        </div>
+      )}
+
+      {/* Sélecteur Route / Trail pour toutes les séances COURSE */}
+      {isCourse && (
+        <div className="flex gap-2">
+          {["route", "trail"].map(t => (
+            <button key={t} type="button" onClick={() => setTypeCourse(t)}
+              className={`flex-1 py-1.5 rounded-xl text-xs font-semibold border transition-colors ${typeCourse === t ? "bg-brand text-white border-brand" : "border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-brand hover:text-brand"}`}>
+              {t === "route" ? "🛣️ Route" : "🏔️ Trail"}
+            </button>
+          ))}
         </div>
       )}
 

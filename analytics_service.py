@@ -197,28 +197,36 @@ def distribution_volume(
         ).scalars().all()
 
         km_total = 0.0
+        km_route = 0.0
+        km_trail = 0.0
         dplus_total = 0
         for j in journaux_course:
             dplus_total += j.dplus_reel_m or 0
+            km_j = 0.0
             if j.distance_reelle_km is not None:
-                km_total += j.distance_reelle_km
+                km_j = j.distance_reelle_km
             elif j.details_intervalles:
-                # Reconstruire depuis les blocs (séances fractionnées)
                 try:
                     blocs = _json.loads(j.details_intervalles)
-                    km_total += sum(b.get("distance_km") or 0 for b in blocs)
-                    km_total += j.distance_repos_km or 0
+                    km_j = sum(b.get("distance_km") or 0 for b in blocs)
+                    km_j += j.distance_repos_km or 0
                 except Exception:
                     pass
             elif j.duree_reelle_min:
-                # Estimation Z2 par défaut
-                km_total += j.duree_reelle_min * 10.0 / 60.0
+                km_j = j.duree_reelle_min * 10.0 / 60.0
+            km_total += km_j
+            if j.type_course == "trail":
+                km_trail += km_j
+            else:
+                km_route += km_j
 
         class _StatsCourse:
-            def __init__(self, km, dplus):
+            def __init__(self, km, km_r, km_t, dplus):
                 self.km_total = km
+                self.km_route = km_r
+                self.km_trail = km_t
                 self.dplus_total = dplus
-        stats_course = _StatsCourse(round(km_total, 2), dplus_total)
+        stats_course = _StatsCourse(round(km_total, 2), round(km_route, 2), round(km_trail, 2), dplus_total)
 
         volume_muscu = {cat.value: 0 for cat in CategorieMusculaire}
 
@@ -279,6 +287,8 @@ def distribution_volume(
                 "macrophase": semaine.macrophase.value,
                 "date_debut": str(semaine.date_debut),
                 "km_course": round(stats_course.km_total or 0.0, 2),
+                "km_route": round(stats_course.km_route or 0.0, 2),
+                "km_trail": round(stats_course.km_trail or 0.0, 2),
                 "dplus_m": stats_course.dplus_total or 0,
                 "multiplicateur_volume": semaine.multiplicateur_volume,
                 "volume_muscu": volume_muscu,

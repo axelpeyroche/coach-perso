@@ -557,6 +557,7 @@ class JournalSeance(Base):
     rpe_cible: Mapped[Optional[float]] = mapped_column(Float)
 
     # Réels course
+    type_course: Mapped[Optional[str]] = mapped_column(String(20))  # "route" | "trail"
     distance_reelle_km: Mapped[Optional[float]] = mapped_column(Float)
     distance_repos_km: Mapped[Optional[float]] = mapped_column(Float)
     duree_reelle_min: Mapped[Optional[int]] = mapped_column(Integer)
