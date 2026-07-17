@@ -6,10 +6,20 @@ import {
 import { getTendancesPhysiologiques, getDistributionVolume, getBiometrieRecuperation } from "../api";
 import Card from "../components/Card";
 
-export default function Analytics() {
+export default function Analytics({ dark }) {
   const { data: physio } = useQuery({ queryKey: ["tendances"], queryFn: () => getTendancesPhysiologiques() });
   const { data: volume } = useQuery({ queryKey: ["volume"], queryFn: () => getDistributionVolume() });
   const { data: recup } = useQuery({ queryKey: ["recuperation"], queryFn: () => getBiometrieRecuperation() });
+
+  const ttStyle = {
+    backgroundColor: dark ? "#1f2937" : "#ffffff",
+    border: `1px solid ${dark ? "#374151" : "#e5e7eb"}`,
+    borderRadius: "10px",
+    color: dark ? "#f9fafb" : "#111827",
+    fontSize: "12px",
+    boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+  };
+  const ttLabelStyle = { color: dark ? "#9ca3af" : "#6b7280", marginBottom: 4 };
 
   const vmaData = physio?.vma?.map((v) => ({ date: v.date.slice(5), vma: v.valeur })) ?? [];
   const volumeData = volume?.semaines?.map((s) => ({ sem: `S${s.numero_semaine}`, km_route: s.km_route ?? s.km_course ?? 0, km_trail: s.km_trail ?? 0, push: s.volume_muscu?.push ?? 0, pull: s.volume_muscu?.pull ?? 0, jambes: s.volume_muscu?.jambes ?? 0 })) ?? [];
@@ -31,7 +41,7 @@ export default function Analytics() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                 <XAxis dataKey="date" tick={{ fontSize: 11 }} />
                 <YAxis domain={["auto", "auto"]} tick={{ fontSize: 11 }} width={32} />
-                <Tooltip formatter={(v) => [`${v} km/h`, "VMA"]} />
+                <Tooltip formatter={(v) => [`${v} km/h`, "VMA"]} contentStyle={ttStyle} labelStyle={ttLabelStyle} />
                 <Line type="monotone" dataKey="vma" stroke="#22c55e" strokeWidth={2} dot={{ r: 4 }} />
               </LineChart>
             </ResponsiveContainer>
@@ -47,7 +57,7 @@ export default function Analytics() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                 <XAxis dataKey="sem" tick={{ fontSize: 11 }} />
                 <YAxis tick={{ fontSize: 11 }} width={32} />
-                <Tooltip formatter={(v, name) => [`${v} km`, name]} />
+                <Tooltip formatter={(v, name) => [`${v} km`, name]} contentStyle={ttStyle} labelStyle={ttLabelStyle} />
                 <Legend />
                 <Bar dataKey="km_route" name="Route" stackId="a" fill="#22c55e" radius={[0, 0, 0, 0]} />
                 <Bar dataKey="km_trail" name="Trail" stackId="a" fill="#f97316" radius={[4, 4, 0, 0]} />
@@ -65,7 +75,7 @@ export default function Analytics() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                 <XAxis dataKey="sem" tick={{ fontSize: 11 }} />
                 <YAxis tick={{ fontSize: 11 }} width={32} />
-                <Tooltip />
+                <Tooltip contentStyle={ttStyle} labelStyle={ttLabelStyle} />
                 <Legend />
                 <Bar dataKey="push" name="Push" fill="#f97316" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="pull" name="Pull" fill="#3b82f6" radius={[4, 4, 0, 0]} />
@@ -84,7 +94,7 @@ export default function Analytics() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                 <XAxis dataKey="sem" tick={{ fontSize: 11 }} />
                 <YAxis tick={{ fontSize: 11 }} width={32} />
-                <Tooltip />
+                <Tooltip contentStyle={ttStyle} labelStyle={ttLabelStyle} />
                 <Legend />
                 <ReferenceLine y={1.5} stroke="#ef4444" strokeDasharray="4 4" label={{ value: "⚠️ 1.5", fontSize: 11, fill: "#ef4444" }} />
                 <Line type="monotone" dataKey="ratio" name="ACWA" stroke="#f97316" strokeWidth={2} dot={{ r: 4 }} />
@@ -118,7 +128,7 @@ export default function Analytics() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                 <XAxis dataKey="date" tick={{ fontSize: 11 }} />
                 <YAxis domain={[0, 10]} tick={{ fontSize: 11 }} width={32} />
-                <Tooltip formatter={(v, name) => [v != null ? v.toFixed(1) : "—", name]} itemStyle={{ color: "inherit" }} />
+                <Tooltip formatter={(v, name) => [v != null ? v.toFixed(1) : "—", name]} contentStyle={ttStyle} labelStyle={ttLabelStyle} />
                 <Legend />
                 <Line type="monotone" dataKey="cible" name="RPE cible" stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="4 4" dot={{ r: 3 }} connectNulls={false} />
                 <Line type="monotone" dataKey="reel" name="RPE réel" stroke="#ef4444" strokeWidth={2} dot={{ r: 3 }} />

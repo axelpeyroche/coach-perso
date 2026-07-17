@@ -186,7 +186,7 @@ export default function App() {
                   <Route path="/programme"  element={<Programme />} />
                   <Route path="/evaluation" element={<Evaluation />} />
                   <Route path="/calendrier" element={<Calendrier />} />
-                  <Route path="/analytics"  element={<Analytics />} />
+                  <Route path="/analytics"  element={<Analytics dark={dark} />} />
                   <Route path="/timers"     element={<Timers />} />
                   <Route path="/profil"     element={<Profil dark={dark} setDark={setDark} />} />
                 </Routes>
