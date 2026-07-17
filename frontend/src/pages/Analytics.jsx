@@ -6,6 +6,16 @@ import {
 import { getTendancesPhysiologiques, getDistributionVolume, getBiometrieRecuperation } from "../api";
 import Card from "../components/Card";
 
+function WeekTick({ x, y, payload, data, dark }) {
+  const entry = data?.find(d => d.sem === payload.value);
+  return (
+    <g transform={`translate(${x},${y})`}>
+      <text x={0} y={0} dy={12} textAnchor="middle" fontSize={11} fill={dark ? "#9ca3af" : "#6b7280"}>{payload.value}</text>
+      {entry?.label && <text x={0} y={0} dy={24} textAnchor="middle" fontSize={9} fill={dark ? "#6b7280" : "#9ca3af"}>{entry.label}</text>}
+    </g>
+  );
+}
+
 export default function Analytics({ dark }) {
   const { data: physio } = useQuery({ queryKey: ["tendances"], queryFn: () => getTendancesPhysiologiques() });
   const { data: volume } = useQuery({ queryKey: ["volume"], queryFn: () => getDistributionVolume() });
@@ -22,23 +32,29 @@ export default function Analytics({ dark }) {
   const ttLabelStyle = { color: dark ? "#9ca3af" : "#6b7280", marginBottom: 4 };
 
   const fmtDate = (iso) => { const [y,m,d] = iso.split("-"); return `${d}/${m}/${y}`; };
-  const vmaData = physio?.vma?.map((v) => ({ date: v.date.slice(5), fullDate: v.date, vma: v.valeur })) ?? [];
-  const volumeData = volume?.semaines?.map((s) => ({ sem: `S${s.numero_semaine}`, km_route: s.km_route ?? s.km_course ?? 0, km_trail: s.km_trail ?? 0, push: s.volume_muscu?.push ?? 0, pull: s.volume_muscu?.pull ?? 0, jambes: s.volume_muscu?.jambes ?? 0 })) ?? [];
+  const fmtJM = (iso) => { const [,m,d] = iso.split("-"); return `${d}/${m}`; };
+  const addDays = (iso, n) => { const d = new Date(iso); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+
+  const vmaData = physio?.vma?.map((v) => ({ date: fmtDate(v.date), vma: v.valeur })) ?? [];
+  const volumeData = volume?.semaines?.map((s) => ({ sem: `S${s.numero_semaine}`, dateDebut: s.date_debut, km_route: s.km_route ?? s.km_course ?? 0, km_trail: s.km_trail ?? 0, push: s.volume_muscu?.push ?? 0, pull: s.volume_muscu?.pull ?? 0, jambes: s.volume_muscu?.jambes ?? 0 })) ?? [];
 
   // Plage de semaines commune à tous les graphiques (S1…Sn)
   const allSems = volumeData.map(s => s.sem);
+  const semDateMap = Object.fromEntries(volumeData.map(s => [s.sem, s.dateDebut]));
 
   const acwaByWeek = Object.fromEntries((recup?.acwa ?? []).map(a => [`S${a.semaine}`, a]));
   const acwaData = allSems.map(sem => ({
     sem,
-    ratio:     acwaByWeek[sem]?.ratio           ?? null,
-    aigue:     acwaByWeek[sem]?.charge_aigue_km ?? null,
+    label: semDateMap[sem] ? `${fmtJM(semDateMap[sem])} - ${fmtJM(addDays(semDateMap[sem], 6))}` : "",
+    ratio:     acwaByWeek[sem]?.ratio               ?? null,
+    aigue:     acwaByWeek[sem]?.charge_aigue_km     ?? null,
     chronique: acwaByWeek[sem]?.charge_chronique_km ?? null,
   }));
 
   const rpeByWeek = Object.fromEntries((recup?.tendance_rpe ?? []).map(r => [`S${r.semaine}`, r]));
   const rpeData = allSems.map(sem => ({
     sem,
+    label: semDateMap[sem] ? `${fmtJM(semDateMap[sem])} - ${fmtJM(addDays(semDateMap[sem], 6))}` : "",
     reel:  rpeByWeek[sem]?.rpe_reel  ?? null,
     cible: rpeByWeek[sem]?.rpe_cible ?? null,
   }));
@@ -58,7 +74,7 @@ export default function Analytics({ dark }) {
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                 <XAxis dataKey="date" tick={{ fontSize: 11 }} />
                 <YAxis domain={["auto", "auto"]} tick={{ fontSize: 11 }} width={32} />
-                <Tooltip formatter={(v) => [`${v} km/h`, "VMA"]} labelFormatter={(_, payload) => payload?.[0]?.payload?.fullDate ? fmtDate(payload[0].payload.fullDate) : ""} contentStyle={ttStyle} labelStyle={ttLabelStyle} />
+                <Tooltip formatter={(v) => [`${v} km/h`, "VMA"]} contentStyle={ttStyle} labelStyle={ttLabelStyle} />
                 <Line type="monotone" dataKey="vma" stroke="#22c55e" strokeWidth={2} dot={{ r: 4 }} />
               </LineChart>
             </ResponsiveContainer>
@@ -106,12 +122,12 @@ export default function Analytics({ dark }) {
       <Card title="⚡ Ratio ACWA — Charge aiguë / chronique">
         {acwaData.length ? (
           <div className="w-full overflow-x-hidden">
-            <ResponsiveContainer width="100%" height={220}>
+            <ResponsiveContainer width="100%" height={240}>
               <LineChart data={acwaData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="sem" tick={{ fontSize: 11 }} />
+                <XAxis dataKey="sem" height={40} tick={<WeekTick data={acwaData} dark={dark} />} />
                 <YAxis tick={{ fontSize: 11 }} width={32} />
-                <Tooltip contentStyle={ttStyle} labelStyle={ttLabelStyle} />
+                <Tooltip formatter={(v, name) => [v != null ? Number(v).toFixed(2) : "—", name]} contentStyle={ttStyle} labelStyle={ttLabelStyle} />
                 <Legend />
                 <ReferenceLine y={1.5} stroke="#ef4444" strokeDasharray="4 4" label={{ value: "⚠️ 1.5", fontSize: 11, fill: "#ef4444" }} />
                 <Line type="monotone" dataKey="ratio" name="ACWA" stroke="#f97316" strokeWidth={2} dot={{ r: 4 }} />
@@ -140,10 +156,10 @@ export default function Analytics({ dark }) {
       <Card title="😓 RPE réel vs cible">
         {rpeData.length ? (
           <div className="w-full overflow-x-hidden">
-            <ResponsiveContainer width="100%" height={200}>
+            <ResponsiveContainer width="100%" height={220}>
               <LineChart data={rpeData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="sem" tick={{ fontSize: 11 }} />
+                <XAxis dataKey="sem" height={40} tick={<WeekTick data={rpeData} dark={dark} />} />
                 <YAxis domain={[0, 10]} tick={{ fontSize: 11 }} width={32} />
                 <Tooltip formatter={(v, name) => [v != null ? v.toFixed(1) : "—", name]} contentStyle={ttStyle} labelStyle={ttLabelStyle} />
                 <Legend />

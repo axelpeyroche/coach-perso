@@ -353,11 +353,15 @@ def biometrie_recuperation(
 
     # Agréger par semaine (moyenne RPE réel et cible)
     from collections import defaultdict
+    _RPE_PAR_ZONE = {"Z1": 5.0, "Z2": 6.0, "Z3": 7.0, "Z4": 8.0, "Z5": 9.0}
     _rpe_par_sem: dict[int, dict] = defaultdict(lambda: {"rpe_reel": [], "rpe_cible": []})
     for j in journaux:
         _rpe_par_sem[j.JournalSeance.seance.semaine.numero_semaine]["rpe_reel"].append(j.JournalSeance.rpe)
-        if j.JournalSeance.rpe_cible is not None:
-            _rpe_par_sem[j.JournalSeance.seance.semaine.numero_semaine]["rpe_cible"].append(j.JournalSeance.rpe_cible)
+        rpe_c = j.JournalSeance.rpe_cible
+        if rpe_c is None and j.JournalSeance.seance.zone_cible:
+            rpe_c = _RPE_PAR_ZONE.get(j.JournalSeance.seance.zone_cible.value)
+        if rpe_c is not None:
+            _rpe_par_sem[j.JournalSeance.seance.semaine.numero_semaine]["rpe_cible"].append(rpe_c)
 
     tendance_rpe = [
         {
