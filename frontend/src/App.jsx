@@ -68,7 +68,7 @@ const NAV = [
   { to: "/programme",  label: "Programme",  IconC: Icon.Programme },
   { to: "/calendrier", label: "Calendrier", IconC: Icon.Calendrier },
   { to: "/evaluation", label: "Évaluation", IconC: Icon.Evaluation, mobileHide: true },
-  { to: "/analytics",  label: "Stats",      IconC: Icon.Stats,      mobileHide: true },
+  { to: "/analytics",  label: "Stats",      IconC: Icon.Stats },
   { to: "/timers",     label: "Timers",     IconC: Icon.Timers },
   { to: "/profil",     label: "Profil",     IconC: Icon.Profil },
 ];
@@ -96,7 +96,7 @@ function BottomLink({ to, label, IconC }) {
         isActive ? "text-brand" : "text-gray-400 dark:text-gray-500"
       )}>
       <IconC />
-      <span className="text-[10px] mt-0.5">{label}</span>
+      <span className="text-[9px] mt-0.5 leading-tight">{label}</span>
     </NavLink>
   );
 }
