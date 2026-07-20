@@ -2769,9 +2769,10 @@ def corriger_emom_3e_seance(
         ],
     }
 
-    exercices_map = {e.slug: e for e in db.query(Exercice).all()}
+    exercices_map = {e.slug: e for e in db.query(VariationExercice).all()}
     nb_corriges = 0
 
+    from sqlalchemy import or_
     # Récupérer tous les EMOMs non complétés de l'utilisateur, groupés par semaine
     rows = (
         db.query(SeanceEntrainement, SemaineEntrainement.id.label("sem_id"))
@@ -2781,7 +2782,7 @@ def corriger_emom_3e_seance(
         .filter(
             Macrocycle.utilisateur_id == current_user.id,
             SeanceEntrainement.type_seance == TypeSeance.EMOM,
-            (JournalSeance.completee == None) | (JournalSeance.completee == False),
+            or_(JournalSeance.completee.is_(None), JournalSeance.completee == False),
         )
         .all()
     )
