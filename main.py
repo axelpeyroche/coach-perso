@@ -2713,6 +2713,67 @@ def signaler_blessure(
     return {"ok": True, "nb_seances_modifiees": len(seances), "fin_blessure": str(fin)}
 
 
+@app.post("/api/programme/corriger-durees-course", summary="Recalcule les durées des séances Z3-Z5 surestimées par calibration")
+def corriger_durees_course(
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(obtenir_session),
+):
+    """
+    Remet les durées correctes pour les séances fractionné/seuil (Z3-Z5) dont la durée
+    a été gonflée par le km_factor lors de la calibration.
+    La durée réelle de ces séances est fixe (structure échauffement + blocs + retour).
+    On la recalcule depuis le contenu seed original.
+    """
+    from seed_seances import MODULE1, MODULE2, MODULE3, _remplacer_duree_titre
+
+    # Construire un dictionnaire titre_base → duree_originale depuis les seeds
+    # (en prenant les titres sans calibration, donc avec les durées originales)
+    durees_originales: dict[str, int] = {}
+    for module in [MODULE1, MODULE2, MODULE3]:
+        for seances in module.values():
+            for s in seances:
+                if s.get("type") == TypeSeance.COURSE and s.get("duree_min"):
+                    zone = s.get("zone")
+                    if zone not in (ZoneCourse.Z1, ZoneCourse.Z2):
+                        # Clé : portion stable du titre avant " — X min"
+                        titre = s.get("titre", "")
+                        import re as _re
+                        base = _re.split(r"\s*—\s*\d+", titre)[0].strip()
+                        durees_originales[base] = s["duree_min"]
+
+    if not durees_originales:
+        return {"ok": True, "nb_corriges": 0}
+
+    import re as _re
+    seances = (
+        db.query(SeanceEntrainement)
+        .join(SemaineEntrainement)
+        .join(Macrocycle)
+        .filter(
+            Macrocycle.utilisateur_id == current_user.id,
+            SeanceEntrainement.type_seance == TypeSeance.COURSE,
+            SeanceEntrainement.zone_cible.in_([ZoneCourse.Z3, ZoneCourse.Z4, ZoneCourse.Z5]),
+        )
+        .all()
+    )
+
+    nb_corriges = 0
+    for s in seances:
+        titre = s.titre or ""
+        base = _re.split(r"\s*—\s*\d+", titre)[0].strip()
+        duree_orig = durees_originales.get(base)
+        if duree_orig and s.duree_cible_min != duree_orig:
+            # Corriger le titre et la durée
+            ancien = s.duree_cible_min
+            s.duree_cible_min = duree_orig
+            if ancien:
+                s.titre = _remplacer_duree_titre(titre, ancien, duree_orig)
+            nb_corriges += 1
+
+    db.commit()
+    return {"ok": True, "nb_corriges": nb_corriges}
+
+
 @app.post("/api/programme/corriger-emom", summary="Corrige les EMOM compléments mal affectés (bug logique inversée)")
 def corriger_emom_3e_seance(
     current_user: Utilisateur = Depends(get_current_user),

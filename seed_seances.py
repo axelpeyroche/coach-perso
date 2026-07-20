@@ -2019,7 +2019,11 @@ def calibrer_module(module_data: dict, km_factor: float = 1.0, amrap_factor: flo
             if t == TypeSeance.COURSE:
                 orig_dur = ns.get("duree_min")
                 orig_dplus = ns.get("dplus_m")
-                if orig_dur:
+                # Ne scaler que les sorties endurance (Z1/Z2) : les fractionnés/seuil (Z3-Z5)
+                # ont une durée dictée par leur structure (échauffement + blocs + retour).
+                zone = ns.get("zone")
+                scale_dur = zone in (ZoneCourse.Z1, ZoneCourse.Z2, None)
+                if orig_dur and scale_dur:
                     new_dur = max(20, round(orig_dur * km_factor / 5) * 5)
                     ns["duree_min"] = new_dur
                     titre = _remplacer_duree_titre(titre, orig_dur, new_dur)

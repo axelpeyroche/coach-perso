@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import api, { getToutesSemaines, journaliserSeance, validerRPE, getProfilFC, supprimerJournal, modifierJournal, planifierSeance, creerEvaluation, enregistrerDemiCooper, enregistrerMax1Min, enregistrerAmrapBenchmark, getExercicesEvaluation, getHistoriqueEvaluations, modifierEvaluation, supprimerEvaluation, corrigerEmom } from "../api";
+import api, { getToutesSemaines, journaliserSeance, validerRPE, getProfilFC, supprimerJournal, modifierJournal, planifierSeance, creerEvaluation, enregistrerDemiCooper, enregistrerMax1Min, enregistrerAmrapBenchmark, getExercicesEvaluation, getHistoriqueEvaluations, modifierEvaluation, supprimerEvaluation, corrigerEmom, corrigerDureesCourse } from "../api";
 import clsx from "clsx";
 
 
@@ -1037,9 +1037,11 @@ export default function Programme() {
 
   const qc = useQueryClient();
 
-  // Correction silencieuse des EMOM mal affectés (bug complément inversé) — une seule fois par session
+  // Corrections silencieuses au montage
   useEffect(() => {
-    corrigerEmom().then(() => qc.invalidateQueries({ queryKey: ["toutes-semaines"] })).catch(() => {});
+    Promise.allSettled([corrigerEmom(), corrigerDureesCourse()]).then(() =>
+      qc.invalidateQueries({ queryKey: ["toutes-semaines"] })
+    );
   }, []);
 
   const { data, isLoading, error } = useQuery({
