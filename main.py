@@ -1961,6 +1961,7 @@ def toutes_semaines_programme(current_user: Utilisateur = Depends(get_current_us
                         "heure_planifiee": seance.heure_planifiee,
                         "journal": {
                             "completee": seance.journal.completee,
+                            "enregistre_le": seance.journal.enregistre_le.strftime("%d/%m/%Y") if seance.journal.enregistre_le else None,
                             "rpe": seance.journal.rpe,
                             "notes": seance.journal.notes,
                             "duree_reelle_min": seance.journal.duree_reelle_min,
