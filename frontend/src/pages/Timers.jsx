@@ -303,6 +303,9 @@ function Minuteur({ circleSize }) {
     setRemaining(null);
   }
 
+  // Annule le rAF uniquement au démontage
+  useEffect(() => () => cancelAnimationFrame(rafRef.current), []);
+
   // Correction horloge murale quand l'onglet revient au premier plan
   useEffect(() => {
     function onVisible() {
@@ -316,10 +319,7 @@ function Minuteur({ circleSize }) {
       }
     }
     document.addEventListener("visibilitychange", onVisible);
-    return () => {
-      document.removeEventListener("visibilitychange", onVisible);
-      cancelAnimationFrame(rafRef.current);
-    };
+    return () => document.removeEventListener("visibilitychange", onVisible);
   }, [running]);
 
   return (
@@ -474,6 +474,9 @@ function Tabata({ circleSize }) {
     setTour(0);
   }
 
+  // Annule le rAF uniquement au démontage
+  useEffect(() => () => cancelAnimationFrame(rafRef.current), []);
+
   useEffect(() => {
     function onVisible() {
       if (!running || !stateRef.current.endTime) return;
@@ -486,10 +489,7 @@ function Tabata({ circleSize }) {
       }
     }
     document.addEventListener("visibilitychange", onVisible);
-    return () => {
-      document.removeEventListener("visibilitychange", onVisible);
-      cancelAnimationFrame(rafRef.current);
-    };
+    return () => document.removeEventListener("visibilitychange", onVisible);
   }, [running, tick]);
 
   if (phase !== null) {
