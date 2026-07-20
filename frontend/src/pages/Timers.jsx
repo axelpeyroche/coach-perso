@@ -341,8 +341,8 @@ function Chronometre({ circleSize }) {
         </button>
       </div>
 
-      {laps.length > 0 && (
-        <div className="w-full max-w-xs space-y-1 overflow-y-auto" style={{ maxHeight: "18vh" }}>
+      <div className="w-full max-w-xs overflow-y-auto" style={{ height: "18vh" }}>
+        <div className="space-y-1">
           {[...laps].reverse().map((t, i) => {
             const idx = laps.length - i;
             const prev = idx > 1 ? laps[idx - 2] : 0;
@@ -355,7 +355,7 @@ function Chronometre({ circleSize }) {
             );
           })}
         </div>
-      )}
+      </div>
     </div>
   );
 }
