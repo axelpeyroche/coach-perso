@@ -613,7 +613,7 @@ function PlanificationModal({ seance, onConfirm, onClose }) {
         <div className="flex items-center justify-between">
           <div>
             <p className="text-xs text-gray-400 font-medium uppercase tracking-wide">Planifier</p>
-            <p className="text-sm font-bold text-gray-900 dark:text-white truncate">{seance.titre}</p>
+            <p className="text-sm font-bold text-gray-900 dark:text-white break-words">{seance.titre}</p>
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 text-2xl leading-none">×</button>
         </div>
@@ -773,7 +773,7 @@ function CarteSeance({ seance, zonesFC }) {
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 min-w-0">
-            <p className="text-sm font-semibold text-gray-900 dark:text-white leading-snug truncate">{(() => {
+            <p className="text-sm font-semibold text-gray-900 dark:text-white leading-snug break-words">{(() => {
               const dureeCorrecte = dureeReelleSeance(seance);
               if (dureeCorrecte && seance.duree_cible_min && dureeCorrecte !== seance.duree_cible_min) {
                 return (seance.titre || "").replace(/—\s*\d+\s*min/, `— ${dureeCorrecte} min`);
@@ -970,7 +970,7 @@ function CarteSeance({ seance, zonesFC }) {
                   <div key={i} className="flex items-center justify-between px-3 py-2 bg-white dark:bg-gray-900 text-sm gap-2 min-w-0">
                     <div className="flex items-center gap-2 min-w-0 flex-1">
                       <span className="text-xs text-gray-400 w-4 shrink-0">{i + 1}.</span>
-                      <span className="font-medium text-gray-800 dark:text-gray-200 truncate">{ex.nom}</span>
+                      <span className="font-medium text-gray-800 dark:text-gray-200 break-words">{ex.nom}</span>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       {ex.duree_bloc_min && seance.type === "EMOM" && (

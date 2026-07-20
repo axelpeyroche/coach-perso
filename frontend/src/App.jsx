@@ -64,10 +64,10 @@ const Icon = {
 };
 
 const NAV = [
-  { to: "/",           label: "Dashboard",  IconC: Icon.Dashboard },
-  { to: "/programme",  label: "Programme",  IconC: Icon.Programme },
-  { to: "/calendrier", label: "Calendrier", IconC: Icon.Calendrier },
-  { to: "/evaluation", label: "Évaluation", IconC: Icon.Evaluation, mobileHide: true },
+  { to: "/",           label: "Dashboard",  mobileLabel: "Home",  IconC: Icon.Dashboard },
+  { to: "/programme",  label: "Programme",  mobileLabel: "Prog.", IconC: Icon.Programme },
+  { to: "/calendrier", label: "Calendrier", mobileLabel: "Cal.",  IconC: Icon.Calendrier },
+  { to: "/evaluation", label: "Évaluation", mobileLabel: "Éval.",  IconC: Icon.Evaluation },
   { to: "/analytics",  label: "Stats",      IconC: Icon.Stats },
   { to: "/timers",     label: "Timers",     IconC: Icon.Timers },
   { to: "/profil",     label: "Profil",     IconC: Icon.Profil },
@@ -88,7 +88,7 @@ function SidebarLink({ to, label, IconC }) {
   );
 }
 
-function BottomLink({ to, label, IconC }) {
+function BottomLink({ to, label, mobileLabel, IconC }) {
   return (
     <NavLink to={to} end={to === "/"}
       className={({ isActive }) => clsx(
@@ -96,9 +96,15 @@ function BottomLink({ to, label, IconC }) {
         isActive ? "text-brand" : "text-gray-400 dark:text-gray-500"
       )}>
       <IconC />
-      <span className="text-[9px] mt-0.5 leading-tight">{label}</span>
+      <span className="text-[9px] mt-0.5 leading-tight">{mobileLabel ?? label}</span>
     </NavLink>
   );
+}
+
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
+  return null;
 }
 
 function RequireAuth({ children }) {
@@ -181,6 +187,7 @@ export default function App() {
 
               {/* ── Contenu principal ── */}
               <main className="flex-1 md:ml-56 pt-14 md:pt-0 pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0 min-h-screen overflow-x-hidden w-full min-w-0">
+                <ScrollToTop />
                 <Routes>
                   <Route path="/"           element={<Dashboard />} />
                   <Route path="/programme"  element={<Programme />} />

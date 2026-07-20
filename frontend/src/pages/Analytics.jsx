@@ -15,6 +15,8 @@ function LineCursor({ x, y, width, height }) {
   return <line x1={x + width / 2} y1={y} x2={x + width / 2} y2={y + height} stroke="#9ca3af" strokeWidth={1} />;
 }
 
+const IS_MOBILE = typeof window !== "undefined" && window.innerWidth < 768;
+
 function WeekTick({ x, y, payload, data, dark }) {
   const entry = data?.find(d => d.sem === payload.value);
   const c1 = dark ? "#9ca3af" : "#6b7280";
@@ -22,7 +24,7 @@ function WeekTick({ x, y, payload, data, dark }) {
   return (
     <g transform={`translate(${x},${y + 4})`}>
       <text x={0} y={0} dy={0} textAnchor="middle" fontSize={11} fontWeight={600} fill={c1}>{payload.value}</text>
-      {entry?.label && <text x={0} y={0} dy={14} textAnchor="middle" fontSize={9} fill={c2}>{entry.label}</text>}
+      {!IS_MOBILE && entry?.label && <text x={0} y={0} dy={14} textAnchor="middle" fontSize={9} fill={c2}>{entry.label}</text>}
     </g>
   );
 }
@@ -275,7 +277,7 @@ export default function Analytics({ dark }) {
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={volumeData} onClick={handleChartClick} style={{ cursor: "pointer" }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="sem" height={40} tick={<WeekTick data={volumeData} dark={dark} />} />
+                <XAxis dataKey="sem" height={IS_MOBILE ? 20 : 40} tick={<WeekTick data={volumeData} dark={dark} />} />
                 <YAxis tick={{ fontSize: 11 }} width={32} />
                 <Tooltip formatter={(v, name) => [`${v} km`, name]} contentStyle={ttStyle} labelStyle={ttLabelStyle} cursor={<LineCursor />} />
                 <Legend />
@@ -296,7 +298,7 @@ export default function Analytics({ dark }) {
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={zonesFCData} onClick={handleChartClick} style={{ cursor: "pointer" }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="sem" height={40} tick={<WeekTick data={zonesFCData} dark={dark} />} />
+                <XAxis dataKey="sem" height={IS_MOBILE ? 20 : 40} tick={<WeekTick data={zonesFCData} dark={dark} />} />
                 <YAxis tick={{ fontSize: 11 }} width={32} />
                 <Tooltip formatter={(v, name) => [`${v} min`, name]} contentStyle={ttStyle} labelStyle={ttLabelStyle} cursor={<LineCursor />} />
                 <Legend />
@@ -341,7 +343,7 @@ export default function Analytics({ dark }) {
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={volumeData} onClick={handleChartClick} style={{ cursor: "pointer" }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="sem" height={40} tick={<WeekTick data={volumeData} dark={dark} />} />
+                <XAxis dataKey="sem" height={IS_MOBILE ? 20 : 40} tick={<WeekTick data={volumeData} dark={dark} />} />
                 <YAxis tick={{ fontSize: 11 }} width={32} />
                 <Tooltip contentStyle={ttStyle} labelStyle={ttLabelStyle} cursor={<LineCursor />} />
                 <Legend />
@@ -360,7 +362,7 @@ export default function Analytics({ dark }) {
             <ResponsiveContainer width="100%" height={240}>
               <LineChart data={acwaData} onClick={handleChartClick} style={{ cursor: "pointer" }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="sem" height={40} padding={{ left: 30, right: 30 }} tick={<WeekTick data={acwaData} dark={dark} />} />
+                <XAxis dataKey="sem" height={IS_MOBILE ? 20 : 40} padding={{ left: 30, right: 30 }} tick={<WeekTick data={acwaData} dark={dark} />} />
                 <YAxis tick={{ fontSize: 11 }} width={32} />
                 <Tooltip formatter={(v, name) => [v != null ? Number(v).toFixed(2) : "—", name]} contentStyle={ttStyle} labelStyle={ttLabelStyle} />
                 <Legend />
@@ -395,7 +397,7 @@ export default function Analytics({ dark }) {
             <ResponsiveContainer width="100%" height={220}>
               <LineChart data={rpeData} onClick={handleChartClick} style={{ cursor: "pointer" }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="sem" height={40} padding={{ left: 30, right: 30 }} tick={<WeekTick data={rpeData} dark={dark} />} />
+                <XAxis dataKey="sem" height={IS_MOBILE ? 20 : 40} padding={{ left: 30, right: 30 }} tick={<WeekTick data={rpeData} dark={dark} />} />
                 <YAxis domain={[0, 10]} tick={{ fontSize: 11 }} width={32} />
                 <Tooltip formatter={(v, name) => [v != null ? v.toFixed(1) : "—", name]} contentStyle={ttStyle} labelStyle={ttLabelStyle} />
                 <Legend />
