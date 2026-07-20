@@ -1038,22 +1038,21 @@ export default function Programme() {
   });
   const zonesFC = calcZonesFC(profilFC?.fc_max, profilFC?.fc_repos);
 
-  if (isLoading) return <Loader />;
-  if (error) return <Erreur msg={`Erreur : ${error.message}`} />;
-
   const semaines = data?.semaines ?? [];
-  if (semaines.length === 0)
-    return <Erreur msg="Aucun programme. Génère-en un depuis le tableau de bord." />;
-
   const idxCourant = idxSemaineCourante(semaines);
   const idx = semIdx !== null ? semIdx : idxCourant;
 
-  // Auto-scroll vers la semaine courante au premier chargement
+  // Auto-scroll vers la semaine courante — avant tout early return (règle des hooks)
   useEffect(() => {
     if (!navRef.current || semaines.length === 0) return;
     const btn = navRef.current.querySelectorAll("button")[idxCourant];
     if (btn) btn.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
   }, [idxCourant, semaines.length]);
+
+  if (isLoading) return <Loader />;
+  if (error) return <Erreur msg={`Erreur : ${error.message}`} />;
+  if (semaines.length === 0)
+    return <Erreur msg="Aucun programme. Génère-en un depuis le tableau de bord." />;
   const semaine = semaines[idx];
 
   const seancesVisibles = semaine?.seances?.filter(s => s.type !== "REPOS") ?? [];
