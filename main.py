@@ -2718,34 +2718,34 @@ def corriger_durees_course(
     current_user: Utilisateur = Depends(get_current_user),
     db: Session = Depends(obtenir_session),
 ):
-    """
-    Remet les durées correctes pour les séances fractionné/seuil (Z3-Z5) dont la durée
-    a été gonflée par le km_factor lors de la calibration.
-    La durée réelle de ces séances est fixe (structure échauffement + blocs + retour).
-    On la recalcule depuis le contenu seed original.
-    """
-    from seed_seances import MODULE1, MODULE2, MODULE3, _remplacer_duree_titre
-
     import re as _re
 
-    def _titre_sans_duree(t: str) -> str:
-        """Supprime uniquement le nombre de minutes dans '— X min' pour garder le reste comme clé."""
-        return _re.sub(r"(?<=—\s)\d+(?=\s*min)", "", t).strip()
+    def _parse_min(s: str) -> float:
+        """Convertit '2', '1:30' en minutes décimales."""
+        if ":" in s:
+            mm, ss = s.split(":")
+            return int(mm) + int(ss) / 60
+        return float(s)
 
-    # Clé = titre complet sans le nombre de minutes (ex: "Fractionné Z5 —  min (6×2 min R=2 min)")
-    # Cela différencie les variantes qui ont la même structure d'intervalles
-    durees_originales: dict[str, int] = {}
-    for module in [MODULE1, MODULE2, MODULE3]:
-        for seances_list in module.values():
-            for s in seances_list:
-                if s.get("type") == TypeSeance.COURSE and s.get("duree_min"):
-                    zone = s.get("zone")
-                    if zone not in (ZoneCourse.Z1, ZoneCourse.Z2):
-                        cle = _titre_sans_duree(s.get("titre", ""))
-                        durees_originales[cle] = s["duree_min"]
-
-    if not durees_originales:
-        return {"ok": True, "nb_corriges": 0}
+    def _duree_depuis_titre(titre: str) -> int | None:
+        """
+        Calcule la durée réelle d'une séance fractionné/seuil depuis son titre.
+        Format attendu : '... (N×T min R=Tr min)' ou '... (N×T min, X récup)'
+        Formule : 10 min échauff + N*(T + Tr) + 6 min retour
+        """
+        m = _re.search(r"\((\d+)[×x\*](\d+(?::\d+)?)\s*min\s*R=(\d+(?::\d+)?)\s*min\)", titre)
+        if m:
+            n = int(m.group(1))
+            work = _parse_min(m.group(2))
+            rest = _parse_min(m.group(3))
+            return round(10 + n * (work + rest) + 6)
+        # Format seuil : '(N×T min)' sans récup explicite
+        m2 = _re.search(r"\((\d+)[×x\*](\d+(?::\d+)?)\s*min\)", titre)
+        if m2:
+            n = int(m2.group(1))
+            work = _parse_min(m2.group(2))
+            return round(10 + n * work * 2 + 6)  # récup ≈ durée effort
+        return None
 
     seances = (
         db.query(SeanceEntrainement)
@@ -2762,14 +2762,17 @@ def corriger_durees_course(
     nb_corriges = 0
     for s in seances:
         titre = s.titre or ""
-        cle = _titre_sans_duree(titre)
-        duree_orig = durees_originales.get(cle)
-        if duree_orig and s.duree_cible_min != duree_orig:
-            # Corriger le titre et la durée
+        duree_correcte = _duree_depuis_titre(titre)
+        if duree_correcte and s.duree_cible_min != duree_correcte:
             ancien = s.duree_cible_min
-            s.duree_cible_min = duree_orig
+            s.duree_cible_min = duree_correcte
             if ancien:
-                s.titre = _remplacer_duree_titre(titre, ancien, duree_orig)
+                s.titre = _re.sub(
+                    r"(?<=—\s)\d+(?=\s*min\b)",
+                    str(duree_correcte),
+                    titre,
+                    count=1,
+                )
             nb_corriges += 1
 
     db.commit()
