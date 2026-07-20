@@ -69,6 +69,8 @@ function Spinner({ label, value, onChange, min = 0, max = 99, step = 1, unit = "
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const inputRef = useRef(null);
+  const touchStartY = useRef(null);
+  const touchAccum = useRef(0);
 
   function inc() { onChange(Math.min(max, value + step)); }
   function dec() { onChange(Math.max(min, value - step)); }
@@ -85,6 +87,31 @@ function Spinner({ label, value, onChange, min = 0, max = 99, step = 1, unit = "
     setEditing(false);
   }
 
+  function onWheel(e) {
+    e.preventDefault();
+    if (e.deltaY < 0) inc(); else dec();
+  }
+
+  function onTouchStart(e) {
+    touchStartY.current = e.touches[0].clientY;
+    touchAccum.current = 0;
+  }
+
+  function onTouchMove(e) {
+    e.preventDefault();
+    const dy = touchStartY.current - e.touches[0].clientY;
+    touchAccum.current += dy;
+    touchStartY.current = e.touches[0].clientY;
+    const threshold = 12;
+    if (touchAccum.current > threshold) {
+      inc();
+      touchAccum.current = 0;
+    } else if (touchAccum.current < -threshold) {
+      dec();
+      touchAccum.current = 0;
+    }
+  }
+
   return (
     <div className="flex flex-col items-center gap-0.5">
       {label && <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">{label}</p>}
@@ -92,8 +119,13 @@ function Spinner({ label, value, onChange, min = 0, max = 99, step = 1, unit = "
         className="w-7 h-6 flex items-center justify-center text-gray-400 hover:text-accent transition-colors rounded-lg hover:bg-accent/10">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-3 h-3"><path d="M18 15l-6-6-6 6"/></svg>
       </button>
-      <div className="w-14 h-11 bg-gray-100 dark:bg-gray-800 rounded-xl flex flex-col items-center justify-center cursor-pointer select-none"
-        onClick={startEdit}>
+      <div
+        className="w-14 h-11 bg-gray-100 dark:bg-gray-800 rounded-xl flex flex-col items-center justify-center cursor-pointer select-none touch-none"
+        onClick={startEdit}
+        onWheel={onWheel}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+      >
         {editing ? (
           <input ref={inputRef} value={draft} onChange={e => setDraft(e.target.value)}
             onBlur={commitEdit} onKeyDown={e => e.key === "Enter" && commitEdit()}
