@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Routes, Route, NavLink, Navigate, useLocation } from "react-router-dom";
+import { useState, useEffect, useRef } from "react";
+import { Routes, Route, NavLink, Navigate, useLocation, useNavigate } from "react-router-dom";
 import clsx from "clsx";
 import { useAuth } from "./AuthContext";
 import { usePushNotifications } from "./usePush";
@@ -107,6 +107,66 @@ function BottomLink({ to, label, mobileLabel, IconC }) {
   );
 }
 
+function BottomNav() {
+  const navigate = useNavigate();
+  const navRef = useRef(null);
+  const items = NAV.filter(n => !n.mobileHide);
+
+  useEffect(() => {
+    const el = navRef.current;
+    if (!el) return;
+
+    let startX = 0, startY = 0, scrubbing = false, lastIdx = -1;
+
+    function getIdx(clientX) {
+      const rect = el.getBoundingClientRect();
+      const rel = clientX - rect.left;
+      return Math.max(0, Math.min(items.length - 1, Math.floor(rel / (rect.width / items.length))));
+    }
+
+    function onStart(e) {
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
+      scrubbing = false;
+      lastIdx = getIdx(startX);
+    }
+
+    function onMove(e) {
+      const x = e.touches[0].clientX;
+      const y = e.touches[0].clientY;
+      const dx = Math.abs(x - startX);
+      const dy = Math.abs(y - startY);
+      // Attend un mouvement minimal et ignore le scroll vertical
+      if (!scrubbing) {
+        if (dx < 5 && dy < 5) return;
+        if (dy > dx) return;
+        scrubbing = true;
+      }
+      e.preventDefault();
+      const idx = getIdx(x);
+      if (idx !== lastIdx) {
+        lastIdx = idx;
+        navigate(items[idx].to);
+      }
+    }
+
+    el.addEventListener("touchstart", onStart, { passive: true });
+    el.addEventListener("touchmove", onMove, { passive: false });
+    return () => {
+      el.removeEventListener("touchstart", onStart);
+      el.removeEventListener("touchmove", onMove);
+    };
+  }, [navigate, items.length]);
+
+  return (
+    <nav ref={navRef}
+      className="md:hidden fixed bottom-0 left-0 right-0 z-20 flex glass-nav border-t"
+      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
+      {items.map(n => <BottomLink key={n.to} {...n} />)}
+    </nav>
+  );
+}
+
 function ScrollToTop() {
   const { pathname } = useLocation();
   useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
@@ -206,10 +266,7 @@ export default function App() {
               </main>
 
               {/* ── Bottom nav mobile ── */}
-              <nav className="md:hidden fixed bottom-0 left-0 right-0 z-20 flex glass-nav border-t"
-                style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
-                {NAV.filter(n => !n.mobileHide).map(n => <BottomLink key={n.to} {...n} />)}
-              </nav>
+              <BottomNav />
 
             </div>
           </RequireOnboarding>
