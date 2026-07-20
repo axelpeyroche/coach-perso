@@ -1115,7 +1115,9 @@ export default function Programme() {
   const nbFaites = seancesVisibles.filter(s => s.journal?.completee).length;
   const seancesTriees = [
     ...seancesVisibles.filter(s => !s.journal?.completee),
-    ...seancesVisibles.filter(s => s.journal?.completee).sort((a, b) => a.jour - b.jour),
+    ...seancesVisibles.filter(s => s.journal?.completee).sort((a, b) =>
+      (a.journal.enregistre_le ?? a.date ?? "").localeCompare(b.journal.enregistre_le ?? b.date ?? "")
+    ),
   ];
 
   return (
