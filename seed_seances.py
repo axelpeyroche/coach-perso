@@ -1802,7 +1802,7 @@ def adapter_contenu_muscu(content: dict, seances_muscu: int, sexe: str | None = 
                 and (emoms[0].get("temps_limite") or 0) >= 18  # pas une séance décharge (<18 min)
             ):
                 is_pull = "PULL" in emoms[0].get("titre", "")
-                complement = dict(_COMPLEMENT_EMOM_PULL if is_pull else _COMPLEMENT_EMOM_PUSH)
+                complement = dict(_COMPLEMENT_EMOM_PUSH if is_pull else _COMPLEMENT_EMOM_PULL)
                 result[sem] = seances + [complement]
             else:
                 result[sem] = seances

@@ -512,6 +512,15 @@ def zones_fc_hebdo(db: Session, utilisateur_id: int) -> dict[str, Any]:
             return "Z5"
         return None
 
+    _TYPES_AVEC_FC = [
+        TypeSeance.COURSE,
+        TypeSeance.EMOM,
+        TypeSeance.AMRAP,
+        TypeSeance.GYM_UPPER,
+        TypeSeance.GYM_LOWER,
+        TypeSeance.GYM_FULL,
+    ]
+
     journaux = (
         db.execute(
             select(JournalSeance, SemaineEntrainement.numero_semaine)
@@ -521,7 +530,7 @@ def zones_fc_hebdo(db: Session, utilisateur_id: int) -> dict[str, Any]:
             .where(
                 Macrocycle.utilisateur_id == utilisateur_id,
                 JournalSeance.completee == True,
-                SeanceEntrainement.type_seance == TypeSeance.COURSE,
+                SeanceEntrainement.type_seance.in_(_TYPES_AVEC_FC),
             )
         )
         .all()

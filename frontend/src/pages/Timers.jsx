@@ -36,7 +36,7 @@ function TimerCircle({ progress = 1, color = "#f97316", children, pulse = false,
           strokeDasharray={C}
           strokeDashoffset={C * (1 - Math.max(0, progress))}
           transform="rotate(-90 130 130)"
-          className={clsx("transition-[stroke-dashoffset] duration-200", pulse && "animate-pulse")}
+          className={clsx(pulse && "animate-pulse")}
         />
       </svg>
       <div className="relative z-10 flex flex-col items-center justify-center">
@@ -221,66 +221,121 @@ function Chronometre({ circleSize }) {
   );
 }
 
+// ─── Audio beeps ─────────────────────────────────────────────────────────────
+
+function playBeep(freq = 880, duration = 0.12, vol = 0.4) {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(vol, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + duration);
+    osc.onended = () => ctx.close();
+  } catch (_) {}
+}
+
 // ─── MINUTEUR ────────────────────────────────────────────────────────────────
 
 function Minuteur({ circleSize }) {
-  const [mins, setMins]     = useState(5);
-  const [secs, setSecs]     = useState(0);
+  const [mins, setMins]       = useState(5);
+  const [secs, setSecs]       = useState(0);
   const [running, setRunning] = useState(false);
+  // remaining en ms (float) pour le rendu fluide
   const [remaining, setRemaining] = useState(null);
-  const intervalRef = useRef(null);
 
-  const total = mins * 60 + secs;
-  const current = remaining ?? total;
-  const progress = total === 0 ? 1 : current / total;
-  const finished = running && current === 0;
+  const endTimeRef  = useRef(null);   // timestamp cible (ms)
+  const savedMsRef  = useRef(null);   // ms restantes au moment de la pause
+  const rafRef      = useRef(null);
+  const beeped      = useRef(new Set());
+
+  const totalMs  = (mins * 60 + secs) * 1000;
+  const currentMs = remaining ?? totalMs;
+  const currentSec = Math.ceil(currentMs / 1000);
+  const progress = totalMs === 0 ? 1 : Math.max(0, currentMs / totalMs);
+  const finished = !running && remaining !== null && remaining <= 0;
   const status = finished ? "TERMINÉ !" : running ? "EN COURS" : remaining !== null ? "PAUSE" : "PRÊT";
   const fontSize = circleSize < 170 ? "text-3xl" : "text-4xl";
+
+  const tick = useCallback(() => {
+    const left = endTimeRef.current - Date.now();
+    if (left <= 0) {
+      setRemaining(0);
+      setRunning(false);
+      if (!beeped.current.has(0)) { playBeep(660, 0.4, 0.5); beeped.current.add(0); }
+      return;
+    }
+    setRemaining(left);
+    const leftSec = Math.ceil(left / 1000);
+    if (leftSec <= 3 && !beeped.current.has(leftSec)) {
+      playBeep(880, 0.1);
+      beeped.current.add(leftSec);
+    }
+    rafRef.current = requestAnimationFrame(tick);
+  }, []);
 
   function toggle() {
     if (finished) return;
     if (running) {
-      clearInterval(intervalRef.current);
+      cancelAnimationFrame(rafRef.current);
+      savedMsRef.current = endTimeRef.current - Date.now();
       setRunning(false);
     } else {
-      if (total === 0) return;
-      const start = remaining ?? total;
-      let left = start;
-      setRemaining(left);
+      if (totalMs === 0) return;
+      const startMs = savedMsRef.current ?? totalMs;
+      endTimeRef.current = Date.now() + startMs;
+      beeped.current = new Set();
       setRunning(true);
-      intervalRef.current = setInterval(() => {
-        left--;
-        setRemaining(left);
-        if (left <= 0) {
-          clearInterval(intervalRef.current);
-          setRunning(false);
-        }
-      }, 1000);
+      rafRef.current = requestAnimationFrame(tick);
     }
   }
 
   function reset() {
-    clearInterval(intervalRef.current);
+    cancelAnimationFrame(rafRef.current);
+    endTimeRef.current = null;
+    savedMsRef.current = null;
+    beeped.current = new Set();
     setRunning(false);
     setRemaining(null);
   }
 
-  useEffect(() => () => clearInterval(intervalRef.current), []);
+  // Correction horloge murale quand l'onglet revient au premier plan
+  useEffect(() => {
+    function onVisible() {
+      if (!running || !endTimeRef.current) return;
+      const left = endTimeRef.current - Date.now();
+      if (left <= 0) {
+        setRemaining(0);
+        setRunning(false);
+      } else {
+        setRemaining(left);
+      }
+    }
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      cancelAnimationFrame(rafRef.current);
+    };
+  }, [running]);
 
   return (
     <div className="flex flex-col items-center gap-3 w-full">
       <TimerCircle progress={progress} size={circleSize} pulse={running}>
         <span className={clsx(fontSize, "font-black tabular-nums", finished ? "text-accent" : "text-gray-900 dark:text-white")}>
-          {fmtMS(current)}
+          {fmtMS(currentSec)}
         </span>
         <p className="text-[10px] font-bold tracking-widest text-gray-400 dark:text-gray-500 mt-0.5">{status}</p>
       </TimerCircle>
 
       {!running && !finished && (
         <div className="flex items-start gap-3">
-          <Spinner label="MIN" value={mins} onChange={v => { setMins(v); setRemaining(null); }} max={99} unit="min" />
+          <Spinner label="MIN" value={mins} onChange={v => { setMins(v); reset(); }} max={99} unit="min" />
           <div className="flex items-center h-11 mt-6 text-xl font-bold text-gray-300 dark:text-gray-600">:</div>
-          <Spinner label="SEC" value={secs} onChange={v => { setSecs(v); setRemaining(null); }} max={59} step={5} unit="sec" />
+          <Spinner label="SEC" value={secs} onChange={v => { setSecs(v); reset(); }} max={59} step={5} unit="sec" />
         </div>
       )}
 
@@ -316,10 +371,13 @@ function Tabata({ circleSize }) {
 
   const [running, setRunning] = useState(false);
   const [phase,   setPhase]   = useState(null);
-  const [left,    setLeft]    = useState(0);
+  // left en ms pour affichage fluide
+  const [leftMs,  setLeftMs]  = useState(0);
   const [tour,    setTour]    = useState(0);
-  const intervalRef = useRef(null);
-  const stateRef = useRef({});
+
+  const stateRef   = useRef({});   // { phase, endTime, tour, phaseDurMs }
+  const rafRef     = useRef(null);
+  const beeped     = useRef(new Set());
 
   const totalWork = work * tours;
   const totalRest = rest * Math.max(0, tours - 1);
@@ -327,63 +385,112 @@ function Tabata({ circleSize }) {
 
   function fmtT(s) { return `${pad(Math.floor(s / 60))}:${pad(s % 60)}`; }
 
+  const leftSec = Math.ceil(leftMs / 1000);
+  const phaseDurMs = stateRef.current.phaseDurMs || 1;
   const progress = phase === PHASE.DONE ? 1
-    : phase === PHASE.PREP ? left / prep
-    : phase === PHASE.WORK ? left / work
-    : phase === PHASE.REST && rest > 0 ? left / rest
-    : 1;
+    : phase === null ? 1
+    : Math.max(0, leftMs / phaseDurMs);
 
   const fontSize = circleSize < 170 ? "text-3xl" : "text-4xl";
 
-  function start() {
-    if (running) return;
-    const initialLeft  = phase === null ? prep : stateRef.current.left;
-    const initialPhase = phase === null ? PHASE.PREP : stateRef.current.phase;
-    const initialTour  = phase === null ? 1 : stateRef.current.tour;
-    stateRef.current = { left: initialLeft, phase: initialPhase, tour: initialTour };
-    setPhase(initialPhase);
-    setLeft(initialLeft);
-    setTour(initialTour);
-    setRunning(true);
-    intervalRef.current = setInterval(() => {
-      stateRef.current.left--;
-      setLeft(stateRef.current.left);
-      if (stateRef.current.left <= 0) {
-        const ph = stateRef.current.phase;
-        const t  = stateRef.current.tour;
-        if (ph === PHASE.PREP) {
-          stateRef.current = { left: work, phase: PHASE.WORK, tour: t };
-        } else if (ph === PHASE.WORK) {
-          if (t >= tours) {
-            stateRef.current = { left: 0, phase: PHASE.DONE, tour: t };
-            clearInterval(intervalRef.current);
-            setRunning(false);
-          } else if (rest > 0) {
-            stateRef.current = { left: rest, phase: PHASE.REST, tour: t };
-          } else {
-            stateRef.current = { left: work, phase: PHASE.WORK, tour: t + 1 };
-          }
-        } else if (ph === PHASE.REST) {
-          stateRef.current = { left: work, phase: PHASE.WORK, tour: t + 1 };
-        }
-        setPhase(stateRef.current.phase);
-        setLeft(stateRef.current.left);
-        setTour(stateRef.current.tour);
-      }
-    }, 1000);
+  function _nextPhase(ph, t) {
+    if (ph === PHASE.PREP) return { phase: PHASE.WORK, durSec: work, tour: t };
+    if (ph === PHASE.WORK) {
+      if (t >= tours) return { phase: PHASE.DONE, durSec: 0, tour: t };
+      if (rest > 0)   return { phase: PHASE.REST, durSec: rest, tour: t };
+      return { phase: PHASE.WORK, durSec: work, tour: t + 1 };
+    }
+    if (ph === PHASE.REST) return { phase: PHASE.WORK, durSec: work, tour: t + 1 };
+    return { phase: PHASE.DONE, durSec: 0, tour: t };
   }
 
-  function pause() { clearInterval(intervalRef.current); setRunning(false); }
+  const tick = useCallback(() => {
+    const left = stateRef.current.endTime - Date.now();
+    if (left <= 0) {
+      const { phase: ph, tour: t } = stateRef.current;
+      const next = _nextPhase(ph, t);
+      if (next.phase === PHASE.DONE) {
+        playBeep(660, 0.5, 0.5);
+        stateRef.current = { ...stateRef.current, phase: PHASE.DONE, endTime: Date.now(), phaseDurMs: 1 };
+        setPhase(PHASE.DONE);
+        setLeftMs(0);
+        setTour(t);
+        setRunning(false);
+        return;
+      }
+      playBeep(660, 0.15, 0.4);
+      beeped.current = new Set();
+      const durMs = next.durSec * 1000;
+      stateRef.current = { phase: next.phase, endTime: Date.now() + durMs, tour: next.tour, phaseDurMs: durMs };
+      setPhase(next.phase);
+      setTour(next.tour);
+      setLeftMs(durMs);
+      rafRef.current = requestAnimationFrame(tick);
+      return;
+    }
+    setLeftMs(left);
+    const ls = Math.ceil(left / 1000);
+    if (ls <= 3 && !beeped.current.has(ls)) {
+      playBeep(880, 0.1);
+      beeped.current.add(ls);
+    }
+    rafRef.current = requestAnimationFrame(tick);
+  }, [work, rest, tours]);
+
+  function start() {
+    if (running) return;
+    let initialPhase, durSec, initialTour;
+    if (phase === null) {
+      initialPhase = PHASE.PREP; durSec = prep; initialTour = 1;
+    } else {
+      initialPhase = stateRef.current.phase;
+      durSec = Math.ceil((stateRef.current.endTime - Date.now()) / 1000);
+      initialTour = stateRef.current.tour;
+    }
+    beeped.current = new Set();
+    const durMs = durSec * 1000;
+    stateRef.current = { phase: initialPhase, endTime: Date.now() + durMs, tour: initialTour, phaseDurMs: durMs };
+    setPhase(initialPhase);
+    setTour(initialTour);
+    setRunning(true);
+    rafRef.current = requestAnimationFrame(tick);
+  }
+
+  function pause() {
+    cancelAnimationFrame(rafRef.current);
+    // Fige endTime à la valeur courante (lefMs restantes depuis maintenant)
+    stateRef.current.endTime = Date.now() + leftMs;
+    stateRef.current.phaseDurMs = phaseDurMs; // conserve pour la progression
+    setRunning(false);
+  }
 
   function reset() {
-    clearInterval(intervalRef.current);
+    cancelAnimationFrame(rafRef.current);
+    stateRef.current = {};
+    beeped.current = new Set();
     setRunning(false);
     setPhase(null);
-    setLeft(0);
+    setLeftMs(0);
     setTour(0);
   }
 
-  useEffect(() => () => clearInterval(intervalRef.current), []);
+  useEffect(() => {
+    function onVisible() {
+      if (!running || !stateRef.current.endTime) return;
+      const left = stateRef.current.endTime - Date.now();
+      if (left <= 0) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = requestAnimationFrame(tick);
+      } else {
+        setLeftMs(left);
+      }
+    }
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      cancelAnimationFrame(rafRef.current);
+    };
+  }, [running, tick]);
 
   if (phase !== null) {
     const isDone = phase === PHASE.DONE;
@@ -395,7 +502,7 @@ function Tabata({ circleSize }) {
         <TimerCircle progress={progress} color={PHASE_STROKE[phase]} pulse={running} size={circleSize}>
           <p className={clsx("text-xs font-bold tracking-widest uppercase", PHASE_COLORS[phase])}>{phase}</p>
           <span className={clsx(fontSize, "font-black text-gray-900 dark:text-white tabular-nums mt-0.5")}>
-            {isDone ? "🏁" : fmtT(left)}
+            {isDone ? "🏁" : fmtT(leftSec)}
           </span>
         </TimerCircle>
         <div className="flex items-center gap-5">

@@ -1047,6 +1047,13 @@ export default function Programme() {
 
   const idxCourant = idxSemaineCourante(semaines);
   const idx = semIdx !== null ? semIdx : idxCourant;
+
+  // Auto-scroll vers la semaine courante au premier chargement
+  useEffect(() => {
+    if (!navRef.current || semaines.length === 0) return;
+    const btn = navRef.current.querySelectorAll("button")[idxCourant];
+    if (btn) btn.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+  }, [idxCourant, semaines.length]);
   const semaine = semaines[idx];
 
   const seancesVisibles = semaine?.seances?.filter(s => s.type !== "REPOS") ?? [];
