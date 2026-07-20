@@ -958,7 +958,13 @@ export default function Dashboard() {
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Dashboard</h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Vue d'ensemble de ta progression</p>
         </div>
-        <ReconfigurerBtn />
+        <div className="flex items-center gap-3">
+          <button onClick={() => setShowBlessureModal(true)}
+            className="flex items-center gap-1.5 text-xs text-red-500 dark:text-red-400 border border-red-200 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-900/20 px-3 py-1.5 rounded-xl transition-colors font-medium">
+            🩹 Signaler une blessure
+          </button>
+          <ReconfigurerBtn />
+        </div>
       </div>
 
       {/* Alertes fatigue RPE */}
@@ -973,13 +979,6 @@ export default function Dashboard() {
         <JaugeSemaine />
       </div>
 
-      {/* Bouton blessure */}
-      <div className="flex justify-end">
-        <button onClick={() => setShowBlessureModal(true)}
-          className="flex items-center gap-1.5 text-xs text-red-500 dark:text-red-400 border border-red-200 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-900/20 px-3 py-1.5 rounded-xl transition-colors font-medium">
-          🩹 Signaler une blessure
-        </button>
-      </div>
       {showBlessureModal && <BlessureModal onClose={() => setShowBlessureModal(false)} />}
 
       {alerteActive && (
