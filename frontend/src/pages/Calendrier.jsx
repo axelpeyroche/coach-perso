@@ -63,8 +63,8 @@ export default function Calendrier() {
     for (const sem of semaines) {
       for (const s of sem.seances ?? []) {
         if (s.journal?.completee) {
-          // Si la séance avait été planifiée, on l'affiche à la date planifiée, sinon à la date du programme
-          const key = (s.date_planifiee ?? s.date ?? "").slice(0, 10);
+          // Séance validée → date réelle de réalisation (enregistre_le), sinon date programme
+          const key = (s.journal.enregistre_le ?? s.date ?? "").slice(0, 10);
           if (!key) continue;
           if (!map[key]) map[key] = [];
           map[key].push(s);

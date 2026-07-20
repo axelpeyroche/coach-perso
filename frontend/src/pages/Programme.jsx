@@ -819,7 +819,7 @@ function CarteSeance({ seance, zonesFC }) {
             })()}
             {fait && seance.journal?.enregistre_le && (
               <span className="px-1.5 py-0.5 rounded bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">
-                {seance.journal.enregistre_le}
+                {seance.journal.enregistre_le.split("-").reverse().join("/")}
               </span>
             )}
           </div>
