@@ -676,8 +676,12 @@ const MODES = [
 
 // ─── Page principale ──────────────────────────────────────────────────────────
 
+let _activeMode = "chrono";
+
 export default function Timers() {
-  const [mode, setMode] = useState("chrono");
+  const [mode, setMode] = useState(_activeMode);
+
+  function switchMode(id) { _activeMode = id; setMode(id); }
   const circleSize = useTimerSize();
 
   useEffect(() => {
@@ -710,7 +714,7 @@ export default function Timers() {
     >
       <div className="flex-none flex w-full bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
         {MODES.map(({ id, label, Icon }) => (
-          <button key={id} onClick={() => setMode(id)}
+          <button key={id} onClick={() => switchMode(id)}
             className={clsx(
               "flex-1 flex flex-col items-center justify-center gap-1 py-2.5 text-[11px] font-semibold transition-colors",
               mode === id
