@@ -2713,6 +2713,78 @@ def signaler_blessure(
     return {"ok": True, "nb_seances_modifiees": len(seances), "fin_blessure": str(fin)}
 
 
+@app.post("/api/programme/corriger-emom", summary="Corrige les EMOM 3e séance mal affectés (bug complément inversé)")
+def corriger_emom_3e_seance(
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(obtenir_session),
+):
+    """
+    Pour chaque semaine non complétée, si deux EMOMs ont le même type (tous deux PUSH
+    ou tous deux PULL), corrige le complément "3e séance" en l'opposé.
+    """
+    from seed_seances import _COMPLEMENT_EMOM_PUSH, _COMPLEMENT_EMOM_PULL
+    from datetime import date as date_cls
+
+    macrocycles = (
+        db.query(Macrocycle)
+        .filter(Macrocycle.utilisateur_id == current_user.id)
+        .all()
+    )
+    exercices_map = {e.slug: e for e in db.query(Exercice).all()}
+    nb_corriges = 0
+
+    for mac in macrocycles:
+        semaines = (
+            db.query(SemaineEntrainement)
+            .filter(SemaineEntrainement.macrocycle_id == mac.id)
+            .all()
+        )
+        for sem in semaines:
+            emoms = [
+                s for s in sem.seances
+                if s.type_seance == TypeSeance.EMOM
+                and not (s.journal and s.journal.completee)
+            ]
+            if len(emoms) < 2:
+                continue
+            # Trouver le complément "3e séance"
+            complement = next((s for s in emoms if "3e séance" in (s.titre or "")), None)
+            principal = next((s for s in emoms if "3e séance" not in (s.titre or "")), None)
+            if not complement or not principal:
+                continue
+            # Déterminer si le principal est PUSH ou PULL
+            principal_is_push = "PUSH" in (principal.titre or "").upper()
+            complement_is_push = "PUSH" in (complement.titre or "").upper()
+            # Si les deux sont du même type → corriger le complément
+            if principal_is_push == complement_is_push:
+                # Sélectionner le bon template
+                tpl = _COMPLEMENT_EMOM_PUSH if not principal_is_push else _COMPLEMENT_EMOM_PULL
+                complement.titre = tpl["titre"]
+                complement.description = tpl.get("description")
+                complement.temps_limite_min = tpl.get("temps_limite")
+                # Remplacer les exercices
+                for ex in list(complement.exercices):
+                    db.delete(ex)
+                db.flush()
+                for pos, ex_data in enumerate(tpl.get("exercices", []), 1):
+                    slug = ex_data.get("slug")
+                    exercice = exercices_map.get(slug)
+                    if not exercice:
+                        continue
+                    db.add(ExerciceSeance(
+                        seance_id=complement.id,
+                        exercice_id=exercice.id,
+                        ordre=pos,
+                        repetitions=ex_data.get("reps"),
+                        tempo_override=ex_data.get("tempo"),
+                        duree_bloc_min=ex_data.get("duree_min"),
+                    ))
+                nb_corriges += 1
+
+    db.commit()
+    return {"ok": True, "nb_semaines_corrigees": nb_corriges}
+
+
 @app.post("/api/programme/recalibrer", summary="Recalibre les sÃ©ances restantes aprÃ¨s un test d'Ã©valuation")
 def recalibrer_programme(
     current_user: Utilisateur = Depends(get_current_user),

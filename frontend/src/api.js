@@ -45,6 +45,9 @@ export const getAnalyseObjectif = () =>
 export const recalibrerProgramme = () =>
   api.post("/programme/recalibrer").then((r) => r.data);
 
+export const corrigerEmom = () =>
+  api.post("/programme/corriger-emom").then((r) => r.data);
+
 export const getAlerteFatigue = () =>
   api.get("/programme/alerte-fatigue").then((r) => r.data);
 

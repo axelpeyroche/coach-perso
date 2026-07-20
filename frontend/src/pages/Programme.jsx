@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import api, { getToutesSemaines, journaliserSeance, validerRPE, getProfilFC, supprimerJournal, modifierJournal, planifierSeance, creerEvaluation, enregistrerDemiCooper, enregistrerMax1Min, enregistrerAmrapBenchmark, getExercicesEvaluation, getHistoriqueEvaluations, modifierEvaluation, supprimerEvaluation } from "../api";
+import api, { getToutesSemaines, journaliserSeance, validerRPE, getProfilFC, supprimerJournal, modifierJournal, planifierSeance, creerEvaluation, enregistrerDemiCooper, enregistrerMax1Min, enregistrerAmrapBenchmark, getExercicesEvaluation, getHistoriqueEvaluations, modifierEvaluation, supprimerEvaluation, corrigerEmom } from "../api";
 import clsx from "clsx";
 
 
@@ -991,13 +991,13 @@ function idxSemaineCourante(semaines) {
   today.setHours(0, 0, 0, 0);
   for (let i = 0; i < semaines.length; i++) {
     if (!semaines[i].date_debut) continue;
-    const debut = new Date(semaines[i].date_debut);
+    // Suffixe T00:00:00 pour parser en heure locale (sans ça, ISO date → UTC minuit ≠ minuit local)
+    const debut = new Date(semaines[i].date_debut + "T00:00:00");
     const fin   = new Date(debut);
     fin.setDate(fin.getDate() + 7);
     if (today >= debut && today < fin) return i;
   }
-  // Pas encore commencé → première semaine ; terminé → dernière
-  const premiere = semaines[0]?.date_debut ? new Date(semaines[0].date_debut) : null;
+  const premiere = semaines[0]?.date_debut ? new Date(semaines[0].date_debut + "T00:00:00") : null;
   if (premiere && today < premiere) return 0;
   return semaines.length - 1;
 }
@@ -1027,6 +1027,10 @@ export default function Programme() {
 
   const qc = useQueryClient();
 
+  // Correction silencieuse des EMOM mal affectés (bug complément inversé) — une seule fois par session
+  useEffect(() => {
+    corrigerEmom().then(() => qc.invalidateQueries({ queryKey: ["toutes-semaines"] })).catch(() => {});
+  }, []);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["toutes-semaines"],
