@@ -701,7 +701,7 @@ export default function Timers() {
 
   return (
     <div
-      className="flex flex-col overflow-hidden bg-gray-50 dark:bg-gray-950"
+      className="flex flex-col overflow-hidden"
       style={isMobile ? {
         position: "fixed",
         left: 0,
@@ -712,7 +712,7 @@ export default function Timers() {
         height: "100%",
       }}
     >
-      <div className="flex-none flex w-full bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
+      <div className="flex-none flex w-full glass-nav border-b">
         {MODES.map(({ id, label, Icon }) => (
           <button key={id} onClick={() => switchMode(id)}
             className={clsx(

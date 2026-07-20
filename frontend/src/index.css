@@ -2,13 +2,168 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─── Liquid Glass – fond global fixe ───────────────────────────────────────
+   Le dégradé reste immobile (background-attachment: fixed) pendant le scroll.
+   Toutes les surfaces vitrées laissent voir ce fond : c'est le principe clé. */
+
 @layer base {
   * { box-sizing: border-box; }
-  html { overflow-x: hidden; max-width: 100vw; }
-  body { margin: 0; -webkit-font-smoothing: antialiased; overflow-x: hidden; max-width: 100vw; }
+  html {
+    overflow-x: hidden;
+    max-width: 100vw;
+  }
+  body {
+    margin: 0;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+    max-width: 100vw;
+    /* Light mode — pastel lavande / rose / menthe (Apple-inspired) */
+    background:
+      linear-gradient(
+        145deg,
+        #dde8ff 0%,
+        #ebe4ff 28%,
+        #ffe4f3 55%,
+        #d4f4ee 82%,
+        #dde8ff 100%
+      );
+    background-attachment: fixed;
+    min-height: 100vh;
+  }
+  .dark body {
+    /* Dark mode — midnight indigo / violet très sombre */
+    background:
+      linear-gradient(
+        145deg,
+        #0b0d1c 0%,
+        #150f2e 30%,
+        #0a0612 58%,
+        #051812 85%,
+        #0b0d1c 100%
+      );
+    background-attachment: fixed;
+  }
 }
 
+/* ─── Classes glass principales ─────────────────────────────────────────────*/
+
+@layer components {
+
+  /* Surface principale — cartes, panneaux */
+  .glass {
+    background: rgba(255, 255, 255, 0.55);
+    backdrop-filter: blur(28px) saturate(200%);
+    -webkit-backdrop-filter: blur(28px) saturate(200%);
+    border: 1px solid rgba(255, 255, 255, 0.72);
+    box-shadow:
+      0 2px 24px rgba(100, 80, 200, 0.10),
+      inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  }
+  .dark .glass {
+    background: rgba(255, 255, 255, 0.07);
+    backdrop-filter: blur(28px) saturate(160%);
+    -webkit-backdrop-filter: blur(28px) saturate(160%);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    box-shadow:
+      0 2px 24px rgba(0, 0, 0, 0.50),
+      inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  }
+
+  /* Navigation (header, sidebar, bottom nav) — plus opaque */
+  .glass-nav {
+    background: rgba(255, 255, 255, 0.76) !important;
+    backdrop-filter: blur(36px) saturate(220%) !important;
+    -webkit-backdrop-filter: blur(36px) saturate(220%) !important;
+    border-color: rgba(255, 255, 255, 0.65) !important;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.95),
+      0 4px 24px rgba(100, 80, 180, 0.10) !important;
+  }
+  .dark .glass-nav {
+    background: rgba(12, 8, 30, 0.80) !important;
+    backdrop-filter: blur(36px) saturate(160%) !important;
+    -webkit-backdrop-filter: blur(36px) saturate(160%) !important;
+    border-color: rgba(255, 255, 255, 0.08) !important;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.06),
+      0 -4px 24px rgba(0, 0, 0, 0.40) !important;
+  }
+
+  /* Surface secondaire — petits panneaux, statistiques */
+  .glass-sm {
+    background: rgba(255, 255, 255, 0.38);
+    backdrop-filter: blur(14px) saturate(180%);
+    -webkit-backdrop-filter: blur(14px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.55);
+  }
+  .dark .glass-sm {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid rgba(255, 255, 255, 0.07);
+  }
+}
+
+/* ─── Overrides globaux : panneaux blancs et gris inline ────────────────────
+   Couvre les modales, panneaux de pages et zones secondaires
+   sans avoir à modifier chaque page. */
+
 @layer utilities {
+
+  /* Panneaux blancs (modales, drawers) */
+  :is(main, aside, header, nav, .fixed) [class*="bg-white"] {
+    background: rgba(255, 255, 255, 0.70) !important;
+    backdrop-filter: blur(24px) saturate(200%);
+    -webkit-backdrop-filter: blur(24px) saturate(200%);
+  }
+  .dark :is(main, aside, header, nav, .fixed) [class*="bg-white"] {
+    background: rgba(14, 10, 32, 0.72) !important;
+    backdrop-filter: blur(24px) saturate(160%);
+    -webkit-backdrop-filter: blur(24px) saturate(160%);
+  }
+  /* Panneaux gris-900 dark mode */
+  .dark :is(main, aside) [class*="bg-gray-900"] {
+    background: rgba(14, 10, 32, 0.65) !important;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+  }
+
+  /* Zones secondaires (bg-gray-100 / bg-gray-50) */
+  :is(main, aside) :is([class*="bg-gray-100"], [class*="bg-gray-50"]) {
+    background: rgba(255, 255, 255, 0.32) !important;
+    border: 1px solid rgba(255, 255, 255, 0.50) !important;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+  .dark :is(main, aside) :is([class*="bg-gray-800"], [class*="bg-gray-700"]) {
+    background: rgba(255, 255, 255, 0.05) !important;
+    border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+
+  /* Inputs, selects, textareas */
+  :is(input, textarea, select)[class*="rounded"] {
+    background: rgba(255, 255, 255, 0.55) !important;
+    border-color: rgba(255, 255, 255, 0.65) !important;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    color: #111827 !important;
+  }
+  .dark :is(input, textarea, select)[class*="rounded"] {
+    background: rgba(255, 255, 255, 0.07) !important;
+    border-color: rgba(255, 255, 255, 0.12) !important;
+    color: #f9fafb !important;
+  }
+  /* Placeholder */
+  input::placeholder, textarea::placeholder {
+    color: rgba(107, 114, 128, 0.7) !important;
+  }
+  .dark input::placeholder, .dark textarea::placeholder {
+    color: rgba(156, 163, 175, 0.5) !important;
+  }
+
+  /* Scrollbar */
   .scrollbar-hide::-webkit-scrollbar { display: none; }
   .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 }

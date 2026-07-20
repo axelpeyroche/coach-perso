@@ -77,10 +77,10 @@ function SidebarLink({ to, label, IconC }) {
   return (
     <NavLink to={to} end={to === "/"}
       className={({ isActive }) => clsx(
-        "flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors",
+        "flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all",
         isActive
-          ? "bg-brand/10 text-brand dark:bg-brand/20"
-          : "text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-800"
+          ? "glass-sm text-brand dark:text-brand font-semibold"
+          : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white/30 dark:hover:bg-white/5"
       )}>
       <IconC />
       <span>{label}</span>
@@ -92,11 +92,17 @@ function BottomLink({ to, label, mobileLabel, IconC }) {
   return (
     <NavLink to={to} end={to === "/"}
       className={({ isActive }) => clsx(
-        "flex flex-col items-center justify-center gap-0.5 flex-1 py-2 min-h-[52px] text-xs font-medium transition-colors",
+        "flex flex-col items-center justify-center gap-0.5 flex-1 py-2 min-h-[52px] text-xs font-medium transition-all",
         isActive ? "text-brand" : "text-gray-400 dark:text-gray-500"
       )}>
-      <IconC />
-      <span className="text-[9px] mt-0.5 leading-tight">{mobileLabel ?? label}</span>
+      {({ isActive }) => (
+        <>
+          <span className={clsx("p-1.5 rounded-xl transition-all", isActive && "bg-brand/10 dark:bg-brand/15")}>
+            <IconC />
+          </span>
+          <span className="text-[9px] leading-tight">{mobileLabel ?? label}</span>
+        </>
+      )}
     </NavLink>
   );
 }
@@ -111,8 +117,8 @@ function RequireAuth({ children }) {
   const { token, loading } = useAuth();
   const location = useLocation();
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-950">
-      <div className="animate-pulse">
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="animate-pulse text-purple-400 dark:text-purple-300">
         <Icon.Dashboard />
       </div>
     </div>
@@ -161,13 +167,13 @@ export default function App() {
       <Route path="/*" element={
         <RequireAuth>
           <RequireOnboarding>
-            <div className="min-h-screen flex bg-gray-50 dark:bg-gray-950 overflow-x-hidden">
+            <div className="min-h-screen flex overflow-x-hidden">
 
               {/* ── Sidebar desktop ── */}
-              <aside className="hidden md:flex flex-col w-56 shrink-0 border-r border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-6 gap-1 fixed top-0 left-0 h-full z-20">
+              <aside className="hidden md:flex flex-col w-56 shrink-0 border-r glass-nav px-3 py-6 gap-1 fixed top-0 left-0 h-full z-20">
                 <NavLink to="/" className="block px-4 mb-6 hover:opacity-75 transition-opacity">
                   <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Coach</p>
-                  <h1 className="text-lg font-bold text-gray-900 dark:text-white mt-0.5">Coach Perso</h1>
+                  <h1 className="text-lg font-bold bg-gradient-to-r from-violet-600 to-indigo-500 dark:from-violet-300 dark:to-indigo-300 bg-clip-text text-transparent mt-0.5">Coach Perso</h1>
                   {user && (
                     <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 truncate">
                       {user.prenom} {user.nom}
@@ -178,10 +184,10 @@ export default function App() {
               </aside>
 
               {/* ── Header mobile ── */}
-              <header className="md:hidden fixed top-0 left-0 right-0 z-20 flex items-center justify-between px-4 h-14 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
+              <header className="md:hidden fixed top-0 left-0 right-0 z-20 flex items-center justify-between px-4 h-14 glass-nav border-b">
                 <NavLink to="/" className="flex items-center gap-2 hover:opacity-75 transition-opacity">
                   <span className="text-xl">⚡</span>
-                  <span className="text-base font-bold text-gray-900 dark:text-white">Coach Perso</span>
+                  <span className="text-base font-bold bg-gradient-to-r from-violet-600 to-indigo-500 dark:from-violet-300 dark:to-indigo-300 bg-clip-text text-transparent">Coach Perso</span>
                 </NavLink>
               </header>
 
@@ -200,7 +206,7 @@ export default function App() {
               </main>
 
               {/* ── Bottom nav mobile ── */}
-              <nav className="md:hidden fixed bottom-0 left-0 right-0 z-20 flex bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800"
+              <nav className="md:hidden fixed bottom-0 left-0 right-0 z-20 flex glass-nav border-t"
                 style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
                 {NAV.filter(n => !n.mobileHide).map(n => <BottomLink key={n.to} {...n} />)}
               </nav>
