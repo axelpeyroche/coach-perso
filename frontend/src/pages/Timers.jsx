@@ -707,7 +707,7 @@ export default function Timers() {
         left: 0,
         right: 0,
         top: "56px",
-        bottom: "calc(64px + env(safe-area-inset-bottom, 0px))",
+        bottom: "calc(80px + env(safe-area-inset-bottom, 0px))",
       } : {
         height: "100%",
       }}

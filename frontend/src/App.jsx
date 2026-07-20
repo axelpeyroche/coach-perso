@@ -88,25 +88,6 @@ function SidebarLink({ to, label, IconC }) {
   );
 }
 
-function BottomLink({ to, label, mobileLabel, IconC }) {
-  return (
-    <NavLink to={to} end={to === "/"}
-      className={({ isActive }) => clsx(
-        "flex flex-col items-center justify-center gap-0.5 flex-1 py-2 min-h-[52px] text-xs font-medium transition-all",
-        isActive ? "text-brand" : "text-gray-400 dark:text-gray-500"
-      )}>
-      {({ isActive }) => (
-        <>
-          <span className={clsx("p-1.5 rounded-xl transition-all", isActive && "bg-brand/10 dark:bg-brand/15")}>
-            <IconC />
-          </span>
-          <span className="text-[9px] leading-tight">{mobileLabel ?? label}</span>
-        </>
-      )}
-    </NavLink>
-  );
-}
-
 // ── Fond liquide animé : 3 blobs colorés + parallaxe souris/tactile ────────
 function LiquidBackground() {
   const blobsRef = useRef([]);
@@ -149,8 +130,14 @@ function LiquidBackground() {
 
 function BottomNav() {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const navRef = useRef(null);
   const items = NAV.filter(n => !n.mobileHide);
+
+  // Index de l'onglet actif (route la plus spécifique)
+  const activeIdx = Math.max(0, items.findIndex(n =>
+    n.to === "/" ? pathname === "/" : pathname.startsWith(n.to)
+  ));
 
   useEffect(() => {
     const el = navRef.current;
@@ -199,11 +186,32 @@ function BottomNav() {
   }, [navigate, items.length]);
 
   return (
-    <nav ref={navRef}
-      className="md:hidden fixed bottom-0 left-0 right-0 z-20 flex glass-nav border-t"
-      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
-      {items.map(n => <BottomLink key={n.to} {...n} />)}
-    </nav>
+    <div className="md:hidden fixed bottom-0 left-0 right-0 z-20 px-3"
+      style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 10px)" }}>
+      <nav ref={navRef}
+        className="relative flex glass-nav rounded-[28px] h-[60px] overflow-hidden border">
+        {/* Lentille glissante (effet loupe) */}
+        <div
+          className="glass-lens absolute top-[6px] bottom-[6px] rounded-[22px] transition-transform duration-300 ease-out pointer-events-none"
+          style={{
+            width: `calc(${100 / items.length}% - 8px)`,
+            left: "4px",
+            transform: `translateX(calc(${activeIdx * 100}% + ${activeIdx * 8}px))`,
+          }}
+        />
+        {items.map((n, i) => (
+          <NavLink key={n.to} to={n.to} end={n.to === "/"}
+            className={clsx(
+              "relative z-10 flex-1 flex items-center justify-center transition-colors duration-200",
+              i === activeIdx
+                ? "text-gray-900 dark:text-white"
+                : "text-gray-400 dark:text-gray-500"
+            )}>
+            <n.IconC />
+          </NavLink>
+        ))}
+      </nav>
+    </div>
   );
 }
 
@@ -294,7 +302,7 @@ export default function App() {
               </header>
 
               {/* ── Contenu principal ── */}
-              <main className="flex-1 md:ml-56 pt-14 md:pt-0 pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0 min-h-screen overflow-x-hidden w-full min-w-0">
+              <main className="flex-1 md:ml-56 pt-14 md:pt-0 pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:pb-0 min-h-screen overflow-x-hidden w-full min-w-0">
                 <ScrollToTop />
                 <Routes>
                   <Route path="/"           element={<Dashboard />} />
