@@ -1108,6 +1108,10 @@ export default function Programme() {
 
   const seancesVisibles = semaine?.seances?.filter(s => s.type !== "REPOS") ?? [];
   const nbFaites = seancesVisibles.filter(s => s.journal?.completee).length;
+  const seancesTriees = [
+    ...seancesVisibles.filter(s => !s.journal?.completee),
+    ...seancesVisibles.filter(s => s.journal?.completee).sort((a, b) => a.jour - b.jour),
+  ];
 
   return (
     <div className="p-4 md:p-8 max-w-2xl mx-auto space-y-5 w-full min-w-0">
@@ -1174,7 +1178,7 @@ export default function Programme() {
           {/* Séances */}
           <div className="space-y-3">
             {seancesVisibles.length > 0
-              ? seancesVisibles.map(s => <CarteSeance key={s.id} seance={s} zonesFC={zonesFC} />)
+              ? seancesTriees.map(s => <CarteSeance key={s.id} seance={s} zonesFC={zonesFC} />)
               : <p className="text-sm text-gray-400 text-center py-8">Aucune séance cette semaine.</p>
             }
           </div>
