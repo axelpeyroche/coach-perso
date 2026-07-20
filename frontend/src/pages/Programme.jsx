@@ -695,6 +695,18 @@ const CONSEIL_COLORS = {
   depassement: { bg: "bg-red-100 dark:bg-red-900/25",   border: "border-red-300 dark:border-red-700",    text: "text-red-900 dark:text-red-200",    sub: "text-red-700 dark:text-red-400" },
 };
 
+// Calcule la durée réelle d'une séance intervalle depuis son titre "(N×T min R=Tr min)"
+// 10 min échauff + N*(T+Tr) + 6 min retour. Retourne null si le pattern ne correspond pas.
+function dureeReelleSeance(seance) {
+  const dureeBlocs = seance.exercices?.reduce((s, e) => s + (e.duree_bloc_min || 0), 0) || 0;
+  if (dureeBlocs > 0) return dureeBlocs;
+  const m = (seance.titre || "").match(/\((\d+)[×x*](\d+(?::\d+)?)\s*min\s*R=(\d+(?::\d+)?)\s*min\)/);
+  if (!m) return null;
+  const parseMM = (s) => s.includes(":") ? parseInt(s) + parseInt(s.split(":")[1]) / 60 : parseFloat(s);
+  const n = parseInt(m[1]), work = parseMM(m[2]), rest = parseMM(m[3]);
+  return Math.round(10 + n * (work + rest) + 6);
+}
+
 function CarteSeance({ seance, zonesFC }) {
   const qc = useQueryClient();
   const [ouvert, setOuvert]         = useState(false);
@@ -748,9 +760,9 @@ function CarteSeance({ seance, zonesFC }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 min-w-0">
             <p className="text-sm font-semibold text-gray-900 dark:text-white leading-snug truncate">{(() => {
-              const dureeBlocs = seance.exercices?.reduce((s, e) => s + (e.duree_bloc_min || 0), 0) || 0;
-              if (dureeBlocs > 0 && seance.duree_cible_min && dureeBlocs !== seance.duree_cible_min) {
-                return (seance.titre || "").replace(/—\s*\d+\s*min/, `— ${dureeBlocs} min`);
+              const dureeCorrecte = dureeReelleSeance(seance);
+              if (dureeCorrecte && seance.duree_cible_min && dureeCorrecte !== seance.duree_cible_min) {
+                return (seance.titre || "").replace(/—\s*\d+\s*min/, `— ${dureeCorrecte} min`);
               }
               return seance.titre;
             })()}</p>
@@ -763,8 +775,7 @@ function CarteSeance({ seance, zonesFC }) {
               </span>
             )}
             {seance.duree_cible_min && (() => {
-              const dureeBlocs = seance.exercices?.reduce((s, e) => s + (e.duree_bloc_min || 0), 0) || 0;
-              const duree = dureeBlocs > 0 ? dureeBlocs : seance.duree_cible_min;
+              const duree = dureeReelleSeance(seance) || seance.duree_cible_min;
               return (
                 <span className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-xs text-gray-600 dark:text-gray-400">
                   ⏱ {fmt(duree)}

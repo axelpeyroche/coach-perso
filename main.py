@@ -2727,7 +2727,7 @@ def corriger_durees_course(
             return int(mm) + int(ss) / 60
         return float(s)
 
-    def _duree_depuis_titre(titre: str) -> int | None:
+    def _duree_depuis_titre(titre: str):
         """
         Calcule la durée réelle d'une séance fractionné/seuil depuis son titre.
         Format attendu : '... (N×T min R=Tr min)' ou '... (N×T min, X récup)'
