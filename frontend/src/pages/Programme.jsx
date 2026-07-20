@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import api, { getToutesSemaines, journaliserSeance, validerRPE, getProfilFC, supprimerJournal, modifierJournal, planifierSeance, creerEvaluation, enregistrerDemiCooper, enregistrerMax1Min, enregistrerAmrapBenchmark, getExercicesEvaluation, getHistoriqueEvaluations, modifierEvaluation, supprimerEvaluation, corrigerEmom, corrigerDureesCourse } from "../api";
+import api, { getToutesSemaines, journaliserSeance, validerRPE, getProfilFC, supprimerJournal, modifierJournal, planifierSeance, creerEvaluation, enregistrerDemiCooper, enregistrerMax1Min, enregistrerAmrapBenchmark, getExercicesEvaluation, getHistoriqueEvaluations, modifierEvaluation, supprimerEvaluation, corrigerEmom, corrigerDureesCourse, adapterCharge } from "../api";
 import clsx from "clsx";
 
 
@@ -1077,9 +1077,9 @@ export default function Programme() {
 
   const qc = useQueryClient();
 
-  // Corrections silencieuses au montage
+  // Corrections silencieuses + adaptation de charge au montage
   useEffect(() => {
-    Promise.allSettled([corrigerEmom(), corrigerDureesCourse()]).then(() =>
+    Promise.allSettled([corrigerEmom(), corrigerDureesCourse(), adapterCharge()]).then(() =>
       qc.invalidateQueries({ queryKey: ["toutes-semaines"] })
     );
   }, []);

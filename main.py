@@ -502,12 +502,14 @@ def onboarding(
     if payload.type_muscu:
         current_user.type_muscu = payload.type_muscu
 
-    # Calibration depuis l'historique de performance
-    calib = {"km_factor": 1.0, "amrap_factor": 1.0, "reps_factor": 1.0}
+    # Calibration intelligente depuis l'historique + profil complet
+    from intelligence_programme import (
+        construire_profil, calibration_v2, generer_blueprint_course_v2,
+        semaines_assimilation, appliquer_profil_au_contenu,
+    )
+    hist = payload.historique_perf or {}
     if payload.historique_perf:
         current_user.historique_perf = _json.dumps(payload.historique_perf, ensure_ascii=False)
-        hist = payload.historique_perf
-        calib = _calculer_calibration(hist)
 
         # Pre-fill FC max
         if hist.get("fc_max") and not current_user.fc_max:
@@ -548,9 +550,14 @@ def onboarding(
         ObjectifCourse.utilisateur_id == current_user.id
     ).order_by(ObjectifCourse.id.desc()).first()
 
+    # Profil consolidÃ© + calibration v2 (Ã¢ge, VMA, force pull/push, progression)
+    profil = construire_profil(current_user, db, hist)
+    calib = calibration_v2(hist, profil)
+
     kf = calib["km_factor"]
     af = calib["amrap_factor"]
     rf = calib["reps_factor"]
+    vma_for_paces = profil.get("vma")  # bio rÃ©cente sinon estimation questionnaire
 
     if obj_course and payload.objectif_type in ("course", "hybride"):
         from models import TypeMacrophase
@@ -558,8 +565,8 @@ def onboarding(
         n_surcharge = n_semaines - 3
         eval_freq = current_user.frequence_tests_semaines or 8
 
-        # Blueprint adaptatif + marquage des semaines d'Ã©valuation dans la pÃ©riode de surcharge
-        blueprint = generer_blueprint_course(n_semaines)
+        # Blueprint v2 (mÃ©socycles 3:1, progression individualisÃ©e) + semaines d'Ã©valuation
+        blueprint = generer_blueprint_course_v2(n_semaines, calib)
         for regle in blueprint:
             if regle.numero <= n_surcharge and regle.numero % eval_freq == 0:
                 regle.macrophase = TypeMacrophase.EVALUATION
@@ -578,19 +585,13 @@ def onboarding(
                 objectif_km_course=km, objectif_amrap_min=amrap))
         db.flush()
 
-        # VMA pour enrichissement des descriptions
-        vma_for_paces = None
-        if payload.historique_perf and payload.historique_perf.get("vma_estimee"):
-            try:
-                vma_for_paces = float(payload.historique_perf["vma_estimee"])
-            except (TypeError, ValueError):
-                pass
-
         # Contenu des sÃ©ances : surcharge progressive + semaines d'Ã©valuation
         # Volume progressif : facteur km augmente de kf (niveau actuel) vers f_pic (volume objectif)
         vol_pic = _calculer_volume_pic(obj_course.distance_km)
         BASELINE_VOL = 35.0
-        f_pic = min(vol_pic / BASELINE_VOL, kf * 2.2)  # cap Ã  2.2Ã— le niveau actuel
+        f_pic = min(vol_pic / BASELINE_VOL, kf * calib.get("plafond_pic", 2.2))
+        assim = semaines_assimilation(n_surcharge)
+        progress_map = {}
 
         n_build_weeks = sum(1 for i in range(1, n_surcharge + 1) if i % eval_freq != 0)
         m1_cal = calibrer_module(MODULE1, kf, af, rf)
@@ -603,15 +604,21 @@ def onboarding(
             else:
                 # km_factor croÃ®t progressivement de kf Ã  f_pic
                 progress = build_count / max(1, n_build_weeks - 1) if n_build_weeks > 1 else 1.0
-                week_kf = kf + (f_pic - kf) * (progress ** 0.75)
+                week_kf = kf + (f_pic - kf) * (progress ** calib.get("exp_progression", 0.75))
+                if i in assim:
+                    week_kf *= 0.75  # semaine d'assimilation : le corps absorbe la charge
                 pool_key = min(pool_idx, 15)
                 week_content = calibrer_module({1: _POOL_SURCHARGE[pool_key]}, week_kf, af, rf)[1]
                 content[i] = week_content
+                progress_map[i] = progress
                 pool_idx += 1
                 build_count += 1
         content[n_surcharge + 1] = m1_cal.get(6, MODULE1[6])  # dÃ©charge calibrÃ©e
         content[n_surcharge + 2] = _semaine_taper_course()     # taper prÃ©-course (pas de prÃ©pa tests)
         content[n_semaines] = _semaine_course(obj_course.date_course, obj_course.nom)
+
+        # Adaptation au profil : allures selon distance, sortie longue, variantes, terrain
+        content = appliquer_profil_au_contenu(content, profil, calib, progress_map)
 
         # Enrichissement des descriptions avec allures rÃ©elles
         if vma_for_paces and vma_for_paces >= 5.0:
@@ -645,6 +652,7 @@ def onboarding(
             db.flush()
             module_data = modules.get(numero_cycle, MODULE1)
             calibrated = calibrer_module(module_data, kf, af, rf)
+            calibrated = appliquer_profil_au_contenu(calibrated, profil, calib)
             if vma_for_paces and vma_for_paces >= 5.0:
                 calibrated = enrichir_paces_vma(calibrated, vma_for_paces)
             adapted = adapter_contenu_course(muscu_adapter(calibrated, n_muscu, current_user.sexe), n_course)
@@ -709,13 +717,18 @@ def update_programme(
     n_course = min(n_course, max(1, seances_total - n_muscu))
     muscu_adapter = adapter_contenu_gym if current_user.type_muscu == "salle" else adapter_contenu_muscu
 
-    calib = {"km_factor": 1.0, "amrap_factor": 1.0, "reps_factor": 1.0}
+    from intelligence_programme import (
+        construire_profil as _cp_upd, calibration_v2 as _cv2_upd,
+        appliquer_profil_au_contenu as _apc_upd,
+    )
+    hist_upd = {}
     if current_user.historique_perf:
         try:
-            hist = _json.loads(current_user.historique_perf)
-            calib = _calculer_calibration(hist)
+            hist_upd = _json.loads(current_user.historique_perf)
         except Exception:
-            pass
+            hist_upd = {}
+    profil_upd = _cp_upd(current_user, db, hist_upd)
+    calib = _cv2_upd(hist_upd, profil_upd)
     kf, af, rf = calib["km_factor"], calib["amrap_factor"], calib["reps_factor"]
 
     # VMA actuelle pour enrichissement descriptions
@@ -768,6 +781,7 @@ def update_programme(
         # PrÃ©parer le contenu calibrÃ© pour ce macrocycle
         module_data = modules.get(mc.numero_cycle, MODULE1)
         calibrated = calibrer_module(module_data, kf, af, rf)
+        calibrated = _apc_upd(calibrated, profil_upd, calib)
         if vma_for_paces:
             calibrated = enrichir_paces_vma(calibrated, vma_for_paces)
         adapted = adapter_contenu_course(muscu_adapter(calibrated, n_muscu, current_user.sexe), n_course)
@@ -2379,7 +2393,23 @@ def initialiser_programme(payload: InitProgrammePayload, current_user: Utilisate
                 raise HTTPException(400, f"La course est dans {n_semaines} semaine(s) â€” trop proche (minimum 4 semaines).")
 
             n_surcharge = n_semaines - 3
-            blueprint = generer_blueprint_course(n_semaines)
+
+            # Calibration v2 avant blueprint (progression individualisÃ©e)
+            historique = {}
+            if user.historique_perf:
+                import json as _json
+                try:
+                    historique = _json.loads(user.historique_perf)
+                except Exception:
+                    historique = {}
+            from intelligence_programme import (
+                construire_profil, calibration_v2, generer_blueprint_course_v2,
+                semaines_assimilation, appliquer_profil_au_contenu,
+            )
+            profil = construire_profil(user, db, historique)
+            cal = calibration_v2(historique, profil)
+
+            blueprint = generer_blueprint_course_v2(n_semaines, cal)
             dates = [debut_mc1 + timedelta(weeks=i) for i in range(n_semaines)]
 
             # Injection des semaines d'Ã©valuation dans le blueprint (AVANT insertion en BDD)
@@ -2410,15 +2440,6 @@ def initialiser_programme(payload: InitProgrammePayload, current_user: Utilisate
                 ))
             db.flush()
 
-            # Calibration si historique dispo
-            historique = {}
-            if user.historique_perf:
-                import json as _json
-                try:
-                    historique = _json.loads(user.historique_perf)
-                except Exception:
-                    historique = {}
-            cal = _calculer_calibration(historique)
             kf_init = cal["km_factor"]
             af_init = cal["amrap_factor"]
             rf_init = cal["reps_factor"]
@@ -2434,17 +2455,19 @@ def initialiser_programme(payload: InitProgrammePayload, current_user: Utilisate
             if vma_init is None:
                 bio = db.query(BiometrieUtilisateur).filter(
                     BiometrieUtilisateur.utilisateur_id == user.id
-                ).order_by(BiometrieUtilisateur.date_mesure.desc()).first()
+                ).order_by(BiometrieUtilisateur.enregistre_le.desc()).first()
                 if bio:
                     vma_init = bio.vma_kmh
 
             # Volume progressif
             vol_pic = _calculer_volume_pic(obj.distance_km)
             BASELINE_VOL = 35.0
-            f_pic_init = min(vol_pic / BASELINE_VOL, kf_init * 2.2)
+            f_pic_init = min(vol_pic / BASELINE_VOL, kf_init * cal.get("plafond_pic", 2.2))
 
+            assim = semaines_assimilation(n_surcharge)
             n_build_weeks_init = sum(1 for i in range(1, n_surcharge + 1) if i % eval_freq != 0)
             content: dict = {}
+            progress_map: dict = {}
             pool_idx = 1
             build_count = 0
             for i in range(1, n_surcharge + 1):
@@ -2452,14 +2475,20 @@ def initialiser_programme(payload: InitProgrammePayload, current_user: Utilisate
                     content[i] = MODULE1[8]
                 else:
                     progress = build_count / max(1, n_build_weeks_init - 1) if n_build_weeks_init > 1 else 1.0
-                    week_kf = kf_init + (f_pic_init - kf_init) * (progress ** 0.75)
+                    week_kf = kf_init + (f_pic_init - kf_init) * (progress ** cal.get("exp_progression", 0.75))
+                    if i in assim:
+                        week_kf *= 0.75  # semaine d'assimilation
                     pool_key = min(pool_idx, 15)
                     content[i] = calibrer_module({1: _POOL_SURCHARGE[pool_key]}, week_kf, af_init, rf_init)[1]
+                    progress_map[i] = progress
                     pool_idx += 1
                     build_count += 1
             content[n_surcharge + 1] = m1_cal_init.get(6, MODULE1[6])
             content[n_surcharge + 2] = _semaine_taper_course()
             content[n_semaines]      = _semaine_course(obj.date_course, obj.nom)
+
+            # Adaptation au profil (spÃ©cificitÃ© distance, sortie longue, variantes, terrain)
+            content = appliquer_profil_au_contenu(content, profil, cal, progress_map)
 
             # Enrichissement allures rÃ©elles
             if vma_init and vma_init >= 5.0:
@@ -2489,7 +2518,12 @@ def initialiser_programme(payload: InitProgrammePayload, current_user: Utilisate
                 historique_std = _json_std.loads(user.historique_perf)
             except Exception:
                 historique_std = {}
-        cal_std = _calculer_calibration(historique_std)
+        from intelligence_programme import (
+            construire_profil as _cp_std, calibration_v2 as _cv2_std,
+            appliquer_profil_au_contenu as _apc_std,
+        )
+        profil_std = _cp_std(user, db, historique_std)
+        cal_std = _cv2_std(historique_std, profil_std)
         kf_std = cal_std["km_factor"]
         af_std = cal_std["amrap_factor"]
         rf_std = cal_std["reps_factor"]
@@ -2504,7 +2538,7 @@ def initialiser_programme(payload: InitProgrammePayload, current_user: Utilisate
         if vma_std is None:
             bio_std = db.query(BiometrieUtilisateur).filter(
                 BiometrieUtilisateur.utilisateur_id == user.id
-            ).order_by(BiometrieUtilisateur.date_mesure.desc()).first()
+            ).order_by(BiometrieUtilisateur.enregistre_le.desc()).first()
             if bio_std:
                 vma_std = bio_std.vma_kmh
 
@@ -2539,6 +2573,7 @@ def initialiser_programme(payload: InitProgrammePayload, current_user: Utilisate
             db.flush()
             module_data = {1: MODULE1, 2: MODULE2, 3: MODULE3}[numero_cycle]
             calibrated_std = calibrer_module(module_data, kf_std, af_std, rf_std)
+            calibrated_std = _apc_std(calibrated_std, profil_std, cal_std)
             if vma_std and vma_std >= 5.0:
                 calibrated_std = enrichir_paces_vma(calibrated_std, vma_std)
             adapted_std = adapter_contenu_course(muscu_adapter(calibrated_std, n_muscu, user.sexe), n_course)
@@ -2577,7 +2612,7 @@ def analyse_objectif(
 
         bio = db.query(BiometrieUtilisateur).filter(
             BiometrieUtilisateur.utilisateur_id == current_user.id
-        ).order_by(BiometrieUtilisateur.date_mesure.desc()).first()
+        ).order_by(BiometrieUtilisateur.enregistre_le.desc()).first()
         vma_actuelle = bio.vma_kmh if bio else None
 
         dist = float(obj.distance_km or 0)
@@ -2712,6 +2747,23 @@ def signaler_blessure(
             db.delete(ex)
     db.commit()
     return {"ok": True, "nb_seances_modifiees": len(seances), "fin_blessure": str(fin)}
+
+
+@app.post("/api/programme/adapter-charge", summary="Régule la charge de la semaine courante selon ACWA / RPE / assiduité")
+def adapter_charge(
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(obtenir_session),
+):
+    """Adaptation continue : si la charge aiguë dérape (ACWA > 1.5 ou RPE moyen
+    élevé), les séances restantes de la semaine sont allégées de 20 % ; si
+    l'utilisateur encaisse très bien (ACWA < 0.8, RPE bas, assidu), légère
+    augmentation. Idempotent — marqueur ⚙ dans le titre."""
+    from intelligence_programme import adapter_charge_semaine
+    try:
+        return adapter_charge_semaine(db, current_user)
+    except Exception as exc:
+        db.rollback()
+        return {"ok": False, "erreur": str(exc)}
 
 
 @app.post("/api/programme/corriger-durees-course", summary="Recalcule les durées des séances Z3-Z5 surestimées par calibration")
@@ -2930,7 +2982,7 @@ def recalibrer_programme(
     # VMA la plus rÃ©cente
     bio = db.query(BiometrieUtilisateur).filter(
         BiometrieUtilisateur.utilisateur_id == current_user.id
-    ).order_by(BiometrieUtilisateur.date_mesure.desc()).first()
+    ).order_by(BiometrieUtilisateur.enregistre_le.desc()).first()
     if not bio:
         raise HTTPException(400, "Aucune biomÃ©trie disponible. Effectuez d'abord un test Demi-Cooper.")
 

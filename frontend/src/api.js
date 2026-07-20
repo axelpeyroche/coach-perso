@@ -51,6 +51,9 @@ export const corrigerEmom = () =>
 export const corrigerDureesCourse = () =>
   api.post("/programme/corriger-durees-course").then((r) => r.data);
 
+export const adapterCharge = () =>
+  api.post("/programme/adapter-charge").then((r) => r.data);
+
 export const getAlerteFatigue = () =>
   api.get("/programme/alerte-fatigue").then((r) => r.data);
 
