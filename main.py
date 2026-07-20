@@ -2733,12 +2733,12 @@ def corriger_durees_course(
         "(8×2:30 min R=1:30 min)": 50,
         "(6×3 min R=3 min)": 50,
         "(8×3 min R=2 min)": 55,
-        "(3×12 min R=2 min) — maintenance": 45,
+        "(3×10 min R=2 min) — maintenance": 45,
     }
 
     def _cle_intervalles(titre: str):
-        """Extrait la partie entre parenthèses (et éventuel suffixe) du titre."""
-        m = _re.search(r"\(.*\)(?:\s*—\s*\w+)?", titre)
+        """Extrait '(N×T min R=Tr min)' du titre, avec éventuel suffixe '— mot'."""
+        m = _re.search(r"\(\d+[×x*]\d.*?\)(?:\s*—\s*\w+)?", titre)
         return m.group(0).strip() if m else None
 
     seances = (
@@ -2748,7 +2748,6 @@ def corriger_durees_course(
         .filter(
             Macrocycle.utilisateur_id == current_user.id,
             SeanceEntrainement.type_seance == TypeSeance.COURSE,
-            SeanceEntrainement.zone_cible.in_([ZoneCourse.Z3, ZoneCourse.Z4, ZoneCourse.Z5]),
         )
         .all()
     )

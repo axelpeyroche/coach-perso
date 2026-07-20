@@ -695,11 +695,30 @@ const CONSEIL_COLORS = {
   depassement: { bg: "bg-red-100 dark:bg-red-900/25",   border: "border-red-300 dark:border-red-700",    text: "text-red-900 dark:text-red-200",    sub: "text-red-700 dark:text-red-400" },
 };
 
-// Durée réelle d'une séance : somme des blocs d'exercices si disponibles, sinon null.
-// Pour les séances COURSE, la DB est corrigée par /api/programme/corriger-durees-course au montage.
+// Durées originales (non calibrées) des séances Z3-Z5 par structure d'intervalles.
+// Source : seed_seances.py — ces valeurs sont fixes (indépendantes du km_factor).
+const DUREES_INTERVALLES = {
+  "(3×8 min R=2 min)": 40,
+  "(6×2 min R=2 min)": 40,
+  "(3×10 min R=2 min)": 45,
+  "(8×2 min R=1:30 min)": 45,
+  "(3×11 min R=2 min)": 50,
+  "(6×2:30 min R=2 min)": 45,
+  "(3×12 min R=2 min)": 50,
+  "(8×2:30 min R=1:30 min)": 50,
+  "(6×3 min R=3 min)": 50,
+  "(8×3 min R=2 min)": 55,
+};
+
 function dureeReelleSeance(seance) {
   const dureeBlocs = seance.exercices?.reduce((s, e) => s + (e.duree_bloc_min || 0), 0) || 0;
-  return dureeBlocs > 0 ? dureeBlocs : null;
+  if (dureeBlocs > 0) return dureeBlocs;
+  const m = (seance.titre || "").match(/(\(\d+[×xX*]\d.*?\))/u);
+  if (m) {
+    const duree = DUREES_INTERVALLES[m[1]];
+    if (duree) return duree;
+  }
+  return null;
 }
 
 function CarteSeance({ seance, zonesFC }) {
