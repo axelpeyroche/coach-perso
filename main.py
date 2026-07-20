@@ -2720,32 +2720,26 @@ def corriger_durees_course(
 ):
     import re as _re
 
-    def _parse_min(s: str) -> float:
-        """Convertit '2', '1:30' en minutes décimales."""
-        if ":" in s:
-            mm, ss = s.split(":")
-            return int(mm) + int(ss) / 60
-        return float(s)
+    # Mapping exact des durées correctes (non calibrées) par structure d'intervalles.
+    # Clé : partie entre parenthèses du titre seed original.
+    DUREES_SEED = {
+        "(3×8 min R=2 min)": 40,
+        "(6×2 min R=2 min)": 40,
+        "(3×10 min R=2 min)": 45,
+        "(8×2 min R=1:30 min)": 45,
+        "(3×11 min R=2 min)": 50,
+        "(6×2:30 min R=2 min)": 45,
+        "(3×12 min R=2 min)": 50,
+        "(8×2:30 min R=1:30 min)": 50,
+        "(6×3 min R=3 min)": 50,
+        "(8×3 min R=2 min)": 55,
+        "(3×12 min R=2 min) — maintenance": 45,
+    }
 
-    def _duree_depuis_titre(titre: str):
-        """
-        Calcule la durée réelle d'une séance fractionné/seuil depuis son titre.
-        Format attendu : '... (N×T min R=Tr min)' ou '... (N×T min, X récup)'
-        Formule : 10 min échauff + N*(T + Tr) + 6 min retour
-        """
-        m = _re.search(r"\((\d+)[×x\*](\d+(?::\d+)?)\s*min\s*R=(\d+(?::\d+)?)\s*min\)", titre)
-        if m:
-            n = int(m.group(1))
-            work = _parse_min(m.group(2))
-            rest = _parse_min(m.group(3))
-            return round(10 + n * (work + rest) + 6)
-        # Format seuil : '(N×T min)' sans récup explicite
-        m2 = _re.search(r"\((\d+)[×x\*](\d+(?::\d+)?)\s*min\)", titre)
-        if m2:
-            n = int(m2.group(1))
-            work = _parse_min(m2.group(2))
-            return round(10 + n * work * 2 + 6)  # récup ≈ durée effort
-        return None
+    def _cle_intervalles(titre: str):
+        """Extrait la partie entre parenthèses (et éventuel suffixe) du titre."""
+        m = _re.search(r"\(.*\)(?:\s*—\s*\w+)?", titre)
+        return m.group(0).strip() if m else None
 
     seances = (
         db.query(SeanceEntrainement)
@@ -2762,7 +2756,8 @@ def corriger_durees_course(
     nb_corriges = 0
     for s in seances:
         titre = s.titre or ""
-        duree_correcte = _duree_depuis_titre(titre)
+        cle = _cle_intervalles(titre)
+        duree_correcte = DUREES_SEED.get(cle) if cle else None
         if duree_correcte and s.duree_cible_min != duree_correcte:
             ancien = s.duree_cible_min
             s.duree_cible_min = duree_correcte

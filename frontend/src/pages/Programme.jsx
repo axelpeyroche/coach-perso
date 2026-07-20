@@ -695,16 +695,11 @@ const CONSEIL_COLORS = {
   depassement: { bg: "bg-red-100 dark:bg-red-900/25",   border: "border-red-300 dark:border-red-700",    text: "text-red-900 dark:text-red-200",    sub: "text-red-700 dark:text-red-400" },
 };
 
-// Calcule la durée réelle d'une séance intervalle depuis son titre "(N×T min R=Tr min)"
-// 10 min échauff + N*(T+Tr) + 6 min retour. Retourne null si le pattern ne correspond pas.
+// Durée réelle d'une séance : somme des blocs d'exercices si disponibles, sinon null.
+// Pour les séances COURSE, la DB est corrigée par /api/programme/corriger-durees-course au montage.
 function dureeReelleSeance(seance) {
   const dureeBlocs = seance.exercices?.reduce((s, e) => s + (e.duree_bloc_min || 0), 0) || 0;
-  if (dureeBlocs > 0) return dureeBlocs;
-  const m = (seance.titre || "").match(/\((\d+)[×x*](\d+(?::\d+)?)\s*min\s*R=(\d+(?::\d+)?)\s*min\)/);
-  if (!m) return null;
-  const parseMM = (s) => s.includes(":") ? parseInt(s) + parseInt(s.split(":")[1]) / 60 : parseFloat(s);
-  const n = parseInt(m[1]), work = parseMM(m[2]), rest = parseMM(m[3]);
-  return Math.round(10 + n * (work + rest) + 6);
+  return dureeBlocs > 0 ? dureeBlocs : null;
 }
 
 function CarteSeance({ seance, zonesFC }) {
