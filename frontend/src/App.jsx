@@ -107,6 +107,46 @@ function BottomLink({ to, label, mobileLabel, IconC }) {
   );
 }
 
+// ── Fond liquide animé : 3 blobs colorés + parallaxe souris/tactile ────────
+function LiquidBackground() {
+  const blobsRef = useRef([]);
+
+  useEffect(() => {
+    const handleMove = (e) => {
+      let x, y;
+      if (e.type === "touchmove") {
+        x = e.touches[0].clientX;
+        y = e.touches[0].clientY;
+      } else {
+        x = e.clientX;
+        y = e.clientY;
+      }
+      const relX = x / window.innerWidth - 0.5;
+      const relY = y / window.innerHeight - 0.5;
+      requestAnimationFrame(() => {
+        const [b1, b2, b3] = blobsRef.current;
+        if (b1) b1.style.transform = `translate(${relX * -10}%, ${relY * -10}%) translateZ(0)`;
+        if (b2) b2.style.transform = `translate(${relX * -20}%, ${relY * -20}%) translateZ(0)`;
+        if (b3) b3.style.transform = `translate(${relX * -30}%, ${relY * -30}%) translateZ(0)`;
+      });
+    };
+    window.addEventListener("mousemove", handleMove);
+    window.addEventListener("touchmove", handleMove, { passive: true });
+    return () => {
+      window.removeEventListener("mousemove", handleMove);
+      window.removeEventListener("touchmove", handleMove);
+    };
+  }, []);
+
+  return (
+    <div className="liquid-bg" aria-hidden="true">
+      <div className="liquid-blob blob-1" ref={el => (blobsRef.current[0] = el)} />
+      <div className="liquid-blob blob-2" ref={el => (blobsRef.current[1] = el)} />
+      <div className="liquid-blob blob-3" ref={el => (blobsRef.current[2] = el)} />
+    </div>
+  );
+}
+
 function BottomNav() {
   const navigate = useNavigate();
   const navRef = useRef(null);
@@ -220,6 +260,8 @@ export default function App() {
   }, [dark]);
 
   return (
+    <>
+    <LiquidBackground />
     <Routes>
       <Route path="/login" element={<Auth />} />
       <Route path="/onboarding" element={<RequireAuth><Onboarding /></RequireAuth>} />
@@ -273,5 +315,6 @@ export default function App() {
         </RequireAuth>
       } />
     </Routes>
+    </>
   );
 }
