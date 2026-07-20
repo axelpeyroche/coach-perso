@@ -2726,25 +2726,27 @@ def corriger_durees_course(
     """
     from seed_seances import MODULE1, MODULE2, MODULE3, _remplacer_duree_titre
 
-    # Construire un dictionnaire titre_base → duree_originale depuis les seeds
-    # (en prenant les titres sans calibration, donc avec les durées originales)
+    import re as _re
+
+    def _titre_sans_duree(t: str) -> str:
+        """Supprime uniquement le nombre de minutes dans '— X min' pour garder le reste comme clé."""
+        return _re.sub(r"(?<=—\s)\d+(?=\s*min)", "", t).strip()
+
+    # Clé = titre complet sans le nombre de minutes (ex: "Fractionné Z5 —  min (6×2 min R=2 min)")
+    # Cela différencie les variantes qui ont la même structure d'intervalles
     durees_originales: dict[str, int] = {}
     for module in [MODULE1, MODULE2, MODULE3]:
-        for seances in module.values():
-            for s in seances:
+        for seances_list in module.values():
+            for s in seances_list:
                 if s.get("type") == TypeSeance.COURSE and s.get("duree_min"):
                     zone = s.get("zone")
                     if zone not in (ZoneCourse.Z1, ZoneCourse.Z2):
-                        # Clé : portion stable du titre avant " — X min"
-                        titre = s.get("titre", "")
-                        import re as _re
-                        base = _re.split(r"\s*—\s*\d+", titre)[0].strip()
-                        durees_originales[base] = s["duree_min"]
+                        cle = _titre_sans_duree(s.get("titre", ""))
+                        durees_originales[cle] = s["duree_min"]
 
     if not durees_originales:
         return {"ok": True, "nb_corriges": 0}
 
-    import re as _re
     seances = (
         db.query(SeanceEntrainement)
         .join(SemaineEntrainement)
@@ -2760,8 +2762,8 @@ def corriger_durees_course(
     nb_corriges = 0
     for s in seances:
         titre = s.titre or ""
-        base = _re.split(r"\s*—\s*\d+", titre)[0].strip()
-        duree_orig = durees_originales.get(base)
+        cle = _titre_sans_duree(titre)
+        duree_orig = durees_originales.get(cle)
         if duree_orig and s.duree_cible_min != duree_orig:
             # Corriger le titre et la durée
             ancien = s.duree_cible_min
