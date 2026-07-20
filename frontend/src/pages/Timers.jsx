@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import clsx from "clsx";
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function pad(n) { return String(n).padStart(2, "0"); }
 
@@ -19,8 +19,107 @@ function fmtMSms(ms) {
   return { m: pad(m), s: pad(s), cs: pad(cs) };
 }
 
-// ─── Cercle SVG responsive ───────────────────────────────────────────────────
-// La taille est pilotée par la prop `size` (px) calculée par le parent.
+// ─── Audio ───────────────────────────────────────────────────────────────────
+
+function playBeep(freq = 880, duration = 0.12, vol = 0.4) {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(vol, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + duration);
+    osc.onended = () => ctx.close();
+  } catch (_) {}
+}
+
+// ─── Persistent global timer state (survives React unmounts) ─────────────────
+
+const PHASE = { PREP: "PRÉPA", WORK: "TRAVAIL", REST: "REPOS", DONE: "TERMINÉ" };
+
+const _min = { mins: 5, secs: 0, running: false, endTime: null, savedMs: null, beeped: new Set() };
+const _chr = { running: false, startTime: null, savedMs: 0, laps: [] };
+const _tab = {
+  prep: 5, work: 60, rest: 0, tours: 9,
+  running: false, phase: null, endTime: null, tour: 0, phaseDurMs: 1,
+  beeped: new Set(),
+};
+
+function _tabNextPhase(ph, t) {
+  if (ph === PHASE.PREP) return { phase: PHASE.WORK, durSec: _tab.work, tour: t };
+  if (ph === PHASE.WORK) {
+    if (t >= _tab.tours) return { phase: PHASE.DONE, durSec: 0, tour: t };
+    if (_tab.rest > 0)   return { phase: PHASE.REST, durSec: _tab.rest, tour: t };
+    return { phase: PHASE.WORK, durSec: _tab.work, tour: t + 1 };
+  }
+  if (ph === PHASE.REST) return { phase: PHASE.WORK, durSec: _tab.work, tour: t + 1 };
+  return { phase: PHASE.DONE, durSec: 0, tour: t };
+}
+
+// ─── Global audio interval (runs even when Timers page is unmounted) ──────────
+
+let _audioInterval = null;
+
+function ensureAudioTick() {
+  if (_audioInterval) return;
+  _audioInterval = setInterval(() => {
+    let anyRunning = false;
+
+    // Minuteur audio
+    if (_min.running) {
+      anyRunning = true;
+      const left = _min.endTime - Date.now();
+      const leftSec = Math.ceil(left / 1000);
+      if (leftSec <= 3 && leftSec > 0 && !_min.beeped.has(leftSec)) {
+        playBeep(880, 0.1);
+        _min.beeped.add(leftSec);
+      }
+      if (left <= 0 && !_min.beeped.has(0)) {
+        playBeep(660, 0.4, 0.5);
+        _min.beeped.add(0);
+        _min.running = false;
+      }
+    }
+
+    // Tabata audio + phase transitions
+    if (_tab.running) {
+      anyRunning = true;
+      const left = _tab.endTime - Date.now();
+      const leftSec = Math.ceil(left / 1000);
+      if (leftSec <= 3 && leftSec > 0 && !_tab.beeped.has(leftSec)) {
+        playBeep(880, 0.1);
+        _tab.beeped.add(leftSec);
+      }
+      if (left <= 0) {
+        const next = _tabNextPhase(_tab.phase, _tab.tour);
+        if (next.phase === PHASE.DONE) {
+          playBeep(660, 0.5, 0.5);
+          _tab.running = false;
+          _tab.phase = PHASE.DONE;
+        } else {
+          playBeep(660, 0.15, 0.4);
+          const durMs = next.durSec * 1000;
+          _tab.phase = next.phase;
+          _tab.tour = next.tour;
+          _tab.endTime = Date.now() + durMs;
+          _tab.phaseDurMs = durMs;
+          _tab.beeped = new Set();
+        }
+      }
+    }
+
+    if (!anyRunning) {
+      clearInterval(_audioInterval);
+      _audioInterval = null;
+    }
+  }, 100);
+}
+
+// ─── Cercle SVG responsive ────────────────────────────────────────────────────
 
 function TimerCircle({ progress = 1, color = "#f97316", children, pulse = false, size = 220 }) {
   const R = 110;
@@ -46,13 +145,12 @@ function TimerCircle({ progress = 1, color = "#f97316", children, pulse = false,
   );
 }
 
-// ─── Hook pour mesurer la hauteur disponible ─────────────────────────────────
+// ─── Hook pour mesurer la hauteur disponible ──────────────────────────────────
 
 function useTimerSize() {
   const [size, setSize] = useState(200);
   useEffect(() => {
     function calc() {
-      // Hauteur dispo = dvh - header(56) - bottom nav(64) - tabs mode(~52) - padding(24)
       const avail = window.innerHeight - 56 - 64 - 52 - 24;
       setSize(Math.min(220, Math.max(130, avail * 0.45)));
     }
@@ -63,7 +161,7 @@ function useTimerSize() {
   return size;
 }
 
-// ─── Spinner numérique ───────────────────────────────────────────────────────
+// ─── Spinner numérique ────────────────────────────────────────────────────────
 
 function Spinner({ label, value, onChange, min = 0, max = 99, step = 1, unit = "" }) {
   const [editing, setEditing] = useState(false);
@@ -103,13 +201,8 @@ function Spinner({ label, value, onChange, min = 0, max = 99, step = 1, unit = "
     touchAccum.current += dy;
     touchStartY.current = e.touches[0].clientY;
     const threshold = 12;
-    if (touchAccum.current > threshold) {
-      inc();
-      touchAccum.current = 0;
-    } else if (touchAccum.current < -threshold) {
-      dec();
-      touchAccum.current = 0;
-    }
+    if (touchAccum.current > threshold) { inc(); touchAccum.current = 0; }
+    else if (touchAccum.current < -threshold) { dec(); touchAccum.current = 0; }
   }
 
   return (
@@ -143,7 +236,7 @@ function Spinner({ label, value, onChange, min = 0, max = 99, step = 1, unit = "
   );
 }
 
-// ─── Boutons de contrôle ─────────────────────────────────────────────────────
+// ─── Boutons de contrôle ──────────────────────────────────────────────────────
 
 function BtnPlay({ running, onClick }) {
   return (
@@ -172,44 +265,58 @@ function BtnReset({ onClick }) {
 // ─── CHRONOMÈTRE ─────────────────────────────────────────────────────────────
 
 function Chronometre({ circleSize }) {
-  const [running, setRunning] = useState(false);
-  const [ms, setMs]           = useState(0);
-  const [laps, setLaps]       = useState([]);
-  const startRef  = useRef(null);
-  const savedRef  = useRef(0);
-  const rafRef    = useRef(null);
+  const [running, setRunning] = useState(_chr.running);
+  const [ms, setMs] = useState(
+    _chr.running ? (_chr.savedMs + (Date.now() - _chr.startTime)) : _chr.savedMs
+  );
+  const [laps, setLaps] = useState([..._chr.laps]);
+  const rafRef = useRef(null);
 
   const tick = useCallback(() => {
-    setMs(savedRef.current + (Date.now() - startRef.current));
+    const current = _chr.savedMs + (Date.now() - _chr.startTime);
+    setMs(current);
     rafRef.current = requestAnimationFrame(tick);
   }, []);
 
+  // Remonte : redémarre le rAF si le chrono tournait pendant la navigation
+  useEffect(() => {
+    if (_chr.running) {
+      rafRef.current = requestAnimationFrame(tick);
+    }
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [tick]);
+
   function toggle() {
-    if (running) {
+    if (_chr.running) {
       cancelAnimationFrame(rafRef.current);
-      savedRef.current += Date.now() - startRef.current;
+      _chr.savedMs += Date.now() - _chr.startTime;
+      _chr.running = false;
       setRunning(false);
     } else {
-      startRef.current = Date.now();
-      rafRef.current = requestAnimationFrame(tick);
+      _chr.startTime = Date.now();
+      _chr.running = true;
       setRunning(true);
+      rafRef.current = requestAnimationFrame(tick);
     }
   }
 
   function reset() {
     cancelAnimationFrame(rafRef.current);
+    _chr.running = false;
+    _chr.startTime = null;
+    _chr.savedMs = 0;
+    _chr.laps = [];
     setRunning(false);
     setMs(0);
     setLaps([]);
-    savedRef.current = 0;
   }
 
   function lap() {
-    if (!running) return;
-    setLaps(l => [...l, ms]);
+    if (!_chr.running) return;
+    const current = _chr.savedMs + (Date.now() - _chr.startTime);
+    _chr.laps = [..._chr.laps, current];
+    setLaps([..._chr.laps]);
   }
-
-  useEffect(() => () => cancelAnimationFrame(rafRef.current), []);
 
   const { m, s, cs } = fmtMSms(ms);
   const status = running ? "EN COURS" : ms === 0 ? "PRÊT" : "PAUSE";
@@ -253,74 +360,79 @@ function Chronometre({ circleSize }) {
   );
 }
 
-// ─── Audio beeps ─────────────────────────────────────────────────────────────
-
-function playBeep(freq = 880, duration = 0.12, vol = 0.4) {
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.frequency.value = freq;
-    gain.gain.setValueAtTime(vol, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + duration);
-    osc.onended = () => ctx.close();
-  } catch (_) {}
-}
-
-// ─── MINUTEUR ────────────────────────────────────────────────────────────────
+// ─── MINUTEUR ─────────────────────────────────────────────────────────────────
 
 function Minuteur({ circleSize }) {
-  const [mins, setMins]       = useState(5);
-  const [secs, setSecs]       = useState(0);
-  const [running, setRunning] = useState(false);
-  // remaining en ms (float) pour le rendu fluide
-  const [remaining, setRemaining] = useState(null);
+  const [mins, setMins] = useState(_min.mins);
+  const [secs, setSecs] = useState(_min.secs);
+  const [running, setRunning] = useState(_min.running);
+  const [remaining, setRemaining] = useState(() => {
+    if (_min.running) return Math.max(0, _min.endTime - Date.now());
+    if (_min.savedMs !== null) return _min.savedMs;
+    return null;
+  });
 
-  const endTimeRef  = useRef(null);   // timestamp cible (ms)
-  const savedMsRef  = useRef(null);   // ms restantes au moment de la pause
-  const rafRef      = useRef(null);
-  const beeped      = useRef(new Set());
+  const rafRef = useRef(null);
 
-  const totalMs  = (mins * 60 + secs) * 1000;
+  const totalMs = (mins * 60 + secs) * 1000;
   const currentMs = remaining ?? totalMs;
   const currentSec = Math.ceil(currentMs / 1000);
   const progress = totalMs === 0 ? 1 : Math.max(0, currentMs / totalMs);
-  const finished = !running && remaining !== null && remaining <= 0;
+  const finished = !_min.running && remaining !== null && remaining <= 0;
   const status = finished ? "TERMINÉ !" : running ? "EN COURS" : remaining !== null ? "PAUSE" : "PRÊT";
   const fontSize = circleSize < 170 ? "text-3xl" : "text-4xl";
 
   const tick = useCallback(() => {
-    const left = endTimeRef.current - Date.now();
-    if (left <= 0) {
-      setRemaining(0);
+    // Toujours lire depuis l'état global (la phase peut avoir été modifiée par l'audio tick)
+    if (!_min.running) {
       setRunning(false);
-      if (!beeped.current.has(0)) { playBeep(660, 0.4, 0.5); beeped.current.add(0); }
+      setRemaining(r => (r !== null && r > 0) ? r : 0);
       return;
     }
-    setRemaining(left);
-    const leftSec = Math.ceil(left / 1000);
-    if (leftSec <= 3 && !beeped.current.has(leftSec)) {
-      playBeep(880, 0.1);
-      beeped.current.add(leftSec);
+    const left = _min.endTime - Date.now();
+    setRemaining(Math.max(0, left));
+    if (left > 0) {
+      rafRef.current = requestAnimationFrame(tick);
+    } else {
+      setRunning(false);
+      setRemaining(0);
     }
-    rafRef.current = requestAnimationFrame(tick);
   }, []);
+
+  // Remonte : re-sync si le minuteur tournait pendant la navigation
+  useEffect(() => {
+    if (_min.running) {
+      rafRef.current = requestAnimationFrame(tick);
+    }
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [tick]);
+
+  // Détecte la fin déclenchée par l'audio interval quand on revient sur la page
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (!_min.running && running) {
+        setRunning(false);
+        setRemaining(0);
+      }
+    }, 300);
+    return () => clearInterval(id);
+  }, [running]);
 
   function toggle() {
     if (finished) return;
-    if (running) {
+    if (_min.running) {
       cancelAnimationFrame(rafRef.current);
-      savedMsRef.current = endTimeRef.current - Date.now();
+      _min.savedMs = Math.max(0, _min.endTime - Date.now());
+      _min.running = false;
       setRunning(false);
     } else {
       if (totalMs === 0) return;
-      const startMs = savedMsRef.current ?? totalMs;
-      endTimeRef.current = Date.now() + startMs;
-      beeped.current = new Set();
+      const startMs = _min.savedMs ?? totalMs;
+      _min.endTime = Date.now() + startMs;
+      _min.savedMs = null;
+      _min.running = true;
+      _min.beeped = new Set();
+      ensureAudioTick();
       setRunning(true);
       rafRef.current = requestAnimationFrame(tick);
     }
@@ -328,31 +440,13 @@ function Minuteur({ circleSize }) {
 
   function reset() {
     cancelAnimationFrame(rafRef.current);
-    endTimeRef.current = null;
-    savedMsRef.current = null;
-    beeped.current = new Set();
+    _min.endTime = null;
+    _min.savedMs = null;
+    _min.running = false;
+    _min.beeped = new Set();
     setRunning(false);
     setRemaining(null);
   }
-
-  // Annule le rAF uniquement au démontage
-  useEffect(() => () => cancelAnimationFrame(rafRef.current), []);
-
-  // Correction horloge murale quand l'onglet revient au premier plan
-  useEffect(() => {
-    function onVisible() {
-      if (!running || !endTimeRef.current) return;
-      const left = endTimeRef.current - Date.now();
-      if (left <= 0) {
-        setRemaining(0);
-        setRunning(false);
-      } else {
-        setRemaining(left);
-      }
-    }
-    document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [running]);
 
   return (
     <div className="flex flex-col items-center gap-3 w-full">
@@ -365,9 +459,9 @@ function Minuteur({ circleSize }) {
 
       {!running && !finished && (
         <div className="flex items-start gap-3">
-          <Spinner label="MIN" value={mins} onChange={v => { setMins(v); reset(); }} max={99} unit="min" />
+          <Spinner label="MIN" value={mins} onChange={v => { _min.mins = v; setMins(v); reset(); }} max={99} unit="min" />
           <div className="flex items-center h-11 mt-6 text-xl font-bold text-gray-300 dark:text-gray-600">:</div>
-          <Spinner label="SEC" value={secs} onChange={v => { setSecs(v); reset(); }} max={59} step={5} unit="sec" />
+          <Spinner label="SEC" value={secs} onChange={v => { _min.secs = v; setSecs(v); reset(); }} max={59} step={5} unit="sec" />
         </div>
       )}
 
@@ -381,7 +475,6 @@ function Minuteur({ circleSize }) {
 
 // ─── TABATA ───────────────────────────────────────────────────────────────────
 
-const PHASE = { PREP: "PRÉPA", WORK: "TRAVAIL", REST: "REPOS", DONE: "TERMINÉ" };
 const PHASE_COLORS = {
   [PHASE.PREP]: "text-yellow-500",
   [PHASE.WORK]: "text-accent",
@@ -396,20 +489,17 @@ const PHASE_STROKE = {
 };
 
 function Tabata({ circleSize }) {
-  const [prep,  setPrep]  = useState(5);
-  const [work,  setWork]  = useState(60);
-  const [rest,  setRest]  = useState(0);
-  const [tours, setTours] = useState(9);
+  const [prep,  setPrep]  = useState(_tab.prep);
+  const [work,  setWork]  = useState(_tab.work);
+  const [rest,  setRest]  = useState(_tab.rest);
+  const [tours, setTours] = useState(_tab.tours);
 
-  const [running, setRunning] = useState(false);
-  const [phase,   setPhase]   = useState(null);
-  // left en ms pour affichage fluide
-  const [leftMs,  setLeftMs]  = useState(0);
-  const [tour,    setTour]    = useState(0);
+  const [running, setRunning] = useState(_tab.running);
+  const [phase,   setPhase]   = useState(_tab.phase);
+  const [leftMs,  setLeftMs]  = useState(_tab.running ? Math.max(0, _tab.endTime - Date.now()) : 0);
+  const [tour,    setTour]    = useState(_tab.tour);
 
-  const stateRef   = useRef({});   // { phase, endTime, tour, phaseDurMs }
-  const rafRef     = useRef(null);
-  const beeped     = useRef(new Set());
+  const rafRef = useRef(null);
 
   const totalWork = work * tours;
   const totalRest = rest * Math.max(0, tours - 1);
@@ -418,111 +508,88 @@ function Tabata({ circleSize }) {
   function fmtT(s) { return `${pad(Math.floor(s / 60))}:${pad(s % 60)}`; }
 
   const leftSec = Math.ceil(leftMs / 1000);
-  const phaseDurMs = stateRef.current.phaseDurMs || 1;
+  const phaseDurMs = _tab.phaseDurMs || 1;
   const progress = phase === PHASE.DONE ? 1
     : phase === null ? 1
     : Math.max(0, leftMs / phaseDurMs);
 
   const fontSize = circleSize < 170 ? "text-3xl" : "text-4xl";
 
-  function _nextPhase(ph, t) {
-    if (ph === PHASE.PREP) return { phase: PHASE.WORK, durSec: work, tour: t };
-    if (ph === PHASE.WORK) {
-      if (t >= tours) return { phase: PHASE.DONE, durSec: 0, tour: t };
-      if (rest > 0)   return { phase: PHASE.REST, durSec: rest, tour: t };
-      return { phase: PHASE.WORK, durSec: work, tour: t + 1 };
-    }
-    if (ph === PHASE.REST) return { phase: PHASE.WORK, durSec: work, tour: t + 1 };
-    return { phase: PHASE.DONE, durSec: 0, tour: t };
-  }
-
+  // rAF tick : lit toujours depuis l'état global (transitions gérées par l'audio interval)
   const tick = useCallback(() => {
-    const left = stateRef.current.endTime - Date.now();
-    if (left <= 0) {
-      const { phase: ph, tour: t } = stateRef.current;
-      const next = _nextPhase(ph, t);
-      if (next.phase === PHASE.DONE) {
-        playBeep(660, 0.5, 0.5);
-        stateRef.current = { ...stateRef.current, phase: PHASE.DONE, endTime: Date.now(), phaseDurMs: 1 };
-        setPhase(PHASE.DONE);
-        setLeftMs(0);
-        setTour(t);
-        setRunning(false);
-        return;
-      }
-      playBeep(660, 0.15, 0.4);
-      beeped.current = new Set();
-      const durMs = next.durSec * 1000;
-      stateRef.current = { phase: next.phase, endTime: Date.now() + durMs, tour: next.tour, phaseDurMs: durMs };
-      setPhase(next.phase);
-      setTour(next.tour);
-      setLeftMs(durMs);
-      rafRef.current = requestAnimationFrame(tick);
-      return;
-    }
-    setLeftMs(left);
-    const ls = Math.ceil(left / 1000);
-    if (ls <= 3 && !beeped.current.has(ls)) {
-      playBeep(880, 0.1);
-      beeped.current.add(ls);
-    }
+    const gPhase   = _tab.phase;
+    const gRunning = _tab.running;
+    const gTour    = _tab.tour;
+
+    setPhase(gPhase);
+    setTour(gTour);
+    setRunning(gRunning);
+
+    if (!gRunning) return;
+
+    const left = _tab.endTime - Date.now();
+    setLeftMs(Math.max(0, left));
     rafRef.current = requestAnimationFrame(tick);
-  }, [work, rest, tours]);
+  }, []);
+
+  // Remonte : re-sync si le tabata tournait pendant la navigation
+  useEffect(() => {
+    if (_tab.running) {
+      setPhase(_tab.phase);
+      setTour(_tab.tour);
+      setLeftMs(Math.max(0, _tab.endTime - Date.now()));
+      rafRef.current = requestAnimationFrame(tick);
+    }
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [tick]);
 
   function start() {
-    if (running) return;
+    if (_tab.running) return;
     let initialPhase, durSec, initialTour;
-    if (phase === null) {
-      initialPhase = PHASE.PREP; durSec = prep; initialTour = 1;
+    if (_tab.phase === null) {
+      initialPhase = PHASE.PREP; durSec = _tab.prep; initialTour = 1;
     } else {
-      initialPhase = stateRef.current.phase;
-      durSec = Math.ceil((stateRef.current.endTime - Date.now()) / 1000);
-      initialTour = stateRef.current.tour;
+      initialPhase = _tab.phase;
+      durSec = Math.max(1, Math.ceil((_tab.endTime - Date.now()) / 1000));
+      initialTour = _tab.tour;
     }
-    beeped.current = new Set();
+    _tab.beeped = new Set();
     const durMs = durSec * 1000;
-    stateRef.current = { phase: initialPhase, endTime: Date.now() + durMs, tour: initialTour, phaseDurMs: durMs };
+    _tab.phase = initialPhase;
+    _tab.endTime = Date.now() + durMs;
+    _tab.tour = initialTour;
+    _tab.phaseDurMs = durMs;
+    _tab.running = true;
+    ensureAudioTick();
     setPhase(initialPhase);
     setTour(initialTour);
     setRunning(true);
+    setLeftMs(durMs);
     rafRef.current = requestAnimationFrame(tick);
   }
 
   function pause() {
     cancelAnimationFrame(rafRef.current);
-    // Fige endTime à la valeur courante (lefMs restantes depuis maintenant)
-    stateRef.current.endTime = Date.now() + leftMs;
-    stateRef.current.phaseDurMs = phaseDurMs; // conserve pour la progression
+    _tab.endTime = Date.now() + leftMs;
+    _tab.running = false;
     setRunning(false);
   }
 
   function reset() {
     cancelAnimationFrame(rafRef.current);
-    stateRef.current = {};
-    beeped.current = new Set();
+    _tab.running = false;
+    _tab.phase = null;
+    _tab.endTime = null;
+    _tab.tour = 0;
+    _tab.phaseDurMs = 1;
+    _tab.beeped = new Set();
     setRunning(false);
     setPhase(null);
     setLeftMs(0);
     setTour(0);
   }
 
-  // Annule le rAF uniquement au démontage
   useEffect(() => () => cancelAnimationFrame(rafRef.current), []);
-
-  useEffect(() => {
-    function onVisible() {
-      if (!running || !stateRef.current.endTime) return;
-      const left = stateRef.current.endTime - Date.now();
-      if (left <= 0) {
-        cancelAnimationFrame(rafRef.current);
-        rafRef.current = requestAnimationFrame(tick);
-      } else {
-        setLeftMs(left);
-      }
-    }
-    document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [running, tick]);
 
   if (phase !== null) {
     const isDone = phase === PHASE.DONE;
@@ -548,12 +615,11 @@ function Tabata({ circleSize }) {
   return (
     <div className="flex flex-col items-center gap-3 w-full">
       <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Configuration</p>
-      {/* 2×2 sur mobile, 4 colonnes sur desktop */}
       <div className="grid grid-cols-4 gap-2 w-full max-w-xs">
-        <Spinner label="Prépa"   value={prep}  onChange={setPrep}  max={60}  unit="s" />
-        <Spinner label="Travail" value={work}  onChange={setWork}  max={300} step={5} unit="s" />
-        <Spinner label="Repos"   value={rest}  onChange={setRest}  max={120} step={5} unit="s" />
-        <Spinner label="Tours"   value={tours} onChange={setTours} min={1}   max={30} unit="×" />
+        <Spinner label="Prépa"   value={prep}  onChange={v => { _tab.prep  = v; setPrep(v);  reset(); }} max={60}  unit="s" />
+        <Spinner label="Travail" value={work}  onChange={v => { _tab.work  = v; setWork(v);  reset(); }} max={300} step={5} unit="s" />
+        <Spinner label="Repos"   value={rest}  onChange={v => { _tab.rest  = v; setRest(v);  reset(); }} max={120} step={5} unit="s" />
+        <Spinner label="Tours"   value={tours} onChange={v => { _tab.tours = v; setTours(v); reset(); }} min={1}   max={30} unit="×" />
       </div>
 
       <div className="w-full max-w-xs rounded-xl bg-gray-100 dark:bg-gray-800 px-3 py-2.5 space-y-1 text-xs">
@@ -614,7 +680,6 @@ export default function Timers() {
   const [mode, setMode] = useState("chrono");
   const circleSize = useTimerSize();
 
-  // Verrouille tout scroll de la page (body + html) pendant que Timers est affiché.
   useEffect(() => {
     const html = document.documentElement;
     const body = document.body;
@@ -628,7 +693,6 @@ export default function Timers() {
     };
   }, []);
 
-  // Sur mobile (<768px), on applique position:fixed pour ancrer le contenu
   const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
 
   return (
@@ -644,8 +708,6 @@ export default function Timers() {
         height: "100%",
       }}
     >
-
-      {/* ── Barre de modes — pleine largeur, 3 onglets égaux ── */}
       <div className="flex-none flex w-full bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-800">
         {MODES.map(({ id, label, Icon }) => (
           <button key={id} onClick={() => setMode(id)}
@@ -661,7 +723,6 @@ export default function Timers() {
         ))}
       </div>
 
-      {/* ── Contenu timer — centré dans l'espace restant ── */}
       <div className="flex-1 min-h-0 flex items-center justify-center px-4 py-3 overflow-hidden">
         <div className="w-full max-w-sm flex flex-col items-center">
           {mode === "chrono"   && <Chronometre  circleSize={circleSize} />}
@@ -669,7 +730,6 @@ export default function Timers() {
           {mode === "tabata"   && <Tabata        circleSize={circleSize} />}
         </div>
       </div>
-
     </div>
   );
 }
