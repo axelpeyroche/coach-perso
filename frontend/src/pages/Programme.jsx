@@ -747,7 +747,13 @@ function CarteSeance({ seance, zonesFC }) {
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 min-w-0">
-            <p className="text-sm font-semibold text-gray-900 dark:text-white leading-snug truncate">{seance.titre}</p>
+            <p className="text-sm font-semibold text-gray-900 dark:text-white leading-snug truncate">{(() => {
+              const dureeBlocs = seance.exercices?.reduce((s, e) => s + (e.duree_bloc_min || 0), 0) || 0;
+              if (dureeBlocs > 0 && seance.duree_cible_min && dureeBlocs !== seance.duree_cible_min) {
+                return (seance.titre || "").replace(/—\s*\d+\s*min/, `— ${dureeBlocs} min`);
+              }
+              return seance.titre;
+            })()}</p>
             {fait && <span className="text-green-500 dark:text-green-400 font-bold text-base leading-none shrink-0">✓</span>}
           </div>
           <div className="flex flex-wrap gap-1.5 mt-1">
@@ -756,11 +762,15 @@ function CarteSeance({ seance, zonesFC }) {
                 {seance.zone_cible}
               </span>
             )}
-            {seance.duree_cible_min && (
-              <span className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-xs text-gray-600 dark:text-gray-400">
-                ⏱ {fmt(seance.duree_cible_min)}
-              </span>
-            )}
+            {seance.duree_cible_min && (() => {
+              const dureeBlocs = seance.exercices?.reduce((s, e) => s + (e.duree_bloc_min || 0), 0) || 0;
+              const duree = dureeBlocs > 0 ? dureeBlocs : seance.duree_cible_min;
+              return (
+                <span className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-xs text-gray-600 dark:text-gray-400">
+                  ⏱ {fmt(duree)}
+                </span>
+              );
+            })()}
             {seance.dplus_cible_m > 0 && (
               <span className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-xs text-gray-600 dark:text-gray-400">
                 ↑ {seance.dplus_cible_m} m
