@@ -771,11 +771,17 @@ function CarteSeance({ seance, zonesFC }) {
                 {GYM_LABEL[seance.type]}
               </span>
             )}
-            {seance.temps_limite_min && (
-              <span className="px-1.5 py-0.5 rounded bg-brand/10 text-brand text-xs font-bold">
-                {seance.temps_limite_min} min
-              </span>
-            )}
+            {seance.temps_limite_min && (() => {
+              const dureeReelle = seance.exercices?.length
+                ? seance.exercices.reduce((s, e) => s + (e.duree_bloc_min || 0), 0)
+                : 0;
+              const duree = dureeReelle > 0 ? dureeReelle : seance.temps_limite_min;
+              return (
+                <span className="px-1.5 py-0.5 rounded bg-brand/10 text-brand text-xs font-bold">
+                  {duree} min
+                </span>
+              );
+            })()}
           </div>
         </div>
 
@@ -910,10 +916,14 @@ function CarteSeance({ seance, zonesFC }) {
           {seance.exercices?.length > 0 && (
             <div>
               <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">
-                {seance.type === "AMRAP"     ? `Circuit AMRAP ${seance.temps_limite_min} min` :
-                 seance.type === "EMOM"      ? `EMOM ${seance.temps_limite_min} min` :
-                 isGym                       ? `${GYM_LABEL[seance.type]} — ${seance.temps_limite_min} min` :
-                 "Exercices"}
+                {(() => {
+                  const dureeReelle = seance.exercices.reduce((s, e) => s + (e.duree_bloc_min || 0), 0);
+                  const duree = dureeReelle > 0 ? dureeReelle : seance.temps_limite_min;
+                  return seance.type === "AMRAP" ? `Circuit AMRAP ${duree} min`
+                       : seance.type === "EMOM"  ? `EMOM ${duree} min`
+                       : isGym                   ? `${GYM_LABEL[seance.type]} — ${duree} min`
+                       : "Exercices";
+                })()}
               </p>
               <div className="divide-y divide-gray-50 dark:divide-gray-800 rounded-xl border border-gray-100 dark:border-gray-800 overflow-hidden">
                 {seance.exercices.map((ex, i) => (
