@@ -366,8 +366,19 @@ def me(current_user: Utilisateur = Depends(get_current_user), db: Session = Depe
     }
 
 
-@app.post("/api/auth/reset-onboarding", summary="RÃ©initialise l'onboarding et supprime le programme")
+@app.post("/api/auth/reset-onboarding", summary="Réinitialise l'onboarding et supprime le programme")
 def reset_onboarding(current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
+    # Récupérer les IDs des séances liées aux macrocycles de cet utilisateur
+    seance_ids = [
+        s.id
+        for mc in db.query(Macrocycle).filter(Macrocycle.utilisateur_id == current_user.id).all()
+        for sem in mc.semaines
+        for s in sem.seances
+    ]
+    # Supprimer les journaux d'abord (FK bloque sinon la cascade ORM)
+    if seance_ids:
+        db.query(JournalSeance).filter(JournalSeance.seance_id.in_(seance_ids)).delete(synchronize_session=False)
+    # Supprimer les macrocycles (cascade ORM → semaines → séances → exercices)
     for mc in db.query(Macrocycle).filter(Macrocycle.utilisateur_id == current_user.id).all():
         db.delete(mc)
     current_user.onboarding_complet = False
