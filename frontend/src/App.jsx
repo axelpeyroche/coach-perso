@@ -277,7 +277,7 @@ export default function App() {
       <Route path="/*" element={
         <RequireAuth>
           <RequireOnboarding>
-            <div className="min-h-screen flex overflow-x-hidden">
+            <div className="min-h-screen flex" style={{ overflowX: "clip" }}>
 
               {/* ── Sidebar desktop ── */}
               <aside className="hidden md:flex flex-col w-56 shrink-0 border-r glass-nav px-3 py-6 gap-1 fixed top-0 left-0 h-full z-20">
@@ -293,24 +293,33 @@ export default function App() {
                 {NAV.map(n => <SidebarLink key={n.to} {...n} />)}
               </aside>
 
-              {/* ── Header mobile ── */}
+              {/* ── Header mobile — flottant, sans fond visible ── */}
               <header
-                className="md:hidden fixed top-0 left-0 right-0 z-20 flex items-center px-5 glass-nav border-b"
+                className="md:hidden fixed left-0 right-0 z-20 flex items-center px-5"
                 style={{
+                  top: 0,
                   paddingTop: "env(safe-area-inset-top)",
-                  height: "calc(3.5rem + env(safe-area-inset-top))",
+                  height: "calc(3.25rem + env(safe-area-inset-top))",
+                  pointerEvents: "none",
                 }}
               >
-                <NavLink to="/" className="flex items-center gap-2 hover:opacity-75 transition-opacity">
-                  <span className="text-xl">⚡</span>
-                  <span className="text-base font-bold bg-gradient-to-r from-violet-600 to-indigo-500 dark:from-violet-300 dark:to-indigo-300 bg-clip-text text-transparent">Coach Perso</span>
+                <NavLink
+                  to="/"
+                  className="flex items-center gap-2"
+                  style={{ pointerEvents: "auto" }}
+                >
+                  <span className="text-xl drop-shadow-md">⚡</span>
+                  <span className="text-base font-bold drop-shadow-md bg-gradient-to-r from-violet-600 to-indigo-500 dark:from-violet-300 dark:to-indigo-300 bg-clip-text text-transparent">Coach Perso</span>
                 </NavLink>
               </header>
 
               {/* ── Contenu principal ── */}
               <main
-                className="flex-1 md:ml-56 md:pt-0 pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:pb-0 min-h-screen overflow-x-hidden w-full min-w-0"
-                style={{ paddingTop: "calc(3.5rem + env(safe-area-inset-top))" }}
+                className="flex-1 md:ml-56 md:pt-0 pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:pb-0 min-h-screen w-full min-w-0"
+                style={{
+                  overflowX: "clip",
+                  paddingTop: "calc(3.25rem + env(safe-area-inset-top))",
+                }}
               >
                 <ScrollToTop />
                 <Routes>
