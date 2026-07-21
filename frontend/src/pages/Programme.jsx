@@ -1324,7 +1324,21 @@ function ModalAjoutSeance({ semaineId, semaine, onClose }) {
       temps_limite_min: estAmrapEmom && tempsLimite ? parseInt(tempsLimite) : null,
     }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["toutes-semaines"] }); onClose(); },
-    onError: (e) => setErr(e?.response?.data?.detail ?? "Erreur lors de la création"),
+    onError: (e) => {
+      const d = e?.response?.data?.detail;
+      let msg;
+      if (Array.isArray(d)) {
+        // Erreur de validation FastAPI (422) : detail = [{loc, msg, ...}]
+        msg = d.map(x => `${(x.loc ?? []).slice(-1)[0] ?? ""}: ${x.msg}`).join(" · ");
+      } else if (typeof d === "string") {
+        msg = d;
+      } else if (e?.response?.status) {
+        msg = `Erreur ${e.response.status}`;
+      } else {
+        msg = e?.message || "Erreur lors de la création";
+      }
+      setErr(msg);
+    },
   });
 
   const inputCls = "w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand";

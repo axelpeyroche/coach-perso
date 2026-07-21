@@ -2126,30 +2126,36 @@ def creer_seance_personnalisee(
         except ValueError:
             raise HTTPException(400, f"Zone invalide : {payload.zone_cible}")
 
-    # Ordre : à la fin de la semaine
-    nb_existantes = db.query(SeanceEntrainement).filter(
-        SeanceEntrainement.semaine_id == semaine.id
-    ).count()
+    try:
+        # Ordre : à la fin de la semaine
+        nb_existantes = db.query(SeanceEntrainement).filter(
+            SeanceEntrainement.semaine_id == semaine.id
+        ).count()
 
-    seance = SeanceEntrainement(
-        semaine_id=semaine.id,
-        date_seance=date_seance,
-        type_seance=type_seance,
-        titre=payload.titre,
-        description=payload.description,
-        ordre_dans_semaine=nb_existantes + 1,
-        zone_cible=zone,
-        distance_cible_km=payload.distance_cible_km,
-        duree_cible_min=payload.duree_cible_min,
-        dplus_cible_m=payload.dplus_cible_m,
-        temps_limite_min=payload.temps_limite_min,
-        date_planifiee=date_seance,
-        heure_planifiee=payload.heure_planifiee or None,
-    )
-    db.add(seance)
-    db.commit()
-    db.refresh(seance)
-    return {"id": seance.id, "message": "Séance créée."}
+        seance = SeanceEntrainement(
+            semaine_id=semaine.id,
+            date_seance=date_seance,
+            type_seance=type_seance,
+            titre=payload.titre,
+            description=payload.description,
+            ordre_dans_semaine=nb_existantes + 1,
+            zone_cible=zone,
+            distance_cible_km=payload.distance_cible_km,
+            duree_cible_min=payload.duree_cible_min,
+            dplus_cible_m=payload.dplus_cible_m,
+            temps_limite_min=payload.temps_limite_min,
+            date_planifiee=date_seance,
+            heure_planifiee=payload.heure_planifiee or None,
+        )
+        db.add(seance)
+        db.commit()
+        db.refresh(seance)
+        return {"id": seance.id, "message": "Séance créée."}
+    except Exception as exc:
+        db.rollback()
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(500, f"Erreur création séance : {exc}")
 
 
 @app.delete("/api/seances/{seance_id}", summary="Supprime une séance (et son journal)")
