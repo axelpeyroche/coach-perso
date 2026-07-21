@@ -891,10 +891,12 @@ function CarteSeance({ seance, zonesFC, manuel = false }) {
               🗑
             </button>
           )}
-          <button onClick={() => { setOuvert(v => !v); setLogOpen(false); setEditOpen(false); }}
-            className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
-            <span className={clsx("inline-block transition-transform text-xs", ouvert ? "rotate-180" : "")}>▼</span>
-          </button>
+          {(seance.exercices?.length > 0 || seance.description) && (
+            <button onClick={() => { setOuvert(v => !v); setLogOpen(false); setEditOpen(false); }}
+              className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+              <span className={clsx("inline-block transition-transform text-xs", ouvert ? "rotate-180" : "")}>▼</span>
+            </button>
+          )}
         </div>
       </div>
 
