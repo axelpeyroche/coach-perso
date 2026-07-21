@@ -28,6 +28,7 @@ import re
 
 from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, Security, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
@@ -128,6 +129,28 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(Exception)
+async def _handler_exception_global(request: Request, exc: Exception):
+    """
+    Filet de sécurité : une exception non gérée renvoyée par ServerErrorMiddleware
+    (en dehors du middleware CORS) apparaît comme "Network error" côté navigateur.
+    On renvoie ici un JSON 500 AVEC les en-têtes CORS pour que le message d'erreur
+    réel soit lisible dans l'interface.
+    """
+    import traceback
+    traceback.print_exc()
+    origin = request.headers.get("origin")
+    headers = {}
+    if origin in _ALLOWED_ORIGINS:
+        headers["Access-Control-Allow-Origin"] = origin
+        headers["Access-Control-Allow-Credentials"] = "true"
+    return JSONResponse(
+        status_code=500,
+        content={"detail": f"Erreur serveur : {exc}"},
+        headers=headers,
+    )
 
 # ---------------------------------------------------------------------------
 # Auth â€” JWT + bcrypt
@@ -2096,37 +2119,40 @@ def creer_seance_personnalisee(
     current_user: Utilisateur = Depends(get_current_user),
     db: Session = Depends(obtenir_session),
 ):
-    # Vérifier que la semaine appartient bien à l'utilisateur
-    semaine = (
-        db.query(SemaineEntrainement)
-        .join(Macrocycle, SemaineEntrainement.macrocycle_id == Macrocycle.id)
-        .filter(
-            SemaineEntrainement.id == payload.semaine_id,
-            Macrocycle.utilisateur_id == current_user.id,
+    # Tout le corps est protégé : une exception non gérée (500 sans en-têtes
+    # CORS via ServerErrorMiddleware) apparaîtrait comme "Network error" côté
+    # navigateur. On convertit toute erreur en HTTPException (CORS conservé).
+    try:
+        # Vérifier que la semaine appartient bien à l'utilisateur
+        semaine = (
+            db.query(SemaineEntrainement)
+            .join(Macrocycle, SemaineEntrainement.macrocycle_id == Macrocycle.id)
+            .filter(
+                SemaineEntrainement.id == payload.semaine_id,
+                Macrocycle.utilisateur_id == current_user.id,
+            )
+            .first()
         )
-        .first()
-    )
-    if not semaine:
-        raise HTTPException(404, "Semaine introuvable")
+        if not semaine:
+            raise HTTPException(404, "Semaine introuvable")
 
-    try:
-        type_seance = TypeSeance(payload.type_seance)
-    except ValueError:
-        raise HTTPException(400, f"Type de séance invalide : {payload.type_seance}")
-
-    try:
-        date_seance = date.fromisoformat(payload.date_seance)
-    except ValueError:
-        raise HTTPException(400, "Format date_seance invalide — attendu YYYY-MM-DD")
-
-    zone = None
-    if payload.zone_cible:
         try:
-            zone = ZoneCourse(payload.zone_cible)
+            type_seance = TypeSeance(payload.type_seance)
         except ValueError:
-            raise HTTPException(400, f"Zone invalide : {payload.zone_cible}")
+            raise HTTPException(400, f"Type de séance invalide : {payload.type_seance}")
 
-    try:
+        try:
+            date_seance = date.fromisoformat(payload.date_seance)
+        except ValueError:
+            raise HTTPException(400, "Format date_seance invalide — attendu YYYY-MM-DD")
+
+        zone = None
+        if payload.zone_cible:
+            try:
+                zone = ZoneCourse(payload.zone_cible)
+            except ValueError:
+                raise HTTPException(400, f"Zone invalide : {payload.zone_cible}")
+
         # Ordre : à la fin de la semaine
         nb_existantes = db.query(SeanceEntrainement).filter(
             SeanceEntrainement.semaine_id == semaine.id
@@ -2151,6 +2177,8 @@ def creer_seance_personnalisee(
         db.commit()
         db.refresh(seance)
         return {"id": seance.id, "message": "Séance créée."}
+    except HTTPException:
+        raise
     except Exception as exc:
         db.rollback()
         import traceback
