@@ -116,6 +116,10 @@ class Utilisateur(Base):
     objectif_type: Mapped[Optional[str]] = mapped_column(String(20))     # "course" | "muscu" | "aucun"
     historique_perf: Mapped[Optional[str]] = mapped_column(Text)          # JSON serialisé
 
+    # Mode de génération du programme : True = programme auto-généré,
+    # False = l'utilisateur crée lui-même ses séances (mode manuel)
+    programme_auto: Mapped[bool] = mapped_column(Boolean, default=True)
+
     # Token d'import (iOS Shortcuts)
     import_token: Mapped[Optional[str]] = mapped_column(String(64))
 

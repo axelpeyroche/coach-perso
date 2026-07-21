@@ -280,6 +280,7 @@ class OnboardingSchema(BaseModel):
     historique_perf: Optional[dict] = None
     type_course: Optional[str] = None   # "route" | "trail"
     type_muscu: Optional[str] = None    # "poids_corps" | "salle"
+    programme_auto: bool = True         # False = l'utilisateur crée ses propres séances
 
 
 @app.post("/api/auth/register", summary="CrÃ©e un nouveau compte")
@@ -363,6 +364,7 @@ def me(current_user: Utilisateur = Depends(get_current_user), db: Session = Depe
         "seances_muscu_semaine": current_user.seances_muscu_semaine,
         "frequence_tests_semaines": current_user.frequence_tests_semaines,
         "objectif_type": current_user.objectif_type,
+        "programme_auto": bool(current_user.programme_auto),
     }
 
 
@@ -407,6 +409,7 @@ def reset_onboarding(current_user: Utilisateur = Depends(get_current_user), db: 
         "seances_muscu_semaine": current_user.seances_muscu_semaine,
         "frequence_tests_semaines": current_user.frequence_tests_semaines,
         "objectif_type": current_user.objectif_type,
+        "programme_auto": bool(current_user.programme_auto),
     }
 
 
@@ -520,6 +523,7 @@ def onboarding(
     current_user.seances_muscu_semaine = payload.seances_muscu_semaine
     current_user.frequence_tests_semaines = payload.frequence_tests_semaines
     current_user.objectif_type = payload.objectif_type
+    current_user.programme_auto = payload.programme_auto
     current_user.onboarding_complet = True
     if payload.type_course:
         current_user.type_course = payload.type_course
@@ -576,6 +580,28 @@ def onboarding(
     for mc_old in db.query(Macrocycle).filter(Macrocycle.utilisateur_id == current_user.id).all():
         db.delete(mc_old)
     db.flush()
+
+    # ── MODE MANUEL : pas de génération auto ────────────────────────────────
+    # On crée une structure de semaines vides (macrocycle sans séances) que
+    # l'utilisateur remplira lui-même. Les stats se nourriront des séances
+    # qu'il crée et journalise (même chemin : Journal → Séance → Semaine → MC).
+    if not payload.programme_auto:
+        from models import TypeMacrophase
+        N_SEMAINES_VIDES = 24  # ~6 mois de structure hebdomadaire
+        mc = Macrocycle(
+            utilisateur_id=current_user.id, numero_cycle=1,
+            date_debut=debut, date_fin=debut + timedelta(weeks=N_SEMAINES_VIDES),
+        )
+        db.add(mc); db.flush()
+        for i in range(N_SEMAINES_VIDES):
+            db.add(SemaineEntrainement(
+                macrocycle_id=mc.id, numero_semaine=i + 1,
+                macrophase=TypeMacrophase.SURCHARGE,
+                date_debut=debut + timedelta(weeks=i),
+                multiplicateur_volume=1.0,
+            ))
+        db.commit()
+        return {"ok": True, "message": "Onboarding terminé, mode manuel activé."}
 
     # RÃ©cupÃ©rer objectif course si existant
     obj_course = db.query(ObjectifCourse).filter(
@@ -1936,7 +1962,9 @@ def toutes_semaines_programme(current_user: Utilisateur = Depends(get_current_us
     mcs = db.query(Macrocycle).filter(Macrocycle.utilisateur_id == user.id).order_by(Macrocycle.numero_cycle).all()
 
     # Correction automatique du nombre de sÃ©ances par semaine (bulk SQL)
+    # Désactivée en mode manuel : l'utilisateur gère lui-même ses séances.
     try:
+      if user.programme_auto:
         n_muscu = user.seances_muscu_semaine or 2
         seances_total = user.seances_semaine or 5
         n_course = user.seances_course_semaine if user.seances_course_semaine is not None else max(1, seances_total - n_muscu)
@@ -1974,6 +2002,7 @@ def toutes_semaines_programme(current_user: Utilisateur = Depends(get_current_us
             semaine_globale += 1
             result.append({
                 "semaine_globale": semaine_globale,
+                "semaine_id": s.id,
                 "macrocycle_id": mc.id,
                 "numero_semaine": s.numero_semaine,
                 "macrophase": s.macrophase.value,
@@ -2023,6 +2052,110 @@ def toutes_semaines_programme(current_user: Utilisateur = Depends(get_current_us
                 ],
             })
     return {"semaines": result, "total": semaine_globale}
+
+
+# ---------------------------------------------------------------------------
+# Séances personnalisées (mode manuel) — création et suppression par l'utilisateur
+# ---------------------------------------------------------------------------
+
+class CreerSeanceSchema(BaseModel):
+    semaine_id: int
+    type_seance: str                         # COURSE | GYM_UPPER | GYM_LOWER | GYM_FULL | AMRAP | EMOM
+    titre: str
+    date_seance: str                         # "YYYY-MM-DD"
+    description: Optional[str] = None
+    zone_cible: Optional[str] = None         # Z1..Z5 (course)
+    distance_cible_km: Optional[float] = None
+    duree_cible_min: Optional[int] = None
+    dplus_cible_m: Optional[int] = None
+    temps_limite_min: Optional[int] = None   # AMRAP / EMOM
+
+
+@app.post("/api/seances", summary="Crée une séance personnalisée dans une semaine (mode manuel)")
+def creer_seance_personnalisee(
+    payload: CreerSeanceSchema,
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(obtenir_session),
+):
+    # Vérifier que la semaine appartient bien à l'utilisateur
+    semaine = (
+        db.query(SemaineEntrainement)
+        .join(Macrocycle, SemaineEntrainement.macrocycle_id == Macrocycle.id)
+        .filter(
+            SemaineEntrainement.id == payload.semaine_id,
+            Macrocycle.utilisateur_id == current_user.id,
+        )
+        .first()
+    )
+    if not semaine:
+        raise HTTPException(404, "Semaine introuvable")
+
+    try:
+        type_seance = TypeSeance(payload.type_seance)
+    except ValueError:
+        raise HTTPException(400, f"Type de séance invalide : {payload.type_seance}")
+
+    try:
+        date_seance = date.fromisoformat(payload.date_seance)
+    except ValueError:
+        raise HTTPException(400, "Format date_seance invalide — attendu YYYY-MM-DD")
+
+    zone = None
+    if payload.zone_cible:
+        try:
+            zone = ZoneCourse(payload.zone_cible)
+        except ValueError:
+            raise HTTPException(400, f"Zone invalide : {payload.zone_cible}")
+
+    # Ordre : à la fin de la semaine
+    nb_existantes = db.query(SeanceEntrainement).filter(
+        SeanceEntrainement.semaine_id == semaine.id
+    ).count()
+
+    seance = SeanceEntrainement(
+        semaine_id=semaine.id,
+        date_seance=date_seance,
+        type_seance=type_seance,
+        titre=payload.titre,
+        description=payload.description,
+        ordre_dans_semaine=nb_existantes + 1,
+        zone_cible=zone,
+        distance_cible_km=payload.distance_cible_km,
+        duree_cible_min=payload.duree_cible_min,
+        dplus_cible_m=payload.dplus_cible_m,
+        temps_limite_min=payload.temps_limite_min,
+        date_planifiee=date_seance,
+    )
+    db.add(seance)
+    db.commit()
+    db.refresh(seance)
+    return {"id": seance.id, "message": "Séance créée."}
+
+
+@app.delete("/api/seances/{seance_id}", summary="Supprime une séance (et son journal)")
+def supprimer_seance(
+    seance_id: int,
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(obtenir_session),
+):
+    seance = (
+        db.query(SeanceEntrainement)
+        .join(SemaineEntrainement, SeanceEntrainement.semaine_id == SemaineEntrainement.id)
+        .join(Macrocycle, SemaineEntrainement.macrocycle_id == Macrocycle.id)
+        .filter(
+            SeanceEntrainement.id == seance_id,
+            Macrocycle.utilisateur_id == current_user.id,
+        )
+        .first()
+    )
+    if not seance:
+        raise HTTPException(404, "Séance introuvable")
+
+    # Supprimer le journal d'abord (FK), puis la séance (exercices en cascade ORM)
+    db.query(JournalSeance).filter(JournalSeance.seance_id == seance_id).delete(synchronize_session=False)
+    db.delete(seance)
+    db.commit()
+    return {"message": "Séance supprimée."}
 
 
 @app.get("/api/macrocycles", summary="Liste tous les macrocycles de l'utilisateur")

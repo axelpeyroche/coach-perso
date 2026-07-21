@@ -68,19 +68,36 @@ const ETAPES = [
 
 function Etape1({ data, set }) {
   return (
-    <div className="space-y-3">
-      <ChoixCard icon="🏃" titre="Course à pied uniquement"
-        description="Séances de running, endurance et intervalles"
-        selected={data.type_programme === "course"}
-        onClick={() => set({ type_programme: "course" })} />
-      <ChoixCard icon="💪" titre="Musculation uniquement"
-        description="AMRAP, EMOM et travail au poids du corps"
-        selected={data.type_programme === "muscu"}
-        onClick={() => set({ type_programme: "muscu" })} />
-      <ChoixCard icon="⚡" titre="Hybride — les deux"
-        description="Alternance course et musculation chaque semaine"
-        selected={data.type_programme === "hybride"}
-        onClick={() => set({ type_programme: "hybride" })} />
+    <div className="space-y-5">
+      {/* Choix du mode de génération */}
+      <div className="space-y-2">
+        <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Comment veux-tu construire ton programme ?</p>
+        <ChoixCard icon="✨" titre="Génération automatique"
+          description="L'app crée un programme progressif et personnalisé selon ton profil et ton objectif"
+          selected={data.programme_auto === true}
+          onClick={() => set({ programme_auto: true })} />
+        <ChoixCard icon="✍️" titre="Je crée mes propres séances"
+          description="Tu ajoutes toi-même tes séances de course et de musculation. Toutes tes données alimentent tes stats"
+          selected={data.programme_auto === false}
+          onClick={() => set({ programme_auto: false })} />
+      </div>
+
+      {/* Type de programme */}
+      <div className="space-y-2">
+        <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Type d'entraînement</p>
+        <ChoixCard icon="🏃" titre="Course à pied uniquement"
+          description="Séances de running, endurance et intervalles"
+          selected={data.type_programme === "course"}
+          onClick={() => set({ type_programme: "course" })} />
+        <ChoixCard icon="💪" titre="Musculation uniquement"
+          description="AMRAP, EMOM et travail au poids du corps"
+          selected={data.type_programme === "muscu"}
+          onClick={() => set({ type_programme: "muscu" })} />
+        <ChoixCard icon="⚡" titre="Hybride — les deux"
+          description="Alternance course et musculation chaque semaine"
+          selected={data.type_programme === "hybride"}
+          onClick={() => set({ type_programme: "hybride" })} />
+      </div>
     </div>
   );
 }
@@ -361,6 +378,7 @@ export default function Onboarding() {
   const [loading, setLoading] = useState(false);
 
   const [data, setData] = useState({
+    programme_auto: true,
     type_programme: "hybride",
     seances_semaine: 4,
     seances_course_semaine: 2,
@@ -453,6 +471,7 @@ export default function Onboarding() {
         historique_perf: buildHistorique(),
         type_course: data.type_course || null,
         type_muscu: data.type_muscu || null,
+        programme_auto: data.programme_auto,
       });
 
       const me = await api.get("/auth/me");
@@ -524,7 +543,9 @@ export default function Onboarding() {
             ) : (
               <button type="button" onClick={valider} disabled={!canGoNext() || loading}
                 className="px-6 py-2.5 rounded-xl bg-brand text-white font-semibold text-sm hover:bg-brand-dark transition-colors disabled:opacity-40">
-                {loading ? "Génération du programme…" : "Lancer mon programme ⚡"}
+                {loading
+                  ? (data.programme_auto ? "Génération du programme…" : "Création de ton espace…")
+                  : "Lancer mon programme ⚡"}
               </button>
             )}
           </div>

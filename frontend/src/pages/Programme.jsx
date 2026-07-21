@@ -1,7 +1,8 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import api, { getToutesSemaines, journaliserSeance, validerRPE, getProfilFC, supprimerJournal, modifierJournal, planifierSeance, creerEvaluation, enregistrerDemiCooper, enregistrerMax1Min, enregistrerAmrapBenchmark, getExercicesEvaluation, getHistoriqueEvaluations, modifierEvaluation, supprimerEvaluation, corrigerEmom, corrigerDureesCourse, adapterCharge } from "../api";
+import api, { getToutesSemaines, journaliserSeance, validerRPE, getProfilFC, supprimerJournal, modifierJournal, planifierSeance, creerEvaluation, enregistrerDemiCooper, enregistrerMax1Min, enregistrerAmrapBenchmark, getExercicesEvaluation, getHistoriqueEvaluations, modifierEvaluation, supprimerEvaluation, corrigerEmom, corrigerDureesCourse, adapterCharge, creerSeance, supprimerSeance } from "../api";
 import clsx from "clsx";
+import { useAuth } from "../AuthContext";
 
 
 // ─── Constantes ────────────────────────────────────────────────────────────
@@ -721,7 +722,7 @@ function dureeReelleSeance(seance) {
   return null;
 }
 
-function CarteSeance({ seance, zonesFC }) {
+function CarteSeance({ seance, zonesFC, manuel = false }) {
   const qc = useQueryClient();
   const [ouvert, setOuvert]         = useState(false);
   const [logOpen, setLogOpen]       = useState(false);
@@ -733,6 +734,11 @@ function CarteSeance({ seance, zonesFC }) {
   const mutPlanifier = useMutation({
     mutationFn: ({ date_planifiee, heure_planifiee }) => planifierSeance(seance.id, date_planifiee, heure_planifiee),
     onSuccess: () => { setPlanifOpen(false); qc.invalidateQueries({ queryKey: ["toutes-semaines"] }); },
+  });
+
+  const mutSupprimerSeance = useMutation({
+    mutationFn: () => supprimerSeance(seance.id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["toutes-semaines"] }); },
   });
 
   const isGym = GYM_TYPES.includes(seance.type);
@@ -876,6 +882,14 @@ function CarteSeance({ seance, zonesFC }) {
                 Valider
               </button>
             </div>
+          )}
+          {manuel && (
+            <button onClick={() => { if (window.confirm("Supprimer définitivement cette séance ?")) mutSupprimerSeance.mutate(); }}
+              disabled={mutSupprimerSeance.isPending}
+              title="Supprimer la séance"
+              className="p-1.5 rounded-lg text-sm text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-40">
+              🗑
+            </button>
           )}
           <button onClick={() => { setOuvert(v => !v); setLogOpen(false); setEditOpen(false); }}
             className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
@@ -1054,6 +1068,9 @@ function idxSemaineCourante(semaines) {
 
 export default function Programme() {
   const [semIdx, setSemIdx] = useState(null);
+  const { user } = useAuth();
+  const manuel = user?.programme_auto === false;
+  const [ajoutOpen, setAjoutOpen] = useState(false);
 
   // Drag-to-scroll — déclaré avant tout early return (règles des hooks)
   const navRef = useRef(null);
@@ -1078,11 +1095,13 @@ export default function Programme() {
   const qc = useQueryClient();
 
   // Corrections silencieuses + adaptation de charge au montage
+  // Désactivées en mode manuel : elles ne concernent que le programme auto-généré.
   useEffect(() => {
+    if (manuel) return;
     Promise.allSettled([corrigerEmom(), corrigerDureesCourse(), adapterCharge()]).then(() =>
       qc.invalidateQueries({ queryKey: ["toutes-semaines"] })
     );
-  }, []);
+  }, [manuel]);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["toutes-semaines"],
@@ -1185,12 +1204,167 @@ export default function Programme() {
           {/* Séances */}
           <div className="space-y-3">
             {seancesVisibles.length > 0
-              ? seancesTriees.map(s => <CarteSeance key={s.id} seance={s} zonesFC={zonesFC} />)
+              ? seancesTriees.map(s => <CarteSeance key={s.id} seance={s} zonesFC={zonesFC} manuel={manuel} />)
               : <p className="text-sm text-gray-400 text-center py-8">Aucune séance cette semaine.</p>
             }
           </div>
+
+          {/* Bouton d'ajout — mode manuel uniquement */}
+          {manuel && (
+            <button
+              onClick={() => setAjoutOpen(true)}
+              className="w-full py-3 rounded-2xl border-2 border-dashed border-gray-300 dark:border-gray-700 text-sm font-semibold text-gray-500 dark:text-gray-400 hover:border-brand hover:text-brand hover:bg-brand/5 transition-colors"
+            >
+              + Ajouter une séance
+            </button>
+          )}
         </>
       )}
+
+      {/* Modal de création de séance */}
+      {ajoutOpen && semaine && (
+        <ModalAjoutSeance
+          semaineId={semaine.semaine_id}
+          semaine={semaine}
+          onClose={() => setAjoutOpen(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─── Modal : création d'une séance personnalisée (mode manuel) ───────────────
+
+const TYPES_SEANCE = [
+  { id: "COURSE",    label: "Course à pied", icon: "🏃", cat: "course" },
+  { id: "GYM_UPPER", label: "Muscu — Haut du corps", icon: "💪", cat: "muscu" },
+  { id: "GYM_LOWER", label: "Muscu — Bas du corps", icon: "🦵", cat: "muscu" },
+  { id: "GYM_FULL",  label: "Muscu — Full body", icon: "🏋️", cat: "muscu" },
+  { id: "AMRAP",     label: "AMRAP", icon: "🔥", cat: "muscu" },
+  { id: "EMOM",      label: "EMOM", icon: "⏱️", cat: "muscu" },
+];
+
+function ModalAjoutSeance({ semaineId, semaine, onClose }) {
+  const qc = useQueryClient();
+  const [type, setType] = useState("COURSE");
+  const [titre, setTitre] = useState("");
+  const [dateSeance, setDateSeance] = useState(semaine?.date_debut ?? "");
+  const [zone, setZone] = useState("Z2");
+  const [distance, setDistance] = useState("");
+  const [duree, setDuree] = useState("");
+  const [dplus, setDplus] = useState("");
+  const [tempsLimite, setTempsLimite] = useState("");
+  const [err, setErr] = useState("");
+
+  const estCourse = type === "COURSE";
+  const estAmrapEmom = type === "AMRAP" || type === "EMOM";
+
+  const mut = useMutation({
+    mutationFn: () => creerSeance({
+      semaine_id: semaineId,
+      type_seance: type,
+      titre: titre.trim() || TYPES_SEANCE.find(t => t.id === type)?.label || "Séance",
+      date_seance: dateSeance,
+      zone_cible: estCourse ? zone : null,
+      distance_cible_km: estCourse && distance ? parseFloat(distance) : null,
+      duree_cible_min: estCourse && duree ? parseInt(duree) : null,
+      dplus_cible_m: estCourse && dplus ? parseInt(dplus) : null,
+      temps_limite_min: estAmrapEmom && tempsLimite ? parseInt(tempsLimite) : null,
+    }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["toutes-semaines"] }); onClose(); },
+    onError: (e) => setErr(e?.response?.data?.detail ?? "Erreur lors de la création"),
+  });
+
+  const inputCls = "w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+        <h3 className="text-lg font-bold text-gray-900 dark:text-white">Nouvelle séance</h3>
+
+        {/* Type */}
+        <div>
+          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1.5">Type de séance</label>
+          <div className="grid grid-cols-2 gap-2">
+            {TYPES_SEANCE.map(t => (
+              <button key={t.id} onClick={() => setType(t.id)}
+                className={clsx(
+                  "flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-medium transition-colors text-left",
+                  type === t.id
+                    ? "border-brand bg-brand/10 text-brand"
+                    : "border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-300"
+                )}>
+                <span className="text-base">{t.icon}</span>
+                <span className="leading-tight">{t.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Titre */}
+        <div>
+          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Titre (optionnel)</label>
+          <input value={titre} onChange={e => setTitre(e.target.value)}
+            placeholder={TYPES_SEANCE.find(t => t.id === type)?.label}
+            className={inputCls} />
+        </div>
+
+        {/* Date */}
+        <div>
+          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Date</label>
+          <input type="date" value={dateSeance} onChange={e => setDateSeance(e.target.value)} className={inputCls} />
+        </div>
+
+        {/* Champs course */}
+        {estCourse && (
+          <>
+            <div>
+              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Zone d'intensité</label>
+              <select value={zone} onChange={e => setZone(e.target.value)} className={inputCls}>
+                <option value="Z1">Z1 — Récupération</option>
+                <option value="Z2">Z2 — Endurance</option>
+                <option value="Z3">Z3 — Tempo</option>
+                <option value="Z4">Z4 — Seuil</option>
+                <option value="Z5">Z5 — VO2max</option>
+              </select>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Distance (km)</label>
+                <input type="number" step="0.1" value={distance} onChange={e => setDistance(e.target.value)} className={inputCls} />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Durée (min)</label>
+                <input type="number" value={duree} onChange={e => setDuree(e.target.value)} className={inputCls} />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">D+ (m)</label>
+                <input type="number" value={dplus} onChange={e => setDplus(e.target.value)} className={inputCls} />
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Champs AMRAP / EMOM */}
+        {estAmrapEmom && (
+          <div>
+            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Durée limite (min)</label>
+            <input type="number" value={tempsLimite} onChange={e => setTempsLimite(e.target.value)} className={inputCls} />
+          </div>
+        )}
+
+        {err && <p className="text-sm text-red-500">{err}</p>}
+
+        <div className="flex gap-2 pt-1">
+          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+            Annuler
+          </button>
+          <button onClick={() => { setErr(""); mut.mutate(); }} disabled={mut.isPending || !dateSeance}
+            className="flex-1 py-2.5 rounded-xl bg-brand text-white font-semibold text-sm hover:bg-brand-dark transition-colors disabled:opacity-40">
+            {mut.isPending ? "Création…" : "Créer"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

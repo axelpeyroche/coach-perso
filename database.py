@@ -61,6 +61,8 @@ def creer_tables() -> None:
         "ALTER TABLE journaux_seances ADD COLUMN IF NOT EXISTS type_course VARCHAR(20)",
         # Token d'import iOS Shortcuts
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS import_token VARCHAR(64)",
+        # Mode de génération du programme (auto vs manuel)
+        "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS programme_auto BOOLEAN DEFAULT TRUE",
     ]
     with engine.begin() as conn:
         for stmt in _migrations:

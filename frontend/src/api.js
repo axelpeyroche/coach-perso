@@ -96,6 +96,13 @@ export const modifierJournal = (seance_id, payload) =>
 export const planifierSeance = (seance_id, date_planifiee, heure_planifiee) =>
   api.patch(`/seances/${seance_id}/planifier`, { date_planifiee, heure_planifiee }).then((r) => r.data);
 
+// --- Séances personnalisées (mode manuel) ---
+export const creerSeance = (payload) =>
+  api.post("/seances", payload).then((r) => r.data);
+
+export const supprimerSeance = (seance_id) =>
+  api.delete(`/seances/${seance_id}`).then((r) => r.data);
+
 // --- Évaluations ---
 export const getHistoriqueEvaluations = () =>
   api.get("/evaluations/historique").then((r) => r.data);
