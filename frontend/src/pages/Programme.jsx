@@ -1275,6 +1275,7 @@ function ModalAjoutSeance({ semaineId, semaine, onClose }) {
   const [tempsRepos, setTempsRepos] = useState("");
   const [titre, setTitre] = useState("");
   const [dateSeance, setDateSeance] = useState(semaine?.date_debut ?? "");
+  const [heure, setHeure] = useState("");
   const [distance, setDistance] = useState("");
   const [duree, setDuree] = useState("");
   const [dplus, setDplus] = useState("");
@@ -1315,6 +1316,7 @@ function ModalAjoutSeance({ semaineId, semaine, onClose }) {
       titre: titre.trim() || titreParDefaut,
       description: buildDescription(),
       date_seance: dateSeance,
+      heure_planifiee: heure || null,
       zone_cible: estCourse ? courseCfg.zone : null,
       distance_cible_km: estCourse && distance ? parseFloat(distance) : null,
       duree_cible_min: estCourse && duree ? parseInt(duree) : null,
@@ -1379,10 +1381,16 @@ function ModalAjoutSeance({ semaineId, semaine, onClose }) {
             className={inputCls} />
         </div>
 
-        {/* Date */}
-        <div>
-          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Date</label>
-          <input type="date" value={dateSeance} onChange={e => setDateSeance(e.target.value)} className={inputCls} />
+        {/* Date + créneau horaire */}
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Date</label>
+            <input type="date" value={dateSeance} onChange={e => setDateSeance(e.target.value)} className={inputCls} />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Créneau (heure)</label>
+            <input type="time" value={heure} onChange={e => setHeure(e.target.value)} className={inputCls} />
+          </div>
         </div>
 
         {/* Champs course */}

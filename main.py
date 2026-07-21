@@ -2081,6 +2081,7 @@ class CreerSeanceSchema(BaseModel):
     type_seance: str                         # COURSE | GYM_UPPER | GYM_LOWER | GYM_FULL | AMRAP | EMOM
     titre: str
     date_seance: str                         # "YYYY-MM-DD"
+    heure_planifiee: Optional[str] = None    # "HH:MM"
     description: Optional[str] = None
     zone_cible: Optional[str] = None         # Z1..Z5 (course)
     distance_cible_km: Optional[float] = None
@@ -2143,6 +2144,7 @@ def creer_seance_personnalisee(
         dplus_cible_m=payload.dplus_cible_m,
         temps_limite_min=payload.temps_limite_min,
         date_planifiee=date_seance,
+        heure_planifiee=payload.heure_planifiee or None,
     )
     db.add(seance)
     db.commit()
