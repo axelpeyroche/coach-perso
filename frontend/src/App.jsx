@@ -77,10 +77,10 @@ function SidebarLink({ to, label, IconC }) {
   return (
     <NavLink to={to} end={to === "/"}
       className={({ isActive }) => clsx(
-        "flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all",
+        "flex items-center gap-3 px-4 py-2.5 rounded-xl text-sm font-medium transition-all duration-150",
         isActive
           ? "glass-sm text-brand dark:text-brand font-semibold"
-          : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-white/30 dark:hover:bg-white/5"
+          : "text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:font-semibold hover:bg-white/40 dark:hover:bg-white/8 hover:border hover:border-white/60 dark:hover:border-white/20 hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.7),inset_1px_0_0_rgba(255,255,255,0.3),inset_-1px_0_0_rgba(255,255,255,0.2)]"
       )}>
       <IconC />
       <span>{label}</span>

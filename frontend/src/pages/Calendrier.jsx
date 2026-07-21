@@ -122,7 +122,7 @@ export default function Calendrier() {
   const todayKey = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-${String(today.getDate()).padStart(2,"0")}`;
 
   return (
-    <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-6">
+    <div className="p-4 md:p-8 w-full space-y-6">
       <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Calendrier</h1>
 
       <div className="flex flex-col lg:flex-row gap-6">

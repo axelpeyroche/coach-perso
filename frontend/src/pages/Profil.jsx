@@ -793,7 +793,7 @@ export default function Profil({ dark, setDark }) {
   }
 
   return (
-    <div className="max-w-lg mx-auto px-4 py-6">
+    <div className="w-full px-4 md:px-8 py-6">
 
       {/* Avatar + nom */}
       <div className="flex flex-col items-center mb-6">

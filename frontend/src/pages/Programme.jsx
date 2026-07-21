@@ -1121,7 +1121,7 @@ export default function Programme() {
   ];
 
   return (
-    <div className="p-4 md:p-8 max-w-2xl mx-auto space-y-5 w-full min-w-0">
+    <div className="p-4 md:p-8 w-full space-y-5 min-w-0">
 
       {/* En-tête */}
       <div>

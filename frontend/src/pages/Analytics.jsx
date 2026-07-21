@@ -190,7 +190,7 @@ export default function Analytics({ dark }) {
   ));
 
   return (
-    <div className="p-4 md:p-8 max-w-4xl mx-auto space-y-6">
+    <div className="p-4 md:p-8 w-full space-y-6">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Statistiques</h2>
