@@ -20,20 +20,46 @@ function fmtMSms(ms) {
 }
 
 // ─── Audio ───────────────────────────────────────────────────────────────────
+// iOS Safari exige que l'AudioContext soit créé ET repris pendant un geste
+// utilisateur. On garde un contexte singleton qu'on resume() à chaque press.
+
+let _audioCtx = null;
+
+function getAudioCtx() {
+  if (!_audioCtx) {
+    try {
+      _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    } catch (_) {}
+  }
+  return _audioCtx;
+}
+
+// Appeler sur chaque pression de bouton (start/stop/reset)
+function unlockAudio() {
+  const ctx = getAudioCtx();
+  if (ctx && ctx.state === "suspended") ctx.resume();
+}
 
 function playBeep(freq = 880, duration = 0.12, vol = 0.4) {
   try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.frequency.value = freq;
-    gain.gain.setValueAtTime(vol, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + duration);
-    osc.onended = () => ctx.close();
+    const ctx = getAudioCtx();
+    if (!ctx) return;
+    const play = () => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(vol, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + duration);
+    };
+    if (ctx.state === "suspended") {
+      ctx.resume().then(play);
+    } else {
+      play();
+    }
   } catch (_) {}
 }
 
@@ -294,6 +320,7 @@ function Chronometre({ circleSize }) {
   }, [tick]);
 
   function toggle() {
+    unlockAudio();
     if (_chr.running) {
       cancelAnimationFrame(rafRef.current);
       _chr.savedMs += Date.now() - _chr.startTime;
@@ -308,6 +335,7 @@ function Chronometre({ circleSize }) {
   }
 
   function reset() {
+    unlockAudio();
     cancelAnimationFrame(rafRef.current);
     _chr.running = false;
     _chr.startTime = null;
@@ -426,6 +454,7 @@ function Minuteur({ circleSize }) {
   }, [running]);
 
   function toggle() {
+    unlockAudio();
     if (finished) return;
     if (_min.running) {
       cancelAnimationFrame(rafRef.current);
@@ -446,6 +475,7 @@ function Minuteur({ circleSize }) {
   }
 
   function reset() {
+    unlockAudio();
     cancelAnimationFrame(rafRef.current);
     _min.endTime = null;
     _min.savedMs = null;
@@ -551,6 +581,7 @@ function Tabata({ circleSize }) {
   }, [tick]);
 
   function start() {
+    unlockAudio();
     if (_tab.running) return;
     let initialPhase, durSec, initialTour;
     if (_tab.phase === null) {
@@ -576,6 +607,7 @@ function Tabata({ circleSize }) {
   }
 
   function pause() {
+    unlockAudio();
     cancelAnimationFrame(rafRef.current);
     _tab.endTime = Date.now() + leftMs;
     _tab.running = false;
@@ -583,6 +615,7 @@ function Tabata({ circleSize }) {
   }
 
   function reset() {
+    unlockAudio();
     cancelAnimationFrame(rafRef.current);
     _tab.running = false;
     _tab.phase = null;
