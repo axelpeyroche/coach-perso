@@ -1257,13 +1257,24 @@ const FOCUS_MUSCU = [
   { id: "full", label: "Full body" },
 ];
 
+// Sous-types de course : zone imposée + champs disponibles
+const COURSE_TYPES = [
+  { id: "EF",            label: "EF",            zone: "Z2", dplus: true,  sequences: false, terrain: false },
+  { id: "SEUIL",         label: "Seuil",         zone: "Z4", dplus: false, sequences: true,  terrain: false },
+  { id: "FRACTIONNE",    label: "Fractionné",    zone: "Z5", dplus: true,  sequences: true,  terrain: false },
+  { id: "SORTIE_LONGUE", label: "Sortie longue", zone: "Z2", dplus: true,  sequences: false, terrain: true  },
+];
+
 function ModalAjoutSeance({ semaineId, semaine, onClose }) {
   const qc = useQueryClient();
   const [type, setType] = useState("COURSE");
   const [focus, setFocus] = useState("push");
+  const [courseType, setCourseType] = useState("EF");
+  const [terrain, setTerrain] = useState("route");
+  const [nbSequences, setNbSequences] = useState("");
+  const [tempsRepos, setTempsRepos] = useState("");
   const [titre, setTitre] = useState("");
   const [dateSeance, setDateSeance] = useState(semaine?.date_debut ?? "");
-  const [zone, setZone] = useState("Z2");
   const [distance, setDistance] = useState("");
   const [duree, setDuree] = useState("");
   const [dplus, setDplus] = useState("");
@@ -1273,21 +1284,41 @@ function ModalAjoutSeance({ semaineId, semaine, onClose }) {
   const estCourse = type === "COURSE";
   const estAmrapEmom = type === "AMRAP" || type === "EMOM";
 
-  // Titre par défaut : "EMOM - Push", "AMRAP - Full body", "Course à pied"
+  const courseCfg = COURSE_TYPES.find(c => c.id === courseType) ?? COURSE_TYPES[0];
+
+  // Titre par défaut
   const focusLabel = FOCUS_MUSCU.find(f => f.id === focus)?.label;
-  const titreParDefaut = estAmrapEmom ? `${type} - ${focusLabel}` : "Course à pied";
+  let titreParDefaut = "Course à pied";
+  if (estAmrapEmom) titreParDefaut = `${type} - ${focusLabel}`;
+  else if (estCourse) {
+    titreParDefaut = courseCfg.label;
+    if (courseCfg.terrain) titreParDefaut += terrain === "trail" ? " (Trail)" : " (Route)";
+  }
+
+  // Description : détails de séquences / repos / terrain pour la course
+  function buildDescription() {
+    if (estAmrapEmom) return focusLabel;
+    if (!estCourse) return null;
+    const parts = [];
+    if (courseCfg.sequences && nbSequences) {
+      parts.push(`${nbSequences} séquence${parseInt(nbSequences) > 1 ? "s" : ""}`);
+      if (tempsRepos) parts.push(`repos ${tempsRepos}s`);
+    }
+    if (courseCfg.terrain) parts.push(terrain === "trail" ? "Trail" : "Route");
+    return parts.length ? parts.join(" · ") : null;
+  }
 
   const mut = useMutation({
     mutationFn: () => creerSeance({
       semaine_id: semaineId,
       type_seance: type,
       titre: titre.trim() || titreParDefaut,
-      description: estAmrapEmom ? focusLabel : null,
+      description: buildDescription(),
       date_seance: dateSeance,
-      zone_cible: estCourse ? zone : null,
+      zone_cible: estCourse ? courseCfg.zone : null,
       distance_cible_km: estCourse && distance ? parseFloat(distance) : null,
       duree_cible_min: estCourse && duree ? parseInt(duree) : null,
-      dplus_cible_m: estCourse && dplus ? parseInt(dplus) : null,
+      dplus_cible_m: estCourse && courseCfg.dplus && dplus ? parseInt(dplus) : null,
       temps_limite_min: estAmrapEmom && tempsLimite ? parseInt(tempsLimite) : null,
     }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["toutes-semaines"] }); onClose(); },
@@ -1357,17 +1388,47 @@ function ModalAjoutSeance({ semaineId, semaine, onClose }) {
         {/* Champs course */}
         {estCourse && (
           <>
+            {/* Sous-type de course */}
             <div>
-              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Zone d'intensité</label>
-              <select value={zone} onChange={e => setZone(e.target.value)} className={inputCls}>
-                <option value="Z1">Z1 — Récupération</option>
-                <option value="Z2">Z2 — Endurance</option>
-                <option value="Z3">Z3 — Tempo</option>
-                <option value="Z4">Z4 — Seuil</option>
-                <option value="Z5">Z5 — VO2max</option>
-              </select>
+              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1.5">Type de course</label>
+              <div className="grid grid-cols-2 gap-2">
+                {COURSE_TYPES.map(c => (
+                  <button key={c.id} onClick={() => setCourseType(c.id)}
+                    className={clsx(
+                      "flex items-center justify-between px-3 py-2 rounded-xl border text-xs font-medium transition-colors",
+                      courseType === c.id
+                        ? "border-brand bg-brand/10 text-brand"
+                        : "border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-300"
+                    )}>
+                    <span>{c.label}</span>
+                    <span className={clsx("px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold", ZONE_PILL[c.zone])}>{c.zone}</span>
+                  </button>
+                ))}
+              </div>
             </div>
-            <div className="grid grid-cols-3 gap-2">
+
+            {/* Terrain — sortie longue uniquement */}
+            {courseCfg.terrain && (
+              <div>
+                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1.5">Terrain</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[{ id: "route", label: "🛣️ Route" }, { id: "trail", label: "🏔️ Trail" }].map(t => (
+                    <button key={t.id} onClick={() => setTerrain(t.id)}
+                      className={clsx(
+                        "px-3 py-2 rounded-xl border text-xs font-medium transition-colors",
+                        terrain === t.id
+                          ? "border-brand bg-brand/10 text-brand"
+                          : "border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-300"
+                      )}>
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Distance / Durée / D+ */}
+            <div className={clsx("grid gap-2", courseCfg.dplus ? "grid-cols-3" : "grid-cols-2")}>
               <div>
                 <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Distance (km)</label>
                 <input type="number" step="0.1" value={distance} onChange={e => setDistance(e.target.value)} className={inputCls} />
@@ -1376,11 +1437,27 @@ function ModalAjoutSeance({ semaineId, semaine, onClose }) {
                 <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Durée (min)</label>
                 <input type="number" value={duree} onChange={e => setDuree(e.target.value)} className={inputCls} />
               </div>
-              <div>
-                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">D+ (m)</label>
-                <input type="number" value={dplus} onChange={e => setDplus(e.target.value)} className={inputCls} />
-              </div>
+              {courseCfg.dplus && (
+                <div>
+                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">D+ (m)</label>
+                  <input type="number" value={dplus} onChange={e => setDplus(e.target.value)} className={inputCls} />
+                </div>
+              )}
             </div>
+
+            {/* Séquences + repos — fractionné et seuil */}
+            {courseCfg.sequences && (
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Nombre de séquences</label>
+                  <input type="number" value={nbSequences} onChange={e => setNbSequences(e.target.value)} className={inputCls} />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Temps de repos (s)</label>
+                  <input type="number" value={tempsRepos} onChange={e => setTempsRepos(e.target.value)} className={inputCls} />
+                </div>
+              </div>
+            )}
           </>
         )}
 
