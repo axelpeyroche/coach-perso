@@ -587,13 +587,26 @@ def onboarding(
     # qu'il crée et journalise (même chemin : Journal → Séance → Semaine → MC).
     if not payload.programme_auto:
         from models import TypeMacrophase
-        N_SEMAINES_VIDES = 24  # ~6 mois de structure hebdomadaire
+        import math
+
+        # Nombre de semaines = jusqu'à la date d'objectif si elle existe,
+        # sinon 12 semaines par défaut. Borné entre 1 et 52.
+        obj_manuel = db.query(ObjectifCourse).filter(
+            ObjectifCourse.utilisateur_id == current_user.id
+        ).order_by(ObjectifCourse.id.desc()).first()
+        if obj_manuel and obj_manuel.date_course:
+            jours = (obj_manuel.date_course - debut).days
+            n_semaines = math.ceil(jours / 7) if jours > 0 else 1
+        else:
+            n_semaines = 12
+        n_semaines = max(1, min(52, n_semaines))
+
         mc = Macrocycle(
             utilisateur_id=current_user.id, numero_cycle=1,
-            date_debut=debut, date_fin=debut + timedelta(weeks=N_SEMAINES_VIDES),
+            date_debut=debut, date_fin=debut + timedelta(weeks=n_semaines),
         )
         db.add(mc); db.flush()
-        for i in range(N_SEMAINES_VIDES):
+        for i in range(n_semaines):
             db.add(SemaineEntrainement(
                 macrocycle_id=mc.id, numero_semaine=i + 1,
                 macrophase=TypeMacrophase.SURCHARGE,
