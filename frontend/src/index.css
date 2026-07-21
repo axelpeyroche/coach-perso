@@ -351,6 +351,16 @@
     }
   }
 
+  /* Offset du header mobile — uniquement sur mobile */
+  .mobile-header-offset {
+    padding-top: calc(3.25rem + env(safe-area-inset-top));
+  }
+  @media (min-width: 768px) {
+    .mobile-header-offset {
+      padding-top: 0;
+    }
+  }
+
   /* Scrollbar */
   .scrollbar-hide::-webkit-scrollbar { display: none; }
   .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }

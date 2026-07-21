@@ -151,8 +151,15 @@ function useTimerSize() {
   const [size, setSize] = useState(200);
   useEffect(() => {
     function calc() {
-      const avail = window.innerHeight - 56 - 64 - 52 - 24;
-      setSize(Math.min(220, Math.max(130, avail * 0.45)));
+      const isDesktop = window.innerWidth >= 768;
+      if (isDesktop) {
+        // Sur PC : cercle plus grand, limité par la hauteur disponible
+        const avail = Math.min(window.innerHeight - 120, window.innerWidth - 280);
+        setSize(Math.min(380, Math.max(260, avail * 0.40)));
+      } else {
+        const avail = window.innerHeight - 56 - 64 - 52 - 24;
+        setSize(Math.min(220, Math.max(130, avail * 0.45)));
+      }
     }
     calc();
     window.addEventListener("resize", calc);
@@ -320,7 +327,7 @@ function Chronometre({ circleSize }) {
 
   const { m, s, cs } = fmtMSms(ms);
   const status = running ? "EN COURS" : ms === 0 ? "PRÊT" : "PAUSE";
-  const fontSize = circleSize < 170 ? "text-3xl" : "text-4xl";
+  const fontSize = circleSize < 170 ? "text-3xl" : circleSize > 300 ? "text-6xl" : "text-4xl";
 
   return (
     <div className="flex flex-col items-center gap-3 w-full">
@@ -380,7 +387,7 @@ function Minuteur({ circleSize }) {
   const progress = totalMs === 0 ? 1 : Math.max(0, currentMs / totalMs);
   const finished = !_min.running && remaining !== null && remaining <= 0;
   const status = finished ? "TERMINÉ !" : running ? "EN COURS" : remaining !== null ? "PAUSE" : "PRÊT";
-  const fontSize = circleSize < 170 ? "text-3xl" : "text-4xl";
+  const fontSize = circleSize < 170 ? "text-3xl" : circleSize > 300 ? "text-6xl" : "text-4xl";
 
   const tick = useCallback(() => {
     // Toujours lire depuis l'état global (la phase peut avoir été modifiée par l'audio tick)
@@ -513,7 +520,7 @@ function Tabata({ circleSize }) {
     : phase === null ? 1
     : Math.max(0, leftMs / phaseDurMs);
 
-  const fontSize = circleSize < 170 ? "text-3xl" : "text-4xl";
+  const fontSize = circleSize < 170 ? "text-3xl" : circleSize > 300 ? "text-6xl" : "text-4xl";
 
   // rAF tick : lit toujours depuis l'état global (transitions gérées par l'audio interval)
   const tick = useCallback(() => {
@@ -709,7 +716,7 @@ export default function Timers() {
         top: "56px",
         bottom: "calc(80px + env(safe-area-inset-bottom, 0px))",
       } : {
-        height: "100%",
+        minHeight: "calc(100vh - 0px)",
       }}
     >
       <div className="flex-none flex w-full glass-nav border-b">
@@ -727,8 +734,8 @@ export default function Timers() {
         ))}
       </div>
 
-      <div className="flex-1 min-h-0 flex items-center justify-center px-4 py-3 overflow-hidden">
-        <div className="w-full max-w-sm flex flex-col items-center">
+      <div className="flex-1 min-h-0 flex items-center justify-center px-4 py-6 overflow-hidden">
+        <div className="w-full flex flex-col items-center">
           {mode === "chrono"   && <Chronometre  circleSize={circleSize} />}
           {mode === "minuteur" && <Minuteur      circleSize={circleSize} />}
           {mode === "tabata"   && <Tabata        circleSize={circleSize} />}

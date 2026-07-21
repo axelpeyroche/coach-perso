@@ -315,11 +315,8 @@ export default function App() {
 
               {/* ── Contenu principal ── */}
               <main
-                className="flex-1 md:ml-56 md:pt-0 pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:pb-0 min-h-screen w-full min-w-0"
-                style={{
-                  overflowX: "clip",
-                  paddingTop: "calc(3.25rem + env(safe-area-inset-top))",
-                }}
+                className="flex-1 md:ml-56 pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:pb-0 min-h-screen w-full min-w-0 mobile-header-offset"
+                style={{ overflowX: "clip" }}
               >
                 <ScrollToTop />
                 <Routes>
