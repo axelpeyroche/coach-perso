@@ -294,7 +294,13 @@ export default function App() {
               </aside>
 
               {/* ── Header mobile ── */}
-              <header className="md:hidden fixed top-0 left-0 right-0 z-20 flex items-center justify-between px-4 h-14 glass-nav border-b">
+              <header
+                className="md:hidden fixed top-0 left-0 right-0 z-20 flex items-center px-5 glass-nav border-b"
+                style={{
+                  paddingTop: "env(safe-area-inset-top)",
+                  height: "calc(3.5rem + env(safe-area-inset-top))",
+                }}
+              >
                 <NavLink to="/" className="flex items-center gap-2 hover:opacity-75 transition-opacity">
                   <span className="text-xl">⚡</span>
                   <span className="text-base font-bold bg-gradient-to-r from-violet-600 to-indigo-500 dark:from-violet-300 dark:to-indigo-300 bg-clip-text text-transparent">Coach Perso</span>
@@ -302,7 +308,10 @@ export default function App() {
               </header>
 
               {/* ── Contenu principal ── */}
-              <main className="flex-1 md:ml-56 pt-14 md:pt-0 pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:pb-0 min-h-screen overflow-x-hidden w-full min-w-0">
+              <main
+                className="flex-1 md:ml-56 md:pt-0 pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:pb-0 min-h-screen overflow-x-hidden w-full min-w-0"
+                style={{ paddingTop: "calc(3.5rem + env(safe-area-inset-top))" }}
+              >
                 <ScrollToTop />
                 <Routes>
                   <Route path="/"           element={<Dashboard />} />
