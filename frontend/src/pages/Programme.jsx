@@ -1180,15 +1180,9 @@ export default function Programme() {
               )}>
               <span className="font-bold">S{s.semaine_globale}</span>
               <span className="opacity-70 mt-0.5">
-                {complet
-                  ? "✓"
-                  : s.macrophase === "evaluation"
-                  ? "★"
-                  : estCourante && !selectionne
-                  ? "●"
-                  : manuel
-                  ? " "
-                  : s.macrophase === "surcharge" ? "↑" : s.macrophase === "decharge" ? "↓" : "★"}
+                {manuel
+                  ? (s.macrophase === "evaluation" ? "★" : estCourante ? "●" : complet ? "✓" : " ")
+                  : (complet ? "✓" : estCourante && !selectionne ? "●" : s.macrophase === "surcharge" ? "↑" : s.macrophase === "decharge" ? "↓" : "★")}
               </span>
             </button>
           );
