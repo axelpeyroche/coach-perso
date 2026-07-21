@@ -719,22 +719,46 @@ export default function Timers() {
         minHeight: "calc(100vh - 0px)",
       }}
     >
-      <div className="flex-none flex w-full glass-nav border-b">
-        {MODES.map(({ id, label, Icon }) => (
-          <button key={id} onClick={() => switchMode(id)}
-            className={clsx(
-              "flex-1 flex flex-col items-center justify-center gap-1 py-2.5 text-[11px] font-semibold transition-colors",
-              mode === id
-                ? "text-accent border-b-2 border-accent bg-accent/5"
-                : "text-gray-500 dark:text-gray-400"
-            )}>
-            <Icon />
-            {label}
-          </button>
-        ))}
-      </div>
+      {/* Sélecteur PC : bandeau classique */}
+      {!isMobile && (
+        <div className="flex-none flex w-full glass-nav border-b">
+          {MODES.map(({ id, label, Icon }) => (
+            <button key={id} onClick={() => switchMode(id)}
+              className={clsx(
+                "flex-1 flex flex-col items-center justify-center gap-1 py-2.5 text-[11px] font-semibold transition-colors",
+                mode === id
+                  ? "text-accent border-b-2 border-accent bg-accent/5"
+                  : "text-gray-500 dark:text-gray-400"
+              )}>
+              <Icon />
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
 
-      <div className="flex-1 min-h-0 flex items-center justify-center px-4 py-6 overflow-hidden">
+      {/* Sélecteur mobile : 3 boutons style Programme */}
+      {isMobile && (
+        <div className="flex-none flex gap-2 px-4 pt-3 pb-1">
+          {MODES.map(({ id, label, Icon }) => (
+            <button
+              key={id}
+              onClick={() => switchMode(id)}
+              className={clsx(
+                "flex-1 flex flex-col items-center justify-center gap-1.5 py-3 rounded-xl border text-xs font-semibold transition-all",
+                mode === id
+                  ? "border-accent bg-accent/10 text-accent dark:bg-accent/20"
+                  : "border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-300"
+              )}
+            >
+              <Icon />
+              <span>{label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="flex-1 min-h-0 flex items-center justify-center px-4 py-4 overflow-hidden">
         <div className="w-full flex flex-col items-center">
           {mode === "chrono"   && <Chronometre  circleSize={circleSize} />}
           {mode === "minuteur" && <Minuteur      circleSize={circleSize} />}
