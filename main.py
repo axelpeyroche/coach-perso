@@ -551,7 +551,15 @@ def onboarding(
     if debut.weekday() != 0:
         debut = debut + timedelta(days=(7 - debut.weekday()) % 7)
 
-    # Supprimer ancien programme si existant
+    # Supprimer ancien programme si existant (journaux d'abord pour éviter FK)
+    old_seance_ids = [
+        s.id
+        for mc_old in db.query(Macrocycle).filter(Macrocycle.utilisateur_id == current_user.id).all()
+        for sem in mc_old.semaines
+        for s in sem.seances
+    ]
+    if old_seance_ids:
+        db.query(JournalSeance).filter(JournalSeance.seance_id.in_(old_seance_ids)).delete(synchronize_session=False)
     for mc_old in db.query(Macrocycle).filter(Macrocycle.utilisateur_id == current_user.id).all():
         db.delete(mc_old)
     db.flush()
@@ -2233,7 +2241,10 @@ def reset_macrocycles(
         jours = (7 - today.weekday()) % 7 or 7  # lundi prochain
         debut_mc1 = today + timedelta(days=jours)
 
-    # Suppression des macrocycles existants (cascade ORM)
+    # Suppression des macrocycles existants (journaux d'abord pour éviter FK)
+    old_seance_ids_adm = [s.id for mc in db.query(Macrocycle).filter(Macrocycle.utilisateur_id == utilisateur_id).all() for sem in mc.semaines for s in sem.seances]
+    if old_seance_ids_adm:
+        db.query(JournalSeance).filter(JournalSeance.seance_id.in_(old_seance_ids_adm)).delete(synchronize_session=False)
     for mc in db.query(Macrocycle).filter(Macrocycle.utilisateur_id == utilisateur_id).all():
         db.delete(mc)
     db.flush()
@@ -2391,7 +2402,10 @@ def initialiser_programme(payload: InitProgrammePayload, current_user: Utilisate
         ObjectifCourse.utilisateur_id == user.id
     ).order_by(ObjectifCourse.id.desc()).first()
 
-    # Suppression des macrocycles existants (cascade ORM â€” mÃªme session)
+    # Suppression des macrocycles existants (journaux d'abord pour éviter FK)
+    old_seance_ids_init = [s.id for mc_old in db.query(Macrocycle).filter(Macrocycle.utilisateur_id == user.id).all() for sem in mc_old.semaines for s in sem.seances]
+    if old_seance_ids_init:
+        db.query(JournalSeance).filter(JournalSeance.seance_id.in_(old_seance_ids_init)).delete(synchronize_session=False)
     for mc_old in db.query(Macrocycle).filter(Macrocycle.utilisateur_id == user.id).all():
         db.delete(mc_old)
     db.flush()
