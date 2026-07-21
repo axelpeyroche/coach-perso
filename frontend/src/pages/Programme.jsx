@@ -1223,7 +1223,7 @@ export default function Programme() {
           {manuel && (
             <button
               onClick={() => setAjoutOpen(true)}
-              className="w-full py-3 rounded-2xl border-2 border-dashed border-gray-300 dark:border-gray-700 text-sm font-semibold text-gray-500 dark:text-gray-400 hover:border-brand hover:text-brand hover:bg-brand/5 transition-colors"
+              className="w-full py-3 rounded-2xl border border-gray-200 dark:border-gray-700 text-sm font-semibold text-gray-500 dark:text-gray-400 hover:border-brand hover:text-brand hover:bg-brand/5 transition-colors"
             >
               + Ajouter une séance
             </button>
@@ -1246,17 +1246,21 @@ export default function Programme() {
 // ─── Modal : création d'une séance personnalisée (mode manuel) ───────────────
 
 const TYPES_SEANCE = [
-  { id: "COURSE",    label: "Course à pied", icon: "🏃", cat: "course" },
-  { id: "GYM_UPPER", label: "Muscu — Haut du corps", icon: "💪", cat: "muscu" },
-  { id: "GYM_LOWER", label: "Muscu — Bas du corps", icon: "🦵", cat: "muscu" },
-  { id: "GYM_FULL",  label: "Muscu — Full body", icon: "🏋️", cat: "muscu" },
-  { id: "AMRAP",     label: "AMRAP", icon: "🔥", cat: "muscu" },
-  { id: "EMOM",      label: "EMOM", icon: "⏱️", cat: "muscu" },
+  { id: "COURSE", label: "Course à pied", icon: "🏃" },
+  { id: "EMOM",   label: "EMOM", icon: "⏱️" },
+  { id: "AMRAP",  label: "AMRAP", icon: "🔥" },
+];
+
+const FOCUS_MUSCU = [
+  { id: "push", label: "Push" },
+  { id: "pull", label: "Pull" },
+  { id: "full", label: "Full body" },
 ];
 
 function ModalAjoutSeance({ semaineId, semaine, onClose }) {
   const qc = useQueryClient();
   const [type, setType] = useState("COURSE");
+  const [focus, setFocus] = useState("push");
   const [titre, setTitre] = useState("");
   const [dateSeance, setDateSeance] = useState(semaine?.date_debut ?? "");
   const [zone, setZone] = useState("Z2");
@@ -1269,11 +1273,16 @@ function ModalAjoutSeance({ semaineId, semaine, onClose }) {
   const estCourse = type === "COURSE";
   const estAmrapEmom = type === "AMRAP" || type === "EMOM";
 
+  // Titre par défaut : "EMOM - Push", "AMRAP - Full body", "Course à pied"
+  const focusLabel = FOCUS_MUSCU.find(f => f.id === focus)?.label;
+  const titreParDefaut = estAmrapEmom ? `${type} - ${focusLabel}` : "Course à pied";
+
   const mut = useMutation({
     mutationFn: () => creerSeance({
       semaine_id: semaineId,
       type_seance: type,
-      titre: titre.trim() || TYPES_SEANCE.find(t => t.id === type)?.label || "Séance",
+      titre: titre.trim() || titreParDefaut,
+      description: estAmrapEmom ? focusLabel : null,
       date_seance: dateSeance,
       zone_cible: estCourse ? zone : null,
       distance_cible_km: estCourse && distance ? parseFloat(distance) : null,
@@ -1295,27 +1304,47 @@ function ModalAjoutSeance({ semaineId, semaine, onClose }) {
         {/* Type */}
         <div>
           <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1.5">Type de séance</label>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             {TYPES_SEANCE.map(t => (
               <button key={t.id} onClick={() => setType(t.id)}
                 className={clsx(
-                  "flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-medium transition-colors text-left",
+                  "flex flex-col items-center justify-center gap-1 px-2 py-2.5 rounded-xl border text-xs font-medium transition-colors",
                   type === t.id
                     ? "border-brand bg-brand/10 text-brand"
                     : "border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-300"
                 )}>
-                <span className="text-base">{t.icon}</span>
+                <span className="text-lg">{t.icon}</span>
                 <span className="leading-tight">{t.label}</span>
               </button>
             ))}
           </div>
         </div>
 
+        {/* Focus muscu — visible pour EMOM / AMRAP */}
+        {estAmrapEmom && (
+          <div>
+            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1.5">Groupe musculaire</label>
+            <div className="grid grid-cols-3 gap-2">
+              {FOCUS_MUSCU.map(f => (
+                <button key={f.id} onClick={() => setFocus(f.id)}
+                  className={clsx(
+                    "px-2 py-2 rounded-xl border text-xs font-medium transition-colors",
+                    focus === f.id
+                      ? "border-brand bg-brand/10 text-brand"
+                      : "border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-gray-300"
+                  )}>
+                  {f.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Titre */}
         <div>
           <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Titre (optionnel)</label>
           <input value={titre} onChange={e => setTitre(e.target.value)}
-            placeholder={TYPES_SEANCE.find(t => t.id === type)?.label}
+            placeholder={titreParDefaut}
             className={inputCls} />
         </div>
 
