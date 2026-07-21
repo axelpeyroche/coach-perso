@@ -418,6 +418,19 @@ def _pace_str(kmh: float) -> str:
     return f"{int(s // 60)}:{int(s % 60):02d}/km"
 
 
+def _fraction_vma_soutenable(distance_km: float) -> float:
+    """Fraction de VMA soutenable selon la distance (interpolation linéaire, identique analytics_service)."""
+    reperes = [(5.0, 0.92), (10.0, 0.86), (21.1, 0.80), (42.2, 0.74)]
+    if distance_km <= reperes[0][0]:
+        return reperes[0][1]
+    if distance_km >= reperes[-1][0]:
+        return reperes[-1][1]
+    for (d1, f1), (d2, f2) in zip(reperes, reperes[1:]):
+        if d1 <= distance_km <= d2:
+            return f1 + (f2 - f1) * (distance_km - d1) / (d2 - d1)
+    return 0.80
+
+
 def _calculer_volume_pic(distance_km: float) -> float:
     """Volume hebdomadaire pic recommandÃ© (km/semaine) selon la distance cible."""
     if distance_km <= 5:
@@ -2677,16 +2690,14 @@ def analyse_objectif(
         objectif_temps_str = f"{h}h{mn:02d}" if h else f"{mn} min"
         jours_restants = (obj.date_course - date.today()).days if obj.date_course else 0
 
-        # PrÃ©diction chrono basÃ©e sur VMA actuelle
+        # Prédiction chrono basée sur VMA actuelle
+        # Même formule que analytics_service.prediction_course :
+        # distance effective = dist + D+/100, fraction via interpolation continue
         temps_predit_min = None
         if vma_actuelle and dist > 0:
-            if dist <= 5:   pct_vma = 0.97
-            elif dist <= 12: pct_vma = 0.94
-            elif dist <= 22: pct_vma = 0.85
-            elif dist <= 45: pct_vma = 0.78
-            else:            pct_vma = 0.70
-            pace_predit_kmh = vma_actuelle * pct_vma
-            temps_predit_min = round(dist / pace_predit_kmh * 60)
+            dist_eff = dist + (obj.dplus_m or 0) / 100.0
+            fraction = _fraction_vma_soutenable(dist_eff)
+            temps_predit_min = round(dist_eff / (vma_actuelle * fraction) * 60)
 
         return {
             "objectif": {
