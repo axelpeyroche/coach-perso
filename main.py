@@ -66,6 +66,7 @@ from models import (
     TypeSeance,
     Utilisateur,
     VariationExercice,
+    ZoneCourse,
 )
 
 app = FastAPI(
