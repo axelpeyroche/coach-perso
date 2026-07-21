@@ -1180,7 +1180,15 @@ export default function Programme() {
               )}>
               <span className="font-bold">S{s.semaine_globale}</span>
               <span className="opacity-70 mt-0.5">
-                {complet ? "✓" : estCourante && !selectionne ? "●" : s.macrophase === "surcharge" ? "↑" : s.macrophase === "decharge" ? "↓" : "★"}
+                {complet
+                  ? "✓"
+                  : s.macrophase === "evaluation"
+                  ? "★"
+                  : estCourante && !selectionne
+                  ? "●"
+                  : manuel
+                  ? " "
+                  : s.macrophase === "surcharge" ? "↑" : s.macrophase === "decharge" ? "↓" : "★"}
               </span>
             </button>
           );
@@ -1190,11 +1198,19 @@ export default function Programme() {
 
       {semaine && (
         <>
-          {/* Titre semaine */}
+          {/* Titre semaine — en mode manuel : uniquement "Évaluation" sur les semaines de test */}
           <div className="flex items-center gap-3">
-            <span className={clsx("px-2.5 py-1 rounded-full text-xs font-semibold", PHASE_COLORS[semaine.macrophase])}>
-              {PHASE_LABEL[semaine.macrophase]}
-            </span>
+            {manuel
+              ? (semaine.macrophase === "evaluation" && (
+                  <span className={clsx("px-2.5 py-1 rounded-full text-xs font-semibold", PHASE_COLORS.evaluation)}>
+                    Évaluation
+                  </span>
+                ))
+              : (
+                <span className={clsx("px-2.5 py-1 rounded-full text-xs font-semibold", PHASE_COLORS[semaine.macrophase])}>
+                  {PHASE_LABEL[semaine.macrophase]}
+                </span>
+              )}
             <span className="text-xs text-gray-400">{semaine.date_debut ? semaine.date_debut.split("-").reverse().join("/") : ""}</span>
             {seancesVisibles.length > 0 && (
               <span className="text-xs text-gray-400 ml-auto">{nbFaites}/{seancesVisibles.length} faites</span>

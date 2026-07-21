@@ -601,15 +601,20 @@ def onboarding(
             n_semaines = 12
         n_semaines = max(1, min(52, n_semaines))
 
+        eval_freq = current_user.frequence_tests_semaines or 8
+
         mc = Macrocycle(
             utilisateur_id=current_user.id, numero_cycle=1,
             date_debut=debut, date_fin=debut + timedelta(weeks=n_semaines),
         )
         db.add(mc); db.flush()
         for i in range(n_semaines):
+            numero = i + 1
+            # Semaine d'évaluation tous les `eval_freq` semaines
+            est_eval = eval_freq > 0 and numero % eval_freq == 0
             db.add(SemaineEntrainement(
-                macrocycle_id=mc.id, numero_semaine=i + 1,
-                macrophase=TypeMacrophase.SURCHARGE,
+                macrocycle_id=mc.id, numero_semaine=numero,
+                macrophase=TypeMacrophase.EVALUATION if est_eval else TypeMacrophase.SURCHARGE,
                 date_debut=debut + timedelta(weeks=i),
                 multiplicateur_volume=1.0,
             ))
