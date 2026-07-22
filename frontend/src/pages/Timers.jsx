@@ -182,9 +182,9 @@ function useTimerSize(mode = "chrono") {
         // Sur PC : le cercle occupe l'espace disponible, en réservant la place
         // des contrôles propres à chaque timer (spinners, estimation, boutons).
         const reserved =
-          mode === "tabata"   ? 470 :  // 4 spinners + estimation + boutons
-          mode === "minuteur" ? 360 :  // spinners min/sec + boutons
-          200;                         // chrono : boutons seuls
+          mode === "tabata"   ? 510 :  // sélecteur + 4 spinners + estimation + boutons
+          mode === "minuteur" ? 400 :  // sélecteur + spinners min/sec + boutons
+          240;                         // sélecteur + boutons seuls (chrono)
         const availH = window.innerHeight - reserved;
         const availW = window.innerWidth - 340;   // sidebar + marges latérales
         setSize(Math.max(240, Math.min(availH, availW)));
@@ -759,43 +759,24 @@ export default function Timers() {
       }}
     >
       {/* Sélecteur PC : bandeau classique */}
-      {!isMobile && (
-        <div className="flex-none flex w-full glass-nav border-b">
-          {MODES.map(({ id, label, Icon }) => (
-            <button key={id} onClick={() => switchMode(id)}
-              className={clsx(
-                "flex-1 flex flex-col items-center justify-center gap-1 py-2.5 text-[11px] font-semibold transition-colors",
-                mode === id
-                  ? "text-accent border-b-2 border-accent bg-accent/5"
-                  : "text-gray-500 dark:text-gray-400"
-              )}>
-              <Icon />
-              {label}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Sélecteur mobile : 3 boutons style Programme */}
-      {isMobile && (
-        <div className="flex-none flex gap-2 px-4 pt-3 pb-1">
-          {MODES.map(({ id, label, Icon }) => (
-            <button
-              key={id}
-              onClick={() => switchMode(id)}
-              className={clsx(
-                "flex-1 flex flex-col items-center justify-center gap-1.5 py-3 rounded-xl border text-xs font-semibold transition-all",
-                mode === id
-                  ? "border-accent bg-accent/10 text-accent dark:bg-accent/20"
-                  : "border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-300"
-              )}
-            >
-              <Icon />
-              <span>{label}</span>
-            </button>
-          ))}
-        </div>
-      )}
+      {/* Sélecteur : 3 boutons cliquables (mobile ET desktop) */}
+      <div className="flex-none flex gap-2 md:gap-4 px-4 md:px-8 pt-3 md:pt-5 pb-1 md:pb-2 md:max-w-3xl md:mx-auto md:w-full">
+        {MODES.map(({ id, label, Icon }) => (
+          <button
+            key={id}
+            onClick={() => switchMode(id)}
+            className={clsx(
+              "flex-1 flex flex-col items-center justify-center gap-1.5 md:gap-2 py-3 md:py-4 rounded-xl md:rounded-2xl border text-xs md:text-sm font-semibold transition-all",
+              mode === id
+                ? "border-accent bg-accent/10 text-accent dark:bg-accent/20"
+                : "border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-300"
+            )}
+          >
+            <Icon />
+            <span>{label}</span>
+          </button>
+        ))}
+      </div>
 
       <div className="flex-1 min-h-0 flex items-center justify-center px-4 py-4 overflow-hidden">
         <div className="w-full flex flex-col items-center">
