@@ -3363,28 +3363,55 @@ def signaler_blessure(
     db: Session = Depends(obtenir_session),
 ):
     today = date.today()
-    fin = today + timedelta(days=payload.duree_jours)
-    seances = (
-        db.query(SeanceEntrainement)
-        .join(SemaineEntrainement)
-        .join(Macrocycle)
-        .filter(
-            Macrocycle.utilisateur_id == current_user.id,
-            SeanceEntrainement.date_seance >= today,
-            SeanceEntrainement.date_seance <= fin,
-            SeanceEntrainement.type_seance != TypeSeance.REPOS,
-            SeanceEntrainement.type_seance != TypeSeance.BLESSURE,
-        )
+    fin = today + timedelta(days=max(0, payload.duree_jours - 1))  # période inclusive
+    desc = f"Repos forcé suite à une blessure ({payload.description or 'non précisée'}). Reprends progressivement après guérison."
+
+    # Semaines de l'utilisateur (pour rattacher un marqueur blessure à chaque jour)
+    semaines = (
+        db.query(SemaineEntrainement)
+        .join(Macrocycle, SemaineEntrainement.macrocycle_id == Macrocycle.id)
+        .filter(Macrocycle.utilisateur_id == current_user.id)
         .all()
     )
-    for s in seances:
-        s.type_seance = TypeSeance.BLESSURE
-        s.titre = "Repos â€” Blessure"
-        s.description = f"Repos forcÃ© suite Ã  une blessure ({payload.description or 'non prÃ©cisÃ©e'}). Reprends progressivement aprÃ¨s guÃ©rison."
-        for ex in s.exercices:
-            db.delete(ex)
+    def semaine_du_jour(d):
+        for w in semaines:
+            if w.date_debut <= d < w.date_debut + timedelta(days=7):
+                return w
+        return None
+
+    nb_jours = 0
+    jour = today
+    while jour <= fin:
+        w = semaine_du_jour(jour)
+        if w:
+            # Séances de ce jour non validées → supprimées ; validées conservées.
+            blessure_deja = False
+            for s in list(w.seances):
+                jour_s = s.date_planifiee or s.date_seance
+                if jour_s != jour:
+                    continue
+                if s.type_seance == TypeSeance.BLESSURE:
+                    blessure_deja = True
+                    continue
+                if s.journal and s.journal.completee:
+                    continue
+                for ex in list(s.exercices):
+                    db.delete(ex)
+                db.delete(s)
+            if not blessure_deja:
+                db.add(SeanceEntrainement(
+                    semaine_id=w.id,
+                    date_seance=jour,
+                    date_planifiee=jour,
+                    type_seance=TypeSeance.BLESSURE,
+                    titre="Blessure — repos",
+                    description=desc,
+                    ordre_dans_semaine=99,
+                ))
+                nb_jours += 1
+        jour += timedelta(days=1)
     db.commit()
-    return {"ok": True, "nb_seances_modifiees": len(seances), "fin_blessure": str(fin)}
+    return {"ok": True, "nb_jours_blessure": nb_jours, "fin_blessure": str(fin)}
 
 
 @app.post("/api/programme/adapter-charge", summary="Régule la charge de la semaine courante selon ACWA / RPE / assiduité")

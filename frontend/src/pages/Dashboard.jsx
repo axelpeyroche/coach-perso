@@ -686,7 +686,7 @@ function BlessureModal({ onClose }) {
       onClose();
       const fin = new Date(data.fin_blessure);
       const finStr = fin.toLocaleDateString("fr-FR", { day: "numeric", month: "long" });
-      alert(`Programme adapté — ${data.nb_seances_modifiees} séance(s) mises en repos jusqu'au ${finStr}.`);
+      alert(`Blessure enregistrée — repos affiché dans le calendrier jusqu'au ${finStr}.`);
     },
     onError: (e) => alert(e?.response?.data?.detail ?? "Erreur lors de la mise à jour"),
   });

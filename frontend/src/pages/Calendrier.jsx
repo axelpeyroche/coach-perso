@@ -200,11 +200,13 @@ export default function Calendrier() {
                       <span key={si}
                         className={clsx(
                           "w-full text-center text-[10px] leading-tight font-medium rounded px-0.5 py-0.5 truncate",
-                          s._planifie
-                            ? "border border-dashed border-indigo-300 dark:border-indigo-700 text-indigo-500 dark:text-indigo-300 bg-indigo-100/70 dark:bg-indigo-900/30"
-                            : clsx("text-white", TYPE_COLORS[s.type] ?? "bg-gray-400")
+                          s.type === "BLESSURE"
+                            ? "bg-red-500 text-white"
+                            : s._planifie
+                              ? "border border-dashed border-indigo-300 dark:border-indigo-700 text-indigo-500 dark:text-indigo-300 bg-indigo-100/70 dark:bg-indigo-900/30"
+                              : clsx("text-white", TYPE_COLORS[s.type] ?? "bg-gray-400")
                         )}
-                        title={s._planifie ? `📅 Planifié · ${s.titre}` : s.titre}>
+                        title={s.type === "BLESSURE" ? `🩹 Blessure — repos` : s._planifie ? `📅 Planifié · ${s.titre}` : s.titre}>
                         {TYPE_ICONS[s.type]}
                       </span>
                     ))}
