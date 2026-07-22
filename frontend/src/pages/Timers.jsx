@@ -173,17 +173,21 @@ function TimerCircle({ progress = 1, color = "#f97316", children, pulse = false,
 
 // ─── Hook pour mesurer la hauteur disponible ──────────────────────────────────
 
-function useTimerSize() {
+function useTimerSize(mode = "chrono") {
   const [size, setSize] = useState(200);
   useEffect(() => {
     function calc() {
       const isDesktop = window.innerWidth >= 768;
       if (isDesktop) {
-        // Sur PC : le cercle occupe tout l'espace disponible
-        // (on réserve la place des onglets, des contrôles et des marges)
-        const availH = window.innerHeight - 240;  // onglets + boutons + marges
+        // Sur PC : le cercle occupe l'espace disponible, en réservant la place
+        // des contrôles propres à chaque timer (spinners, estimation, boutons).
+        const reserved =
+          mode === "tabata"   ? 470 :  // 4 spinners + estimation + boutons
+          mode === "minuteur" ? 360 :  // spinners min/sec + boutons
+          200;                         // chrono : boutons seuls
+        const availH = window.innerHeight - reserved;
         const availW = window.innerWidth - 340;   // sidebar + marges latérales
-        setSize(Math.max(300, Math.min(availH, availW)));
+        setSize(Math.max(240, Math.min(availH, availW)));
       } else {
         const avail = window.innerHeight - 56 - 64 - 52 - 24;
         setSize(Math.min(220, Math.max(130, avail * 0.45)));
@@ -192,7 +196,7 @@ function useTimerSize() {
     calc();
     window.addEventListener("resize", calc);
     return () => window.removeEventListener("resize", calc);
-  }, []);
+  }, [mode]);
   return size;
 }
 
@@ -241,14 +245,14 @@ function Spinner({ label, value, onChange, min = 0, max = 99, step = 1, unit = "
   }
 
   return (
-    <div className="flex flex-col items-center gap-0.5">
-      {label && <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider">{label}</p>}
+    <div className="flex flex-col items-center gap-0.5 md:gap-1">
+      {label && <p className="text-[9px] md:text-xs font-bold text-gray-400 uppercase tracking-wider">{label}</p>}
       <button onClick={inc}
-        className="w-7 h-6 flex items-center justify-center text-gray-400 hover:text-accent transition-colors rounded-lg hover:bg-accent/10">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-3 h-3"><path d="M18 15l-6-6-6 6"/></svg>
+        className="w-7 h-6 md:w-12 md:h-9 flex items-center justify-center text-gray-400 hover:text-accent transition-colors rounded-lg hover:bg-accent/10">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-3 h-3 md:w-5 md:h-5"><path d="M18 15l-6-6-6 6"/></svg>
       </button>
       <div
-        className="w-14 h-11 bg-gray-100 dark:bg-gray-800 rounded-xl flex flex-col items-center justify-center cursor-pointer select-none touch-none"
+        className="w-14 h-11 md:w-24 md:h-20 bg-gray-100 dark:bg-gray-800 rounded-xl md:rounded-2xl flex flex-col items-center justify-center cursor-pointer select-none touch-none"
         onClick={startEdit}
         onWheel={onWheel}
         onTouchStart={onTouchStart}
@@ -257,15 +261,15 @@ function Spinner({ label, value, onChange, min = 0, max = 99, step = 1, unit = "
         {editing ? (
           <input ref={inputRef} value={draft} onChange={e => setDraft(e.target.value)}
             onBlur={commitEdit} onKeyDown={e => e.key === "Enter" && commitEdit()}
-            className="w-12 text-center text-xl font-bold bg-transparent text-accent outline-none" autoFocus />
+            className="w-12 md:w-20 text-center text-xl md:text-4xl font-bold bg-transparent text-accent outline-none" autoFocus />
         ) : (
-          <span className="text-xl font-bold text-gray-900 dark:text-white">{value}</span>
+          <span className="text-xl md:text-4xl font-bold text-gray-900 dark:text-white">{value}</span>
         )}
-        <span className="text-[9px] text-gray-400 mt-0.5">{unit}</span>
+        <span className="text-[9px] md:text-xs text-gray-400 mt-0.5">{unit}</span>
       </div>
       <button onClick={dec}
-        className="w-7 h-6 flex items-center justify-center text-gray-400 hover:text-accent transition-colors rounded-lg hover:bg-accent/10">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-3 h-3"><path d="M6 9l6 6 6-6"/></svg>
+        className="w-7 h-6 md:w-12 md:h-9 flex items-center justify-center text-gray-400 hover:text-accent transition-colors rounded-lg hover:bg-accent/10">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} className="w-3 h-3 md:w-5 md:h-5"><path d="M6 9l6 6 6-6"/></svg>
       </button>
     </div>
   );
@@ -497,9 +501,9 @@ function Minuteur({ circleSize }) {
       </TimerCircle>
 
       {!running && !finished && (
-        <div className="flex items-start gap-3">
+        <div className="flex items-start gap-3 md:gap-4">
           <Spinner label="MIN" value={mins} onChange={v => { _min.mins = v; setMins(v); reset(); }} max={99} unit="min" />
-          <div className="flex items-center h-11 mt-6 text-xl font-bold text-gray-300 dark:text-gray-600">:</div>
+          <div className="flex items-center h-11 md:h-20 mt-6 md:mt-11 text-xl md:text-4xl font-bold text-gray-300 dark:text-gray-600">:</div>
           <Spinner label="SEC" value={secs} onChange={v => { _min.secs = v; setSecs(v); reset(); }} max={59} step={5} unit="sec" />
         </div>
       )}
@@ -656,15 +660,15 @@ function Tabata({ circleSize }) {
 
   return (
     <div className="flex flex-col items-center gap-3 w-full">
-      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Configuration</p>
-      <div className="grid grid-cols-4 gap-2 w-full max-w-xs">
+      <p className="text-[10px] md:text-sm font-bold text-gray-400 uppercase tracking-widest">Configuration</p>
+      <div className="grid grid-cols-4 gap-2 md:gap-6 w-full max-w-xs md:max-w-2xl">
         <Spinner label="Prépa"   value={prep}  onChange={v => { _tab.prep  = v; setPrep(v);  reset(); }} max={60}  unit="s" />
         <Spinner label="Travail" value={work}  onChange={v => { _tab.work  = v; setWork(v);  reset(); }} max={300} step={5} unit="s" />
         <Spinner label="Repos"   value={rest}  onChange={v => { _tab.rest  = v; setRest(v);  reset(); }} max={120} step={5} unit="s" />
         <Spinner label="Tours"   value={tours} onChange={v => { _tab.tours = v; setTours(v); reset(); }} min={1}   max={30} unit="×" />
       </div>
 
-      <div className="w-full max-w-xs rounded-xl bg-gray-100 dark:bg-gray-800 px-3 py-2.5 space-y-1 text-xs">
+      <div className="w-full max-w-xs md:max-w-md rounded-xl bg-gray-100 dark:bg-gray-800 px-3 py-2.5 md:px-5 md:py-3.5 space-y-1 md:space-y-1.5 text-xs md:text-sm">
         <div className="flex justify-between">
           <span className="text-gray-500 dark:text-gray-400">Durée estimée</span>
           <span className="font-bold text-gray-900 dark:text-white">{fmtT(totalSec)}</span>
@@ -724,7 +728,7 @@ export default function Timers() {
   const [mode, setMode] = useState(_activeMode);
 
   function switchMode(id) { _activeMode = id; setMode(id); }
-  const circleSize = useTimerSize();
+  const circleSize = useTimerSize(mode);
 
   useEffect(() => {
     const html = document.documentElement;
