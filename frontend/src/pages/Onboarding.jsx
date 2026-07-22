@@ -93,8 +93,12 @@ function Etape1({ data, set }) {
           description="AMRAP, EMOM et travail au poids du corps"
           selected={data.type_programme === "muscu"}
           onClick={() => set({ type_programme: "muscu" })} />
-        <ChoixCard icon="⚡" titre="Hybride — les deux"
-          description="Alternance course et musculation chaque semaine"
+        <ChoixCard icon="🚴" titre="Vélo de route"
+          description="Sorties vélo — durée et dénivelé"
+          selected={data.type_programme === "velo"}
+          onClick={() => set({ type_programme: "velo" })} />
+        <ChoixCard icon="⚡" titre="Hybride — plusieurs disciplines"
+          description="Combine course, musculation et vélo de route"
           selected={data.type_programme === "hybride"}
           onClick={() => set({ type_programme: "hybride" })} />
       </div>
