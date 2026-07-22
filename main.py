@@ -759,9 +759,67 @@ def onboarding(
             _inserer_seances_en_session(db, mc, adapted)
 
     # ── Séances vélo de route (si la discipline est pratiquée) ──────────────
-    # Une sortie endurance par semaine, durée modulée par le volume de la semaine.
+    # Approche préparateur physique : modèle polarisé 80/20.
+    #   • 1 séance PMA (Z5, intervalles courts) — développe VO2max
+    #   • 1 séance seuil / sweet spot (Z3-Z4, blocs longs) — élève la puissance soutenable
+    #   • 1-2 sorties endurance dont la sortie longue — base aérobie, lipolyse
+    # Progression : durées modulées par le multiplicateur de volume de la semaine.
+    # Décharge : volume -40 %, on garde un court rappel d'intensité (mémoire neuromusculaire).
+    # Évaluation : test FTP 20 min (programme vélo pur uniquement).
     if payload.type_programme in ("velo", "hybride"):
         from models import TypeMacrophase as _TM
+
+        fc = current_user.fc_max
+        def _pl(pct_lo, pct_hi):
+            """Plage FC cible si FC max connue, sinon chaîne vide."""
+            if not fc:
+                return ""
+            return f" (FC {round(fc*pct_lo)}-{round(fc*pct_hi)} bpm)"
+
+        def _seances_semaine_velo(mult, phase, n):
+            """Construit la liste des séances vélo d'une semaine (offset_jour, titre, description, durée)."""
+            decharge = phase == _TM.DECHARGE
+            f = 0.6 if decharge else mult  # décharge : -40 % de volume
+
+            pma = (1, "Vélo — PMA 30/30",
+                   "Échauffement 20 min Z2 progressif. Puis 2 séries de 8×(30s à intensité maximale soutenable"
+                   f" / 30s récup souple){_pl(0.90, 1.00)}, 5 min souple entre les séries. Cadence > 95 rpm."
+                   " Retour au calme 10 min. RPE cible 8-9 sur les efforts.",
+                   max(45, round(65 * f)))
+            seuil = (3, "Vélo — Sweet spot",
+                     "Échauffement 15 min Z2. Puis 3×12 min en sweet spot (88-94 % FTP, « inconfortable mais tenable »)"
+                     f"{_pl(0.83, 0.90)}, cadence 85-95 rpm, récup 6 min souple entre les blocs."
+                     " Retour au calme 10 min. RPE cible 7.",
+                     max(50, round(75 * f)))
+            tempo = (4, "Vélo — Endurance & vélocité",
+                     "Z2 continu avec travail neuromusculaire : alterner 3×5 min vélocité (105-110 rpm, petit braquet)"
+                     " et 3×5 min force (55-65 rpm, gros braquet, en restant assis)"
+                     f"{_pl(0.65, 0.75)}. Le reste à cadence naturelle.",
+                     max(45, round(60 * f)))
+            longue = (5, "Vélo — Sortie longue",
+                      "Endurance fondamentale Z2, allure strictement conversationnelle"
+                      f"{_pl(0.65, 0.75)}. S'alimenter toutes les 45 min (40-60 g de glucides/h),"
+                      " boire 500-750 ml/h. Négliger ni la nutrition ni le vent de face au retour.",
+                      max(60, round(105 * f)))
+
+            if decharge:
+                # Volume réduit, un seul rappel d'intensité court + sortie souple
+                rappel = (1, "Vélo — Rappel intensité",
+                          "Échauffement 15 min Z2 puis 5×1 min à haute intensité (RPE 8), récup 2 min."
+                          " Objectif : entretenir les qualités sans générer de fatigue. Total volontairement court.",
+                          45)
+                return [rappel, (5, longue[1], longue[2], max(60, round(90 * 0.6)))][:max(1, min(n, 2))]
+
+            ordre = [longue, seuil, pma, tempo]  # priorité si peu de séances
+            return sorted(ordre[:max(1, min(n, 4))], key=lambda s: s[0])
+
+        # Nombre de séances vélo hebdo : programme vélo pur → le total demandé ;
+        # hybride → le vélo complète course et muscu (1 à 2 sorties de volume).
+        if payload.type_programme == "velo":
+            n_velo = max(1, min(current_user.seances_semaine or 3, 4))
+        else:
+            n_velo = 2 if (current_user.seances_semaine or 4) >= 6 else 1
+
         semaines_velo = (
             db.query(SemaineEntrainement)
             .join(Macrocycle, SemaineEntrainement.macrocycle_id == Macrocycle.id)
@@ -769,22 +827,28 @@ def onboarding(
             .all()
         )
         for sem in semaines_velo:
-            if sem.macrophase == _TM.EVALUATION:
-                continue  # pas de vélo les semaines de test
-            mult = sem.multiplicateur_volume or 1.0
-            duree = max(45, round(60 * mult))
             nb = db.query(SeanceEntrainement).filter(SeanceEntrainement.semaine_id == sem.id).count()
-            jour = sem.date_debut + timedelta(days=5)  # samedi
-            db.add(SeanceEntrainement(
-                semaine_id=sem.id,
-                date_seance=jour,
-                type_seance=TypeSeance.VELO,
-                titre="Vélo endurance",
-                description="Sortie vélo endurance — allure conversationnelle (zone 2)",
-                ordre_dans_semaine=nb + 1,
-                duree_cible_min=duree,
-                date_planifiee=jour,
-            ))
+            if sem.macrophase == _TM.EVALUATION:
+                # Test FTP uniquement pour les cyclistes purs — les hybrides ont déjà leurs tests
+                if payload.type_programme == "velo":
+                    jour = sem.date_debut + timedelta(days=2)
+                    db.add(SeanceEntrainement(
+                        semaine_id=sem.id, date_seance=jour, type_seance=TypeSeance.VELO,
+                        titre="Vélo — Test FTP 20 min",
+                        description="Échauffement 20 min avec 3 accélérations progressives. Puis 20 min à l'intensité"
+                                    " maximale que tu peux maintenir sur toute la durée (départ conservateur !)."
+                                    " FTP estimée = 95 % de la puissance (ou FC) moyenne du test. Retour au calme 15 min.",
+                        ordre_dans_semaine=nb + 1, duree_cible_min=60, date_planifiee=jour,
+                    ))
+                continue
+            mult = sem.multiplicateur_volume or 1.0
+            for i, (offset, titre, desc, duree) in enumerate(_seances_semaine_velo(mult, sem.macrophase, n_velo)):
+                jour = sem.date_debut + timedelta(days=offset)
+                db.add(SeanceEntrainement(
+                    semaine_id=sem.id, date_seance=jour, type_seance=TypeSeance.VELO,
+                    titre=titre, description=desc,
+                    ordre_dans_semaine=nb + 1 + i, duree_cible_min=duree, date_planifiee=jour,
+                ))
 
     db.commit()
     return {"ok": True, "message": "Onboarding terminé, programme généré."}
