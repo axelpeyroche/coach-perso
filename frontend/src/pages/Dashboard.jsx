@@ -315,6 +315,168 @@ function BlocAnalyseObjectif() {
   );
 }
 
+// ─── Bloc fusionné : Objectif + Analyse (allures affichées une seule fois) ───
+
+function BlocObjectifComplet({ vma }) {
+  const [edit, setEdit] = useState(false);
+  const qc = useQueryClient();
+  const { data: obj, isLoading } = useQuery({ queryKey: ["objectif-course"], queryFn: () => getObjectifCourse() });
+  const { data: analyse } = useQuery({ queryKey: ["analyse-objectif"], queryFn: getAnalyseObjectif, staleTime: 5 * 60 * 1000, retry: 0 });
+
+  const mut = useMutation({
+    mutationFn: recalibrerProgramme,
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["analyse-objectif"] });
+      alert(`Recalibration OK — VMA ${data.vma} km/h\nZ2 : ${data.allures.Z2} · Z4 : ${data.allures.Z4} · Z5 : ${data.allures.Z5}\n${data.seances_mises_a_jour} séance(s) mises à jour.`);
+    },
+    onError: (e) => alert(e?.response?.data?.detail ?? "Erreur recalibration"),
+  });
+
+  if (isLoading) return null;
+
+  if (edit || !obj) {
+    return (
+      <Card title={obj ? "Modifier l'objectif" : "Prochain objectif course 🎯"}>
+        <FormulaireObjectif onClose={() => setEdit(false)} />
+      </Card>
+    );
+  }
+
+  const urgence = obj.jours_restants <= 14 ? "text-red-500" : obj.jours_restants <= 30 ? "text-orange-500" : "text-brand";
+  const a = analyse?.objectif ? analyse : null;
+  // Allures d'entraînement : source unique = backend (évite l'incohérence d'arrondi)
+  const allures = a?.allures_entrainement;
+  const fs = a?.faisabilite ? (FAISABILITE_STYLE[a.faisabilite] ?? FAISABILITE_STYLE["challenge"]) : null;
+
+  function fmtMin(min) {
+    if (!min) return null;
+    const h = Math.floor(min / 60), m = min % 60;
+    return h ? `${h}h${m ? String(m).padStart(2, "0") : ""}` : `${min} min`;
+  }
+
+  return (
+    <Card title="">
+      <div className="space-y-4">
+        {/* En-tête objectif */}
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-0.5">Prochain objectif</p>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white leading-tight">{obj.nom}</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+              {obj.date_course} · {obj.distance_km} km{obj.dplus_m > 0 ? ` · D+ ${obj.dplus_m} m` : ""}
+            </p>
+          </div>
+          <div className="text-center shrink-0">
+            <p className={clsx("text-3xl font-black", urgence)}>{obj.jours_restants}</p>
+            <p className="text-xs text-gray-400">jours</p>
+          </div>
+        </div>
+
+        {/* Objectif temps + allure cible */}
+        <div className="rounded-xl bg-brand/5 dark:bg-brand/10 border border-brand/20 px-4 py-3 flex items-center justify-between">
+          <div>
+            <p className="text-xs text-gray-500 dark:text-gray-400">Objectif</p>
+            <p className="text-xl font-black text-brand">{obj.objectif_temps_str}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-xs text-gray-500 dark:text-gray-400">Allure cible</p>
+            <p className="text-xl font-black text-gray-900 dark:text-white">{obj.allures.course}</p>
+          </div>
+        </div>
+
+        {/* Objectif atteignable ? */}
+        {a && (
+          <>
+            <div className="flex items-center justify-between gap-3 pt-1">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Objectif atteignable ?</p>
+              {fs && (
+                <span className={clsx("text-xs font-semibold px-2.5 py-1 rounded-full shrink-0", fs.badge)}>
+                  {fs.icon} {a.faisabilite}
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="rounded-xl bg-gray-50 dark:bg-gray-800 p-3">
+                <p className="text-xs text-gray-400 mb-1">VMA actuelle</p>
+                <p className="text-lg font-black text-gray-900 dark:text-white">{a.vma_actuelle ? a.vma_actuelle.toFixed(1) : "—"}</p>
+                <p className="text-xs text-gray-400">km/h</p>
+              </div>
+              <div className="rounded-xl bg-brand/5 dark:bg-brand/10 border border-brand/20 p-3">
+                <p className="text-xs text-gray-400 mb-1">Delta</p>
+                <p className={clsx("text-lg font-black", a.delta_vma === null ? "text-gray-400" : a.delta_vma <= 0 ? "text-green-600 dark:text-green-400" : "text-orange-500")}>
+                  {a.delta_vma === null ? "—" : a.delta_vma > 0 ? `+${a.delta_vma.toFixed(1)}` : a.delta_vma.toFixed(1)}
+                </p>
+                <p className="text-xs text-gray-400">km/h</p>
+              </div>
+              <div className="rounded-xl bg-gray-50 dark:bg-gray-800 p-3">
+                <p className="text-xs text-gray-400 mb-1">VMA cible</p>
+                <p className="text-lg font-black text-brand">{a.vma_requise ? a.vma_requise.toFixed(1) : "—"}</p>
+                <p className="text-xs text-gray-400">km/h</p>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Allures d'entraînement — affichées UNE seule fois */}
+        {(allures || obj.allures) && (
+          <div>
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Allures d'entraînement</p>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { z: "Z2", val: allures?.Z2 ?? obj.allures.z2, label: "EF / Z2",    color: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
+                { z: "Z4", val: allures?.Z4 ?? obj.allures.z4, label: "Seuil / Z4", color: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400" },
+                { z: "Z5", val: allures?.Z5 ?? obj.allures.z5, label: "Frac. / Z5", color: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" },
+              ].map(({ z, val, label, color }) => (
+                <div key={z} className={clsx("rounded-xl px-3 py-2 text-center", color)}>
+                  <p className="text-xs font-medium opacity-80">{label}</p>
+                  <p className="text-sm font-bold font-mono">{val}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Prédiction chrono */}
+        {a?.temps_predit_min && (
+          <div className="rounded-xl bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-100 dark:border-indigo-800 px-3 py-2.5 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs text-indigo-500 dark:text-indigo-400 font-medium">Temps prédit (VMA actuelle)</p>
+              <p className="text-base font-black text-indigo-800 dark:text-indigo-200">{fmtMin(a.temps_predit_min)}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-gray-400">Objectif visé</p>
+              <p className="text-base font-black text-gray-700 dark:text-gray-200">{a.objectif.objectif_temps_str}</p>
+            </div>
+          </div>
+        )}
+
+        {/* Volume + recalibrer */}
+        {a && (
+          <div className="flex items-center justify-between gap-3 pt-1">
+            <p className="text-xs text-gray-400">
+              Volume pic cible : <span className="font-semibold text-gray-700 dark:text-gray-300">{a.volume_pic_cible} km/sem</span>
+            </p>
+            <button
+              onClick={() => { if (window.confirm("Recalibrer les allures des séances de course avec ta VMA actuelle ?")) mut.mutate(); }}
+              disabled={mut.isPending || !a.vma_actuelle}
+              className="text-xs text-brand border border-brand/30 hover:bg-brand/10 px-3 py-1.5 rounded-lg transition-colors font-medium disabled:opacity-40"
+            >
+              {mut.isPending ? "Recalibration…" : "Recalibrer allures"}
+            </button>
+          </div>
+        )}
+
+        {obj.notes && <p className="text-xs text-gray-400 italic">{obj.notes}</p>}
+
+        <button onClick={() => setEdit(true)}
+          className="w-full text-xs text-gray-400 hover:text-brand dark:hover:text-brand transition-colors py-1">
+          Modifier l'objectif →
+        </button>
+      </div>
+    </Card>
+  );
+}
+
 // ─── Score de forme ─────────────────────────────────────────────────────────
 
 function ScoreForme({ forme }) {
@@ -992,11 +1154,8 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Objectif course */}
-      <BlocObjectif vma={derniereVMA?.valeur ?? null} />
-
-      {/* Analyse coach */}
-      <BlocAnalyseObjectif />
+      {/* Objectif + analyse coach fusionnés (allures affichées une seule fois) */}
+      <BlocObjectifComplet vma={derniereVMA?.valeur ?? null} />
 
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
