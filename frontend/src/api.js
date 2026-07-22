@@ -23,6 +23,9 @@ export const getObjectifCourse = () =>
 export const setObjectifCourse = (payload) =>
   api.post("/objectif-course", payload).then((r) => r.data);
 
+export const extraireInfosCourse = (url) =>
+  api.post("/objectif-course/extraire", { url }, { timeout: 20000 }).then((r) => r.data);
+
 // --- Programme ---
 export const getStatutProgramme = () =>
   api.get("/programme/statut").then((r) => r.data);

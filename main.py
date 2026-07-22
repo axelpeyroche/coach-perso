@@ -2509,6 +2509,105 @@ def exercices_evaluation(db: Session = Depends(obtenir_session)):
 # Objectif course â€” race goal
 # ---------------------------------------------------------------------------
 
+def _extraire_infos_course(url: str) -> dict:
+    """
+    Récupère une page web de course et tente d'en extraire distance (km),
+    dénivelé positif (m) et un nom, par heuristiques (regex sur le texte).
+    Best effort : les pages 100 % JavaScript ou atypiques peuvent ne rien donner.
+    """
+    parsed = _urlparse.urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise HTTPException(400, "URL invalide — doit commencer par http:// ou https://")
+    host = (parsed.hostname or "").lower()
+    if host in ("localhost", "127.0.0.1", "0.0.0.0") or host.startswith("192.168.") or host.startswith("10.") or host.endswith(".local"):
+        raise HTTPException(400, "URL non autorisée")
+
+    req = _urlrequest.Request(url, headers={
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36",
+        "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.8",
+    })
+    try:
+        with _urlrequest.urlopen(req, timeout=15) as resp:
+            raw = resp.read(3_000_000)  # 3 Mo max
+    except Exception as exc:
+        raise HTTPException(502, f"Impossible d'accéder à la page : {exc}")
+
+    # Décodage + nettoyage HTML → texte
+    html = raw.decode("utf-8", errors="ignore")
+    titre_page = None
+    m_title = re.search(r"<title[^>]*>(.*?)</title>", html, flags=re.S | re.I)
+    if m_title:
+        titre_page = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", m_title.group(1))).strip()[:120]
+    texte = re.sub(r"<script.*?</script>", " ", html, flags=re.S | re.I)
+    texte = re.sub(r"<style.*?</style>", " ", texte, flags=re.S | re.I)
+    texte = re.sub(r"<[^>]+>", " ", texte)
+    texte = re.sub(r"&nbsp;|&#160;", " ", texte)
+    texte = re.sub(r"\s+", " ", texte)
+    low = texte.lower()
+
+    # ── Distance ────────────────────────────────────────────────────────────
+    distance = None
+    # 1) Distances explicites "XX km" / "XX,X km" (garde la plus grande plausible ≤ 350 km)
+    candidats = []
+    for m in re.finditer(r"(\d{1,3}(?:[.,]\d{1,3})?)\s*km\b", low):
+        try:
+            v = float(m.group(1).replace(",", "."))
+            if 1.0 <= v <= 350.0:
+                candidats.append(v)
+        except ValueError:
+            pass
+    # 2) Mots-clés distances standard — uniquement en secours (aucune distance explicite)
+    if not candidats:
+        if "semi-marathon" in low or "semi marathon" in low:
+            candidats.append(21.1)
+        elif re.search(r"\bmarathon\b", low):
+            candidats.append(42.195)
+    if candidats:
+        # Choix : la valeur la plus fréquente, sinon la plus grande
+        from collections import Counter as _C
+        freq = _C(round(c, 1) for c in candidats)
+        distance = max(freq.items(), key=lambda kv: (kv[1], kv[0]))[0]
+
+    # ── Dénivelé positif ─────────────────────────────────────────────────────
+    dplus = None
+    patterns_dplus = [
+        r"d\s*\+\s*[:\-]?\s*(\d[\d\s.]{0,6})\s*m",
+        r"d[ée]nivel[ée]\s*(?:positif)?\s*[:\-]?\s*(\d[\d\s.]{0,6})\s*m",
+        r"(\d[\d\s.]{0,6})\s*m\s*(?:de\s*)?d[ée]nivel[ée]",
+        r"\+\s*(\d[\d\s.]{2,6})\s*m\b",
+    ]
+    for pat in patterns_dplus:
+        m = re.search(pat, low)
+        if m:
+            try:
+                v = int(re.sub(r"[\s.]", "", m.group(1)))
+                if 10 <= v <= 30000:
+                    dplus = v
+                    break
+            except ValueError:
+                pass
+
+    return {
+        "nom": titre_page,
+        "distance_km": round(distance, 3) if distance else None,
+        "dplus_m": dplus,
+        "trouve": bool(distance or dplus),
+    }
+
+
+class ExtraireCourseSchema(BaseModel):
+    url: str
+
+
+@app.post("/api/objectif-course/extraire", summary="Extrait distance/dénivelé depuis l'URL officielle d'une course")
+def extraire_infos_course(
+    payload: ExtraireCourseSchema,
+    current_user: Utilisateur = Depends(get_current_user),
+):
+    infos = _extraire_infos_course(payload.url.strip())
+    return infos
+
+
 class ObjectifCourseSchema(BaseModel):
     nom: str
     date_course: str  # dd/mm/yyyy

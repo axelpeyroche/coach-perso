@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { getBiometrieRecuperation, getTendancesPhysiologiques, getObjectifCourse, setObjectifCourse, getStatutProgramme, initialiserProgramme, supprimerProgramme, resetOnboarding, getProfilFC, patchProfilFC, getAnalyseObjectif, recalibrerProgramme, getPreferences, patchPreferences, getAlerteFatigue, signalerBlessure, getSemaineEnCours, getResumeHebdo } from "../api";
+import { getBiometrieRecuperation, getTendancesPhysiologiques, getObjectifCourse, setObjectifCourse, extraireInfosCourse, getStatutProgramme, initialiserProgramme, supprimerProgramme, resetOnboarding, getProfilFC, patchProfilFC, getAnalyseObjectif, recalibrerProgramme, getPreferences, patchPreferences, getAlerteFatigue, signalerBlessure, getSemaineEnCours, getResumeHebdo } from "../api";
 import { useAuth } from "../AuthContext";
 import Card from "../components/Card";
 import StatTile from "../components/StatTile";
@@ -16,10 +16,23 @@ const ZONE_COLORS = {
 
 function FormulaireObjectif({ onClose }) {
   const qc = useQueryClient();
-  const [form, setForm] = useState({ nom: "", date_course: "", distance_km: "", dplus_m: "", objectif_h: "", objectif_min: "", notes: "" });
+  const [form, setForm] = useState({ nom: "", url: "", date_course: "", distance_km: "", dplus_m: "", objectif_h: "", objectif_min: "", notes: "" });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   const tempsMin = (parseInt(form.objectif_h) || 0) * 60 + (parseInt(form.objectif_min) || 0);
+
+  // Récupération auto des infos depuis l'URL officielle de la course
+  const mutExtraire = useMutation({
+    mutationFn: () => extraireInfosCourse(form.url.trim()),
+    onSuccess: (infos) => {
+      setForm(f => ({
+        ...f,
+        nom: f.nom || infos.nom || f.nom,
+        distance_km: infos.distance_km != null ? String(infos.distance_km) : f.distance_km,
+        dplus_m: infos.dplus_m != null ? String(infos.dplus_m) : f.dplus_m,
+      }));
+    },
+  });
 
   const mut = useMutation({
     mutationFn: () => {
@@ -45,6 +58,29 @@ function FormulaireObjectif({ onClose }) {
           <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Nom de la course</label>
           <input value={form.nom} onChange={e => set("nom", e.target.value)} placeholder="Trail des Crêtes 2026"
             className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
+        </div>
+        <div className="col-span-2">
+          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Lien officiel de la course <span className="text-gray-400">(optionnel)</span></label>
+          <div className="flex gap-2">
+            <input value={form.url} onChange={e => set("url", e.target.value)} placeholder="https://…"
+              className="flex-1 min-w-0 px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
+            <button type="button"
+              onClick={() => mutExtraire.mutate()}
+              disabled={mutExtraire.isPending || !form.url.trim()}
+              className="shrink-0 px-3 py-2 rounded-xl bg-brand/10 text-brand text-sm font-semibold hover:bg-brand/20 transition-colors disabled:opacity-40">
+              {mutExtraire.isPending ? "…" : "Récupérer"}
+            </button>
+          </div>
+          {mutExtraire.isSuccess && (
+            <p className={clsx("text-xs mt-1", mutExtraire.data?.trouve ? "text-green-600 dark:text-green-400" : "text-orange-500")}>
+              {mutExtraire.data?.trouve
+                ? `Infos récupérées : ${mutExtraire.data.distance_km ? `${mutExtraire.data.distance_km} km` : ""}${mutExtraire.data.dplus_m ? ` · D+ ${mutExtraire.data.dplus_m} m` : ""}. Vérifie et corrige si besoin.`
+                : "Aucune info détectée automatiquement — remplis les champs à la main."}
+            </p>
+          )}
+          {mutExtraire.isError && (
+            <p className="text-xs mt-1 text-red-500">{mutExtraire.error?.response?.data?.detail ?? "Impossible de récupérer les infos"}</p>
+          )}
         </div>
         <div>
           <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Date (jj/mm/aaaa)</label>
