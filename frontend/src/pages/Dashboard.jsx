@@ -105,7 +105,7 @@ function kmhToPace(kmh) {
 const ALLURES_VMA = {
   z2: 0.70,   // milieu Z2 (65–75%)
   z4: 0.90,   // milieu Z4 (85–95%)
-  z5: 0.975,  // milieu Z5 (95–100%)
+  z5: 1.025,  // fractionné Z5 (VO2max, ~102% VMA) — aligné avec le backend analyse-objectif
 };
 
 // ─── Bloc objectif course ───────────────────────────────────────────────────
