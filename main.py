@@ -2534,10 +2534,36 @@ def _extraire_infos_course(url: str) -> dict:
 
     # Décodage + nettoyage HTML → texte
     html = raw.decode("utf-8", errors="ignore")
-    titre_page = None
-    m_title = re.search(r"<title[^>]*>(.*?)</title>", html, flags=re.S | re.I)
-    if m_title:
-        titre_page = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", m_title.group(1))).strip()[:120]
+
+    # Nom de la course : on privilégie le nom de l'événement (og:site_name /
+    # application-name) plutôt que le titre de la sous-page (ex. "Parcours et profils").
+    def _meta(key):
+        for pat in (
+            rf'<meta[^>]+(?:property|name)=["\']{key}["\'][^>]*content=["\']([^"\']+)["\']',
+            rf'<meta[^>]+content=["\']([^"\']+)["\'][^>]*(?:property|name)=["\']{key}["\']',
+        ):
+            m = re.search(pat, html, re.I)
+            if m:
+                val = re.sub(r"\s+", " ", m.group(1)).strip()
+                # décode quelques entités courantes
+                for a, b in (("&amp;", "&"), ("&#39;", "'"), ("&rsquo;", "’"), ("&eacute;", "é")):
+                    val = val.replace(a, b)
+                if val:
+                    return val[:120]
+        return None
+
+    titre_page = _meta("og:site_name") or _meta("application-name")
+    if not titre_page:
+        og_title = _meta("og:title")
+        m_title = re.search(r"<title[^>]*>(.*?)</title>", html, flags=re.S | re.I)
+        titre_html = None
+        if m_title:
+            titre_html = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", m_title.group(1))).strip()
+        brut = og_title or titre_html
+        if brut:
+            # "Sous-page | Nom Événement" → on garde le segment le plus « nom d'événement »
+            segments = [s.strip() for s in re.split(r"\s+[|·–—-]\s+", brut) if s.strip()]
+            titre_page = (segments[-1] if len(segments) > 1 else brut)[:120]
     texte = re.sub(r"<script.*?</script>", " ", html, flags=re.S | re.I)
     texte = re.sub(r"<style.*?</style>", " ", texte, flags=re.S | re.I)
     texte = re.sub(r"<[^>]+>", " ", texte)
