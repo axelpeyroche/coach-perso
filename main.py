@@ -2563,7 +2563,7 @@ def _extraire_infos_course(url: str) -> dict:
     sld = re.sub(r"[^a-z0-9]", "", parts[-2].lower()) if len(parts) >= 2 else ""
     if 4 <= len(sld) <= 30:
         pat = r"\b" + r"[ \-]?".join(re.escape(c) for c in sld) + r"\b"
-        trouves = re.findall(pat, texte)  # casse d'origine
+        trouves = re.findall(pat, texte, re.I)  # insensible à la casse, garde la casse trouvée
         # On ne garde que les vrais noms d'affichage : avec espace ET une majuscule
         # (écarte le slug "run-in-lyon" tout en minuscules).
         noms = [t.strip() for t in trouves if " " in t and any(c.isupper() for c in t)]
