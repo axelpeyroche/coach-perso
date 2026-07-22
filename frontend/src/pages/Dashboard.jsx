@@ -29,7 +29,7 @@ function FormulaireObjectif({ onClose }) {
       setDistancesOptions(infos.distances ?? []);
       setForm(f => ({
         ...f,
-        nom: f.nom || infos.nom || f.nom,
+        nom: infos.nom || f.nom,
         date_course: infos.date_course || f.date_course,
         distance_km: infos.distance_km != null ? String(infos.distance_km) : f.distance_km,
         dplus_m: infos.dplus_m != null ? String(infos.dplus_m) : f.dplus_m,
