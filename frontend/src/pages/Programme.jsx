@@ -364,6 +364,7 @@ function FormulaireLog({ seance, onClose, onDone, modeEdit = false }) {
   const setC = (k, v) => set_(c => ({ ...c, [k]: v }));
 
   const isCourse = seance.type === "COURSE";
+  const isVelo   = seance.type === "VELO";
   const isMuscu  = seance.type === "AMRAP" || seance.type === "EMOM";
   const isGym    = GYM_TYPES.includes(seance.type);
 
@@ -473,8 +474,8 @@ function FormulaireLog({ seance, onClose, onDone, modeEdit = false }) {
         </div>
       )}
 
-      {/* COURSE CLASSIQUE : métriques manuelles */}
-      {isCourse && !isIntervalles && (
+      {/* COURSE / VÉLO : métriques manuelles (durée, distance, D+, FC moy, FC max) */}
+      {(isCourse || isVelo) && !isIntervalles && (
         <div className="grid grid-cols-2 gap-3">
           {[
             { key: "duree_reelle_min",   label: "Durée (min)",   ph: "40" },
@@ -1338,7 +1339,9 @@ function ModalAjoutSeance({ semaineId, semaine, seanceExistante, onClose }) {
   const [tempsRepos, setTempsRepos] = useState(edition ? (c.tempsRepos || "") : "");
   const [titre, setTitre] = useState(edition ? (seanceExistante.titre || "") : "");
   const [dateSeance, setDateSeance] = useState(
-    edition ? ((seanceExistante.date_planifiee || seanceExistante.date || "").slice(0, 10)) : (semaine?.date_debut ?? "")
+    edition
+      ? ((seanceExistante.date_planifiee || seanceExistante.date || "").slice(0, 10))
+      : new Date().toLocaleDateString("sv-SE")  // date du jour, format YYYY-MM-DD
   );
   const [heure, setHeure] = useState(edition ? (seanceExistante.heure_planifiee || "") : "");
   const [distance, setDistance] = useState(edition && seanceExistante.distance_cible_km != null ? String(seanceExistante.distance_cible_km) : "");
