@@ -53,13 +53,15 @@ const TYPE_SEANCE_EMOJI = {
 
 // ─── Modal détail semaine ───────────────────────────────────────────────────
 
-function ModalSemaine({ numero, onClose }) {
+function ModalSemaine({ numero, filtre = "toutes", onClose }) {
   const { data, isLoading } = useQuery({
     queryKey: ["seances-semaine", numero],
     queryFn: () => getSeancesSemaine(numero),
   });
-  // Le graphique volume ne concerne que la course et le vélo → on filtre la muscu
-  const seances = (data?.seances ?? []).filter(s => s.type_seance === "COURSE" || s.type_seance === "VELO");
+  // "course_velo" (graphique volume) → course + vélo ; sinon toutes les séances
+  const seances = filtre === "course_velo"
+    ? (data?.seances ?? []).filter(s => s.type_seance === "COURSE" || s.type_seance === "VELO")
+    : (data?.seances ?? []);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div className="bg-white dark:bg-gray-900 rounded-2xl p-5 max-w-md w-full max-h-[80vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
@@ -70,7 +72,9 @@ function ModalSemaine({ numero, onClose }) {
         {isLoading ? (
           <p className="text-sm text-gray-400 py-4 text-center">Chargement…</p>
         ) : !seances.length ? (
-          <p className="text-sm text-gray-400 py-4 text-center">Aucune séance course ou vélo cette semaine.</p>
+          <p className="text-sm text-gray-400 py-4 text-center">
+            {filtre === "course_velo" ? "Aucune séance course ou vélo cette semaine." : "Aucune séance cette semaine."}
+          </p>
         ) : (
           <div className="space-y-2">
             {seances.map(s => (
@@ -221,12 +225,15 @@ export default function Analytics({ dark }) {
   }
 
   // Clic sur un graphique hebdo → détail de la semaine
-  const handleChartClick = (state) => {
+  function ouvrirDetail(state, filtre) {
     if (state?.activeLabel) {
       const num = parseInt(String(state.activeLabel).replace("S", ""));
-      if (!isNaN(num)) setSemaineDetail(num);
+      if (!isNaN(num)) setSemaineDetail({ numero: num, filtre });
     }
-  };
+  }
+  // Volume (km) : uniquement course + vélo ; autres graphiques : toutes les séances
+  const handleChartClickVolume = (state) => ouvrirDetail(state, "course_velo");
+  const handleChartClick = (state) => ouvrirDetail(state, "toutes");
 
   const refLinesEvts = Object.entries(evtsBySem).map(([sem, e]) => (
     <ReferenceLine key={sem} x={sem} stroke={e.type === "course" ? "#ef4444" : "#8b5cf6"} strokeDasharray="4 4"
@@ -365,7 +372,7 @@ export default function Analytics({ dark }) {
         {volumeData.length ? (
           <div className="w-full overflow-x-hidden">
             <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={volumeData} onClick={handleChartClick} style={{ cursor: "pointer" }}>
+              <BarChart data={volumeData} onClick={handleChartClickVolume} style={{ cursor: "pointer" }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                 <XAxis dataKey="sem" height={IS_MOBILE ? 20 : 40} tick={<WeekTick data={volumeData} dark={dark} />} />
                 <YAxis tick={{ fontSize: 11 }} width={32} />
@@ -537,7 +544,7 @@ export default function Analytics({ dark }) {
       </Card>
 
       {poidsModal && <ModalAjoutPoids dernier={poidsData[poidsData.length - 1]?.poids} onClose={() => setPoidsModal(false)} />}
-      {semaineDetail != null && <ModalSemaine numero={semaineDetail} onClose={() => setSemaineDetail(null)} />}
+      {semaineDetail != null && <ModalSemaine numero={semaineDetail.numero} filtre={semaineDetail.filtre} onClose={() => setSemaineDetail(null)} />}
     </div>
   );
 }
