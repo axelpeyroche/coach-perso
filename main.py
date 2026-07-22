@@ -2545,28 +2545,27 @@ def _extraire_infos_course(url: str) -> dict:
     texte = re.sub(r"\s+", " ", texte)
     low = texte.lower()
 
-    # ── Distance ────────────────────────────────────────────────────────────
-    distance = None
-    # 1) Distances explicites "XX km" / "XX,X km" (garde la plus grande plausible ≤ 350 km)
+    # ── Distances (toutes les valeurs distinctes plausibles) ─────────────────
+    from collections import Counter as _C
     candidats = []
     for m in re.finditer(r"(\d{1,3}(?:[.,]\d{1,3})?)\s*km\b", low):
         try:
             v = float(m.group(1).replace(",", "."))
             if 1.0 <= v <= 350.0:
-                candidats.append(v)
+                candidats.append(round(v, 1))
         except ValueError:
             pass
-    # 2) Mots-clés distances standard — uniquement en secours (aucune distance explicite)
     if not candidats:
         if "semi-marathon" in low or "semi marathon" in low:
             candidats.append(21.1)
         elif re.search(r"\bmarathon\b", low):
             candidats.append(42.195)
-    if candidats:
-        # Choix : la valeur la plus fréquente, sinon la plus grande
-        from collections import Counter as _C
-        freq = _C(round(c, 1) for c in candidats)
-        distance = max(freq.items(), key=lambda kv: (kv[1], kv[0]))[0]
+
+    freq = _C(candidats)
+    # Liste des distances distinctes, triées par ordre croissant
+    distances = sorted(freq.keys())
+    # Distance par défaut : la plus fréquente (puis la plus grande en cas d'égalité)
+    distance = max(freq.items(), key=lambda kv: (kv[1], kv[0]))[0] if freq else None
 
     # ── Dénivelé positif ─────────────────────────────────────────────────────
     dplus = None
@@ -2587,12 +2586,48 @@ def _extraire_infos_course(url: str) -> dict:
             except ValueError:
                 pass
 
+    # ── Date de la course ─────────────────────────────────────────────────────
+    date_course = _extraire_date_course(low)
+
     return {
         "nom": titre_page,
         "distance_km": round(distance, 3) if distance else None,
+        "distances": distances,          # liste pour menu déroulant si plusieurs
         "dplus_m": dplus,
-        "trouve": bool(distance or dplus),
+        "date_course": date_course,      # "dd/mm/yyyy" ou None
+        "trouve": bool(distance or dplus or date_course),
     }
+
+
+def _extraire_date_course(low: str) -> Optional[str]:
+    """Cherche une date dans le texte (format numérique ou français) et privilégie
+    une date future (la course à venir). Retourne 'dd/mm/yyyy' ou None."""
+    MOIS = {
+        "janvier": 1, "février": 2, "fevrier": 2, "mars": 3, "avril": 4, "mai": 5,
+        "juin": 6, "juillet": 7, "août": 8, "aout": 8, "septembre": 9,
+        "octobre": 10, "novembre": 11, "décembre": 12, "decembre": 12,
+    }
+    trouvees = []
+    # Format textuel : "15 octobre 2026", "1er mars 2027"
+    for m in re.finditer(r"\b(\d{1,2})(?:er)?\s+([a-zûéèêà]+)\s+(\d{4})\b", low):
+        mois = MOIS.get(m.group(2))
+        if mois:
+            try:
+                trouvees.append(date(int(m.group(3)), mois, int(m.group(1))))
+            except ValueError:
+                pass
+    # Format numérique : "15/10/2026", "15-10-2026", "15.10.2026"
+    for m in re.finditer(r"\b(\d{1,2})[/.\-](\d{1,2})[/.\-](\d{4})\b", low):
+        try:
+            trouvees.append(date(int(m.group(3)), int(m.group(2)), int(m.group(1))))
+        except ValueError:
+            pass
+    if not trouvees:
+        return None
+    today = date.today()
+    futures = sorted(d for d in trouvees if d >= today)
+    choisie = futures[0] if futures else max(trouvees)  # 1re date future, sinon la plus récente
+    return choisie.strftime("%d/%m/%Y")
 
 
 class ExtraireCourseSchema(BaseModel):

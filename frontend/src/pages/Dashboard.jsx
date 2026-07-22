@@ -17,6 +17,7 @@ const ZONE_COLORS = {
 function FormulaireObjectif({ onClose }) {
   const qc = useQueryClient();
   const [form, setForm] = useState({ nom: "", url: "", date_course: "", distance_km: "", dplus_m: "", objectif_h: "", objectif_min: "", notes: "" });
+  const [distancesOptions, setDistancesOptions] = useState([]);
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
   const tempsMin = (parseInt(form.objectif_h) || 0) * 60 + (parseInt(form.objectif_min) || 0);
@@ -25,9 +26,11 @@ function FormulaireObjectif({ onClose }) {
   const mutExtraire = useMutation({
     mutationFn: () => extraireInfosCourse(form.url.trim()),
     onSuccess: (infos) => {
+      setDistancesOptions(infos.distances ?? []);
       setForm(f => ({
         ...f,
         nom: f.nom || infos.nom || f.nom,
+        date_course: infos.date_course || f.date_course,
         distance_km: infos.distance_km != null ? String(infos.distance_km) : f.distance_km,
         dplus_m: infos.dplus_m != null ? String(infos.dplus_m) : f.dplus_m,
       }));
@@ -74,7 +77,11 @@ function FormulaireObjectif({ onClose }) {
           {mutExtraire.isSuccess && (
             <p className={clsx("text-xs mt-1", mutExtraire.data?.trouve ? "text-green-600 dark:text-green-400" : "text-orange-500")}>
               {mutExtraire.data?.trouve
-                ? `Infos récupérées : ${mutExtraire.data.distance_km ? `${mutExtraire.data.distance_km} km` : ""}${mutExtraire.data.dplus_m ? ` · D+ ${mutExtraire.data.dplus_m} m` : ""}. Vérifie et corrige si besoin.`
+                ? `Infos récupérées : ${[
+                    mutExtraire.data.date_course,
+                    (mutExtraire.data.distances?.length > 1) ? `${mutExtraire.data.distances.length} distances` : (mutExtraire.data.distance_km ? `${mutExtraire.data.distance_km} km` : null),
+                    mutExtraire.data.dplus_m ? `D+ ${mutExtraire.data.dplus_m} m` : null,
+                  ].filter(Boolean).join(" · ")}. Vérifie et corrige si besoin.`
                 : "Aucune info détectée automatiquement — remplis les champs à la main."}
             </p>
           )}
@@ -88,9 +95,17 @@ function FormulaireObjectif({ onClose }) {
             className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
         </div>
         <div>
-          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Distance (km)</label>
-          <input type="number" step="0.1" value={form.distance_km} onChange={e => set("distance_km", e.target.value)} placeholder="21"
-            className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
+          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Distance (km){distancesOptions.length > 1 && " — choisis"}</label>
+          {distancesOptions.length > 1 ? (
+            <select value={form.distance_km} onChange={e => set("distance_km", e.target.value)}
+              className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand">
+              <option value="">— Choisir</option>
+              {distancesOptions.map(d => <option key={d} value={d}>{d} km</option>)}
+            </select>
+          ) : (
+            <input type="number" step="0.1" value={form.distance_km} onChange={e => set("distance_km", e.target.value)} placeholder="21"
+              className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
+          )}
         </div>
         <div>
           <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Dénivelé D+ (m)</label>
