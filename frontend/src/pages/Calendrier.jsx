@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getToutesSemaines } from "../api";
 import clsx from "clsx";
@@ -49,6 +49,18 @@ export default function Calendrier() {
   const [annee,  setAnnee]  = useState(today.getFullYear());
   const [moisIdx, setMoisIdx] = useState(today.getMonth());
   const [jourSel, setJourSel] = useState(null); // "YYYY-MM-DD"
+  const calendrierRef = useRef(null);
+
+  // Clic en dehors du calendrier → on déselectionne (retour à l'affichage du jour actuel)
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (calendrierRef.current && !calendrierRef.current.contains(e.target)) {
+        setJourSel(null);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const { data: raw } = useQuery({
     queryKey: ["toutes-semaines"],
@@ -129,7 +141,7 @@ export default function Calendrier() {
       <div className="flex flex-col lg:flex-row gap-6">
 
         {/* ── Calendrier ── */}
-        <div className="flex-1 min-w-0 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-5">
+        <div ref={calendrierRef} className="flex-1 min-w-0 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-5">
 
           {/* Navigation mois */}
           <div className="flex items-center justify-between mb-5">
@@ -168,7 +180,7 @@ export default function Calendrier() {
               return (
                 <div key={key} onClick={() => setJourSel(isSel ? null : key)}
                   className={clsx(
-                    "rounded-xl p-1.5 min-h-[56px] flex flex-col items-center transition-colors cursor-pointer border border-gray-100 dark:border-gray-800",
+                    "rounded-xl p-1.5 min-h-[56px] flex flex-col items-center transition-colors cursor-pointer border border-gray-200 dark:border-gray-600",
                     isSel
                       ? "ring-2 ring-indigo-400 dark:ring-indigo-500 bg-indigo-50 dark:bg-indigo-900/20"
                       : hasValide
