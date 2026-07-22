@@ -863,10 +863,10 @@ function CarteSeance({ seance, zonesFC, manuel = false }) {
                 className="p-1.5 rounded-lg text-sm text-gray-400 hover:text-brand hover:bg-brand/10 transition-colors" title="Modifier">
                 ✏️
               </button>
-              <button onClick={() => { if (window.confirm("Annuler cette séance ?")) mutAnnuler.mutate(); }}
+              <button onClick={() => { if (window.confirm("Annuler la validation de cette séance ?")) mutAnnuler.mutate(); }}
                 disabled={mutAnnuler.isPending}
-                className="p-1.5 rounded-lg text-sm text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-40" title="Annuler la validation">
-                🗑
+                className="p-1.5 rounded-lg text-sm text-gray-400 hover:text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-colors disabled:opacity-40" title="Annuler la validation">
+                ↩️
               </button>
             </>
           ) : (
@@ -914,7 +914,7 @@ function CarteSeance({ seance, zonesFC, manuel = false }) {
               ✏️
             </button>
           )}
-          {manuel && (
+          {manuel && !fait && (
             <button onClick={() => { if (window.confirm("Supprimer définitivement cette séance ?")) mutSupprimerSeance.mutate(); }}
               disabled={mutSupprimerSeance.isPending}
               title="Supprimer la séance"
