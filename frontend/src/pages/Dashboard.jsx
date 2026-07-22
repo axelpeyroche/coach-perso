@@ -597,6 +597,30 @@ function JaugeSemaine() {
             <div className="h-full rounded-full bg-green-500 transition-all" style={{ width: `${pctSeances}%` }} />
           </div>
         </div>
+
+        {/* Détail par type : ce qu'il reste à créer / planifier / valider */}
+        {s.objectifs?.length > 0 && (
+          <div className="rounded-xl bg-gray-50 dark:bg-gray-800/60 px-3 py-2.5 space-y-1.5">
+            {s.objectifs.map(o => {
+              const icon = o.type === "course" ? "🏃" : o.type === "velo" ? "🚴" : "💪";
+              const manques = [];
+              if (o.a_creer > 0)     manques.push(`${o.a_creer} à créer`);
+              if (o.a_planifier > 0) manques.push(`${o.a_planifier} à planifier`);
+              if (o.a_valider > 0)   manques.push(`${o.a_valider} à valider`);
+              return (
+                <div key={o.type} className="flex items-center justify-between text-xs gap-2">
+                  <span className="text-gray-600 dark:text-gray-300 shrink-0">{icon} <span className="capitalize">{o.label}</span> <span className="text-gray-400">{o.validees}/{o.cible}</span></span>
+                  <span className="text-right">
+                    {manques.length > 0
+                      ? <span className="text-orange-500 dark:text-orange-400 font-medium">{manques.join(" · ")}</span>
+                      : <span className="text-green-600 dark:text-green-400 font-medium">✓ complet</span>}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
         <p className="text-xs text-gray-400">
           {s.jours_restants} jour{s.jours_restants > 1 ? "s" : ""} restant{s.jours_restants > 1 ? "s" : ""} · phase {s.macrophase}
         </p>

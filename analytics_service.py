@@ -30,6 +30,7 @@ from models import (
     SeanceEntrainement,
     SemaineEntrainement,
     TypeSeance,
+    Utilisateur,
     VariationExercice,
 )
 
@@ -858,7 +859,7 @@ def semaine_en_cours(db: Session, utilisateur_id: int) -> dict[str, Any]:
         .all()
     )
     km_prevu = sum(s.distance_cible_km or 0 for s in seances if s.type_seance == TypeSeance.COURSE)
-    seances_prevues = len(seances)
+    seances_creees = len(seances)
 
     journaux = (
         db.execute(
@@ -876,6 +877,60 @@ def semaine_en_cours(db: Session, utilisateur_id: int) -> dict[str, Any]:
     seances_faites = len(journaux)
     jours_restants = (semaine.date_debut + timedelta(days=7) - aujourd_hui).days
 
+    # ── Objectifs par type (cible choisie à la création vs créées/planifiées/validées)
+    user = db.get(Utilisateur, utilisateur_id)
+    CATS = {
+        "course": {TypeSeance.COURSE},
+        "muscu":  {TypeSeance.EMOM, TypeSeance.AMRAP, TypeSeance.GYM_UPPER, TypeSeance.GYM_LOWER, TypeSeance.GYM_FULL},
+        "velo":   {TypeSeance.VELO},
+    }
+    LABELS = {"course": "course", "muscu": "muscu", "velo": "vélo"}
+    ids_valides = {j.seance_id for j in journaux}
+    compte = {c: {"creees": 0, "planifiees": 0, "validees": 0} for c in CATS}
+    for s in seances:
+        for c, types in CATS.items():
+            if s.type_seance in types:
+                compte[c]["creees"] += 1
+                if s.date_planifiee:
+                    compte[c]["planifiees"] += 1
+                if s.id in ids_valides:
+                    compte[c]["validees"] += 1
+                break
+
+    cibles = {
+        "course": user.seances_course_semaine if user else None,
+        "muscu":  user.seances_muscu_semaine if user else None,
+        "velo":   user.seances_velo_semaine if user else None,
+    }
+    est_evaluation = semaine.macrophase.value == "evaluation"
+
+    objectifs = []
+    total_cible = 0
+    for c in ("course", "muscu", "velo"):
+        cible = cibles[c] or 0
+        if cible <= 0:
+            continue
+        total_cible += cible
+        objectifs.append({
+            "type": c,
+            "label": LABELS[c],
+            "cible": cible,
+            "creees": compte[c]["creees"],
+            "planifiees": compte[c]["planifiees"],
+            "validees": compte[c]["validees"],
+            "a_creer": max(0, cible - compte[c]["creees"]),
+            "a_planifier": max(0, cible - compte[c]["planifiees"]),
+            "a_valider": max(0, cible - compte[c]["validees"]),
+        })
+
+    # Total de référence : la cible choisie (si définie), sinon les séances créées.
+    # En semaine d'évaluation, on se base sur les séances réellement créées (tests).
+    if est_evaluation or total_cible <= 0:
+        seances_cible = seances_creees
+        objectifs = []
+    else:
+        seances_cible = total_cible
+
     return {
         "semaine": {
             "numero_semaine": semaine.numero_semaine,
@@ -883,9 +938,11 @@ def semaine_en_cours(db: Session, utilisateur_id: int) -> dict[str, Any]:
             "macrophase": semaine.macrophase.value,
             "km_prevu": round(km_prevu, 1),
             "km_fait": round(km_fait, 1),
-            "seances_prevues": seances_prevues,
+            "seances_prevues": seances_cible,   # total = cible choisie
+            "seances_creees": seances_creees,
             "seances_faites": seances_faites,
             "jours_restants": jours_restants,
+            "objectifs": objectifs,
         }
     }
 
