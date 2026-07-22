@@ -847,9 +847,9 @@ function CarteSeance({ seance, zonesFC, manuel = false }) {
                 {focusMuscu}
               </span>
             )}
-            {fait && seance.journal?.enregistre_le && (
+            {fait && (seance.date_planifiee || seance.journal?.enregistre_le) && (
               <span className="px-1.5 py-0.5 rounded bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">
-                {seance.journal.enregistre_le.split("-").reverse().join("/")}
+                {((seance.date_planifiee || seance.journal.enregistre_le).slice(0, 10)).split("-").reverse().join("/")}
               </span>
             )}
           </div>
@@ -1256,15 +1256,7 @@ export default function Programme() {
             )}
           </div>
 
-          {/* Séances */}
-          <div className="space-y-3">
-            {seancesVisibles.length > 0
-              ? seancesTriees.map(s => <CarteSeance key={s.id} seance={s} zonesFC={zonesFC} manuel={manuel} />)
-              : <p className="text-sm text-gray-400 text-center py-8">Aucune séance cette semaine.</p>
-            }
-          </div>
-
-          {/* Bouton d'ajout — mode manuel uniquement */}
+          {/* Bouton d'ajout — mode manuel uniquement, en haut */}
           {manuel && (
             <button
               onClick={() => setAjoutOpen(true)}
@@ -1273,6 +1265,14 @@ export default function Programme() {
               + Ajouter une séance
             </button>
           )}
+
+          {/* Séances */}
+          <div className="space-y-3">
+            {seancesVisibles.length > 0
+              ? seancesTriees.map(s => <CarteSeance key={s.id} seance={s} zonesFC={zonesFC} manuel={manuel} />)
+              : <p className="text-sm text-gray-400 text-center py-8">Aucune séance cette semaine.</p>
+            }
+          </div>
         </>
       )}
 

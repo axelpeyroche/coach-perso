@@ -1435,20 +1435,20 @@ class ValiderRPESchema(BaseModel):
 def _conseil_recuperation(rpe: float) -> dict:
     r = int(round(rpe))
     if r <= 4:
-        return {"niveau": "facile", "titre": "RÃ©cupÃ©ration standard",
-                "conseil": "Belle sÃ©ance lÃ©gÃ¨re ! Hydratation normale et 7-8h de sommeil suffisent."}
+        return {"niveau": "facile", "titre": "Récupération standard",
+                "conseil": "Belle séance légère ! Hydratation normale et 7-8h de sommeil suffisent."}
     elif r <= 6:
-        return {"niveau": "modere", "titre": "RÃ©cupÃ©ration classique",
-                "conseil": "Ã‰tirements 10 min ce soir. Dors 8h et bois au moins 2L d'eau."}
+        return {"niveau": "modere", "titre": "Récupération classique",
+                "conseil": "Étirements 10 min ce soir. Dors 8h et bois au moins 2L d'eau."}
     elif r <= 8:
-        return {"niveau": "intense", "titre": "RÃ©cupÃ©ration active",
-                "conseil": "ProtÃ©ines dans les 30 min (20-30 g). Ã‰tirements + foam roller. Vise 8-9h de sommeil."}
+        return {"niveau": "intense", "titre": "Récupération active",
+                "conseil": "Protéines dans les 30 min (20-30 g). Étirements + foam roller. Vise 8-9h de sommeil."}
     elif r == 9:
-        return {"niveau": "tres_intense", "titre": "RÃ©cupÃ©ration prioritaire",
-                "conseil": "Repos actif ou complet demain. Jambes surÃ©levÃ©es 15 min. Minimum 9h de sommeil."}
+        return {"niveau": "tres_intense", "titre": "Récupération prioritaire",
+                "conseil": "Repos actif ou complet demain. Jambes surélevées 15 min. Minimum 9h de sommeil."}
     else:
         return {"niveau": "depassement", "titre": "Repos obligatoire",
-                "conseil": "2 jours de repos minimum. Alimentation anti-inflammatoire. Consulte un mÃ©decin si douleurs persistantes."}
+                "conseil": "2 jours de repos minimum. Alimentation anti-inflammatoire. Consulte un médecin si douleurs persistantes."}
 
 
 @app.patch(
