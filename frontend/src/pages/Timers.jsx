@@ -179,9 +179,11 @@ function useTimerSize() {
     function calc() {
       const isDesktop = window.innerWidth >= 768;
       if (isDesktop) {
-        // Sur PC : cercle plus grand, limité par la hauteur disponible
-        const avail = Math.min(window.innerHeight - 120, window.innerWidth - 280);
-        setSize(Math.min(380, Math.max(260, avail * 0.40)));
+        // Sur PC : le cercle occupe tout l'espace disponible
+        // (on réserve la place des onglets, des contrôles et des marges)
+        const availH = window.innerHeight - 240;  // onglets + boutons + marges
+        const availW = window.innerWidth - 340;   // sidebar + marges latérales
+        setSize(Math.max(300, Math.min(availH, availW)));
       } else {
         const avail = window.innerHeight - 56 - 64 - 52 - 24;
         setSize(Math.min(220, Math.max(130, avail * 0.45)));
@@ -355,7 +357,7 @@ function Chronometre({ circleSize }) {
 
   const { m, s, cs } = fmtMSms(ms);
   const status = running ? "EN COURS" : ms === 0 ? "PRÊT" : "PAUSE";
-  const fontSize = circleSize < 170 ? "text-3xl" : circleSize > 300 ? "text-6xl" : "text-4xl";
+  const fontSize = circleSize < 170 ? "text-3xl" : circleSize > 520 ? "text-8xl" : circleSize > 300 ? "text-6xl" : "text-4xl";
 
   return (
     <div className="flex flex-col items-center gap-3 w-full">
@@ -415,7 +417,7 @@ function Minuteur({ circleSize }) {
   const progress = totalMs === 0 ? 1 : Math.max(0, currentMs / totalMs);
   const finished = !_min.running && remaining !== null && remaining <= 0;
   const status = finished ? "TERMINÉ !" : running ? "EN COURS" : remaining !== null ? "PAUSE" : "PRÊT";
-  const fontSize = circleSize < 170 ? "text-3xl" : circleSize > 300 ? "text-6xl" : "text-4xl";
+  const fontSize = circleSize < 170 ? "text-3xl" : circleSize > 520 ? "text-8xl" : circleSize > 300 ? "text-6xl" : "text-4xl";
 
   const tick = useCallback(() => {
     // Toujours lire depuis l'état global (la phase peut avoir été modifiée par l'audio tick)
@@ -550,7 +552,7 @@ function Tabata({ circleSize }) {
     : phase === null ? 1
     : Math.max(0, leftMs / phaseDurMs);
 
-  const fontSize = circleSize < 170 ? "text-3xl" : circleSize > 300 ? "text-6xl" : "text-4xl";
+  const fontSize = circleSize < 170 ? "text-3xl" : circleSize > 520 ? "text-8xl" : circleSize > 300 ? "text-6xl" : "text-4xl";
 
   // rAF tick : lit toujours depuis l'état global (transitions gérées par l'audio interval)
   const tick = useCallback(() => {
