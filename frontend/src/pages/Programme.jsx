@@ -745,6 +745,13 @@ function CarteSeance({ seance, zonesFC, manuel = false }) {
   const fait = valide || seance.journal?.completee;
   const prefillEnAttente = !fait && seance.journal && !seance.journal.completee;
 
+  // Séance muscu manuelle (EMOM/AMRAP sans exercices) : la description = focus
+  const isMuscuManuel = (seance.type === "AMRAP" || seance.type === "EMOM")
+    && !(seance.exercices?.length > 0);
+  const focusMuscu = isMuscuManuel ? seance.description : null;
+  // Le chevron ne compte pas la description quand elle sert de focus (affiché en pastille)
+  const aContenuDeploiement = seance.exercices?.length > 0 || (seance.description && !isMuscuManuel);
+
   const mutAnnuler = useMutation({
     mutationFn: async () => {
       await supprimerJournal(seance.id);
@@ -823,6 +830,11 @@ function CarteSeance({ seance, zonesFC, manuel = false }) {
                 </span>
               );
             })()}
+            {focusMuscu && (
+              <span className="px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400 text-xs font-bold">
+                {focusMuscu}
+              </span>
+            )}
             {fait && seance.journal?.enregistre_le && (
               <span className="px-1.5 py-0.5 rounded bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-xs font-medium">
                 {seance.journal.enregistre_le.split("-").reverse().join("/")}
@@ -891,7 +903,7 @@ function CarteSeance({ seance, zonesFC, manuel = false }) {
               🗑
             </button>
           )}
-          {(seance.exercices?.length > 0 || seance.description) && (
+          {aContenuDeploiement && (
             <button onClick={() => { setOuvert(v => !v); setLogOpen(false); setEditOpen(false); }}
               className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
               <span className={clsx("inline-block transition-transform text-xs", ouvert ? "rotate-180" : "")}>▼</span>
