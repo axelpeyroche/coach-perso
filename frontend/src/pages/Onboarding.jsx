@@ -352,11 +352,19 @@ function Etape4({ data, set }) {
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">Objectif de temps (min)</label>
-              <input type="number" value={data.objectif_course_temps ?? ""}
-                placeholder="ex: 240 pour 4h"
-                onChange={e => set({ objectif_course_temps: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
+              <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">Objectif de temps</label>
+              <div className="flex items-center gap-2">
+                <select value={data.objectif_course_h ?? ""} onChange={e => set({ objectif_course_h: e.target.value })}
+                  className="w-full px-2 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand">
+                  <option value="">— h</option>
+                  {Array.from({ length: 16 }, (_, i) => <option key={i} value={i}>{i} h</option>)}
+                </select>
+                <select value={data.objectif_course_min ?? ""} onChange={e => set({ objectif_course_min: e.target.value })}
+                  className="w-full px-2 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand">
+                  <option value="">— min</option>
+                  {Array.from({ length: 60 }, (_, i) => <option key={i} value={i}>{String(i).padStart(2, "0")} min</option>)}
+                </select>
+              </div>
             </div>
             <div>
               <label className="block text-xs text-gray-600 dark:text-gray-400 mb-1">Dénivelé D+ (m) <span className="text-gray-400">(optionnel)</span></label>
@@ -411,7 +419,8 @@ export default function Onboarding() {
     objectif_course_nom: "",
     objectif_course_date: "",
     objectif_course_km: "",
-    objectif_course_temps: "",
+    objectif_course_h: "",
+    objectif_course_min: "",
     objectif_course_dplus: "",
   });
 
@@ -460,7 +469,7 @@ export default function Onboarding() {
           date_course: formatDateFr(data.objectif_course_date),
           distance_km: parseFloat(data.objectif_course_km),
           dplus_m: data.objectif_course_dplus ? parseInt(data.objectif_course_dplus) : 0,
-          objectif_temps_min: data.objectif_course_temps ? parseInt(data.objectif_course_temps) : 0,
+          objectif_temps_min: (parseInt(data.objectif_course_h) || 0) * 60 + (parseInt(data.objectif_course_min) || 0),
         });
       }
 

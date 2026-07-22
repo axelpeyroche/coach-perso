@@ -16,33 +16,27 @@ const ZONE_COLORS = {
 
 function FormulaireObjectif({ onClose }) {
   const qc = useQueryClient();
-  const [form, setForm] = useState({ nom: "", date_course: "", distance_km: "", dplus_m: "", objectif_temps_min: "", notes: "" });
+  const [form, setForm] = useState({ nom: "", date_course: "", distance_km: "", dplus_m: "", objectif_h: "", objectif_min: "", notes: "" });
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
-  // Convertit "2h30" ou "150" en minutes
-  const parseTemps = (s) => {
-    if (!s) return null;
-    const hm = s.match(/^(\d+)h(\d{0,2})$/i);
-    if (hm) return parseInt(hm[1]) * 60 + (parseInt(hm[2] || "0") || 0);
-    const mins = parseInt(s);
-    return isNaN(mins) ? null : mins;
-  };
+  const tempsMin = (parseInt(form.objectif_h) || 0) * 60 + (parseInt(form.objectif_min) || 0);
 
   const mut = useMutation({
     mutationFn: () => {
-      const temps = parseTemps(form.objectif_temps_min);
-      if (!temps) throw new Error("Format temps invalide (ex: 2h30 ou 150)");
+      if (!tempsMin) throw new Error("Sélectionne un temps objectif");
       return setObjectifCourse({
         nom: form.nom,
         date_course: form.date_course,
         distance_km: parseFloat(form.distance_km),
         dplus_m: form.dplus_m ? parseInt(form.dplus_m) : 0,
-        objectif_temps_min: temps,
+        objectif_temps_min: tempsMin,
         notes: form.notes || undefined,
       });
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["objectif-course"] }); onClose(); },
   });
+
+  const selectCls = "w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand";
 
   return (
     <div className="space-y-4">
@@ -68,9 +62,21 @@ function FormulaireObjectif({ onClose }) {
             className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
         </div>
         <div>
-          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Objectif (ex: 2h30 ou 150)</label>
-          <input value={form.objectif_temps_min} onChange={e => set("objectif_temps_min", e.target.value)} placeholder="2h30"
-            className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
+          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Objectif de temps</label>
+          <div className="flex items-center gap-2">
+            <select value={form.objectif_h} onChange={e => set("objectif_h", e.target.value)} className={selectCls}>
+              <option value="">— h</option>
+              {Array.from({ length: 16 }, (_, i) => (
+                <option key={i} value={i}>{i} h</option>
+              ))}
+            </select>
+            <select value={form.objectif_min} onChange={e => set("objectif_min", e.target.value)} className={selectCls}>
+              <option value="">— min</option>
+              {Array.from({ length: 60 }, (_, i) => (
+                <option key={i} value={i}>{String(i).padStart(2, "0")} min</option>
+              ))}
+            </select>
+          </div>
         </div>
         <div className="col-span-2">
           <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Notes (optionnel)</label>
@@ -82,7 +88,7 @@ function FormulaireObjectif({ onClose }) {
       <div className="flex gap-2">
         <button onClick={onClose}
           className="flex-1 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-sm text-gray-500">Annuler</button>
-        <button onClick={() => mut.mutate()} disabled={mut.isPending || !form.nom || !form.date_course || !form.distance_km || !form.objectif_temps_min}
+        <button onClick={() => mut.mutate()} disabled={mut.isPending || !form.nom || !form.date_course || !form.distance_km || !tempsMin}
           className="flex-1 py-2 rounded-xl bg-brand text-white font-semibold text-sm disabled:opacity-50">
           {mut.isPending ? "..." : "Enregistrer"}
         </button>
