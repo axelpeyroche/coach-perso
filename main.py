@@ -2534,9 +2534,14 @@ def _extraire_infos_course(url: str) -> dict:
 
     # Décodage + nettoyage HTML → texte
     html = raw.decode("utf-8", errors="ignore")
+    texte = re.sub(r"<script.*?</script>", " ", html, flags=re.S | re.I)
+    texte = re.sub(r"<style.*?</style>", " ", texte, flags=re.S | re.I)
+    texte = re.sub(r"<[^>]+>", " ", texte)
+    texte = re.sub(r"&nbsp;|&#160;", " ", texte)
+    texte = re.sub(r"\s+", " ", texte)
+    low = texte.lower()
 
-    # Nom de la course : on privilégie le nom de l'événement (og:site_name /
-    # application-name) plutôt que le titre de la sous-page (ex. "Parcours et profils").
+    # ── Nom de la course ─────────────────────────────────────────────────────
     def _meta(key):
         for pat in (
             rf'<meta[^>]+(?:property|name)=["\']{key}["\'][^>]*content=["\']([^"\']+)["\']',
@@ -2545,31 +2550,40 @@ def _extraire_infos_course(url: str) -> dict:
             m = re.search(pat, html, re.I)
             if m:
                 val = re.sub(r"\s+", " ", m.group(1)).strip()
-                # décode quelques entités courantes
                 for a, b in (("&amp;", "&"), ("&#39;", "'"), ("&rsquo;", "’"), ("&eacute;", "é")):
                     val = val.replace(a, b)
                 if val:
                     return val[:120]
         return None
 
-    titre_page = _meta("og:site_name") or _meta("application-name")
+    # 1) Nom de marque dérivé du domaine, retrouvé dans la page avec sa vraie casse.
+    #    Ex : domaine "runinlyon" → on cherche "Run in Lyon" dans le texte.
+    titre_page = None
+    parts = (parsed.hostname or "").split(".")
+    sld = re.sub(r"[^a-z0-9]", "", parts[-2].lower()) if len(parts) >= 2 else ""
+    if 4 <= len(sld) <= 30:
+        pat = r"\b" + r"[ \-]?".join(re.escape(c) for c in sld) + r"\b"
+        trouves = re.findall(pat, texte)  # casse d'origine
+        # On ne garde que les vrais noms d'affichage : avec espace ET une majuscule
+        # (écarte le slug "run-in-lyon" tout en minuscules).
+        noms = [t.strip() for t in trouves if " " in t and any(c.isupper() for c in t)]
+        if noms:
+            from collections import Counter as _CN
+            titre_page = _CN(noms).most_common(1)[0][0][:120]
+
+    # 2) Métadonnées de l'événement
+    if not titre_page:
+        titre_page = _meta("og:site_name") or _meta("application-name")
+
+    # 3) Titre de page / og:title (dernier segment si séparateur)
     if not titre_page:
         og_title = _meta("og:title")
         m_title = re.search(r"<title[^>]*>(.*?)</title>", html, flags=re.S | re.I)
-        titre_html = None
-        if m_title:
-            titre_html = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", m_title.group(1))).strip()
+        titre_html = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", m_title.group(1))).strip() if m_title else None
         brut = og_title or titre_html
         if brut:
-            # "Sous-page | Nom Événement" → on garde le segment le plus « nom d'événement »
             segments = [s.strip() for s in re.split(r"\s+[|·–—-]\s+", brut) if s.strip()]
             titre_page = (segments[-1] if len(segments) > 1 else brut)[:120]
-    texte = re.sub(r"<script.*?</script>", " ", html, flags=re.S | re.I)
-    texte = re.sub(r"<style.*?</style>", " ", texte, flags=re.S | re.I)
-    texte = re.sub(r"<[^>]+>", " ", texte)
-    texte = re.sub(r"&nbsp;|&#160;", " ", texte)
-    texte = re.sub(r"\s+", " ", texte)
-    low = texte.lower()
 
     # ── Distances (toutes les valeurs distinctes plausibles) ─────────────────
     # Une course multi-distances liste souvent à la fois des "XX km" explicites
