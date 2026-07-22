@@ -65,6 +65,7 @@ class TypeSeance(str, enum.Enum):
     EMOM = "EMOM"
     AMRAP = "AMRAP"
     COURSE = "COURSE"
+    VELO = "VELO"
     EVALUATION = "EVALUATION"
     DECHARGE = "DECHARGE"
     REPOS = "REPOS"

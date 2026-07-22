@@ -7,7 +7,7 @@ import { useAuth } from "../AuthContext";
 
 // ─── Constantes ────────────────────────────────────────────────────────────
 
-const TYPE_ICONS   = { COURSE: "🏃", AMRAP: "🔥", EMOM: "⏱️", EVALUATION: "🎯", DECHARGE: "🧘", REPOS: "😴", GYM_UPPER: "💪", GYM_LOWER: "🦵", GYM_FULL: "🏋️", BLESSURE: "🩹" };
+const TYPE_ICONS   = { COURSE: "🏃", VELO: "🚴", AMRAP: "🔥", EMOM: "⏱️", EVALUATION: "🎯", DECHARGE: "🧘", REPOS: "😴", GYM_UPPER: "💪", GYM_LOWER: "🦵", GYM_FULL: "🏋️", BLESSURE: "🩹" };
 const GYM_TYPES    = ["GYM_UPPER", "GYM_LOWER", "GYM_FULL"];
 const GYM_LABEL    = { GYM_UPPER: "Upper Body", GYM_LOWER: "Lower Body", GYM_FULL: "Full Body" };
 const GYM_COLOR    = { GYM_UPPER: "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400", GYM_LOWER: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400", GYM_FULL: "bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400" };
@@ -1277,6 +1277,7 @@ export default function Programme() {
 
 const TYPES_SEANCE = [
   { id: "COURSE", label: "Course à pied", icon: "🏃" },
+  { id: "VELO",   label: "Vélo de route", icon: "🚴" },
   { id: "EMOM",   label: "EMOM", icon: "⏱️" },
   { id: "AMRAP",  label: "AMRAP", icon: "🔥" },
 ];
@@ -1343,6 +1344,7 @@ function ModalAjoutSeance({ semaineId, semaine, seanceExistante, onClose }) {
   const [err, setErr] = useState("");
 
   const estCourse = type === "COURSE";
+  const estVelo = type === "VELO";
   const estAmrapEmom = type === "AMRAP" || type === "EMOM";
 
   const courseCfg = COURSE_TYPES.find(c => c.id === courseType) ?? COURSE_TYPES[0];
@@ -1351,6 +1353,7 @@ function ModalAjoutSeance({ semaineId, semaine, seanceExistante, onClose }) {
   const focusLabel = FOCUS_MUSCU.find(f => f.id === focus)?.label;
   let titreParDefaut = "Course à pied";
   if (estAmrapEmom) titreParDefaut = `${type} - ${focusLabel}`;
+  else if (estVelo) titreParDefaut = "Vélo de route";
   else if (estCourse) {
     titreParDefaut = courseCfg.label;
     if (courseCfg.terrain) titreParDefaut += terrain === "trail" ? " (Trail)" : " (Route)";
@@ -1378,8 +1381,8 @@ function ModalAjoutSeance({ semaineId, semaine, seanceExistante, onClose }) {
       heure_planifiee: heure || null,
       zone_cible: estCourse ? courseCfg.zone : null,
       distance_cible_km: estCourse && distance ? parseFloat(distance) : null,
-      duree_cible_min: estCourse && duree ? parseInt(duree) : null,
-      dplus_cible_m: estCourse && courseCfg.dplus && dplus ? parseInt(dplus) : null,
+      duree_cible_min: (estCourse || estVelo) && duree ? parseInt(duree) : null,
+      dplus_cible_m: ((estCourse && courseCfg.dplus) || estVelo) && dplus ? parseInt(dplus) : null,
       temps_limite_min: estAmrapEmom && tempsLimite ? parseInt(tempsLimite) : null,
     };
   }
@@ -1416,7 +1419,7 @@ function ModalAjoutSeance({ semaineId, semaine, seanceExistante, onClose }) {
         {/* Type */}
         <div>
           <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1.5">Type de séance</label>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             {TYPES_SEANCE.map(t => (
               <button key={t.id} onClick={() => setType(t.id)}
                 className={clsx(
@@ -1546,6 +1549,20 @@ function ModalAjoutSeance({ semaineId, semaine, seanceExistante, onClose }) {
               </div>
             )}
           </>
+        )}
+
+        {/* Champs vélo de route — durée + D+ */}
+        {estVelo && (
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Durée (min)</label>
+              <input type="number" value={duree} onChange={e => setDuree(e.target.value)} className={inputCls} />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">D+ (m)</label>
+              <input type="number" value={dplus} onChange={e => setDplus(e.target.value)} className={inputCls} />
+            </div>
+          </div>
         )}
 
         {/* Champs AMRAP / EMOM */}

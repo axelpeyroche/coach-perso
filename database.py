@@ -77,6 +77,7 @@ def creer_tables() -> None:
         "ALTER TYPE typeseance ADD VALUE IF NOT EXISTS 'GYM_LOWER'",
         "ALTER TYPE typeseance ADD VALUE IF NOT EXISTS 'GYM_FULL'",
         "ALTER TYPE typeseance ADD VALUE IF NOT EXISTS 'BLESSURE'",
+        "ALTER TYPE typeseance ADD VALUE IF NOT EXISTS 'VELO'",
     ]
     if not DATABASE_URL.startswith("sqlite"):
         raw = engine.raw_connection()

@@ -6,6 +6,7 @@ import clsx from "clsx";
 
 const TYPE_COLORS = {
   COURSE:     "bg-brand",
+  VELO:       "bg-cyan-500",
   AMRAP:      "bg-orange-500",
   EMOM:       "bg-purple-500",
   EVALUATION: "bg-yellow-500",
@@ -17,7 +18,7 @@ const TYPE_COLORS = {
   BLESSURE:   "bg-red-300 dark:bg-red-700",
 };
 const TYPE_ICONS = {
-  COURSE: "🏃", AMRAP: "🔥", EMOM: "⏱️", EVALUATION: "🎯", DECHARGE: "🧘", REPOS: "😴",
+  COURSE: "🏃", VELO: "🚴", AMRAP: "🔥", EMOM: "⏱️", EVALUATION: "🎯", DECHARGE: "🧘", REPOS: "😴",
   GYM_UPPER: "💪", GYM_LOWER: "🦵", GYM_FULL: "🏋️", BLESSURE: "🩹",
 };
 
