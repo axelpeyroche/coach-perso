@@ -1162,8 +1162,12 @@ export default function Programme() {
 
   const seancesVisibles = semaine?.seances?.filter(s => s.type !== "REPOS") ?? [];
   const nbFaites = seancesVisibles.filter(s => s.journal?.completee).length;
+  // Clé de tri chronologique d'une séance planifiée : date planifiée + heure (sinon date programme)
+  const cleChrono = (s) => `${(s.date_planifiee ?? s.date ?? "").slice(0, 10)} ${s.heure_planifiee ?? "99:99"}`;
   const seancesTriees = [
-    ...seancesVisibles.filter(s => !s.journal?.completee),
+    ...seancesVisibles.filter(s => !s.journal?.completee).sort((a, b) =>
+      cleChrono(a).localeCompare(cleChrono(b))
+    ),
     ...seancesVisibles.filter(s => s.journal?.completee).sort((a, b) =>
       (a.journal.enregistre_le ?? a.date ?? "").localeCompare(b.journal.enregistre_le ?? b.date ?? "")
     ),
