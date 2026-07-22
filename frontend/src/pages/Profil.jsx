@@ -382,8 +382,9 @@ function EditProgrammeModal({ user, onClose, onSaved }) {
     </Modal>
   );
 
-  const showMuscu  = form.type_programme !== "course";
-  const showCourse = form.type_programme !== "muscu";
+  const showMuscu  = form.type_programme === "muscu" || form.type_programme === "hybride";
+  const showCourse = form.type_programme === "course" || form.type_programme === "hybride";
+  const isVelo     = form.type_programme === "velo";
 
   function handleTypeProgramme(newType) {
     setForm(f => {
@@ -392,6 +393,7 @@ function EditProgrammeModal({ user, onClose, onSaved }) {
       let course = f.seances_course_semaine;
       if (newType === "muscu")  { muscu = total; course = 0; }
       if (newType === "course") { course = total; muscu = 0; }
+      if (newType === "velo")   { muscu = 0; course = 0; }
       if (newType === "hybride") {
         muscu  = Math.round(total * 0.6);
         course = total - muscu;
@@ -403,14 +405,21 @@ function EditProgrammeModal({ user, onClose, onSaved }) {
   return (
     <Modal title="Modifier le programme" onClose={onClose}>
       <Field label="Type de programme">
-        <div className="grid grid-cols-3 gap-2">
-          {[["hybride","Hybride"],["muscu","Muscu"],["course","Course"]].map(([val, label]) => (
+        <div className="grid grid-cols-2 gap-2">
+          {[["hybride","Hybride"],["course","Course"],["muscu","Muscu"],["velo","Vélo de route"]].map(([val, label]) => (
             <button key={val} onClick={() => handleTypeProgramme(val)}
               className={`py-2 rounded-xl text-sm font-semibold border transition-colors ${form.type_programme === val ? "bg-brand text-white border-brand" : "border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-brand hover:text-brand"}`}>
               {label}
             </button>
           ))}
         </div>
+        {(isVelo || form.type_programme === "hybride") && (
+          <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
+            🚴 {isVelo
+              ? "Programme vélo : sorties PMA, sweet spot, endurance et sortie longue générées automatiquement."
+              : "En hybride, une sortie vélo endurance est ajoutée chaque semaine."}
+          </p>
+        )}
       </Field>
       <Field label="Séances / semaine">
         <div className="flex items-center gap-3">
@@ -486,7 +495,7 @@ function EditProgrammeModal({ user, onClose, onSaved }) {
 }
 
 // ── Layout components ──────────────────────────────────────────────────────
-const PROG_LABEL = { course: "Course", muscu: "Musculation", hybride: "Hybride" };
+const PROG_LABEL = { course: "Course", muscu: "Musculation", hybride: "Hybride", velo: "Vélo de route" };
 const MUSCU_LABEL = { poids_corps: "Poids du corps", salle: "Salle de sport" };
 const COURSE_LABEL = { route: "Route", trail: "Trail" };
 
