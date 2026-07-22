@@ -1072,11 +1072,33 @@ def get_profil_fc(current_user: Utilisateur = Depends(get_current_user)):
 
 @app.patch("/api/utilisateur/profil-fc", summary="Met Ã  jour fc_max, fc_repos et/ou poids_kg")
 def patch_profil_fc(payload: ProfilFCSchema, current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
+    from models import PoidsUtilisateur
     if payload.fc_max is not None: current_user.fc_max = payload.fc_max
     if payload.fc_repos is not None: current_user.fc_repos = payload.fc_repos
-    if payload.poids_kg is not None: current_user.poids_kg = payload.poids_kg
+    if payload.poids_kg is not None:
+        # Nouveau relevé de poids → point d'historique (uniquement si la valeur change)
+        ancien = current_user.poids_kg
+        if ancien is None or abs(payload.poids_kg - ancien) > 0.001:
+            db.add(PoidsUtilisateur(utilisateur_id=current_user.id, poids_kg=payload.poids_kg))
+        current_user.poids_kg = payload.poids_kg
     db.commit()
     return {"fc_max": current_user.fc_max, "fc_repos": current_user.fc_repos, "poids_kg": current_user.poids_kg}
+
+
+@app.get("/api/utilisateur/poids/historique", summary="Historique des relevés de poids (évolution)")
+def historique_poids(current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
+    from models import PoidsUtilisateur
+    entrees = (
+        db.query(PoidsUtilisateur)
+        .filter(PoidsUtilisateur.utilisateur_id == current_user.id)
+        .order_by(PoidsUtilisateur.enregistre_le)
+        .all()
+    )
+    points = [{"date": e.enregistre_le.strftime("%Y-%m-%d"), "poids": round(e.poids_kg, 1)} for e in entrees]
+    # Si le poids actuel n'a pas encore de point (ancien compte), on l'ajoute
+    if current_user.poids_kg and (not points or abs(points[-1]["poids"] - current_user.poids_kg) > 0.001):
+        points.append({"date": date.today().strftime("%Y-%m-%d"), "poids": round(current_user.poids_kg, 1)})
+    return {"points": points}
 
 
 class PreferencesSchema(BaseModel):

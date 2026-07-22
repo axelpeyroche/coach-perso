@@ -14,6 +14,9 @@ export const getProfilFC = () =>
 export const patchProfilFC = (payload) =>
   api.patch("/utilisateur/profil-fc", payload).then((r) => r.data);
 
+export const getHistoriquePoids = () =>
+  api.get("/utilisateur/poids/historique").then((r) => r.data);
+
 // --- Objectif course ---
 export const getObjectifCourse = () =>
   api.get("/objectif-course")

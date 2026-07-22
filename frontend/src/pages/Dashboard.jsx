@@ -1083,7 +1083,7 @@ function ModalFC({ profil, onClose }) {
       fc_repos: fcRepos ? parseInt(fcRepos) : undefined,
       poids_kg: poids   ? parseFloat(poids) : undefined,
     }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["profil-fc"] }); onClose(); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["profil-fc"] }); qc.invalidateQueries({ queryKey: ["historique-poids"] }); onClose(); },
   });
 
   return (

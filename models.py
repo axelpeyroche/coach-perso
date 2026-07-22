@@ -152,6 +152,20 @@ class Utilisateur(Base):
 
 
 # ---------------------------------------------------------------------------
+# Historique de poids
+# ---------------------------------------------------------------------------
+
+class PoidsUtilisateur(Base):
+    """Un relevé de poids horodaté — un point sur la courbe d'évolution."""
+    __tablename__ = "poids_utilisateurs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    utilisateur_id: Mapped[int] = mapped_column(ForeignKey("utilisateurs.id"), nullable=False)
+    poids_kg: Mapped[float] = mapped_column(Float, nullable=False)
+    enregistre_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+# ---------------------------------------------------------------------------
 # Biométrie — historique VMA et zones FC
 # ---------------------------------------------------------------------------
 

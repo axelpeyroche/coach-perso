@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Legend, ReferenceLine,
@@ -7,7 +7,7 @@ import {
 import {
   getTendancesPhysiologiques, getDistributionVolume, getBiometrieRecuperation,
   getZonesFC, getAllureEndurance, getPredictionCourse, getRecords,
-  getEvenements, getSeancesSemaine,
+  getEvenements, getSeancesSemaine, getHistoriquePoids, patchProfilFC,
 } from "../api";
 import Card from "../components/Card";
 import clsx from "clsx";
@@ -99,6 +99,41 @@ function ModalSemaine({ numero, onClose }) {
 
 const ZONE_FC_COLORS = { Z1: "#60a5fa", Z2: "#4ade80", Z3: "#facc15", Z4: "#fb923c", Z5: "#f87171" };
 
+function ModalAjoutPoids({ dernier, onClose }) {
+  const qc = useQueryClient();
+  const [poids, setPoids] = useState(dernier ? String(dernier) : "");
+  const [err, setErr] = useState("");
+  const mut = useMutation({
+    mutationFn: () => patchProfilFC({ poids_kg: parseFloat(poids) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["historique-poids"] });
+      qc.invalidateQueries({ queryKey: ["profil-fc"] });
+      onClose();
+    },
+    onError: () => setErr("Erreur — réessaie"),
+  });
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={onClose}>
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-xs p-6 space-y-4" onClick={e => e.stopPropagation()}>
+        <h3 className="text-base font-bold text-gray-900 dark:text-white">Nouveau poids</h3>
+        <div>
+          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Poids (kg)</label>
+          <input type="number" step="0.1" autoFocus value={poids} onChange={e => setPoids(e.target.value)} placeholder="72.5"
+            className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
+        </div>
+        {err && <p className="text-xs text-red-500">{err}</p>}
+        <div className="flex gap-2">
+          <button onClick={onClose} className="flex-1 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-sm text-gray-500">Annuler</button>
+          <button onClick={() => { setErr(""); mut.mutate(); }} disabled={mut.isPending || !parseFloat(poids)}
+            className="flex-1 py-2 rounded-xl bg-brand text-white font-semibold text-sm disabled:opacity-50">
+            {mut.isPending ? "…" : "Enregistrer"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Analytics({ dark }) {
   const { data: physio } = useQuery({ queryKey: ["tendances"], queryFn: () => getTendancesPhysiologiques() });
   const { data: volume } = useQuery({ queryKey: ["volume"], queryFn: () => getDistributionVolume() });
@@ -108,9 +143,11 @@ export default function Analytics({ dark }) {
   const { data: prediction } = useQuery({ queryKey: ["prediction-course"], queryFn: getPredictionCourse });
   const { data: records } = useQuery({ queryKey: ["records"], queryFn: getRecords });
   const { data: evenements } = useQuery({ queryKey: ["evenements"], queryFn: getEvenements });
+  const { data: poidsHist } = useQuery({ queryKey: ["historique-poids"], queryFn: getHistoriquePoids });
 
   const [periode, setPeriode] = useState("all"); // "4" | "8" | "all"
   const [semaineDetail, setSemaineDetail] = useState(null);
+  const [poidsModal, setPoidsModal] = useState(false);
 
   const ttStyle = {
     backgroundColor: dark ? "#1f2937" : "#ffffff",
@@ -127,6 +164,7 @@ export default function Analytics({ dark }) {
   const addDays = (iso, n) => { const d = new Date(iso); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
 
   const vmaData = physio?.vma?.map((v) => ({ date: fmtDate(v.date), vma: v.valeur })) ?? [];
+  const poidsData = poidsHist?.points?.map((p) => ({ date: fmtDate(p.date), poids: p.poids })) ?? [];
   const volumeDataFull = volume?.semaines?.map((s) => {
     const label = s.date_debut ? `${fmtJM(s.date_debut)} - ${fmtJM(addDays(s.date_debut, 6))}` : "";
     return { sem: `S${s.numero_semaine}`, num: s.numero_semaine, dateDebut: s.date_debut, label, km_route: s.km_route ?? s.km_course ?? 0, km_trail: s.km_trail ?? 0, km_velo: s.km_velo ?? 0, push: s.volume_muscu?.push ?? 0, pull: s.volume_muscu?.pull ?? 0, jambes: s.volume_muscu?.jambes ?? 0 };
@@ -291,6 +329,29 @@ export default function Analytics({ dark }) {
           </div>
         ) : <Vide />}
       </Card>
+
+      {/* Évolution du poids */}
+      <Card title="⚖️ Évolution du poids (kg)" action={
+        <button onClick={() => setPoidsModal(true)} title="Ajouter un poids"
+          className="w-7 h-7 flex items-center justify-center rounded-lg bg-brand/10 text-brand text-lg font-bold hover:bg-brand/20 transition-colors leading-none">
+          +
+        </button>
+      }>
+        {poidsData.length ? (
+          <div className="w-full overflow-x-hidden">
+            <ResponsiveContainer width="100%" height={200}>
+              <LineChart data={poidsData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                <YAxis domain={["auto", "auto"]} tick={{ fontSize: 11 }} width={36} />
+                <Tooltip formatter={(v) => [`${v} kg`, "Poids"]} contentStyle={ttStyle} labelStyle={ttLabelStyle} />
+                <Line type="monotone" dataKey="poids" stroke="#3b82f6" strokeWidth={2} dot={{ r: 4 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        ) : <Vide />}
+      </Card>
+      {poidsModal && <ModalAjoutPoids dernier={poidsData[poidsData.length - 1]?.poids} onClose={() => setPoidsModal(false)} />}
 
       {/* Prédiction temps de course */}
       {predData.length > 0 && prediction?.objectif && (
