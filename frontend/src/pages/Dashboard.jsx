@@ -1075,21 +1075,19 @@ function ModalFC({ profil, onClose }) {
   const qc = useQueryClient();
   const [fcMax, setFcMax]     = useState(profil?.fc_max ?? "");
   const [fcRepos, setFcRepos] = useState(profil?.fc_repos ?? "");
-  const [poids, setPoids]     = useState(profil?.poids_kg ?? "");
 
   const mut = useMutation({
     mutationFn: () => patchProfilFC({
       fc_max:   fcMax   ? parseInt(fcMax)   : undefined,
       fc_repos: fcRepos ? parseInt(fcRepos) : undefined,
-      poids_kg: poids   ? parseFloat(poids) : undefined,
     }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["profil-fc"] }); qc.invalidateQueries({ queryKey: ["historique-poids"] }); onClose(); },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["profil-fc"] }); onClose(); },
   });
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={onClose}>
       <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4" onClick={e => e.stopPropagation()}>
-        <h3 className="text-base font-bold text-gray-900 dark:text-white">Profil physiologique</h3>
+        <h3 className="text-base font-bold text-gray-900 dark:text-white">Profil cardio</h3>
 
         <div>
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Cardio</p>
@@ -1112,18 +1110,43 @@ function ModalFC({ profil, onClose }) {
           )}
         </div>
 
-        <div>
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Corps</p>
-          <div>
-            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Poids (kg)</label>
-            <input type="number" step="0.1" placeholder="70.0" value={poids} onChange={e => setPoids(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
-          </div>
-        </div>
         <div className="flex justify-end gap-2 pt-1">
           <button onClick={onClose} className="px-4 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-sm text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800">Annuler</button>
           <button onClick={() => mut.mutate()} disabled={mut.isPending}
             className="px-5 py-2 rounded-xl bg-brand text-white font-semibold text-sm disabled:opacity-50">
+            {mut.isPending ? "…" : "Enregistrer"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Modal poids seul (même fenêtre que le "+" du graphique dans Stats) ──────
+function ModalPoids({ profil, onClose }) {
+  const qc = useQueryClient();
+  const [poids, setPoids] = useState(profil?.poids_kg ? String(profil.poids_kg) : "");
+  const mut = useMutation({
+    mutationFn: () => patchProfilFC({ poids_kg: parseFloat(poids) }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["profil-fc"] });
+      qc.invalidateQueries({ queryKey: ["historique-poids"] });
+      onClose();
+    },
+  });
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={onClose}>
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-xs p-6 space-y-4" onClick={e => e.stopPropagation()}>
+        <h3 className="text-base font-bold text-gray-900 dark:text-white">Nouveau poids</h3>
+        <div>
+          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Poids (kg)</label>
+          <input type="number" step="0.1" autoFocus placeholder="72.5" value={poids} onChange={e => setPoids(e.target.value)}
+            className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
+        </div>
+        <div className="flex gap-2">
+          <button onClick={onClose} className="flex-1 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-sm text-gray-500">Annuler</button>
+          <button onClick={() => mut.mutate()} disabled={mut.isPending || !parseFloat(poids)}
+            className="flex-1 py-2 rounded-xl bg-brand text-white font-semibold text-sm disabled:opacity-50">
             {mut.isPending ? "…" : "Enregistrer"}
           </button>
         </div>
@@ -1137,6 +1160,7 @@ function ModalFC({ profil, onClose }) {
 export default function Dashboard() {
   const qc = useQueryClient();
   const [showModalFC, setShowModalFC] = useState(false);
+  const [showModalPoids, setShowModalPoids] = useState(false);
 
   const { data: physio } = useQuery({
     queryKey: ["tendances", undefined],
@@ -1241,22 +1265,22 @@ export default function Dashboard() {
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <StatTile label="VMA actuelle"    value={derniereVMA ? `${derniereVMA.valeur} km/h` : "—"} sub="Demi-Cooper"   color="green" />
-        <StatTile label="Poids"           value={profilFC?.poids_kg ? `${profilFC.poids_kg} kg` : "—"} sub={<button onClick={() => setShowModalFC(true)} className="text-brand hover:underline">Mettre à jour</button>} color="blue" />
+        <StatTile label="Poids"           value={profilFC?.poids_kg ? `${profilFC.poids_kg} kg` : "—"} sub={<button onClick={() => setShowModalPoids(true)} className="text-brand hover:underline">Mettre à jour</button>} color="blue" />
         <StatTile label="Km cette semaine" value={derniereACWA ? `${derniereACWA.charge_aigue_km} km` : "—"} sub="Charge aiguë"    color="orange" />
         <StatTile label="Ratio ACWA"      value={derniereACWA?.ratio ?? "—"} sub={derniereACWA?.alerte_risque ? "⚠️ Élevé" : "Normal"} color={derniereACWA?.alerte_risque ? "red" : "purple"} />
       </div>
 
       {/* Zones */}
       {zones && (
-        <Card title={
-          <div className="flex items-center justify-between w-full">
-            <span>Zones de vitesse actuelles</span>
+        <Card
+          title="Zones de vitesse actuelles"
+          action={
             <button onClick={() => setShowModalFC(true)}
-              className="text-xs text-brand border border-brand/30 hover:bg-brand/10 px-2.5 py-1 rounded-lg transition-colors font-medium">
+              className="shrink-0 text-xs text-brand border border-brand/30 hover:bg-brand/10 px-2.5 py-1 rounded-lg transition-colors font-medium">
               ⚙ Profil {profilFC?.fc_max ? `${profilFC.fc_max}/${profilFC.fc_repos ?? "?"}` : "configurer"}
             </button>
-          </div>
-        }>
+          }
+        >
           <div className="space-y-0">
             {[
               { z: "Z1", label: "Récup." },
@@ -1293,6 +1317,7 @@ export default function Dashboard() {
         </Card>
       )}
       {showModalFC && <ModalFC profil={profilFC} onClose={() => setShowModalFC(false)} />}
+      {showModalPoids && <ModalPoids profil={profilFC} onClose={() => setShowModalPoids(false)} />}
 
       {!derniereVMA && !derniereACWA && !zones && (
         <Card title="Démarrer">
