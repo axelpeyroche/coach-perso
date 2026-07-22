@@ -2546,8 +2546,12 @@ def _extraire_infos_course(url: str) -> dict:
     low = texte.lower()
 
     # ── Distances (toutes les valeurs distinctes plausibles) ─────────────────
+    # Une course multi-distances liste souvent à la fois des "XX km" explicites
+    # ET des libellés type "Marathon" / "Semi-Marathon" (dont les km sont parfois
+    # en image). On combine donc les deux sources.
     from collections import Counter as _C
     candidats = []
+    # 1) Distances explicites "XX km" et "XX k" (raccourci course, ex. 10K / 5K)
     for m in re.finditer(r"(\d{1,3}(?:[.,]\d{1,3})?)\s*km\b", low):
         try:
             v = float(m.group(1).replace(",", "."))
@@ -2555,13 +2559,22 @@ def _extraire_infos_course(url: str) -> dict:
                 candidats.append(round(v, 1))
         except ValueError:
             pass
-    if not candidats:
-        if "semi-marathon" in low or "semi marathon" in low:
-            candidats.append(21.1)
-        elif re.search(r"\bmarathon\b", low):
-            candidats.append(42.195)
+    for m in re.finditer(r"(\d{1,3})\s*k\b", low):  # "10k", "5 k" (k sans m)
+        try:
+            v = float(m.group(1))
+            if 1.0 <= v <= 350.0:
+                candidats.append(round(v, 1))
+        except ValueError:
+            pass
+    # 2) Libellés standard (ajoutés en plus, pas seulement en secours)
+    if "semi-marathon" in low or "semi marathon" in low:
+        candidats.append(21.1)
+    # marathon « plein » : présent en dehors du mot « semi-marathon »
+    low_sans_semi = low.replace("semi-marathon", " ").replace("semi marathon", " ")
+    if re.search(r"\bmarathon\b", low_sans_semi):
+        candidats.append(42.195)
 
-    freq = _C(candidats)
+    freq = _C(round(c, 1) for c in candidats)
     # Liste des distances distinctes, triées par ordre croissant
     distances = sorted(freq.keys())
     # Distance par défaut : la plus fréquente (puis la plus grande en cas d'égalité)
