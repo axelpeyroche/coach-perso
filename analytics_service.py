@@ -228,6 +228,22 @@ def distribution_volume(
                 self.dplus_total = dplus
         stats_course = _StatsCourse(round(km_total, 2), round(km_route, 2), round(km_trail, 2), dplus_total)
 
+        # Volume vélo de route (séances VELO validées)
+        journaux_velo = db.execute(
+            select(JournalSeance)
+            .join(SeanceEntrainement, JournalSeance.seance_id == SeanceEntrainement.id)
+            .where(
+                SeanceEntrainement.semaine_id == semaine.id,
+                SeanceEntrainement.type_seance == TypeSeance.VELO,
+                JournalSeance.completee == True,
+            )
+        ).scalars().all()
+        km_velo = 0.0
+        for j in journaux_velo:
+            if j.distance_reelle_km is not None:
+                km_velo += j.distance_reelle_km
+        km_velo = round(km_velo, 2)
+
         volume_muscu = {cat.value: 0 for cat in CategorieMusculaire}
 
         # Cas 1 — exercices liés à une VariationExercice (poids du corps, barre, EMOM, AMRAP…)
@@ -289,6 +305,7 @@ def distribution_volume(
                 "km_course": round(stats_course.km_total or 0.0, 2),
                 "km_route": round(stats_course.km_route or 0.0, 2),
                 "km_trail": round(stats_course.km_trail or 0.0, 2),
+                "km_velo": km_velo,
                 "dplus_m": stats_course.dplus_total or 0,
                 "multiplicateur_volume": semaine.multiplicateur_volume,
                 "volume_muscu": volume_muscu,

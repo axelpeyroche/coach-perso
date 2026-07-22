@@ -128,7 +128,7 @@ export default function Analytics({ dark }) {
   const vmaData = physio?.vma?.map((v) => ({ date: fmtDate(v.date), vma: v.valeur })) ?? [];
   const volumeDataFull = volume?.semaines?.map((s) => {
     const label = s.date_debut ? `${fmtJM(s.date_debut)} - ${fmtJM(addDays(s.date_debut, 6))}` : "";
-    return { sem: `S${s.numero_semaine}`, num: s.numero_semaine, dateDebut: s.date_debut, label, km_route: s.km_route ?? s.km_course ?? 0, km_trail: s.km_trail ?? 0, push: s.volume_muscu?.push ?? 0, pull: s.volume_muscu?.pull ?? 0, jambes: s.volume_muscu?.jambes ?? 0 };
+    return { sem: `S${s.numero_semaine}`, num: s.numero_semaine, dateDebut: s.date_debut, label, km_route: s.km_route ?? s.km_course ?? 0, km_trail: s.km_trail ?? 0, km_velo: s.km_velo ?? 0, push: s.volume_muscu?.push ?? 0, pull: s.volume_muscu?.pull ?? 0, jambes: s.volume_muscu?.jambes ?? 0 };
   }) ?? [];
 
   // Filtre de période
@@ -271,7 +271,7 @@ export default function Analytics({ dark }) {
         </Card>
       )}
 
-      <Card title="🏃 Volume course hebdomadaire (km)">
+      <Card title="🏃 Volume hebdomadaire (km)">
         {volumeData.length ? (
           <div className="w-full overflow-x-hidden">
             <ResponsiveContainer width="100%" height={220}>
@@ -283,7 +283,8 @@ export default function Analytics({ dark }) {
                 <Legend />
                 {refLinesEvts}
                 <Bar dataKey="km_route" name="Route" stackId="a" fill="#22c55e" radius={[0, 0, 0, 0]} activeBar={{ fill: '#16a34a' }} />
-                <Bar dataKey="km_trail" name="Trail" stackId="a" fill="#f97316" radius={[4, 4, 0, 0]} activeBar={{ fill: '#ea580c' }} />
+                <Bar dataKey="km_trail" name="Trail" stackId="a" fill="#f97316" radius={[0, 0, 0, 0]} activeBar={{ fill: '#ea580c' }} />
+                <Bar dataKey="km_velo" name="Vélo" stackId="a" fill="#06b6d4" radius={[4, 4, 0, 0]} activeBar={{ fill: '#0891b2' }} />
               </BarChart>
             </ResponsiveContainer>
             <p className="mt-1 px-1 text-xs text-gray-400 text-center">Clique sur une semaine pour voir le détail des séances</p>
