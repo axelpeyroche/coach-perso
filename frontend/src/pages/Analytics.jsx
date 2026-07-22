@@ -330,29 +330,6 @@ export default function Analytics({ dark }) {
         ) : <Vide />}
       </Card>
 
-      {/* Évolution du poids */}
-      <Card title="⚖️ Évolution du poids (kg)" action={
-        <button onClick={() => setPoidsModal(true)} title="Ajouter un poids"
-          className="w-7 h-7 flex items-center justify-center rounded-lg bg-brand/10 text-brand text-lg font-bold hover:bg-brand/20 transition-colors leading-none">
-          +
-        </button>
-      }>
-        {poidsData.length ? (
-          <div className="w-full overflow-x-hidden">
-            <ResponsiveContainer width="100%" height={200}>
-              <LineChart data={poidsData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                <YAxis domain={["auto", "auto"]} tick={{ fontSize: 11 }} width={36} />
-                <Tooltip formatter={(v) => [`${v} kg`, "Poids"]} contentStyle={ttStyle} labelStyle={ttLabelStyle} />
-                <Line type="monotone" dataKey="poids" stroke="#3b82f6" strokeWidth={2} dot={{ r: 4 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        ) : <Vide />}
-      </Card>
-      {poidsModal && <ModalAjoutPoids dernier={poidsData[poidsData.length - 1]?.poids} onClose={() => setPoidsModal(false)} />}
-
       {/* Prédiction temps de course */}
       {predData.length > 0 && prediction?.objectif && (
         <Card title={`🎯 Prédiction — ${prediction.objectif.nom}`}>
@@ -528,6 +505,29 @@ export default function Analytics({ dark }) {
         ) : <Vide />}
       </Card>
 
+      {/* Évolution du poids — tout en bas */}
+      <Card title="⚖️ Évolution du poids (kg)" action={
+        <button onClick={() => setPoidsModal(true)} title="Ajouter un poids"
+          className="w-7 h-7 flex items-center justify-center rounded-lg bg-brand/10 text-brand text-lg font-bold hover:bg-brand/20 transition-colors leading-none">
+          +
+        </button>
+      }>
+        {poidsData.length ? (
+          <div className="w-full overflow-x-hidden">
+            <ResponsiveContainer width="100%" height={200}>
+              <LineChart data={poidsData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                <YAxis domain={["auto", "auto"]} tick={{ fontSize: 11 }} width={36} />
+                <Tooltip formatter={(v) => [`${v} kg`, "Poids"]} contentStyle={ttStyle} labelStyle={ttLabelStyle} />
+                <Line type="monotone" dataKey="poids" stroke="#3b82f6" strokeWidth={2} dot={{ r: 4 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        ) : <Vide />}
+      </Card>
+
+      {poidsModal && <ModalAjoutPoids dernier={poidsData[poidsData.length - 1]?.poids} onClose={() => setPoidsModal(false)} />}
       {semaineDetail != null && <ModalSemaine numero={semaineDetail} onClose={() => setSemaineDetail(null)} />}
     </div>
   );

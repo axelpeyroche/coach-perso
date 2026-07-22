@@ -1095,9 +1095,11 @@ def historique_poids(current_user: Utilisateur = Depends(get_current_user), db: 
         .all()
     )
     points = [{"date": e.enregistre_le.strftime("%Y-%m-%d"), "poids": round(e.poids_kg, 1)} for e in entrees]
-    # Si le poids actuel n'a pas encore de point (ancien compte), on l'ajoute
-    if current_user.poids_kg and (not points or abs(points[-1]["poids"] - current_user.poids_kg) > 0.001):
-        points.append({"date": date.today().strftime("%Y-%m-%d"), "poids": round(current_user.poids_kg, 1)})
+    # Aucun historique mais un poids existant (saisi avant cette fonctionnalité) :
+    # on crée un point de départ daté de la création du compte (date réelle du 1er poids).
+    if not points and current_user.poids_kg:
+        d0 = current_user.cree_le.date() if current_user.cree_le else date.today()
+        points.append({"date": d0.strftime("%Y-%m-%d"), "poids": round(current_user.poids_kg, 1)})
     return {"points": points}
 
 
