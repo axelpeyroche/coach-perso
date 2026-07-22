@@ -168,7 +168,7 @@ export default function Calendrier() {
               return (
                 <div key={key} onClick={() => setJourSel(isSel ? null : key)}
                   className={clsx(
-                    "rounded-xl p-1.5 min-h-[56px] flex flex-col items-center transition-colors cursor-pointer",
+                    "rounded-xl p-1.5 min-h-[56px] flex flex-col items-center transition-colors cursor-pointer border border-gray-100 dark:border-gray-800",
                     isSel
                       ? "ring-2 ring-indigo-400 dark:ring-indigo-500 bg-indigo-50 dark:bg-indigo-900/20"
                       : hasValide
@@ -190,7 +190,7 @@ export default function Calendrier() {
                         className={clsx(
                           "w-full text-center text-[10px] leading-tight font-medium rounded px-0.5 py-0.5 truncate",
                           s._planifie
-                            ? "border border-dashed border-gray-400 dark:border-gray-500 text-gray-500 dark:text-gray-400 bg-white/60 dark:bg-gray-800/40"
+                            ? "border border-dashed border-indigo-300 dark:border-indigo-700 text-indigo-500 dark:text-indigo-300 bg-indigo-100/70 dark:bg-indigo-900/30"
                             : clsx("text-white", TYPE_COLORS[s.type] ?? "bg-gray-400")
                         )}
                         title={s._planifie ? `📅 Planifié · ${s.titre}` : s.titre}>
