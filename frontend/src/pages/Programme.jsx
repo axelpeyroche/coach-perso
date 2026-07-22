@@ -1179,8 +1179,9 @@ export default function Programme() {
     ...seancesVisibles.filter(s => !s.journal?.completee).sort((a, b) =>
       cleChrono(a).localeCompare(cleChrono(b))
     ),
+    // Séances validées : ordre chronologique par date planifiée (jour de réalisation)
     ...seancesVisibles.filter(s => s.journal?.completee).sort((a, b) =>
-      (a.journal.enregistre_le ?? a.date ?? "").localeCompare(b.journal.enregistre_le ?? b.date ?? "")
+      cleChrono(a).localeCompare(cleChrono(b))
     ),
   ];
 

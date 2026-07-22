@@ -69,15 +69,14 @@ export default function Calendrier() {
   const semaines = raw?.semaines ?? [];
 
   // Indexe les séances par date "YYYY-MM-DD"
-  // — séances validées indexées sur leur date réelle
-  // — séances planifiées (non validées) indexées sur date_planifiee
+  // — validées comme planifiées : sur la date planifiée (jour de réalisation),
+  //   et non la date de validation. Fallback : enregistre_le puis date programme.
   const seancesParDate = useMemo(() => {
     const map = {};
     for (const sem of semaines) {
       for (const s of sem.seances ?? []) {
         if (s.journal?.completee) {
-          // Séance validée → date réelle de réalisation (enregistre_le), sinon date programme
-          const key = (s.journal.enregistre_le ?? s.date ?? "").slice(0, 10);
+          const key = (s.date_planifiee ?? s.journal.enregistre_le ?? s.date ?? "").slice(0, 10);
           if (!key) continue;
           if (!map[key]) map[key] = [];
           map[key].push(s);
