@@ -395,8 +395,12 @@ function FormulaireLog({ seance, onClose, onDone, modeEdit = false }) {
   const mut = useMutation({
     mutationFn: () => {
       if (prefill) return validerRPE(seance.id, rpe, notes || undefined);
+      // Champs entiers côté backend : on arrondit (ex. durée 34.09 → 34) pour éviter une erreur 422
+      const CHAMPS_ENTIERS = new Set(["duree_reelle_min", "dplus_reel_m", "fc_moyenne_bpm", "fc_max_bpm"]);
       const nums = Object.fromEntries(
-        Object.entries(champs).filter(([,v]) => v !== "").map(([k,v]) => [k, Number(v)])
+        Object.entries(champs).filter(([,v]) => v !== "").map(([k,v]) =>
+          [k, CHAMPS_ENTIERS.has(k) ? Math.round(Number(v)) : Number(v)]
+        )
       );
       let detailsIntervalles = undefined;
       if (isIntervalles) {
@@ -547,7 +551,13 @@ function FormulaireLog({ seance, onClose, onDone, modeEdit = false }) {
           {mut.isPending ? "..." : modeEdit ? "Enregistrer ✓" : "Valider ✓"}
         </button>
       </div>
-      {mut.isError && <p className="text-xs text-red-500 text-center">Erreur — réessaie.</p>}
+      {mut.isError && (() => {
+        const d = mut.error?.response?.data?.detail;
+        const msg = Array.isArray(d)
+          ? d.map(x => `${(x.loc ?? []).slice(-1)[0] ?? ""}: ${x.msg}`).join(" · ")
+          : (typeof d === "string" ? d : (mut.error?.message || "Erreur — réessaie."));
+        return <p className="text-xs text-red-500 text-center">{msg}</p>;
+      })()}
     </div>
   );
 }
