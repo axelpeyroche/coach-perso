@@ -717,7 +717,7 @@ def records_personnels(db: Session, utilisateur_id: int) -> dict[str, Any]:
     """Meilleures performances toutes séances confondues + jalons."""
     journaux = (
         db.execute(
-            select(JournalSeance, SeanceEntrainement.date_seance, SemaineEntrainement.numero_semaine, SemaineEntrainement.id.label("semaine_id"))
+            select(JournalSeance, SeanceEntrainement.date_seance, SeanceEntrainement.type_seance, SemaineEntrainement.numero_semaine, SemaineEntrainement.id.label("semaine_id"))
             .join(SeanceEntrainement, JournalSeance.seance_id == SeanceEntrainement.id)
             .join(SemaineEntrainement, SeanceEntrainement.semaine_id == SemaineEntrainement.id)
             .join(Macrocycle, SemaineEntrainement.macrocycle_id == Macrocycle.id)
@@ -736,10 +736,17 @@ def records_personnels(db: Session, utilisateur_id: int) -> dict[str, Any]:
     km_par_semaine: dict[int, float] = defaultdict(float)
     semaines_actives: set[int] = set()
 
+    # Records dédoublés par discipline (course / vélo)
+    rec = {
+        "course": {"longue": None, "dplus": None, "duree": None, "km_sem": defaultdict(float)},
+        "velo":   {"longue": None, "dplus": None, "duree": None, "km_sem": defaultdict(float)},
+    }
+
     for row in journaux:
         j = row.JournalSeance
         d = str(row.date_seance)
         semaines_actives.add(row.semaine_id)
+        disc = "course" if row.type_seance == TypeSeance.COURSE else ("velo" if row.type_seance == TypeSeance.VELO else None)
         if j.distance_reelle_km:
             km_par_semaine[row.numero_semaine] += j.distance_reelle_km
             if plus_longue is None or j.distance_reelle_km > plus_longue[0]:
@@ -750,8 +757,29 @@ def records_personnels(db: Session, utilisateur_id: int) -> dict[str, Any]:
         if j.duree_reelle_min:
             if plus_longue_duree is None or j.duree_reelle_min > plus_longue_duree[0]:
                 plus_longue_duree = (j.duree_reelle_min, d)
+        # Variante par discipline
+        if disc:
+            r = rec[disc]
+            if j.distance_reelle_km:
+                r["km_sem"][row.numero_semaine] += j.distance_reelle_km
+                if r["longue"] is None or j.distance_reelle_km > r["longue"][0]:
+                    r["longue"] = (j.distance_reelle_km, d)
+            if j.dplus_reel_m and (r["dplus"] is None or j.dplus_reel_m > r["dplus"][0]):
+                r["dplus"] = (j.dplus_reel_m, d)
+            if j.duree_reelle_min and (r["duree"] is None or j.duree_reelle_min > r["duree"][0]):
+                r["duree"] = (j.duree_reelle_min, d)
 
     meilleure_semaine = max(km_par_semaine.items(), key=lambda kv: kv[1]) if km_par_semaine else None
+
+    def _split(disc: str) -> dict:
+        r = rec[disc]
+        best_sem = max(r["km_sem"].items(), key=lambda kv: kv[1]) if r["km_sem"] else None
+        return {
+            "plus_longue_sortie": {"km": round(r["longue"][0], 2), "date": r["longue"][1]} if r["longue"] else None,
+            "plus_gros_dplus": {"m": r["dplus"][0], "date": r["dplus"][1]} if r["dplus"] else None,
+            "plus_longue_duree": {"min": r["duree"][0], "date": r["duree"][1]} if r["duree"] else None,
+            "meilleure_semaine": {"semaine": best_sem[0], "km": round(best_sem[1], 2)} if best_sem else None,
+        }
 
     # VMA max historique
     vma_max = (
@@ -786,6 +814,9 @@ def records_personnels(db: Session, utilisateur_id: int) -> dict[str, Any]:
         "plus_gros_dplus": {"m": plus_gros_dplus[0], "date": plus_gros_dplus[1]} if plus_gros_dplus else None,
         "plus_longue_duree": {"min": plus_longue_duree[0], "date": plus_longue_duree[1]} if plus_longue_duree else None,
         "meilleure_semaine": {"semaine": meilleure_semaine[0], "km": round(meilleure_semaine[1], 2)} if meilleure_semaine else None,
+        # Variantes par discipline (pour affichage course / vélo côte à côte)
+        "course": _split("course"),
+        "velo": _split("velo"),
         "vma_max": vma_max,
         "streak_semaines": streak,
         "seances_completees": len(journaux),

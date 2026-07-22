@@ -10,6 +10,7 @@ import {
   getEvenements, getSeancesSemaine,
 } from "../api";
 import Card from "../components/Card";
+import clsx from "clsx";
 
 function LineCursor({ x, y, width, height }) {
   return <line x1={x + width / 2} y1={y} x2={x + width / 2} y2={y + height} stroke="#9ca3af" strokeWidth={1} />;
@@ -208,26 +209,72 @@ export default function Analytics({ dark }) {
       </div>
 
       {/* Records personnels */}
-      {records && records.seances_completees > 0 && (
-        <Card title="🏆 Records & jalons">
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            {[
-              records.plus_longue_sortie && { label: "Plus longue sortie", val: `${records.plus_longue_sortie.km} km`, sub: fmtDate(records.plus_longue_sortie.date) },
-              records.plus_gros_dplus && { label: "Plus gros D+", val: `${records.plus_gros_dplus.m} m`, sub: fmtDate(records.plus_gros_dplus.date) },
-              records.plus_longue_duree && { label: "Plus longue durée", val: fmtTemps(records.plus_longue_duree.min), sub: fmtDate(records.plus_longue_duree.date) },
-              records.meilleure_semaine && { label: "Meilleure semaine", val: `${records.meilleure_semaine.km} km`, sub: `S${records.meilleure_semaine.semaine}` },
-              records.vma_max && { label: "VMA max", val: `${records.vma_max} km/h`, sub: "Demi-Cooper" },
-              { label: "Régularité", val: `${records.streak_semaines} sem.`, sub: `${records.seances_completees} séances faites` },
-            ].filter(Boolean).map(({ label, val, sub }) => (
-              <div key={label} className="rounded-xl bg-gray-50 dark:bg-gray-800 px-3 py-2.5">
-                <p className="text-xs text-gray-400">{label}</p>
-                <p className="text-base font-black text-gray-900 dark:text-white mt-0.5">{val}</p>
-                <p className="text-xs text-gray-400">{sub}</p>
+      {records && records.seances_completees > 0 && (() => {
+        const hasVelo = records.velo && (records.velo.plus_longue_sortie || records.velo.plus_gros_dplus || records.velo.plus_longue_duree || records.velo.meilleure_semaine);
+        // Formatte une stat (course ou vélo) en { val, sub }
+        const fmtStat = {
+          plus_longue_sortie: (x) => x ? { val: `${x.km} km`, sub: fmtDate(x.date) } : null,
+          plus_gros_dplus:    (x) => x ? { val: `${x.m} m`, sub: fmtDate(x.date) } : null,
+          plus_longue_duree:  (x) => x ? { val: fmtTemps(x.min), sub: fmtDate(x.date) } : null,
+          meilleure_semaine:  (x) => x ? { val: `${x.km} km`, sub: `S${x.semaine}` } : null,
+        };
+        const splitStats = [
+          { key: "plus_longue_sortie", label: "Plus longue sortie" },
+          { key: "plus_gros_dplus",    label: "Plus gros D+" },
+          { key: "plus_longue_duree",  label: "Plus longue durée" },
+          { key: "meilleure_semaine",  label: "Meilleure semaine" },
+        ];
+        return (
+          <Card title="🏆 Records & jalons">
+            <div className={clsx("grid gap-3", hasVelo ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-2 sm:grid-cols-3")}>
+              {splitStats.map(({ key, label }) => {
+                if (hasVelo) {
+                  const c = fmtStat[key](records.course?.[key]);
+                  const v = fmtStat[key](records.velo?.[key]);
+                  return (
+                    <div key={key} className="rounded-xl bg-gray-50 dark:bg-gray-800 px-3 py-2.5">
+                      <p className="text-xs text-gray-400 mb-1.5">{label}</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="border-r border-gray-200 dark:border-gray-700 pr-2">
+                          <p className="text-[11px] text-gray-400">🏃 Course</p>
+                          <p className="text-sm font-black text-gray-900 dark:text-white">{c?.val ?? "—"}</p>
+                          {c?.sub && <p className="text-[10px] text-gray-400">{c.sub}</p>}
+                        </div>
+                        <div className="pl-1">
+                          <p className="text-[11px] text-gray-400">🚴 Vélo</p>
+                          <p className="text-sm font-black text-gray-900 dark:text-white">{v?.val ?? "—"}</p>
+                          {v?.sub && <p className="text-[10px] text-gray-400">{v.sub}</p>}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+                const s = fmtStat[key](records[key]);
+                if (!s) return null;
+                return (
+                  <div key={key} className="rounded-xl bg-gray-50 dark:bg-gray-800 px-3 py-2.5">
+                    <p className="text-xs text-gray-400">{label}</p>
+                    <p className="text-base font-black text-gray-900 dark:text-white mt-0.5">{s.val}</p>
+                    <p className="text-xs text-gray-400">{s.sub}</p>
+                  </div>
+                );
+              })}
+              {records.vma_max && (
+                <div className="rounded-xl bg-gray-50 dark:bg-gray-800 px-3 py-2.5">
+                  <p className="text-xs text-gray-400">VMA max</p>
+                  <p className="text-base font-black text-gray-900 dark:text-white mt-0.5">{records.vma_max} km/h</p>
+                  <p className="text-xs text-gray-400">Demi-Cooper</p>
+                </div>
+              )}
+              <div className="rounded-xl bg-gray-50 dark:bg-gray-800 px-3 py-2.5">
+                <p className="text-xs text-gray-400">Régularité</p>
+                <p className="text-base font-black text-gray-900 dark:text-white mt-0.5">{records.streak_semaines} sem.</p>
+                <p className="text-xs text-gray-400">{records.seances_completees} séances faites</p>
               </div>
-            ))}
-          </div>
-        </Card>
-      )}
+            </div>
+          </Card>
+        );
+      })()}
 
       <Card title="📈 Progression VMA (km/h)">
         {vmaData.length ? (
