@@ -758,8 +758,36 @@ def onboarding(
             adapted = adapter_contenu_course(muscu_adapter(calibrated, n_muscu, current_user.sexe), n_course)
             _inserer_seances_en_session(db, mc, adapted)
 
+    # ── Séances vélo de route (si la discipline est pratiquée) ──────────────
+    # Une sortie endurance par semaine, durée modulée par le volume de la semaine.
+    if payload.type_programme in ("velo", "hybride"):
+        from models import TypeMacrophase as _TM
+        semaines_velo = (
+            db.query(SemaineEntrainement)
+            .join(Macrocycle, SemaineEntrainement.macrocycle_id == Macrocycle.id)
+            .filter(Macrocycle.utilisateur_id == current_user.id)
+            .all()
+        )
+        for sem in semaines_velo:
+            if sem.macrophase == _TM.EVALUATION:
+                continue  # pas de vélo les semaines de test
+            mult = sem.multiplicateur_volume or 1.0
+            duree = max(45, round(60 * mult))
+            nb = db.query(SeanceEntrainement).filter(SeanceEntrainement.semaine_id == sem.id).count()
+            jour = sem.date_debut + timedelta(days=5)  # samedi
+            db.add(SeanceEntrainement(
+                semaine_id=sem.id,
+                date_seance=jour,
+                type_seance=TypeSeance.VELO,
+                titre="Vélo endurance",
+                description="Sortie vélo endurance — allure conversationnelle (zone 2)",
+                ordre_dans_semaine=nb + 1,
+                duree_cible_min=duree,
+                date_planifiee=jour,
+            ))
+
     db.commit()
-    return {"ok": True, "message": "Onboarding terminÃ©, programme gÃ©nÃ©rÃ©."}
+    return {"ok": True, "message": "Onboarding terminé, programme généré."}
 
 
 # ---------------------------------------------------------------------------
