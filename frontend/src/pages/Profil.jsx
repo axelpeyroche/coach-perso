@@ -514,7 +514,7 @@ function EditProgrammeModal({ user, onClose, onSaved }) {
 // ── Layout components ──────────────────────────────────────────────────────
 const PROG_LABEL = { course: "Course", muscu: "Musculation", hybride: "Hybride", velo: "Vélo de route" };
 const MUSCU_LABEL = { poids_corps: "Poids du corps", salle: "Salle de sport" };
-const COURSE_LABEL = { route: "Route", trail: "Trail" };
+const COURSE_LABEL = { route: "Route", trail: "Trail", route_trail: "Route & Trail" };
 
 function Row({ label, value }) {
   if (!value && value !== 0) return null;
@@ -867,13 +867,24 @@ export default function Profil({ dark, setDark }) {
           </svg>
         </button>
       }>
-        <Row label="Type" value={PROG_LABEL[user?.type_programme] ?? user?.type_programme} />
-        <Row label="Musculation" value={MUSCU_LABEL[user?.type_muscu] ?? user?.type_muscu} />
-        <Row label="Course" value={COURSE_LABEL[user?.type_course] ?? user?.type_course} />
-        <Row label="Séances / semaine" value={user?.seances_semaine} />
-        {user?.seances_muscu_semaine != null && <Row label="Séances muscu" value={user.seances_muscu_semaine} />}
-        {user?.seances_course_semaine != null && <Row label="Séances course" value={user.seances_course_semaine} />}
-        <Row label="Tests toutes les" value={user?.frequence_tests_semaines ? `${user.frequence_tests_semaines} semaines` : null} />
+        {(() => {
+          const t = user?.type_programme;
+          const hasMuscu  = t === "muscu"  || t === "hybride";
+          const hasCourse = t === "course" || t === "hybride";
+          const hasVelo   = t === "velo"   || t === "hybride";
+          return (
+            <>
+              <Row label="Type" value={PROG_LABEL[t] ?? t} />
+              {hasMuscu  && <Row label="Type muscu"  value={MUSCU_LABEL[user?.type_muscu] ?? user?.type_muscu} />}
+              {hasCourse && <Row label="Type course" value={COURSE_LABEL[user?.type_course] ?? user?.type_course} />}
+              <Row label="Séances / semaine" value={user?.seances_semaine} />
+              {hasMuscu  && <Row label="Séances muscu"  value={user?.seances_muscu_semaine ?? 0} />}
+              {hasCourse && <Row label="Séances course" value={user?.seances_course_semaine ?? 0} />}
+              {hasVelo   && <Row label="Séances vélo"   value={user?.seances_velo_semaine ?? 0} />}
+              <Row label="Tests toutes les" value={user?.frequence_tests_semaines ? `${user.frequence_tests_semaines} semaines` : null} />
+            </>
+          );
+        })()}
       </Section>
 
       {/* Physiologie */}
