@@ -2213,6 +2213,83 @@ def supprimer_seance(
     return {"message": "Séance supprimée."}
 
 
+class ModifierSeanceSchema(BaseModel):
+    type_seance: Optional[str] = None
+    titre: Optional[str] = None
+    date_seance: Optional[str] = None        # "YYYY-MM-DD"
+    heure_planifiee: Optional[str] = None    # "HH:MM"
+    description: Optional[str] = None
+    zone_cible: Optional[str] = None
+    distance_cible_km: Optional[float] = None
+    duree_cible_min: Optional[int] = None
+    dplus_cible_m: Optional[int] = None
+    temps_limite_min: Optional[int] = None
+
+
+@app.patch("/api/seances/{seance_id}", summary="Modifie une séance personnalisée (mode manuel)")
+def modifier_seance_personnalisee(
+    seance_id: int,
+    payload: ModifierSeanceSchema,
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(obtenir_session),
+):
+    try:
+        seance = (
+            db.query(SeanceEntrainement)
+            .join(SemaineEntrainement, SeanceEntrainement.semaine_id == SemaineEntrainement.id)
+            .join(Macrocycle, SemaineEntrainement.macrocycle_id == Macrocycle.id)
+            .filter(
+                SeanceEntrainement.id == seance_id,
+                Macrocycle.utilisateur_id == current_user.id,
+            )
+            .first()
+        )
+        if not seance:
+            raise HTTPException(404, "Séance introuvable")
+
+        if payload.type_seance is not None:
+            try:
+                seance.type_seance = TypeSeance(payload.type_seance)
+            except ValueError:
+                raise HTTPException(400, f"Type de séance invalide : {payload.type_seance}")
+
+        if payload.date_seance is not None:
+            try:
+                d = date.fromisoformat(payload.date_seance)
+            except ValueError:
+                raise HTTPException(400, "Format date_seance invalide — attendu YYYY-MM-DD")
+            seance.date_seance = d
+            seance.date_planifiee = d
+
+        if payload.zone_cible is not None:
+            if payload.zone_cible == "":
+                seance.zone_cible = None
+            else:
+                try:
+                    seance.zone_cible = ZoneCourse(payload.zone_cible)
+                except ValueError:
+                    raise HTTPException(400, f"Zone invalide : {payload.zone_cible}")
+
+        # Champs simples (None = non modifié explicitement ; on écrase quand fourni)
+        if payload.titre is not None:            seance.titre = payload.titre
+        if payload.heure_planifiee is not None:  seance.heure_planifiee = payload.heure_planifiee or None
+        seance.description       = payload.description
+        seance.distance_cible_km = payload.distance_cible_km
+        seance.duree_cible_min   = payload.duree_cible_min
+        seance.dplus_cible_m     = payload.dplus_cible_m
+        seance.temps_limite_min  = payload.temps_limite_min
+
+        db.commit()
+        return {"id": seance.id, "message": "Séance modifiée."}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        db.rollback()
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(500, f"Erreur modification séance : {exc}")
+
+
 @app.get("/api/macrocycles", summary="Liste tous les macrocycles de l'utilisateur")
 def lister_macrocycles(current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
     mcs = db.query(Macrocycle).filter(Macrocycle.utilisateur_id == current_user.id).order_by(Macrocycle.numero_cycle).all()

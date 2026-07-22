@@ -103,6 +103,9 @@ export const creerSeance = (payload) =>
 export const supprimerSeance = (seance_id) =>
   api.delete(`/seances/${seance_id}`).then((r) => r.data);
 
+export const modifierSeance = (seance_id, payload) =>
+  api.patch(`/seances/${seance_id}`, payload).then((r) => r.data);
+
 // --- Évaluations ---
 export const getHistoriqueEvaluations = () =>
   api.get("/evaluations/historique").then((r) => r.data);

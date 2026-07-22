@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import api, { getToutesSemaines, journaliserSeance, validerRPE, getProfilFC, supprimerJournal, modifierJournal, planifierSeance, creerEvaluation, enregistrerDemiCooper, enregistrerMax1Min, enregistrerAmrapBenchmark, getExercicesEvaluation, getHistoriqueEvaluations, modifierEvaluation, supprimerEvaluation, corrigerEmom, corrigerDureesCourse, adapterCharge, creerSeance, supprimerSeance } from "../api";
+import api, { getToutesSemaines, journaliserSeance, validerRPE, getProfilFC, supprimerJournal, modifierJournal, planifierSeance, creerEvaluation, enregistrerDemiCooper, enregistrerMax1Min, enregistrerAmrapBenchmark, getExercicesEvaluation, getHistoriqueEvaluations, modifierEvaluation, supprimerEvaluation, corrigerEmom, corrigerDureesCourse, adapterCharge, creerSeance, supprimerSeance, modifierSeance } from "../api";
 import clsx from "clsx";
 import { useAuth } from "../AuthContext";
 
@@ -728,6 +728,7 @@ function CarteSeance({ seance, zonesFC, manuel = false }) {
   const [logOpen, setLogOpen]       = useState(false);
   const [valide, setValide]         = useState(false);
   const [editOpen, setEditOpen]     = useState(false);
+  const [editSeanceOpen, setEditSeanceOpen] = useState(false);
   const [conseil, setConseil]       = useState(null);
   const [planifOpen, setPlanifOpen] = useState(false);
 
@@ -895,6 +896,13 @@ function CarteSeance({ seance, zonesFC, manuel = false }) {
               </button>
             </div>
           )}
+          {manuel && !fait && (
+            <button onClick={() => setEditSeanceOpen(true)}
+              title="Modifier la séance"
+              className="p-1.5 rounded-lg text-sm text-gray-400 hover:text-brand hover:bg-brand/10 transition-colors">
+              ✏️
+            </button>
+          )}
           {manuel && (
             <button onClick={() => { if (window.confirm("Supprimer définitivement cette séance ?")) mutSupprimerSeance.mutate(); }}
               disabled={mutSupprimerSeance.isPending}
@@ -1056,6 +1064,14 @@ function CarteSeance({ seance, zonesFC, manuel = false }) {
           seance={seance}
           onClose={() => setPlanifOpen(false)}
           onConfirm={(date_planifiee, heure_planifiee) => mutPlanifier.mutate({ date_planifiee, heure_planifiee })}
+        />
+      )}
+
+      {/* ── Modal édition de la séance (mode manuel) ── */}
+      {editSeanceOpen && (
+        <ModalAjoutSeance
+          seanceExistante={seance}
+          onClose={() => setEditSeanceOpen(false)}
         />
       )}
     </div>
@@ -1279,21 +1295,51 @@ const COURSE_TYPES = [
   { id: "SORTIE_LONGUE", label: "Sortie longue", zone: "Z2", dplus: true,  sequences: false, terrain: true  },
 ];
 
-function ModalAjoutSeance({ semaineId, semaine, onClose }) {
+// Déduit le sous-type de course + terrain + séquences depuis une séance existante
+function deduireCourse(seance) {
+  const t = (seance.titre || "").toLowerCase();
+  const d = (seance.description || "").toLowerCase();
+  let courseType = "EF";
+  if (t.includes("sortie longue")) courseType = "SORTIE_LONGUE";
+  else if (t.includes("fractionn")) courseType = "FRACTIONNE";
+  else if (t.includes("seuil")) courseType = "SEUIL";
+  else if ((seance.zone_cible === "Z4")) courseType = "SEUIL";
+  else if ((seance.zone_cible === "Z5")) courseType = "FRACTIONNE";
+  const terrain = d.includes("trail") ? "trail" : "route";
+  const seqMatch = (seance.description || "").match(/(\d+)\s*séquence/i);
+  const reposMatch = (seance.description || "").match(/repos\s*(\d+)/i);
+  return {
+    courseType,
+    terrain,
+    nbSequences: seqMatch ? seqMatch[1] : "",
+    tempsRepos: reposMatch ? reposMatch[1] : "",
+  };
+}
+
+function ModalAjoutSeance({ semaineId, semaine, seanceExistante, onClose }) {
   const qc = useQueryClient();
-  const [type, setType] = useState("COURSE");
-  const [focus, setFocus] = useState("push");
-  const [courseType, setCourseType] = useState("EF");
-  const [terrain, setTerrain] = useState("route");
-  const [nbSequences, setNbSequences] = useState("");
-  const [tempsRepos, setTempsRepos] = useState("");
-  const [titre, setTitre] = useState("");
-  const [dateSeance, setDateSeance] = useState(semaine?.date_debut ?? "");
-  const [heure, setHeure] = useState("");
-  const [distance, setDistance] = useState("");
-  const [duree, setDuree] = useState("");
-  const [dplus, setDplus] = useState("");
-  const [tempsLimite, setTempsLimite] = useState("");
+  const edition = !!seanceExistante;
+  const c = edition ? deduireCourse(seanceExistante) : {};
+  const focusInit = edition && seanceExistante.description
+    ? (seanceExistante.description.toLowerCase().includes("pull") ? "pull"
+      : seanceExistante.description.toLowerCase().includes("full") ? "full" : "push")
+    : "push";
+
+  const [type, setType] = useState(edition ? seanceExistante.type : "COURSE");
+  const [focus, setFocus] = useState(focusInit);
+  const [courseType, setCourseType] = useState(edition ? (c.courseType || "EF") : "EF");
+  const [terrain, setTerrain] = useState(edition ? (c.terrain || "route") : "route");
+  const [nbSequences, setNbSequences] = useState(edition ? (c.nbSequences || "") : "");
+  const [tempsRepos, setTempsRepos] = useState(edition ? (c.tempsRepos || "") : "");
+  const [titre, setTitre] = useState(edition ? (seanceExistante.titre || "") : "");
+  const [dateSeance, setDateSeance] = useState(
+    edition ? ((seanceExistante.date_planifiee || seanceExistante.date || "").slice(0, 10)) : (semaine?.date_debut ?? "")
+  );
+  const [heure, setHeure] = useState(edition ? (seanceExistante.heure_planifiee || "") : "");
+  const [distance, setDistance] = useState(edition && seanceExistante.distance_cible_km != null ? String(seanceExistante.distance_cible_km) : "");
+  const [duree, setDuree] = useState(edition && seanceExistante.duree_cible_min != null ? String(seanceExistante.duree_cible_min) : "");
+  const [dplus, setDplus] = useState(edition && seanceExistante.dplus_cible_m != null ? String(seanceExistante.dplus_cible_m) : "");
+  const [tempsLimite, setTempsLimite] = useState(edition && seanceExistante.temps_limite_min != null ? String(seanceExistante.temps_limite_min) : "");
   const [err, setErr] = useState("");
 
   const estCourse = type === "COURSE";
@@ -1323,9 +1369,8 @@ function ModalAjoutSeance({ semaineId, semaine, onClose }) {
     return parts.length ? parts.join(" · ") : null;
   }
 
-  const mut = useMutation({
-    mutationFn: () => creerSeance({
-      semaine_id: semaineId,
+  function buildPayload() {
+    return {
       type_seance: type,
       titre: titre.trim() || titreParDefaut,
       description: buildDescription(),
@@ -1336,7 +1381,13 @@ function ModalAjoutSeance({ semaineId, semaine, onClose }) {
       duree_cible_min: estCourse && duree ? parseInt(duree) : null,
       dplus_cible_m: estCourse && courseCfg.dplus && dplus ? parseInt(dplus) : null,
       temps_limite_min: estAmrapEmom && tempsLimite ? parseInt(tempsLimite) : null,
-    }),
+    };
+  }
+
+  const mut = useMutation({
+    mutationFn: () => edition
+      ? modifierSeance(seanceExistante.id, buildPayload())
+      : creerSeance({ semaine_id: semaineId, ...buildPayload() }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["toutes-semaines"] }); onClose(); },
     onError: (e) => {
       const d = e?.response?.data?.detail;
@@ -1360,7 +1411,7 @@ function ModalAjoutSeance({ semaineId, semaine, onClose }) {
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onClose}>
       <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-        <h3 className="text-lg font-bold text-gray-900 dark:text-white">Nouvelle séance</h3>
+        <h3 className="text-lg font-bold text-gray-900 dark:text-white">{edition ? "Modifier la séance" : "Nouvelle séance"}</h3>
 
         {/* Type */}
         <div>
@@ -1513,7 +1564,7 @@ function ModalAjoutSeance({ semaineId, semaine, onClose }) {
           </button>
           <button onClick={() => { setErr(""); mut.mutate(); }} disabled={mut.isPending || !dateSeance}
             className="flex-1 py-2.5 rounded-xl bg-brand text-white font-semibold text-sm hover:bg-brand-dark transition-colors disabled:opacity-40">
-            {mut.isPending ? "Création…" : "Créer"}
+            {mut.isPending ? (edition ? "Enregistrement…" : "Création…") : (edition ? "Enregistrer" : "Créer")}
           </button>
         </div>
       </div>
