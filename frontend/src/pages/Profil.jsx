@@ -1,5 +1,6 @@
 import { useAuth } from "../AuthContext";
 import { useState, useEffect, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import api from "../api";
 import { getImportToken, regenererImportToken } from "../api";
 
@@ -806,6 +807,7 @@ rpe            → 7`}</pre>
 
 export default function Profil({ dark, setDark }) {
   const { user, setUser, logout } = useAuth();
+  const qc = useQueryClient();
   const [editInfos, setEditInfos] = useState(false);
   const [editPwd, setEditPwd] = useState(false);
   const [editProgramme, setEditProgramme] = useState(false);
@@ -815,6 +817,9 @@ export default function Profil({ dark, setDark }) {
   async function refreshUser() {
     const r = await api.get("/auth/me");
     setUser(r.data);
+    // Le programme a pu changer → rafraîchir toutes les données dépendantes
+    // (semaine en cours, séances, stats, objectif…) affichées ailleurs.
+    qc.invalidateQueries();
   }
 
   return (
