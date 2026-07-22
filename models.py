@@ -109,8 +109,9 @@ class Utilisateur(Base):
     seances_semaine: Mapped[Optional[int]] = mapped_column(Integer)
     seances_course_semaine: Mapped[Optional[int]] = mapped_column(Integer)
     seances_muscu_semaine: Mapped[Optional[int]] = mapped_column(Integer)
+    seances_velo_semaine: Mapped[Optional[int]] = mapped_column(Integer)
     frequence_tests_semaines: Mapped[Optional[int]] = mapped_column(Integer, default=8)
-    type_course: Mapped[Optional[str]] = mapped_column(String(20))       # "route" | "trail"
+    type_course: Mapped[Optional[str]] = mapped_column(String(20))       # "route" | "trail" | "route_trail"
     type_muscu: Mapped[Optional[str]] = mapped_column(String(20))        # "poids_corps" | "salle"
 
     # Objectifs

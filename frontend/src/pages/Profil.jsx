@@ -338,6 +338,7 @@ function EditProgrammeModal({ user, onClose, onSaved }) {
     seances_semaine:        user?.seances_semaine ?? 5,
     seances_muscu_semaine:  user?.seances_muscu_semaine ?? 3,
     seances_course_semaine: user?.seances_course_semaine ?? 2,
+    seances_velo_semaine:   user?.seances_velo_semaine ?? 1,
     type_muscu:             user?.type_muscu || "poids_corps",
     type_course:            user?.type_course || "route",
     frequence_tests_semaines: user?.frequence_tests_semaines ?? 8,
@@ -352,11 +353,16 @@ function EditProgrammeModal({ user, onClose, onSaved }) {
   async function save() {
     setSaving(true); setErr("");
     try {
+      // En hybride, le total est la somme muscu + course + vélo
+      const totalSeances = form.type_programme === "hybride"
+        ? form.seances_muscu_semaine + form.seances_course_semaine + form.seances_velo_semaine
+        : form.seances_semaine;
       const payload = {};
       if (form.type_programme         !== user?.type_programme)         payload.type_programme         = form.type_programme;
-      if (form.seances_semaine        !== user?.seances_semaine)        payload.seances_semaine        = form.seances_semaine;
+      if (totalSeances                !== user?.seances_semaine)        payload.seances_semaine        = totalSeances;
       if (form.seances_muscu_semaine  !== user?.seances_muscu_semaine)  payload.seances_muscu_semaine  = form.seances_muscu_semaine;
       if (form.seances_course_semaine !== user?.seances_course_semaine) payload.seances_course_semaine = form.seances_course_semaine;
+      if (form.seances_velo_semaine   !== user?.seances_velo_semaine)   payload.seances_velo_semaine   = form.seances_velo_semaine;
       if (form.type_muscu             !== user?.type_muscu)             payload.type_muscu             = form.type_muscu;
       if (form.type_course            !== user?.type_course)            payload.type_course            = form.type_course;
       if (form.frequence_tests_semaines !== user?.frequence_tests_semaines) payload.frequence_tests_semaines = form.frequence_tests_semaines;
@@ -386,21 +392,21 @@ function EditProgrammeModal({ user, onClose, onSaved }) {
   const showCourse = form.type_programme === "course" || form.type_programme === "hybride";
   const isVelo     = form.type_programme === "velo";
 
+  const isHybride = form.type_programme === "hybride";
+
   function handleTypeProgramme(newType) {
     setForm(f => {
       const total = f.seances_semaine;
-      let muscu  = f.seances_muscu_semaine;
-      let course = f.seances_course_semaine;
-      if (newType === "muscu")  { muscu = total; course = 0; }
-      if (newType === "course") { course = total; muscu = 0; }
-      if (newType === "velo")   { muscu = 0; course = 0; }
-      if (newType === "hybride") {
-        muscu  = Math.round(total * 0.6);
-        course = total - muscu;
-      }
-      return { ...f, type_programme: newType, seances_muscu_semaine: muscu, seances_course_semaine: course };
+      let muscu = f.seances_muscu_semaine, course = f.seances_course_semaine, velo = f.seances_velo_semaine;
+      if (newType === "muscu")  { muscu = total; course = 0; velo = 0; }
+      if (newType === "course") { course = total; muscu = 0; velo = 0; }
+      if (newType === "velo")   { velo = total; muscu = 0; course = 0; }
+      if (newType === "hybride") { muscu = f.seances_muscu_semaine || 2; course = f.seances_course_semaine || 2; velo = f.seances_velo_semaine || 1; }
+      return { ...f, type_programme: newType, seances_muscu_semaine: muscu, seances_course_semaine: course, seances_velo_semaine: velo };
     });
   }
+
+  const totalHybride = form.seances_muscu_semaine + form.seances_course_semaine + form.seances_velo_semaine;
 
   return (
     <Modal title="Modifier le programme" onClose={onClose}>
@@ -413,50 +419,59 @@ function EditProgrammeModal({ user, onClose, onSaved }) {
             </button>
           ))}
         </div>
-        {(isVelo || form.type_programme === "hybride") && (
+        {isVelo && (
           <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
-            🚴 {isVelo
-              ? "Programme vélo : sorties PMA, sweet spot, endurance et sortie longue générées automatiquement."
-              : "En hybride, une sortie vélo endurance est ajoutée chaque semaine."}
+            🚴 Programme vélo : sorties PMA, sweet spot, endurance et sortie longue générées automatiquement.
           </p>
         )}
       </Field>
-      <Field label="Séances / semaine">
-        <div className="flex items-center gap-3">
-          <input type="range" min={2} max={10} value={form.seances_semaine}
-            onChange={e => {
-              const total = parseInt(e.target.value);
-              setForm(f => {
-                if (f.type_programme === "muscu")  return { ...f, seances_semaine: total, seances_muscu_semaine: total, seances_course_semaine: 0 };
-                if (f.type_programme === "course") return { ...f, seances_semaine: total, seances_course_semaine: total, seances_muscu_semaine: 0 };
-                const muscu = Math.min(f.seances_muscu_semaine, total);
-                return { ...f, seances_semaine: total, seances_muscu_semaine: muscu, seances_course_semaine: total - muscu };
-              });
-            }} className="flex-1 accent-brand" />
-          <span className="text-sm font-bold text-gray-900 dark:text-white w-4 text-right">{form.seances_semaine}</span>
-        </div>
-      </Field>
-      {showMuscu && (
-        <Field label="Séances muscu / semaine">
+
+      {/* Hybride : 3 curseurs indépendants, total = somme */}
+      {isHybride ? (
+        <>
+          <Field label={`Séances / semaine — total : ${totalHybride}`}>
+            <div className="h-1" />
+          </Field>
+          <Field label="Séances muscu / semaine">
+            <div className="flex items-center gap-3">
+              <input type="range" min={0} max={8} value={form.seances_muscu_semaine}
+                onChange={e => setForm(f => ({ ...f, seances_muscu_semaine: parseInt(e.target.value) }))}
+                className="flex-1 accent-brand" />
+              <span className="text-sm font-bold text-gray-900 dark:text-white w-4 text-right">{form.seances_muscu_semaine}</span>
+            </div>
+          </Field>
+          <Field label="Séances course / semaine">
+            <div className="flex items-center gap-3">
+              <input type="range" min={0} max={8} value={form.seances_course_semaine}
+                onChange={e => setForm(f => ({ ...f, seances_course_semaine: parseInt(e.target.value) }))}
+                className="flex-1 accent-brand" />
+              <span className="text-sm font-bold text-gray-900 dark:text-white w-4 text-right">{form.seances_course_semaine}</span>
+            </div>
+          </Field>
+          <Field label="Séances vélo / semaine">
+            <div className="flex items-center gap-3">
+              <input type="range" min={0} max={8} value={form.seances_velo_semaine}
+                onChange={e => setForm(f => ({ ...f, seances_velo_semaine: parseInt(e.target.value) }))}
+                className="flex-1 accent-brand" />
+              <span className="text-sm font-bold text-gray-900 dark:text-white w-4 text-right">{form.seances_velo_semaine}</span>
+            </div>
+          </Field>
+        </>
+      ) : (
+        /* Discipline unique : un seul curseur total mappé sur la bonne discipline */
+        <Field label="Séances / semaine">
           <div className="flex items-center gap-3">
-            <input type="range" min={0} max={form.seances_semaine} value={form.seances_muscu_semaine}
+            <input type="range" min={1} max={10} value={form.seances_semaine}
               onChange={e => {
-                const v = parseInt(e.target.value);
-                setForm(f => ({ ...f, seances_muscu_semaine: v, seances_course_semaine: Math.max(0, f.seances_semaine - v) }));
+                const total = parseInt(e.target.value);
+                setForm(f => ({
+                  ...f, seances_semaine: total,
+                  seances_muscu_semaine:  f.type_programme === "muscu"  ? total : 0,
+                  seances_course_semaine: f.type_programme === "course" ? total : 0,
+                  seances_velo_semaine:   f.type_programme === "velo"   ? total : 0,
+                }));
               }} className="flex-1 accent-brand" />
-            <span className="text-sm font-bold text-gray-900 dark:text-white w-4 text-right">{form.seances_muscu_semaine}</span>
-          </div>
-        </Field>
-      )}
-      {showCourse && (
-        <Field label="Séances course / semaine">
-          <div className="flex items-center gap-3">
-            <input type="range" min={0} max={form.seances_semaine} value={form.seances_course_semaine}
-              onChange={e => {
-                const v = parseInt(e.target.value);
-                setForm(f => ({ ...f, seances_course_semaine: v, seances_muscu_semaine: Math.max(0, f.seances_semaine - v) }));
-              }} className="flex-1 accent-brand" />
-            <span className="text-sm font-bold text-gray-900 dark:text-white w-4 text-right">{form.seances_course_semaine}</span>
+            <span className="text-sm font-bold text-gray-900 dark:text-white w-4 text-right">{form.seances_semaine}</span>
           </div>
         </Field>
       )}
@@ -473,6 +488,7 @@ function EditProgrammeModal({ user, onClose, onSaved }) {
           <select className={inputCls} value={form.type_course} onChange={set("type_course")}>
             <option value="route">Route</option>
             <option value="trail">Trail</option>
+            <option value="route_trail">Route & Trail</option>
           </select>
         </Field>
       )}

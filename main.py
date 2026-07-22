@@ -386,6 +386,7 @@ def me(current_user: Utilisateur = Depends(get_current_user), db: Session = Depe
         "seances_semaine": current_user.seances_semaine,
         "seances_course_semaine": current_user.seances_course_semaine,
         "seances_muscu_semaine": current_user.seances_muscu_semaine,
+        "seances_velo_semaine": current_user.seances_velo_semaine,
         "frequence_tests_semaines": current_user.frequence_tests_semaines,
         "objectif_type": current_user.objectif_type,
         "programme_auto": bool(current_user.programme_auto),
@@ -431,6 +432,7 @@ def reset_onboarding(current_user: Utilisateur = Depends(get_current_user), db: 
         "seances_semaine": current_user.seances_semaine,
         "seances_course_semaine": current_user.seances_course_semaine,
         "seances_muscu_semaine": current_user.seances_muscu_semaine,
+        "seances_velo_semaine": current_user.seances_velo_semaine,
         "frequence_tests_semaines": current_user.frequence_tests_semaines,
         "objectif_type": current_user.objectif_type,
         "programme_auto": bool(current_user.programme_auto),
@@ -581,9 +583,13 @@ def _injecter_seances_velo(db, user, type_programme, semaines):
         return sorted(ordre[:max(1, min(n, 4))], key=lambda s: s[0])
 
     if type_programme == "velo":
-        n_velo = max(1, min(user.seances_semaine or 3, 4))
+        n_velo = max(1, min(user.seances_velo_semaine or user.seances_semaine or 3, 4))
+    elif user.seances_velo_semaine is not None:
+        n_velo = max(0, min(user.seances_velo_semaine, 4))
     else:
         n_velo = 2 if (user.seances_semaine or 4) >= 6 else 1
+    if n_velo <= 0:
+        return
 
     for sem in semaines:
         nb = db.query(SeanceEntrainement).filter(SeanceEntrainement.semaine_id == sem.id).count()
@@ -875,8 +881,9 @@ class UpdateProgrammeSchema(BaseModel):
     seances_semaine: Optional[int] = Field(None, ge=1, le=14)
     seances_muscu_semaine: Optional[int] = Field(None, ge=0, le=14)
     seances_course_semaine: Optional[int] = Field(None, ge=0, le=14)
+    seances_velo_semaine: Optional[int] = Field(None, ge=0, le=14)
     type_muscu: Optional[str] = None   # "poids_corps" | "salle"
-    type_course: Optional[str] = None  # "route" | "trail"
+    type_course: Optional[str] = None  # "route" | "trail" | "route_trail"
     frequence_tests_semaines: Optional[int] = Field(None, ge=1, le=52)
 
 
@@ -903,6 +910,8 @@ def update_programme(
         current_user.seances_muscu_semaine = payload.seances_muscu_semaine
     if payload.seances_course_semaine is not None:
         current_user.seances_course_semaine = payload.seances_course_semaine
+    if payload.seances_velo_semaine is not None:
+        current_user.seances_velo_semaine = payload.seances_velo_semaine
     if payload.type_muscu is not None:
         current_user.type_muscu = payload.type_muscu
     if payload.type_course is not None:
@@ -915,10 +924,9 @@ def update_programme(
     today = date.today()
     mcs = db.query(Macrocycle).filter(Macrocycle.utilisateur_id == current_user.id).all()
 
-    n_muscu = current_user.seances_muscu_semaine or 2
+    n_muscu = current_user.seances_muscu_semaine if current_user.seances_muscu_semaine is not None else 2
     seances_total = current_user.seances_semaine or 5
     n_course = current_user.seances_course_semaine if current_user.seances_course_semaine is not None else max(1, seances_total - n_muscu)
-    n_course = min(n_course, max(1, seances_total - n_muscu))
     muscu_adapter = adapter_contenu_gym if current_user.type_muscu == "salle" else adapter_contenu_muscu
 
     from intelligence_programme import (

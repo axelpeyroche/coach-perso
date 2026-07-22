@@ -63,6 +63,8 @@ def creer_tables() -> None:
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS import_token VARCHAR(64)",
         # Mode de génération du programme (auto vs manuel)
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS programme_auto BOOLEAN DEFAULT TRUE",
+        # Nombre de séances vélo par semaine
+        "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS seances_velo_semaine INTEGER",
     ]
     with engine.begin() as conn:
         for stmt in _migrations:
