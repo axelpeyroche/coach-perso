@@ -659,7 +659,22 @@ def onboarding(
     rf = calib["reps_factor"]
     vma_for_paces = profil.get("vma")  # bio rÃ©cente sinon estimation questionnaire
 
-    if obj_course and payload.objectif_type in ("course", "hybride"):
+    if payload.type_programme == "velo":
+        # Programme vélo PUR : 2 macrocycles de 8 semaines périodisées (surcharge/décharge/
+        # évaluation) SANS contenu course/muscu. L'injection vélo plus bas remplit chaque
+        # semaine avec les séances PMA / sweet spot / endurance / sortie longue.
+        from models import TypeMacrophase
+        for numero_cycle in (1, 2):
+            debut_mc = debut + timedelta(weeks=8 * (numero_cycle - 1))
+            mc = Macrocycle(utilisateur_id=current_user.id, numero_cycle=numero_cycle,
+                            date_debut=debut_mc, date_fin=debut_mc + timedelta(weeks=8))
+            db.add(mc); db.flush()
+            for regle, ds in zip(BLUEPRINT_MACROCYCLE, generer_dates_semaines(debut_mc)):
+                db.add(SemaineEntrainement(macrocycle_id=mc.id, numero_semaine=regle.numero,
+                    macrophase=regle.macrophase, date_debut=ds,
+                    multiplicateur_volume=regle.multiplicateur_volume))
+            db.flush()
+    elif obj_course and payload.objectif_type in ("course", "hybride"):
         from models import TypeMacrophase
         n_semaines = max(4, (obj_course.date_course - debut).days // 7)
         n_surcharge = n_semaines - 3
