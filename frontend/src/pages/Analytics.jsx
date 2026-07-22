@@ -11,6 +11,7 @@ import {
 } from "../api";
 import Card from "../components/Card";
 import clsx from "clsx";
+import { useAuth } from "../AuthContext";
 
 function LineCursor({ x, y, width, height }) {
   return <line x1={x + width / 2} y1={y} x2={x + width / 2} y2={y + height} stroke="#9ca3af" strokeWidth={1} />;
@@ -57,6 +58,8 @@ function ModalSemaine({ numero, onClose }) {
     queryKey: ["seances-semaine", numero],
     queryFn: () => getSeancesSemaine(numero),
   });
+  // Le graphique volume ne concerne que la course et le vélo → on filtre la muscu
+  const seances = (data?.seances ?? []).filter(s => s.type_seance === "COURSE" || s.type_seance === "VELO");
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
       <div className="bg-white dark:bg-gray-900 rounded-2xl p-5 max-w-md w-full max-h-[80vh] overflow-y-auto shadow-2xl" onClick={e => e.stopPropagation()}>
@@ -66,11 +69,11 @@ function ModalSemaine({ numero, onClose }) {
         </div>
         {isLoading ? (
           <p className="text-sm text-gray-400 py-4 text-center">Chargement…</p>
-        ) : !data?.seances?.length ? (
-          <p className="text-sm text-gray-400 py-4 text-center">Aucune séance cette semaine.</p>
+        ) : !seances.length ? (
+          <p className="text-sm text-gray-400 py-4 text-center">Aucune séance course ou vélo cette semaine.</p>
         ) : (
           <div className="space-y-2">
-            {data.seances.map(s => (
+            {seances.map(s => (
               <div key={s.id} className="flex items-center gap-3 rounded-xl border border-gray-100 dark:border-gray-800 px-3 py-2.5">
                 <span className="text-lg shrink-0">{TYPE_SEANCE_EMOJI[s.type_seance] ?? "📋"}</span>
                 <div className="flex-1 min-w-0">
@@ -135,6 +138,8 @@ function ModalAjoutPoids({ dernier, onClose }) {
 }
 
 export default function Analytics({ dark }) {
+  const { user } = useAuth();
+  const programmeAuto = user?.programme_auto !== false;  // false = mode manuel
   const { data: physio } = useQuery({ queryKey: ["tendances"], queryFn: () => getTendancesPhysiologiques() });
   const { data: volume } = useQuery({ queryKey: ["volume"], queryFn: () => getDistributionVolume() });
   const { data: recup } = useQuery({ queryKey: ["recuperation"], queryFn: () => getBiometrieRecuperation() });
@@ -423,24 +428,28 @@ export default function Analytics({ dark }) {
         </Card>
       )}
 
-      <Card title="💪 Répartition musculaire (séries)">
-        {volumeData.length ? (
-          <div className="w-full overflow-x-hidden">
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={volumeData} onClick={handleChartClick} style={{ cursor: "pointer" }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="sem" height={IS_MOBILE ? 20 : 40} tick={<WeekTick data={volumeData} dark={dark} />} />
-                <YAxis tick={{ fontSize: 11 }} width={32} />
-                <Tooltip contentStyle={ttStyle} labelStyle={ttLabelStyle} cursor={<LineCursor />} />
-                <Legend />
-                <Bar dataKey="push" name="Push" fill="#f97316" radius={[4, 4, 0, 0]} activeBar={{ fill: '#ea580c' }} />
-                <Bar dataKey="pull" name="Pull" fill="#3b82f6" radius={[4, 4, 0, 0]} activeBar={{ fill: '#2563eb' }} />
-                <Bar dataKey="jambes" name="Jambes" fill="#a855f7" radius={[4, 4, 0, 0]} activeBar={{ fill: '#9333ea' }} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        ) : <Vide />}
-      </Card>
+      {/* Répartition musculaire : uniquement en programme auto-généré
+          (en mode manuel, on n'a pas le détail des exercices réalisés) */}
+      {programmeAuto && (
+        <Card title="💪 Répartition musculaire (séries)">
+          {volumeData.length ? (
+            <div className="w-full overflow-x-hidden">
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={volumeData} onClick={handleChartClick} style={{ cursor: "pointer" }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                  <XAxis dataKey="sem" height={IS_MOBILE ? 20 : 40} tick={<WeekTick data={volumeData} dark={dark} />} />
+                  <YAxis tick={{ fontSize: 11 }} width={32} />
+                  <Tooltip contentStyle={ttStyle} labelStyle={ttLabelStyle} cursor={<LineCursor />} />
+                  <Legend />
+                  <Bar dataKey="push" name="Push" fill="#f97316" radius={[4, 4, 0, 0]} activeBar={{ fill: '#ea580c' }} />
+                  <Bar dataKey="pull" name="Pull" fill="#3b82f6" radius={[4, 4, 0, 0]} activeBar={{ fill: '#2563eb' }} />
+                  <Bar dataKey="jambes" name="Jambes" fill="#a855f7" radius={[4, 4, 0, 0]} activeBar={{ fill: '#9333ea' }} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : <Vide />}
+        </Card>
+      )}
 
       <Card title="⚡ Ratio ACWA — Charge aiguë / chronique">
         {acwaData.length ? (
