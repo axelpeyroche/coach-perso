@@ -322,15 +322,19 @@ function StatBloc({ label, value, unit, icon }) {
 function StatBlocDistance({ kmVelo, kmCourse }) {
   return (
     <div className="grid grid-cols-2 divide-x divide-gray-100 dark:divide-gray-800 col-span-3 lg:col-span-1">
-      <div className="flex flex-col items-center text-center pr-2">
-        <span className="text-lg leading-none mb-0.5">🚴</span>
-        <p className="text-base font-bold text-gray-900 dark:text-white leading-tight">{kmVelo}</p>
-        <p className="text-[10px] text-gray-400 dark:text-gray-500">km vélo</p>
+      <div className="flex flex-row items-center justify-center gap-2 pr-2">
+        <span className="text-lg leading-none">🚴</span>
+        <div>
+          <p className="text-base font-bold text-gray-900 dark:text-white leading-tight">{kmVelo}</p>
+          <p className="text-[10px] text-gray-400 dark:text-gray-500">km vélo</p>
+        </div>
       </div>
-      <div className="flex flex-col items-center text-center pl-2">
-        <span className="text-lg leading-none mb-0.5">🏃</span>
-        <p className="text-base font-bold text-gray-900 dark:text-white leading-tight">{kmCourse}</p>
-        <p className="text-[10px] text-gray-400 dark:text-gray-500">km course</p>
+      <div className="flex flex-row items-center justify-center gap-2 pl-2">
+        <span className="text-lg leading-none">🏃</span>
+        <div>
+          <p className="text-base font-bold text-gray-900 dark:text-white leading-tight">{kmCourse}</p>
+          <p className="text-[10px] text-gray-400 dark:text-gray-500">km course</p>
+        </div>
       </div>
     </div>
   );
