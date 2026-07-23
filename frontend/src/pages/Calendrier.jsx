@@ -92,16 +92,22 @@ export default function Calendrier() {
 
   // Statistiques globales (toutes dates confondues)
   const stats = useMemo(() => {
-    let totalSeances = 0, totalKm = 0, totalDplus = 0;
+    let totalSeances = 0, kmCourse = 0, kmVelo = 0, totalDplus = 0;
     for (const seances of Object.values(seancesParDate)) {
       for (const s of seances) {
         if (s.type === "REPOS" || s._planifie) continue;
         totalSeances++;
-        totalKm   += getDistanceKm(s.journal);
+        const km = getDistanceKm(s.journal);
+        if (s.type === "VELO") kmVelo += km; else kmCourse += km;
         totalDplus += s.journal?.dplus_reel_m ?? 0;
       }
     }
-    return { totalSeances, totalKm: Math.round(totalKm * 10) / 10, totalDplus };
+    return {
+      totalSeances,
+      kmCourse: Math.round(kmCourse * 10) / 10,
+      kmVelo: Math.round(kmVelo * 10) / 10,
+      totalDplus,
+    };
   }, [seancesParDate]);
 
   // Construction de la grille du mois courant
@@ -279,7 +285,7 @@ export default function Calendrier() {
             </h3>
             <div className="grid grid-cols-3 lg:grid-cols-1 gap-3 lg:gap-4">
               <StatBloc label="Séances" value={stats.totalSeances} unit="séances" icon="✅" />
-              <StatBloc label="Distance" value={stats.totalKm}     unit="km"      icon="🏃" />
+              <StatBlocDistance kmVelo={stats.kmVelo} kmCourse={stats.kmCourse} />
               <StatBloc label="Dénivelé" value={stats.totalDplus}  unit="m D+"    icon="⛰️" />
             </div>
           </div>
@@ -312,20 +318,39 @@ function StatBloc({ label, value, unit, icon }) {
   );
 }
 
+// Distance scindée : vélo (gauche) · course (droite)
+function StatBlocDistance({ kmVelo, kmCourse }) {
+  return (
+    <div className="grid grid-cols-2 divide-x divide-gray-100 dark:divide-gray-800 col-span-3 lg:col-span-1">
+      <div className="flex flex-col items-center text-center pr-2">
+        <span className="text-lg leading-none mb-0.5">🚴</span>
+        <p className="text-base font-bold text-gray-900 dark:text-white leading-tight">{kmVelo}</p>
+        <p className="text-[10px] text-gray-400 dark:text-gray-500">km vélo</p>
+      </div>
+      <div className="flex flex-col items-center text-center pl-2">
+        <span className="text-lg leading-none mb-0.5">🏃</span>
+        <p className="text-base font-bold text-gray-900 dark:text-white leading-tight">{kmCourse}</p>
+        <p className="text-[10px] text-gray-400 dark:text-gray-500">km course</p>
+      </div>
+    </div>
+  );
+}
+
 function StatsMois({ seancesParDate, annee, moisIdx, moisLabel }) {
   const stats = useMemo(() => {
-    let seances = 0, km = 0, dplus = 0;
+    let seances = 0, kmCourse = 0, kmVelo = 0, dplus = 0;
     const prefix = `${annee}-${String(moisIdx + 1).padStart(2, "0")}`;
     for (const [key, list] of Object.entries(seancesParDate)) {
       if (!key.startsWith(prefix)) continue;
       for (const s of list) {
         if (s.type === "REPOS" || s._planifie) continue;
         seances++;
-        km    += getDistanceKm(s.journal);
+        const km = getDistanceKm(s.journal);
+        if (s.type === "VELO") kmVelo += km; else kmCourse += km;
         dplus += s.journal?.dplus_reel_m ?? 0;
       }
     }
-    return { seances, km: Math.round(km * 10) / 10, dplus };
+    return { seances, kmCourse: Math.round(kmCourse * 10) / 10, kmVelo: Math.round(kmVelo * 10) / 10, dplus };
   }, [seancesParDate, annee, moisIdx]);
 
   return (
@@ -335,7 +360,7 @@ function StatsMois({ seancesParDate, annee, moisIdx, moisLabel }) {
       </h3>
       <div className="grid grid-cols-3 lg:grid-cols-1 gap-3 lg:gap-4">
         <StatBloc label="Séances" value={stats.seances} unit="séances" icon="✅" />
-        <StatBloc label="Distance" value={stats.km}     unit="km"      icon="🏃" />
+        <StatBlocDistance kmVelo={stats.kmVelo} kmCourse={stats.kmCourse} />
         <StatBloc label="Dénivelé" value={stats.dplus}  unit="m D+"    icon="⛰️" />
       </div>
     </div>
