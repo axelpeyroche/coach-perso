@@ -941,7 +941,7 @@ def semaine_en_cours(db: Session, utilisateur_id: int) -> dict[str, Any]:
             "validees": compte[c]["validees"],
             "a_creer": max(0, cible - creees),
             "a_planifier": max(0, cible - compte[c]["planifiees"]),
-            "a_valider": max(0, cible - compte[c]["validees"]),
+            "a_valider": max(0, creees - compte[c]["validees"]),
             "en_plus": en_plus,
         })
 

@@ -619,7 +619,12 @@ function JaugeSemaine() {
               if (o.a_valider > 0)   manques.push(`${o.a_valider} à valider`);
               return (
                 <div key={o.type} className="flex items-center justify-between text-xs gap-2">
-                  <span className="text-gray-600 dark:text-gray-300 shrink-0">{icon} <span className="capitalize">{o.label}</span> <span className="text-gray-400">{o.validees}/{o.cible}</span></span>
+                  <span className="text-gray-600 dark:text-gray-300 shrink-0">
+                    {icon} <span className="capitalize">{o.label}</span>{" "}
+                    {enPlus > 0
+                      ? <><span className="text-purple-500 dark:text-purple-400 font-semibold">{o.creees}</span><span className="text-gray-400">/{o.cible}</span></>
+                      : <span className="text-gray-400">{o.validees}/{o.cible}</span>}
+                  </span>
                   <span className="text-right flex items-center gap-1.5">
                     {enPlus > 0 && (
                       <span className="text-purple-500 dark:text-purple-400 font-medium">+{enPlus} en plus</span>
