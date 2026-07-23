@@ -15,7 +15,7 @@ from collections import defaultdict
 from datetime import date, timedelta
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from models import (
@@ -399,6 +399,8 @@ def biometrie_recuperation(
                 SemaineEntrainement.numero_semaine,
                 SemaineEntrainement.date_debut,
                 func.sum(JournalSeance.distance_reelle_km).label("km_semaine"),
+                func.sum(case((SeanceEntrainement.type_seance == TypeSeance.COURSE, JournalSeance.distance_reelle_km), else_=0)).label("km_course"),
+                func.sum(case((SeanceEntrainement.type_seance == TypeSeance.VELO, JournalSeance.distance_reelle_km), else_=0)).label("km_velo"),
             )
             .join(SeanceEntrainement, SeanceEntrainement.semaine_id == SemaineEntrainement.id)
             .join(JournalSeance, JournalSeance.seance_id == SeanceEntrainement.id)
@@ -445,6 +447,8 @@ def biometrie_recuperation(
                 "semaine": semaine.numero_semaine,
                 "date_debut": str(semaine.date_debut),
                 "charge_aigue_km": round(charge_aigue, 2),
+                "km_course": round(semaine.km_course or 0.0, 2),
+                "km_velo": round(semaine.km_velo or 0.0, 2),
                 "charge_chronique_km": round(charge_chronique, 2),
                 "ratio": ratio,
                 "alerte_risque": alerte,
