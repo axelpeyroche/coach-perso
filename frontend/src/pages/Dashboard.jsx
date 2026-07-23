@@ -603,6 +603,16 @@ function JaugeSemaine() {
           <div className="rounded-xl bg-gray-50 dark:bg-gray-800/60 px-3 py-2.5 space-y-1.5">
             {s.objectifs.map(o => {
               const icon = o.type === "course" ? "🏃" : o.type === "velo" ? "🚴" : "💪";
+              const enPlus = o.en_plus ?? 0;
+              // Type non prévu dans le profil (cible=0) : ligne "supplémentaire" uniquement
+              if (o.cible === 0) {
+                return (
+                  <div key={o.type} className="flex items-center justify-between text-xs gap-2">
+                    <span className="text-gray-600 dark:text-gray-300 shrink-0">{icon} <span className="capitalize">{o.label}</span> <span className="text-gray-400">{o.validees}/{o.creees}</span></span>
+                    <span className="text-purple-500 dark:text-purple-400 font-medium">+{enPlus} hors programme</span>
+                  </div>
+                );
+              }
               const manques = [];
               if (o.a_creer > 0)     manques.push(`${o.a_creer} à créer`);
               if (o.a_planifier > 0) manques.push(`${o.a_planifier} à planifier`);
@@ -610,10 +620,13 @@ function JaugeSemaine() {
               return (
                 <div key={o.type} className="flex items-center justify-between text-xs gap-2">
                   <span className="text-gray-600 dark:text-gray-300 shrink-0">{icon} <span className="capitalize">{o.label}</span> <span className="text-gray-400">{o.validees}/{o.cible}</span></span>
-                  <span className="text-right">
+                  <span className="text-right flex items-center gap-1.5">
+                    {enPlus > 0 && (
+                      <span className="text-purple-500 dark:text-purple-400 font-medium">+{enPlus} en plus</span>
+                    )}
                     {manques.length > 0
                       ? <span className="text-orange-500 dark:text-orange-400 font-medium">{manques.join(" · ")}</span>
-                      : <span className="text-green-600 dark:text-green-400 font-medium">✓ complet</span>}
+                      : enPlus === 0 && <span className="text-green-600 dark:text-green-400 font-medium">✓ complet</span>}
                   </span>
                 </div>
               );

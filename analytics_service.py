@@ -913,19 +913,36 @@ def semaine_en_cours(db: Session, utilisateur_id: int) -> dict[str, Any]:
     total_cible = 0
     for c in ("course", "muscu", "velo"):
         cible = cibles[c] or 0
+        creees = compte[c]["creees"]
+        en_plus = max(0, creees - cible) if cible > 0 else creees
         if cible <= 0:
+            # Type non prévu dans le profil mais des séances ont quand même été créées
+            if creees > 0:
+                objectifs.append({
+                    "type": c,
+                    "label": LABELS[c],
+                    "cible": 0,
+                    "creees": creees,
+                    "planifiees": compte[c]["planifiees"],
+                    "validees": compte[c]["validees"],
+                    "a_creer": 0,
+                    "a_planifier": 0,
+                    "a_valider": 0,
+                    "en_plus": creees,
+                })
             continue
         total_cible += cible
         objectifs.append({
             "type": c,
             "label": LABELS[c],
             "cible": cible,
-            "creees": compte[c]["creees"],
+            "creees": creees,
             "planifiees": compte[c]["planifiees"],
             "validees": compte[c]["validees"],
-            "a_creer": max(0, cible - compte[c]["creees"]),
+            "a_creer": max(0, cible - creees),
             "a_planifier": max(0, cible - compte[c]["planifiees"]),
             "a_valider": max(0, cible - compte[c]["validees"]),
+            "en_plus": en_plus,
         })
 
     # Total de référence : la cible choisie (si définie), sinon les séances créées.
