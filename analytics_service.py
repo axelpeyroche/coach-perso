@@ -532,6 +532,7 @@ def zones_fc_hebdo(db: Session, utilisateur_id: int) -> dict[str, Any]:
 
     _TYPES_AVEC_FC = [
         TypeSeance.COURSE,
+        TypeSeance.VELO,
         TypeSeance.EMOM,
         TypeSeance.AMRAP,
         TypeSeance.GYM_UPPER,
