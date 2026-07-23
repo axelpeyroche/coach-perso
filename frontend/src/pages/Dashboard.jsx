@@ -1270,15 +1270,15 @@ export default function Dashboard() {
         <StatTile label="VMA actuelle"    value={derniereVMA ? `${derniereVMA.valeur} km/h` : "—"} sub="Demi-Cooper"   color="green" />
         <StatTile label="Poids"           value={profilFC?.poids_kg ? `${profilFC.poids_kg} kg` : "—"} sub={<button onClick={() => setShowModalPoids(true)} className="text-brand hover:underline">Mettre à jour</button>} color="blue" />
         <div className="rounded-2xl p-4 backdrop-blur-xl bg-orange-400/20 dark:bg-orange-500/12 text-orange-800 dark:text-orange-300 border border-orange-300/50 dark:border-orange-400/15">
-          <p className="text-xs font-medium opacity-70">Km cette semaine</p>
-          <div className="flex items-end justify-between gap-2 mt-1">
-            <div>
-              <p className="text-xl font-bold leading-tight">{derniereACWA ? (derniereACWA.km_course ?? 0) : "—"}</p>
+          <p className="text-xs font-medium opacity-70 mb-1">Km cette semaine</p>
+          <div className="grid grid-cols-2 divide-x divide-orange-300/40 dark:divide-orange-400/20">
+            <div className="flex flex-col items-center text-center pr-2">
               <p className="text-[11px] opacity-60">🏃 course</p>
+              <p className="text-xl font-bold leading-tight">{derniereACWA ? (derniereACWA.km_course ?? 0) : "—"}</p>
             </div>
-            <div className="text-right border-l border-orange-300/40 dark:border-orange-400/15 pl-2">
-              <p className="text-xl font-bold leading-tight">{derniereACWA ? (derniereACWA.km_velo ?? 0) : "—"}</p>
+            <div className="flex flex-col items-center text-center pl-2">
               <p className="text-[11px] opacity-60">🚴 vélo</p>
+              <p className="text-xl font-bold leading-tight">{derniereACWA ? (derniereACWA.km_velo ?? 0) : "—"}</p>
             </div>
           </div>
         </div>
