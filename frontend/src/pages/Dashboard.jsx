@@ -1125,12 +1125,15 @@ function ModalFC({ profil, onClose }) {
 // ─── Modal poids seul (même fenêtre que le "+" du graphique dans Stats) ──────
 function ModalPoids({ profil, onClose }) {
   const qc = useQueryClient();
+  const { setUser } = useAuth();
   const [poids, setPoids] = useState(profil?.poids_kg ? String(profil.poids_kg) : "");
   const mut = useMutation({
     mutationFn: () => patchProfilFC({ poids_kg: parseFloat(poids) }),
-    onSuccess: () => {
+    onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["profil-fc"] });
       qc.invalidateQueries({ queryKey: ["historique-poids"] });
+      // Met à jour le poids dans les infos personnelles (AuthContext)
+      setUser(u => u ? { ...u, poids_kg: data.poids_kg } : u);
       onClose();
     },
   });

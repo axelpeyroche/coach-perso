@@ -108,13 +108,16 @@ const ZONE_FC_COLORS = { Z1: "#60a5fa", Z2: "#4ade80", Z3: "#facc15", Z4: "#fb92
 
 function ModalAjoutPoids({ dernier, onClose }) {
   const qc = useQueryClient();
+  const { setUser } = useAuth();
   const [poids, setPoids] = useState(dernier ? String(dernier) : "");
   const [err, setErr] = useState("");
   const mut = useMutation({
     mutationFn: () => patchProfilFC({ poids_kg: parseFloat(poids) }),
-    onSuccess: () => {
+    onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["historique-poids"] });
       qc.invalidateQueries({ queryKey: ["profil-fc"] });
+      // Met à jour le poids dans les infos personnelles (AuthContext)
+      setUser(u => u ? { ...u, poids_kg: data.poids_kg } : u);
       onClose();
     },
     onError: () => setErr("Erreur — réessaie"),
