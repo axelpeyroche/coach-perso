@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient, keepPreviousData } from "@tanstack/react-query";
 import api, { getToutesSemaines, journaliserSeance, validerRPE, getProfilFC, supprimerJournal, modifierJournal, planifierSeance, creerEvaluation, enregistrerDemiCooper, enregistrerMax1Min, enregistrerAmrapBenchmark, getExercicesEvaluation, getHistoriqueEvaluations, modifierEvaluation, supprimerEvaluation, corrigerEmom, corrigerDureesCourse, adapterCharge, creerSeance, supprimerSeance, modifierSeance } from "../api";
 import clsx from "clsx";
 import { useAuth } from "../AuthContext";
@@ -1091,6 +1091,10 @@ function CarteSeance({ seance, zonesFC, manuel = false }) {
 
 // ─── Page principale ────────────────────────────────────────────────────────
 
+// Corrections lancées une seule fois par session (évite de re-solliciter le backend
+// et de recharger le programme à chaque visite de la page).
+let _correctionsFaites = false;
+
 function idxSemaineCourante(semaines) {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -1135,10 +1139,13 @@ export default function Programme() {
 
   const qc = useQueryClient();
 
-  // Corrections silencieuses + adaptation de charge au montage
+  // Corrections silencieuses + adaptation de charge — UNE seule fois par session
+  // (elles modifient rarement le programme mais coûtent 3 appels backend + un
+  // rechargement). En les lançant une fois, les visites suivantes sont instantanées.
   // Désactivées en mode manuel : elles ne concernent que le programme auto-généré.
   useEffect(() => {
-    if (manuel) return;
+    if (manuel || _correctionsFaites) return;
+    _correctionsFaites = true;
     Promise.allSettled([corrigerEmom(), corrigerDureesCourse(), adapterCharge()]).then(() =>
       qc.invalidateQueries({ queryKey: ["toutes-semaines"] })
     );
@@ -1147,10 +1154,13 @@ export default function Programme() {
   const { data, isLoading, error } = useQuery({
     queryKey: ["toutes-semaines"],
     queryFn: () => getToutesSemaines(),
+    staleTime: 2 * 60 * 1000,          // données considérées fraîches 2 min
+    placeholderData: keepPreviousData, // garde l'affichage précédent pendant un refetch
   });
   const { data: profilFC } = useQuery({
     queryKey: ["profil-fc"],
     queryFn: () => getProfilFC(),
+    staleTime: 5 * 60 * 1000,
   });
   const zonesFC = calcZonesFC(profilFC?.fc_max, profilFC?.fc_repos);
 
