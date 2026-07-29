@@ -20,13 +20,15 @@ from typing import Optional
 import time as _time
 import urllib.parse as _urlparse
 import urllib.request as _urlrequest
+import ipaddress as _ipaddress
+import socket as _socket
 import json as _json_mod
 
 import io
 import os
 import re
 
-from fastapi import Depends, FastAPI, File, HTTPException, Query, Request, Security, UploadFile
+from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, Request, Security, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -157,11 +159,21 @@ async def _handler_exception_global(request: Request, exc: Exception):
 # Auth â€” JWT + bcrypt
 # ---------------------------------------------------------------------------
 
-SECRET_KEY = os.getenv("JWT_SECRET", "change-me-in-production-super-secret-key-32chars")
+import hashlib, hmac as _hmac, os as _os, base64 as _b64, secrets as _secrets
+
 ALGORITHM  = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 30  # 30 jours
 
-import hashlib, hmac as _hmac, os as _os, base64 as _b64
+SECRET_KEY = os.getenv("JWT_SECRET")
+if not SECRET_KEY:
+    # Pas de secret configurÃ© (ex. variable d'env absente sur Render) : on gÃ©nÃ¨re un
+    # secret alÃ©atoire pour ce process plutÃ´t que d'utiliser une valeur par dÃ©faut
+    # connue publiquement. Tous les tokens dÃ©jÃ  Ã©mis deviennent invalides Ã  chaque
+    # redÃ©marrage tant que JWT_SECRET n'est pas dÃ©fini explicitement.
+    SECRET_KEY = _secrets.token_hex(32)
+    print("âš ï¸  JWT_SECRET non dÃ©fini â€” gÃ©nÃ©ration d'un secret temporaire pour ce process. "
+          "DÃ©finis la variable d'environnement JWT_SECRET pour Ã©viter la dÃ©connexion de "
+          "tous les utilisateurs Ã  chaque redÃ©marrage.")
 
 http_bearer = HTTPBearer(auto_error=False)
 
@@ -181,7 +193,8 @@ def _verify_password(plain: str, hashed: str) -> bool:
         return False
 
 def _create_token(user_id: int) -> str:
-    return jwt.encode({"sub": str(user_id)}, SECRET_KEY, algorithm=ALGORITHM)
+    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    return jwt.encode({"sub": str(user_id), "exp": expire}, SECRET_KEY, algorithm=ALGORITHM)
 
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Security(http_bearer),
@@ -198,6 +211,31 @@ def get_current_user(
     if not user:
         raise HTTPException(401, "Utilisateur introuvable")
     return user
+
+
+_ADMIN_TOKEN = os.getenv("ADMIN_TOKEN")
+
+def verifier_admin_token(x_admin_token: Optional[str] = Header(None)) -> None:
+    """Protège les routes de maintenance /api/admin/* : nécessite ADMIN_TOKEN configuré et fourni."""
+    if not _ADMIN_TOKEN or not _hmac.compare_digest(x_admin_token or "", _ADMIN_TOKEN):
+        raise HTTPException(403, "AccÃ¨s administrateur refusÃ©")
+
+
+def _obtenir_seance_utilisateur(db: Session, seance_id: int, current_user: "Utilisateur") -> "SeanceEntrainement":
+    """RÃ©cupÃ¨re une sÃ©ance en vÃ©rifiant qu'elle appartient bien Ã  l'utilisateur courant."""
+    seance = (
+        db.query(SeanceEntrainement)
+        .join(SemaineEntrainement, SeanceEntrainement.semaine_id == SemaineEntrainement.id)
+        .join(Macrocycle, SemaineEntrainement.macrocycle_id == Macrocycle.id)
+        .filter(
+            SeanceEntrainement.id == seance_id,
+            Macrocycle.utilisateur_id == current_user.id,
+        )
+        .first()
+    )
+    if not seance:
+        raise HTTPException(404, "SÃ©ance introuvable")
+    return seance
 
 
 def _envoyer_push_seance(seance_id: int) -> None:
@@ -1275,9 +1313,9 @@ class ModifierEvaluationSchema(BaseModel):
     max_1min: Optional[list[dict]] = None  # [{"exercice_id": int, "repetitions": int}]
 
 @app.patch("/api/evaluations/{evaluation_id}", summary="Modifier les donnÃ©es d'une Ã©valuation existante")
-def modifier_evaluation(evaluation_id: int, payload: ModifierEvaluationSchema, db: Session = Depends(obtenir_session)):
+def modifier_evaluation(evaluation_id: int, payload: ModifierEvaluationSchema, current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
     evaluation = db.get(JournalEvaluationSeance, evaluation_id)
-    if not evaluation:
+    if not evaluation or evaluation.utilisateur_id != current_user.id:
         raise HTTPException(404, "Ã‰valuation introuvable")
 
     if payload.distance_metres is not None:
@@ -1363,10 +1401,11 @@ def creer_evaluation(payload: CreerEvaluationSchema, current_user: Utilisateur =
 def enregistrer_demi_cooper(
     evaluation_id: int,
     payload: DemiCooperSchema,
+    current_user: Utilisateur = Depends(get_current_user),
     db: Session = Depends(obtenir_session),
 ):
     evaluation = db.get(JournalEvaluationSeance, evaluation_id)
-    if not evaluation:
+    if not evaluation or evaluation.utilisateur_id != current_user.id:
         raise HTTPException(404, "Ã‰valuation introuvable")
 
     vma = ResultatDemiCooper.calculer_vma(payload.distance_metres)
@@ -1411,10 +1450,11 @@ def enregistrer_demi_cooper(
 def enregistrer_max_1min(
     evaluation_id: int,
     payload: list[Max1MinSchema],
+    current_user: Utilisateur = Depends(get_current_user),
     db: Session = Depends(obtenir_session),
 ):
     evaluation = db.get(JournalEvaluationSeance, evaluation_id)
-    if not evaluation:
+    if not evaluation or evaluation.utilisateur_id != current_user.id:
         raise HTTPException(404, "Ã‰valuation introuvable")
 
     resultats = []
@@ -1439,10 +1479,11 @@ def enregistrer_max_1min(
 def enregistrer_amrap_benchmark(
     evaluation_id: int,
     payload: AMRAPBenchmarkSchema,
+    current_user: Utilisateur = Depends(get_current_user),
     db: Session = Depends(obtenir_session),
 ):
     evaluation = db.get(JournalEvaluationSeance, evaluation_id)
-    if not evaluation:
+    if not evaluation or evaluation.utilisateur_id != current_user.id:
         raise HTTPException(404, "Ã‰valuation introuvable")
 
     benchmark = ResultatAMRAPBenchmark(
@@ -1479,9 +1520,7 @@ def journaliser_seance(
     current_user: Utilisateur = Depends(get_current_user),
     db: Session = Depends(obtenir_session),
 ):
-    seance = db.get(SeanceEntrainement, seance_id)
-    if not seance:
-        raise HTTPException(404, "SÃ©ance introuvable")
+    seance = _obtenir_seance_utilisateur(db, seance_id, current_user)
 
     if seance.journal:
         raise HTTPException(409, "Journal dÃ©jÃ  crÃ©Ã© pour cette sÃ©ance â€” utilisez PATCH")
@@ -1531,7 +1570,6 @@ def journaliser_seance(
 
 
 class PrefillSeanceSchema(BaseModel):
-    utilisateur_id: int = 1
     duree_reelle_min: Optional[int] = None
     distance_reelle_km: Optional[float] = None
     dplus_reel_m: Optional[int] = None
@@ -1549,9 +1587,7 @@ def prefill_seance(
     current_user: Utilisateur = Depends(get_current_user),
     db: Session = Depends(obtenir_session),
 ):
-    seance = db.get(SeanceEntrainement, seance_id)
-    if not seance:
-        raise HTTPException(404, "SÃ©ance introuvable")
+    seance = _obtenir_seance_utilisateur(db, seance_id, current_user)
 
     existing = seance.journal
     if existing:
@@ -1608,10 +1644,11 @@ def _conseil_recuperation(rpe: float) -> dict:
 def valider_rpe(
     seance_id: int,
     payload: ValiderRPESchema,
+    current_user: Utilisateur = Depends(get_current_user),
     db: Session = Depends(obtenir_session),
 ):
-    seance = db.get(SeanceEntrainement, seance_id)
-    if not seance or not seance.journal:
+    seance = _obtenir_seance_utilisateur(db, seance_id, current_user)
+    if not seance.journal:
         raise HTTPException(404, "Journal introuvable â€” lance d'abord un prefill")
     seance.journal.rpe = payload.rpe
     seance.journal.notes = payload.notes
@@ -1626,10 +1663,11 @@ def valider_rpe(
 )
 def supprimer_journal_seance(
     seance_id: int,
+    current_user: Utilisateur = Depends(get_current_user),
     db: Session = Depends(obtenir_session),
 ):
-    seance = db.get(SeanceEntrainement, seance_id)
-    if not seance or not seance.journal:
+    seance = _obtenir_seance_utilisateur(db, seance_id, current_user)
+    if not seance.journal:
         raise HTTPException(404, "Journal introuvable")
     db.delete(seance.journal)
     db.commit()
@@ -1648,9 +1686,7 @@ def planifier_seance(
     current_user: Utilisateur = Depends(get_current_user),
     db: Session = Depends(obtenir_session),
 ):
-    seance = db.get(SeanceEntrainement, seance_id)
-    if not seance:
-        raise HTTPException(404, "SÃ©ance introuvable")
+    seance = _obtenir_seance_utilisateur(db, seance_id, current_user)
     seance.date_planifiee = date.fromisoformat(payload.date_planifiee) if payload.date_planifiee else None
     seance.heure_planifiee = payload.heure_planifiee or None
     db.commit()
@@ -1758,10 +1794,11 @@ def push_test(
 def modifier_journal_seance(
     seance_id: int,
     payload: JournalSeanceSchema,
+    current_user: Utilisateur = Depends(get_current_user),
     db: Session = Depends(obtenir_session),
 ):
-    seance = db.get(SeanceEntrainement, seance_id)
-    if not seance or not seance.journal:
+    seance = _obtenir_seance_utilisateur(db, seance_id, current_user)
+    if not seance.journal:
         raise HTTPException(404, "Journal introuvable")
     j = seance.journal
     if payload.type_course is not None: j.type_course = payload.type_course
@@ -1838,16 +1875,14 @@ def _extraire_metriques_forme(texte: str) -> dict:
 )
 async def analyser_screenshot(
     seance_id: int,
-    utilisateur_id: int = Query(1),
     file: UploadFile = File(...),
+    current_user: Utilisateur = Depends(get_current_user),
     db: Session = Depends(obtenir_session),
 ):
     from PIL import Image
     from rapidocr_onnxruntime import RapidOCR
 
-    seance = db.get(SeanceEntrainement, seance_id)
-    if not seance:
-        raise HTTPException(404, "SÃ©ance introuvable")
+    seance = _obtenir_seance_utilisateur(db, seance_id, current_user)
 
     contenu = await file.read()
     try:
@@ -1871,7 +1906,7 @@ async def analyser_screenshot(
         existing.completee = False
     else:
         journal = JournalSeance(
-            utilisateur_id=utilisateur_id,
+            utilisateur_id=current_user.id,
             seance_id=seance_id,
             completee=False,
             **metriques,
@@ -1978,10 +2013,11 @@ def semaine_courante(current_user: Utilisateur = Depends(get_current_user), db: 
 )
 def obtenir_semaines_macrocycle(
     macrocycle_id: int,
+    current_user: Utilisateur = Depends(get_current_user),
     db: Session = Depends(obtenir_session),
 ):
     macrocycle = db.get(Macrocycle, macrocycle_id)
-    if not macrocycle:
+    if not macrocycle or macrocycle.utilisateur_id != current_user.id:
         raise HTTPException(404, "Macrocycle introuvable")
 
     return {
@@ -2456,7 +2492,7 @@ def lister_macrocycles(current_user: Utilisateur = Depends(get_current_user), db
 
 
 @app.post("/api/admin/seed-seances", summary="GÃ©nÃ¨re toutes les sÃ©ances des 16 semaines EPC (2 macrocycles)")
-def seed_seances_route(db: Session = Depends(obtenir_session)):
+def seed_seances_route(db: Session = Depends(obtenir_session), _admin: None = Depends(verifier_admin_token)):
     from seed_seances import seed_module1, seed_module2, seed_module3
     try:
         seed_module1()
@@ -2468,7 +2504,7 @@ def seed_seances_route(db: Session = Depends(obtenir_session)):
 
 
 @app.post("/api/admin/init-macrocycles", summary="CrÃ©e les 2 macrocycles si absents (pour utilisateurs existants)")
-def init_macrocycles(utilisateur_id: int = Query(1), db: Session = Depends(obtenir_session)):
+def init_macrocycles(utilisateur_id: int = Query(1), db: Session = Depends(obtenir_session), _admin: None = Depends(verifier_admin_token)):
     from models import Utilisateur, SemaineEntrainement
     from periodization_rules import BLUEPRINT_MACROCYCLE, generer_dates_semaines
 
@@ -2510,7 +2546,7 @@ def init_macrocycles(utilisateur_id: int = Query(1), db: Session = Depends(obten
 
 
 @app.post("/api/admin/reseed", summary="RÃ©insÃ¨re les exercices par dÃ©faut")
-def reseed(db: Session = Depends(obtenir_session)):
+def reseed(db: Session = Depends(obtenir_session), _admin: None = Depends(verifier_admin_token)):
     from models import VariationExercice
     from periodization_rules import EXERCICES_DEFAUT
     existants = {e.slug for e in db.query(VariationExercice).all()}
@@ -2562,8 +2598,22 @@ def _extraire_infos_course(url: str) -> dict:
     if parsed.scheme not in ("http", "https"):
         raise HTTPException(400, "URL invalide — doit commencer par http:// ou https://")
     host = (parsed.hostname or "").lower()
-    if host in ("localhost", "127.0.0.1", "0.0.0.0") or host.startswith("192.168.") or host.startswith("10.") or host.endswith(".local"):
+    if not host or host.endswith(".local"):
         raise HTTPException(400, "URL non autorisée")
+    # Résout le nom d'hôte et rejette toute IP privée/loopback/link-local (dont le
+    # endpoint de métadonnées cloud 169.254.169.254) pour se protéger du SSRF —
+    # vérifie l'IP réelle plutôt que le simple texte de l'hôte.
+    try:
+        adresses = _socket.getaddrinfo(host, None)
+    except _socket.gaierror as exc:
+        raise HTTPException(400, f"Nom d'hôte introuvable : {exc}")
+    for info in adresses:
+        try:
+            ip = _ipaddress.ip_address(info[4][0].split("%")[0])
+        except ValueError:
+            raise HTTPException(400, "URL non autorisée")
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast or ip.is_unspecified:
+            raise HTTPException(400, "URL non autorisée")
 
     req = _urlrequest.Request(url, headers={
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36",
@@ -2837,6 +2887,7 @@ def reset_macrocycles(
     utilisateur_id: int = Query(1),
     date_debut: Optional[str] = Query(None, description="Date dÃ©but au format jj/mm/aaaa (dÃ©faut : lundi prochain)"),
     db: Session = Depends(obtenir_session),
+    _admin: None = Depends(verifier_admin_token),
 ):
     from models import SemaineEntrainement
     from periodization_rules import BLUEPRINT_MACROCYCLE, generer_dates_semaines
@@ -2901,7 +2952,6 @@ def reset_macrocycles(
 
 class InitProgrammePayload(BaseModel):
     date_debut: str = Field(..., description="Date dÃ©but du programme (lundi) au format jj/mm/aaaa")
-    utilisateur_id: int = 1
 
 
 @app.get("/api/programme/statut", summary="Statut du programme : existe-t-il ? quelle date de dÃ©but ?")
@@ -3904,10 +3954,16 @@ def import_workout(
 ):
     user = _get_user_by_import_token(payload.token, db)
 
-    seance = db.query(SeanceEntrainement).filter(
-        SeanceEntrainement.id == payload.seance_id,
-        SeanceEntrainement.utilisateur_id == user.id,
-    ).first()
+    seance = (
+        db.query(SeanceEntrainement)
+        .join(SemaineEntrainement, SeanceEntrainement.semaine_id == SemaineEntrainement.id)
+        .join(Macrocycle, SemaineEntrainement.macrocycle_id == Macrocycle.id)
+        .filter(
+            SeanceEntrainement.id == payload.seance_id,
+            Macrocycle.utilisateur_id == user.id,
+        )
+        .first()
+    )
     if not seance:
         raise HTTPException(404, "Seance introuvable")
 
