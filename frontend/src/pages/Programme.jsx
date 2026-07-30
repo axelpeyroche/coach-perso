@@ -4,6 +4,7 @@ import api, { getToutesSemaines, journaliserSeance, validerRPE, getProfilFC, sup
 import clsx from "clsx";
 import { useAuth } from "../AuthContext";
 import { getErrorMessage } from "../utils/errors";
+import ConfirmDialog from "../components/ConfirmDialog";
 
 
 // ─── Constantes ────────────────────────────────────────────────────────────
@@ -739,6 +740,8 @@ function CarteSeance({ seance, zonesFC, manuel = false }) {
   const [editSeanceOpen, setEditSeanceOpen] = useState(false);
   const [conseil, setConseil]       = useState(null);
   const [planifOpen, setPlanifOpen] = useState(false);
+  const [confirmAnnuler, setConfirmAnnuler]     = useState(false);
+  const [confirmSupprimer, setConfirmSupprimer] = useState(false);
 
   const mutPlanifier = useMutation({
     mutationFn: ({ date_planifiee, heure_planifiee }) => planifierSeance(seance.id, date_planifiee, heure_planifiee),
@@ -860,7 +863,7 @@ function CarteSeance({ seance, zonesFC, manuel = false }) {
                 className="p-1.5 rounded-lg text-sm text-gray-400 hover:text-brand hover:bg-brand/10 transition-colors" title="Modifier">
                 ✏️
               </button>
-              <button onClick={() => { if (window.confirm("Annuler la validation de cette séance ?")) mutAnnuler.mutate(); }}
+              <button onClick={() => setConfirmAnnuler(true)}
                 disabled={mutAnnuler.isPending}
                 className="p-1.5 rounded-lg text-sm text-gray-400 hover:text-orange-500 hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-colors disabled:opacity-40" title="Annuler la validation">
                 ↩️
@@ -912,7 +915,7 @@ function CarteSeance({ seance, zonesFC, manuel = false }) {
             </button>
           )}
           {manuel && !fait && (
-            <button onClick={() => { if (window.confirm("Supprimer définitivement cette séance ?")) mutSupprimerSeance.mutate(); }}
+            <button onClick={() => setConfirmSupprimer(true)}
               disabled={mutSupprimerSeance.isPending}
               title="Supprimer la séance"
               className="p-1.5 rounded-lg text-sm text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-40">
@@ -1082,6 +1085,22 @@ function CarteSeance({ seance, zonesFC, manuel = false }) {
           onClose={() => setEditSeanceOpen(false)}
         />
       )}
+
+      <ConfirmDialog
+        open={confirmAnnuler}
+        title="Annuler la validation de cette séance ?"
+        pending={mutAnnuler.isPending}
+        onConfirm={() => { setConfirmAnnuler(false); mutAnnuler.mutate(); }}
+        onCancel={() => setConfirmAnnuler(false)}
+      />
+      <ConfirmDialog
+        open={confirmSupprimer}
+        title="Supprimer définitivement cette séance ?"
+        danger
+        pending={mutSupprimerSeance.isPending}
+        onConfirm={() => { setConfirmSupprimer(false); mutSupprimerSeance.mutate(); }}
+        onCancel={() => setConfirmSupprimer(false)}
+      />
     </div>
   );
 }

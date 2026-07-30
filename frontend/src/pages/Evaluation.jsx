@@ -4,6 +4,7 @@ import { getHistoriqueEvaluations, modifierEvaluation, supprimerEvaluation } fro
 import Card from "../components/Card";
 import clsx from "clsx";
 import { getErrorMessage } from "../utils/errors";
+import ConfirmDialog from "../components/ConfirmDialog";
 
 
 function ModalEditerEval({ ev, onClose }) {
@@ -13,6 +14,7 @@ function ModalEditerEval({ ev, onClose }) {
   const [reps, setReps]         = useState(
     Object.fromEntries(ev.max_1min.map(m => [m.nom, String(m.reps)]))
   );
+  const [confirmSuppr, setConfirmSuppr] = useState(false);
 
   const saveMut = useMutation({
     mutationFn: () => {
@@ -52,12 +54,20 @@ function ModalEditerEval({ ev, onClose }) {
             Modifier — {ev.date.split("-").reverse().join("/")}
           </h3>
           <button
-            onClick={() => { if (window.confirm("Supprimer cette évaluation ?")) deleteMut.mutate(); }}
+            onClick={() => setConfirmSuppr(true)}
             disabled={deleteMut.isPending}
             className="text-red-400 hover:text-red-600 transition-colors text-sm font-medium px-2 py-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50">
             {deleteMut.isPending ? "…" : "Supprimer"}
           </button>
         </div>
+        <ConfirmDialog
+          open={confirmSuppr}
+          title="Supprimer cette évaluation ?"
+          danger
+          pending={deleteMut.isPending}
+          onConfirm={() => { setConfirmSuppr(false); deleteMut.mutate(); }}
+          onCancel={() => setConfirmSuppr(false)}
+        />
 
         {ev.distance_m != null && (
           <div>

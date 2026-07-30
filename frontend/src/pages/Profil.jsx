@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import api from "../api";
 import { getImportToken, regenererImportToken } from "../api";
 import { getErrorMessage } from "../utils/errors";
+import ConfirmDialog from "../components/ConfirmDialog";
 
 function urlBase64ToUint8Array(b64) {
   const pad = "=".repeat((4 - (b64.length % 4)) % 4);
@@ -558,6 +559,7 @@ function ShortcutIOS() {
   const [visible, setVisible] = useState(false);
   const [loading, setLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [confirmRegen, setConfirmRegen] = useState(false);
   const apiUrl = (import.meta.env.VITE_API_URL || "/api").replace(/\/api$/, "");
 
   async function chargerToken() {
@@ -572,7 +574,7 @@ function ShortcutIOS() {
   }
 
   async function regenerer() {
-    if (!window.confirm("Regénérer le token ? L'ancien ne fonctionnera plus dans le raccourci.")) return;
+    setConfirmRegen(false);
     setLoading(true);
     try {
       const data = await regenererImportToken();
@@ -613,10 +615,19 @@ function ShortcutIOS() {
                 {copied ? "✓" : "Copier"}
               </button>
             </div>
-            <button onClick={regenerer} disabled={loading}
+            <button onClick={() => setConfirmRegen(true)} disabled={loading}
               className="mt-1.5 text-gray-400 hover:text-red-500 transition-colors underline text-xs">
               Regénérer le token
             </button>
+            <ConfirmDialog
+              open={confirmRegen}
+              title="Regénérer le token ?"
+              message="L'ancien ne fonctionnera plus dans le raccourci."
+              danger
+              pending={loading}
+              onConfirm={regenerer}
+              onCancel={() => setConfirmRegen(false)}
+            />
           </div>
 
           {/* URL API */}

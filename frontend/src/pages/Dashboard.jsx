@@ -7,6 +7,8 @@ import Card from "../components/Card";
 import StatTile from "../components/StatTile";
 import clsx from "clsx";
 import { getErrorMessage } from "../utils/errors";
+import ConfirmDialog from "../components/ConfirmDialog";
+import AlertDialog from "../components/AlertDialog";
 
 
 const ZONE_COLORS = {
@@ -259,6 +261,8 @@ const FAISABILITE_STYLE = {
 
 function BlocAnalyseObjectif() {
   const qc = useQueryClient();
+  const [confirmRecalibrer, setConfirmRecalibrer] = useState(false);
+  const [alertMsg, setAlertMsg] = useState(null);
   const { data: analyse, isLoading } = useQuery({
     queryKey: ["analyse-objectif"],
     queryFn: getAnalyseObjectif,
@@ -269,9 +273,9 @@ function BlocAnalyseObjectif() {
     mutationFn: recalibrerProgramme,
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["analyse-objectif"] });
-      alert(`Recalibration OK — VMA ${data.vma} km/h\nZ2 : ${data.allures.Z2} · Z4 : ${data.allures.Z4} · Z5 : ${data.allures.Z5}\n${data.seances_mises_a_jour} séance(s) mises à jour.`);
+      setAlertMsg(`Recalibration OK — VMA ${data.vma} km/h\nZ2 : ${data.allures.Z2} · Z4 : ${data.allures.Z4} · Z5 : ${data.allures.Z5}\n${data.seances_mises_a_jour} séance(s) mises à jour.`);
     },
-    onError: (e) => alert(getErrorMessage(e, "Erreur recalibration")),
+    onError: (e) => setAlertMsg(getErrorMessage(e, "Erreur recalibration")),
   });
 
   if (isLoading || !analyse?.objectif) return null;
@@ -361,7 +365,7 @@ function BlocAnalyseObjectif() {
             Volume pic cible : <span className="font-semibold text-gray-700 dark:text-gray-300">{volume_pic_cible} km/sem</span>
           </p>
           <button
-            onClick={() => { if (window.confirm("Recalibrer les allures des séances de course avec ta VMA actuelle ?")) mut.mutate(); }}
+            onClick={() => setConfirmRecalibrer(true)}
             disabled={mut.isPending || !vma_actuelle}
             className="text-xs text-brand border border-brand/30 hover:bg-brand/10 px-3 py-1.5 rounded-lg transition-colors font-medium disabled:opacity-40"
           >
@@ -369,6 +373,14 @@ function BlocAnalyseObjectif() {
           </button>
         </div>
       </div>
+      <ConfirmDialog
+        open={confirmRecalibrer}
+        title="Recalibrer les allures des séances de course avec ta VMA actuelle ?"
+        pending={mut.isPending}
+        onConfirm={() => { setConfirmRecalibrer(false); mut.mutate(); }}
+        onCancel={() => setConfirmRecalibrer(false)}
+      />
+      <AlertDialog open={!!alertMsg} message={alertMsg} onClose={() => setAlertMsg(null)} />
     </Card>
   );
 }
@@ -377,6 +389,8 @@ function BlocAnalyseObjectif() {
 
 function BlocObjectifComplet({ vma }) {
   const [edit, setEdit] = useState(false);
+  const [confirmRecalibrer, setConfirmRecalibrer] = useState(false);
+  const [alertMsg, setAlertMsg] = useState(null);
   const qc = useQueryClient();
   const { data: obj, isLoading } = useQuery({ queryKey: ["objectif-course"], queryFn: () => getObjectifCourse() });
   const { data: analyse } = useQuery({ queryKey: ["analyse-objectif"], queryFn: getAnalyseObjectif, staleTime: 5 * 60 * 1000, retry: 0 });
@@ -385,9 +399,9 @@ function BlocObjectifComplet({ vma }) {
     mutationFn: recalibrerProgramme,
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["analyse-objectif"] });
-      alert(`Recalibration OK — VMA ${data.vma} km/h\nZ2 : ${data.allures.Z2} · Z4 : ${data.allures.Z4} · Z5 : ${data.allures.Z5}\n${data.seances_mises_a_jour} séance(s) mises à jour.`);
+      setAlertMsg(`Recalibration OK — VMA ${data.vma} km/h\nZ2 : ${data.allures.Z2} · Z4 : ${data.allures.Z4} · Z5 : ${data.allures.Z5}\n${data.seances_mises_a_jour} séance(s) mises à jour.`);
     },
-    onError: (e) => alert(getErrorMessage(e, "Erreur recalibration")),
+    onError: (e) => setAlertMsg(getErrorMessage(e, "Erreur recalibration")),
   });
 
   if (isLoading) return null;
@@ -515,7 +529,7 @@ function BlocObjectifComplet({ vma }) {
               Volume pic cible : <span className="font-semibold text-gray-700 dark:text-gray-300">{a.volume_pic_cible} km/sem</span>
             </p>
             <button
-              onClick={() => { if (window.confirm("Recalibrer les allures des séances de course avec ta VMA actuelle ?")) mut.mutate(); }}
+              onClick={() => setConfirmRecalibrer(true)}
               disabled={mut.isPending || !a.vma_actuelle}
               className="text-xs text-brand border border-brand/30 hover:bg-brand/10 px-3 py-1.5 rounded-lg transition-colors font-medium disabled:opacity-40"
             >
@@ -531,6 +545,14 @@ function BlocObjectifComplet({ vma }) {
           Modifier l'objectif →
         </button>
       </div>
+      <ConfirmDialog
+        open={confirmRecalibrer}
+        title="Recalibrer les allures des séances de course avec ta VMA actuelle ?"
+        pending={mut.isPending}
+        onConfirm={() => { setConfirmRecalibrer(false); mut.mutate(); }}
+        onCancel={() => setConfirmRecalibrer(false)}
+      />
+      <AlertDialog open={!!alertMsg} message={alertMsg} onClose={() => setAlertMsg(null)} />
     </Card>
   );
 }
@@ -697,56 +719,61 @@ function BlessureModal({ onClose }) {
   const qc = useQueryClient();
   const [duree, setDuree] = useState(7);
   const [desc, setDesc] = useState("");
+  const [successMsg, setSuccessMsg] = useState(null);
+  const [errorMsg, setErrorMsg] = useState(null);
   const mut = useMutation({
     mutationFn: () => signalerBlessure(duree, desc || undefined),
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["toutes-semaines"] });
       qc.invalidateQueries({ queryKey: ["semaine-courante"] });
-      onClose();
       const fin = new Date(data.fin_blessure);
       const finStr = fin.toLocaleDateString("fr-FR", { day: "numeric", month: "long" });
-      alert(`Blessure enregistrée — repos affiché dans le calendrier jusqu'au ${finStr}.`);
+      setSuccessMsg(`Blessure enregistrée — repos affiché dans le calendrier jusqu'au ${finStr}.`);
     },
-    onError: (e) => alert(getErrorMessage(e, "Erreur lors de la mise à jour")),
+    onError: (e) => setErrorMsg(getErrorMessage(e, "Erreur lors de la mise à jour")),
   });
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="bg-white dark:bg-gray-900 rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-4">
-        <h2 className="text-base font-bold text-gray-900 dark:text-white">🩹 Signaler une blessure</h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400">Combien de temps de repos est nécessaire ? Les séances sur cette période seront adaptées.</p>
-        <div className="grid grid-cols-2 gap-2">
-          {[
-            { val: 3, label: "3 jours" },
-            { val: 7, label: "1 semaine" },
-            { val: 14, label: "2 semaines" },
-            { val: 28, label: "4 semaines" },
-          ].map(({ val, label }) => (
-            <button key={val} onClick={() => setDuree(val)}
-              className={clsx("py-2.5 rounded-xl text-sm font-medium border transition-colors",
-                duree === val
-                  ? "bg-brand text-white border-brand"
-                  : "bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-brand/50")}>
-              {label}
+    <>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+        <div className="bg-white dark:bg-gray-900 rounded-2xl p-6 max-w-sm w-full shadow-2xl space-y-4">
+          <h2 className="text-base font-bold text-gray-900 dark:text-white">🩹 Signaler une blessure</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400">Combien de temps de repos est nécessaire ? Les séances sur cette période seront adaptées.</p>
+          <div className="grid grid-cols-2 gap-2">
+            {[
+              { val: 3, label: "3 jours" },
+              { val: 7, label: "1 semaine" },
+              { val: 14, label: "2 semaines" },
+              { val: 28, label: "4 semaines" },
+            ].map(({ val, label }) => (
+              <button key={val} onClick={() => setDuree(val)}
+                className={clsx("py-2.5 rounded-xl text-sm font-medium border transition-colors",
+                  duree === val
+                    ? "bg-brand text-white border-brand"
+                    : "bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-brand/50")}>
+                {label}
+              </button>
+            ))}
+          </div>
+          <div>
+            <label className="text-xs text-gray-400 block mb-1">Zone touchée (optionnel)</label>
+            <input type="text" value={desc} onChange={e => setDesc(e.target.value)}
+              placeholder="Cheville, genou, dos..."
+              className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
+          </div>
+          <div className="flex gap-2 pt-1">
+            <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+              Annuler
             </button>
-          ))}
-        </div>
-        <div>
-          <label className="text-xs text-gray-400 block mb-1">Zone touchée (optionnel)</label>
-          <input type="text" value={desc} onChange={e => setDesc(e.target.value)}
-            placeholder="Cheville, genou, dos..."
-            className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
-        </div>
-        <div className="flex gap-2 pt-1">
-          <button onClick={onClose} className="flex-1 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 text-sm text-gray-500 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-            Annuler
-          </button>
-          <button onClick={() => mut.mutate()} disabled={mut.isPending}
-            className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600 disabled:opacity-50 transition-colors">
-            {mut.isPending ? "Mise à jour…" : "Confirmer"}
-          </button>
+            <button onClick={() => mut.mutate()} disabled={mut.isPending}
+              className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600 disabled:opacity-50 transition-colors">
+              {mut.isPending ? "Mise à jour…" : "Confirmer"}
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+      <AlertDialog open={!!successMsg} message={successMsg} onClose={() => { setSuccessMsg(null); onClose(); }} />
+      <AlertDialog open={!!errorMsg} message={errorMsg} onClose={() => setErrorMsg(null)} />
+    </>
   );
 }
 
@@ -761,6 +788,7 @@ function ModalReconfigurer({ onClose }) {
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [seancesMuscu, setSeancesMuscu] = useState(2);
   const [freqTests, setFreqTests] = useState(8);
+  const [errorMsg, setErrorMsg] = useState(null);
 
   const { data: prefs } = useQuery({
     queryKey: ["preferences"],
@@ -798,12 +826,13 @@ function ModalReconfigurer({ onClose }) {
       setUser(userData);
       navigate("/onboarding");
     },
-    onError: (e) => alert(getErrorMessage(e, "Erreur lors de la suppression du programme")),
+    onError: (e) => setErrorMsg(getErrorMessage(e, "Erreur lors de la suppression du programme")),
   });
 
   const inputCls = "w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand";
 
   return (
+    <>
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm p-4" onClick={onClose}>
       <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4" onClick={e => e.stopPropagation()}>
 
@@ -911,6 +940,8 @@ function ModalReconfigurer({ onClose }) {
         )}
       </div>
     </div>
+    <AlertDialog open={!!errorMsg} message={errorMsg} onClose={() => setErrorMsg(null)} />
+    </>
   );
 }
 
