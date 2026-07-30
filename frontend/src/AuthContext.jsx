@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect } from "react";
-import api from "./api";
+import api, { setUnauthorizedHandler } from "./api";
 
 const AuthContext = createContext(null);
 
@@ -39,6 +39,12 @@ export function AuthProvider({ children }) {
     setUser(null);
     delete api.defaults.headers.common["Authorization"];
   }
+
+  // Déconnexion automatique quand l'API répond 401 (token expiré/invalide)
+  useEffect(() => {
+    setUnauthorizedHandler(logout);
+    return () => setUnauthorizedHandler(null);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <AuthContext.Provider value={{ token, user, setUser, login, logout, loading }}>

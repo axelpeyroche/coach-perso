@@ -5,6 +5,21 @@ const api = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
+// Déclenché sur un 401 renvoyé par l'API (token expiré/invalide) — l'AuthContext
+// s'y abonne pour effacer la session et rediriger vers /login.
+let onUnauthorized = null;
+export const setUnauthorizedHandler = (fn) => { onUnauthorized = fn; };
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error?.response?.status === 401 && error?.config?.url !== "/auth/login") {
+      onUnauthorized?.();
+    }
+    return Promise.reject(error);
+  }
+);
+
 export default api;
 
 // --- Profil FC ---
