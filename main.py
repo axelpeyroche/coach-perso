@@ -1,8 +1,8 @@
 ﻿"""
-API FastAPI â€” Coach d'EntraÃ®nement Hybride EPC.
+API FastAPI — Coach d'Entraînement Hybride EPC.
 
 Routes :
-    POST /api/evaluations/              CrÃ©er une session d'Ã©valuation
+    POST /api/evaluations/              Créer une session d'évaluation
     POST /api/evaluations/{id}/demi-cooper      Enregistrer un Demi-Cooper
     POST /api/evaluations/{id}/max-1min         Enregistrer les scores Max 1 min
     POST /api/evaluations/{id}/amrap-benchmark  Enregistrer le score AMRAP Benchmark
@@ -10,7 +10,7 @@ Routes :
     GET  /api/analytics/distribution-volume
     GET  /api/analytics/biometrie-recuperation
     GET  /api/macrocycles/{id}/semaines
-    POST /api/seances/{id}/journal              Journaliser une sÃ©ance complÃ©tÃ©e
+    POST /api/seances/{id}/journal              Journaliser une séance complétée
 """
 
 from __future__ import annotations
@@ -72,19 +72,19 @@ from models import (
 )
 
 app = FastAPI(
-    title="Coach EPC â€” API",
-    description="API du coach d'entraÃ®nement hybride Course & Musculation au poids du corps.",
+    title="Coach EPC — API",
+    description="API du coach d'entraînement hybride Course & Musculation au poids du corps.",
     version="1.0.0",
 )
 
 def _initialiser_donnees_demo():
-    """CrÃ©e un utilisateur et 2 macrocycles (Module 1 + Module 2) si la base est vide."""
+    """Crée un utilisateur et 2 macrocycles (Module 1 + Module 2) si la base est vide."""
     from models import Utilisateur, SemaineEntrainement
     from periodization_rules import BLUEPRINT_MACROCYCLE, generer_dates_semaines
     db = next(obtenir_session())
     try:
         if db.query(Utilisateur).count() == 0:
-            user = Utilisateur(email="coach@perso.fr", nom="AthlÃ¨te EPC")
+            user = Utilisateur(email="coach@perso.fr", nom="Athlète EPC")
             db.add(user)
             db.flush()
 
@@ -156,7 +156,7 @@ async def _handler_exception_global(request: Request, exc: Exception):
     )
 
 # ---------------------------------------------------------------------------
-# Auth â€” JWT + bcrypt
+# Auth — JWT + bcrypt
 # ---------------------------------------------------------------------------
 
 import hashlib, hmac as _hmac, os as _os, base64 as _b64, secrets as _secrets
@@ -166,14 +166,14 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 30  # 30 jours
 
 SECRET_KEY = os.getenv("JWT_SECRET")
 if not SECRET_KEY:
-    # Pas de secret configurÃ© (ex. variable d'env absente sur Render) : on gÃ©nÃ¨re un
-    # secret alÃ©atoire pour ce process plutÃ´t que d'utiliser une valeur par dÃ©faut
-    # connue publiquement. Tous les tokens dÃ©jÃ  Ã©mis deviennent invalides Ã  chaque
-    # redÃ©marrage tant que JWT_SECRET n'est pas dÃ©fini explicitement.
+    # Pas de secret configuré (ex. variable d'env absente sur Render) : on génère un
+    # secret aléatoire pour ce process plutôt que d'utiliser une valeur par défaut
+    # connue publiquement. Tous les tokens déjÃ  émis deviennent invalides Ã  chaque
+    # redémarrage tant que JWT_SECRET n'est pas défini explicitement.
     SECRET_KEY = _secrets.token_hex(32)
-    print("âš ï¸  JWT_SECRET non dÃ©fini â€” gÃ©nÃ©ration d'un secret temporaire pour ce process. "
-          "DÃ©finis la variable d'environnement JWT_SECRET pour Ã©viter la dÃ©connexion de "
-          "tous les utilisateurs Ã  chaque redÃ©marrage.")
+    print("⚠️  JWT_SECRET non défini — génération d'un secret temporaire pour ce process. "
+          "Définis la variable d'environnement JWT_SECRET pour éviter la déconnexion de "
+          "tous les utilisateurs Ã  chaque redémarrage.")
 
 http_bearer = HTTPBearer(auto_error=False)
 
@@ -201,7 +201,7 @@ def get_current_user(
     db: Session = Depends(obtenir_session),
 ) -> Utilisateur:
     if not credentials:
-        raise HTTPException(401, "Non authentifiÃ©")
+        raise HTTPException(401, "Non authentifié")
     try:
         payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
         user_id = int(payload["sub"])
@@ -218,11 +218,11 @@ _ADMIN_TOKEN = os.getenv("ADMIN_TOKEN")
 def verifier_admin_token(x_admin_token: Optional[str] = Header(None)) -> None:
     """Protège les routes de maintenance /api/admin/* : nécessite ADMIN_TOKEN configuré et fourni."""
     if not _ADMIN_TOKEN or not _hmac.compare_digest(x_admin_token or "", _ADMIN_TOKEN):
-        raise HTTPException(403, "AccÃ¨s administrateur refusÃ©")
+        raise HTTPException(403, "Accès administrateur refusé")
 
 
 def _obtenir_seance_utilisateur(db: Session, seance_id: int, current_user: "Utilisateur") -> "SeanceEntrainement":
-    """RÃ©cupÃ¨re une sÃ©ance en vÃ©rifiant qu'elle appartient bien Ã  l'utilisateur courant."""
+    """Récupère une séance en vérifiant qu'elle appartient bien Ã  l'utilisateur courant."""
     seance = (
         db.query(SeanceEntrainement)
         .join(SemaineEntrainement, SeanceEntrainement.semaine_id == SemaineEntrainement.id)
@@ -234,12 +234,12 @@ def _obtenir_seance_utilisateur(db: Session, seance_id: int, current_user: "Util
         .first()
     )
     if not seance:
-        raise HTTPException(404, "SÃ©ance introuvable")
+        raise HTTPException(404, "Séance introuvable")
     return seance
 
 
 def _envoyer_push_seance(seance_id: int) -> None:
-    """Envoi de la notification push pour une sÃ©ance planifiÃ©e (appelÃ© par APScheduler)."""
+    """Envoi de la notification push pour une séance planifiée (appelé par APScheduler)."""
     if not _PUSH_ENABLED or not _VAPID_PRIVATE:
         return
     db = next(obtenir_session())
@@ -252,8 +252,8 @@ def _envoyer_push_seance(seance_id: int) -> None:
             return
         subs = db.query(PushSubscription).filter_by(utilisateur_id=semaine.macrocycle.utilisateur_id).all()
         payload = _json.dumps({
-            "title": f"ðŸƒ SÃ©ance du jour : {seance.titre}",
-            "body": f"C'est l'heure de ta sÃ©ance ! {seance.heure_planifiee or ''}".strip(),
+            "title": f"🏃 Séance du jour : {seance.titre}",
+            "body": f"C'est l'heure de ta séance ! {seance.heure_planifiee or ''}".strip(),
             "tag": f"seance-{seance_id}",
             "url": "/programme",
         })
@@ -272,7 +272,7 @@ def _envoyer_push_seance(seance_id: int) -> None:
 
 
 def _planifier_notification(seance_id: int, date_planifiee, heure_planifiee: str | None) -> None:
-    """Ajoute ou supprime un job APScheduler pour la notification de la sÃ©ance."""
+    """Ajoute ou supprime un job APScheduler pour la notification de la séance."""
     if not _PUSH_ENABLED or _scheduler is None:
         return
     job_id = f"seance-{seance_id}"
@@ -298,7 +298,7 @@ def demarrage():
     if _PUSH_ENABLED:
         _scheduler = BackgroundScheduler()
         _scheduler.start()
-        # Re-planifie les notifications pour toutes les sÃ©ances futures encore non validÃ©es
+        # Re-planifie les notifications pour toutes les séances futures encore non validées
         db = next(obtenir_session())
         try:
             from datetime import datetime as _dt
@@ -315,7 +315,7 @@ def demarrage():
 
 
 # ---------------------------------------------------------------------------
-# Auth â€” Register / Login / Me / Onboarding
+# Auth — Register / Login / Me / Onboarding
 # ---------------------------------------------------------------------------
 
 class RegisterSchema(BaseModel):
@@ -345,16 +345,16 @@ class OnboardingSchema(BaseModel):
     programme_auto: bool = True         # False = l'utilisateur crée ses propres séances
 
 
-@app.post("/api/auth/register", summary="CrÃ©e un nouveau compte")
+@app.post("/api/auth/register", summary="Crée un nouveau compte")
 def register(payload: RegisterSchema, db: Session = Depends(obtenir_session)):
     if db.query(Utilisateur).filter(Utilisateur.email == payload.email).first():
-        raise HTTPException(400, "Un compte existe dÃ©jÃ  avec cet email")
+        raise HTTPException(400, "Un compte existe déjà avec cet email")
     dn = None
     if payload.date_naissance:
         try:
             dn = date.fromisoformat(payload.date_naissance)
         except ValueError:
-            raise HTTPException(400, "Format date_naissance invalide â€” attendu YYYY-MM-DD")
+            raise HTTPException(400, "Format date_naissance invalide — attendu YYYY-MM-DD")
     try:
         password_hash = _hash_password(payload.password)
     except Exception as e:
@@ -375,7 +375,7 @@ def register(payload: RegisterSchema, db: Session = Depends(obtenir_session)):
         db.refresh(user)
     except Exception as e:
         db.rollback()
-        raise HTTPException(500, f"Erreur base de donnÃ©es: {e}")
+        raise HTTPException(500, f"Erreur base de données: {e}")
     token = _create_token(user.id)
     return {"access_token": token, "token_type": "bearer", "user_id": user.id, "onboarding_complet": False}
 
@@ -394,7 +394,7 @@ def login(payload: LoginSchema, db: Session = Depends(obtenir_session)):
     }
 
 
-@app.get("/api/auth/me", summary="Retourne le profil de l'utilisateur connectÃ©")
+@app.get("/api/auth/me", summary="Retourne le profil de l'utilisateur connecté")
 def me(current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
     dn = current_user.date_naissance
     age = None
@@ -480,7 +480,7 @@ def reset_onboarding(current_user: Utilisateur = Depends(get_current_user), db: 
 def _pace_str(kmh: float) -> str:
     """Convertit une vitesse km/h en allure min:sec/km."""
     if not kmh or kmh <= 0:
-        return "â€”"
+        return "—"
     s = 3600 / kmh
     return f"{int(s // 60)}:{int(s % 60):02d}/km"
 
@@ -499,7 +499,7 @@ def _fraction_vma_soutenable(distance_km: float) -> float:
 
 
 def _calculer_volume_pic(distance_km: float) -> float:
-    """Volume hebdomadaire pic recommandÃ© (km/semaine) selon la distance cible."""
+    """Volume hebdomadaire pic recommandé (km/semaine) selon la distance cible."""
     if distance_km <= 5:
         return 35.0
     elif distance_km <= 12:
@@ -513,7 +513,7 @@ def _calculer_volume_pic(distance_km: float) -> float:
 
 
 def _vma_requise(distance_km: float, objectif_temps_min: float) -> float:
-    """VMA nÃ©cessaire (km/h) pour atteindre l'objectif temps sur la distance."""
+    """VMA nécessaire (km/h) pour atteindre l'objectif temps sur la distance."""
     if not objectif_temps_min or objectif_temps_min <= 0:
         return 0.0
     allure_kmh = (distance_km / objectif_temps_min) * 60
@@ -536,7 +536,7 @@ def _calculer_calibration(historique: dict) -> dict:
     niveau_map = {"debutant": 0.75, "intermediaire": 1.0, "confirme": 1.25}
     base_factor = niveau_map.get(niveau, 1.0)
 
-    # km_factor â€” calÃ© sur le volume hebdomadaire actuel
+    # km_factor — calé sur le volume hebdomadaire actuel
     volume = historique.get("volume_km_semaine")
     try:
         vol = float(volume) if volume is not None else None
@@ -548,7 +548,7 @@ def _calculer_calibration(historique: dict) -> dict:
     else:
         km_factor = base_factor
 
-    # amrap_factor â€” calÃ© sur les performances muscu
+    # amrap_factor — calé sur les performances muscu
     max_pompes = historique.get("max_pompes")
     max_tractions = historique.get("max_tractions")
     try:
@@ -653,7 +653,7 @@ def _injecter_seances_velo(db, user, type_programme, semaines):
             ))
 
 
-@app.post("/api/auth/onboarding", summary="ComplÃ¨te l'onboarding et gÃ©nÃ¨re le programme")
+@app.post("/api/auth/onboarding", summary="Complète l'onboarding et génère le programme")
 def onboarding(
     payload: OnboardingSchema,
     current_user: Utilisateur = Depends(get_current_user),
@@ -664,7 +664,7 @@ def onboarding(
     from periodization_rules import BLUEPRINT_MACROCYCLE, generer_dates_semaines, generer_blueprint_course
     from seed_seances import MODULE1, MODULE2, MODULE3, _POOL_SURCHARGE, _semaine_course, _semaine_taper_course, _inserer_seances_en_session, calibrer_module, adapter_contenu_muscu, adapter_contenu_gym, adapter_contenu_course, enrichir_paces_vma
 
-    # Sauvegarder prÃ©fÃ©rences
+    # Sauvegarder préférences
     current_user.type_programme = payload.type_programme
     current_user.seances_semaine = payload.seances_semaine
     current_user.seances_course_semaine = payload.seances_course_semaine
@@ -694,12 +694,12 @@ def onboarding(
             except (TypeError, ValueError):
                 pass
 
-        # Pre-fill biomÃ©trie depuis VMA connue (Ã©quivaut Ã  un test demi-Cooper virtuel)
+        # Pre-fill biométrie depuis VMA connue (équivaut à un test demi-Cooper virtuel)
         if hist.get("vma_estimee"):
             try:
                 vma = float(hist["vma_estimee"])
                 if 5.0 <= vma <= 30.0:
-                    # distance_metres = vma * 100 â†’ depuis_demi_cooper recalcule vma = dist/100 = vma
+                    # distance_metres = vma * 100 → depuis_demi_cooper recalcule vma = dist/100 = vma
                     biometrie = BiometrieUtilisateur.depuis_demi_cooper(
                         utilisateur_id=current_user.id,
                         distance_metres=vma * 100,
@@ -712,7 +712,7 @@ def onboarding(
     try:
         debut = datetime.strptime(payload.date_debut_programme, "%d/%m/%Y").date()
     except ValueError:
-        raise HTTPException(400, "Format date_debut_programme invalide â€” attendu jj/mm/aaaa")
+        raise HTTPException(400, "Format date_debut_programme invalide — attendu jj/mm/aaaa")
     if debut.weekday() != 0:
         debut = debut + timedelta(days=(7 - debut.weekday()) % 7)
 
@@ -769,19 +769,19 @@ def onboarding(
         db.commit()
         return {"ok": True, "message": "Onboarding terminé, mode manuel activé."}
 
-    # RÃ©cupÃ©rer objectif course si existant
+    # Récupérer objectif course si existant
     obj_course = db.query(ObjectifCourse).filter(
         ObjectifCourse.utilisateur_id == current_user.id
     ).order_by(ObjectifCourse.id.desc()).first()
 
-    # Profil consolidÃ© + calibration v2 (Ã¢ge, VMA, force pull/push, progression)
+    # Profil consolidé + calibration v2 (âge, VMA, force pull/push, progression)
     profil = construire_profil(current_user, db, hist)
     calib = calibration_v2(hist, profil)
 
     kf = calib["km_factor"]
     af = calib["amrap_factor"]
     rf = calib["reps_factor"]
-    vma_for_paces = profil.get("vma")  # bio rÃ©cente sinon estimation questionnaire
+    vma_for_paces = profil.get("vma")  # bio récente sinon estimation questionnaire
 
     if payload.type_programme == "velo":
         # Programme vélo PUR : 2 macrocycles de 8 semaines périodisées (surcharge/décharge/
@@ -804,7 +804,7 @@ def onboarding(
         n_surcharge = n_semaines - 3
         eval_freq = current_user.frequence_tests_semaines or 8
 
-        # Blueprint v2 (mÃ©socycles 3:1, progression individualisÃ©e) + semaines d'Ã©valuation
+        # Blueprint v2 (mésocycles 3:1, progression individualisée) + semaines d'évaluation
         blueprint = generer_blueprint_course_v2(n_semaines, calib)
         for regle in blueprint:
             if regle.numero <= n_surcharge and regle.numero % eval_freq == 0:
@@ -824,7 +824,7 @@ def onboarding(
                 objectif_km_course=km, objectif_amrap_min=amrap))
         db.flush()
 
-        # Contenu des sÃ©ances : surcharge progressive + semaines d'Ã©valuation
+        # Contenu des séances : surcharge progressive + semaines d'évaluation
         # Volume progressif : facteur km augmente de kf (niveau actuel) vers f_pic (volume objectif)
         vol_pic = _calculer_volume_pic(obj_course.distance_km)
         BASELINE_VOL = 35.0
@@ -839,9 +839,9 @@ def onboarding(
         build_count = 0
         for i in range(1, n_surcharge + 1):
             if i % eval_freq == 0:
-                content[i] = MODULE1[8]  # tests standardisÃ©s â€” non calibrÃ©s
+                content[i] = MODULE1[8]  # tests standardisés — non calibrés
             else:
-                # km_factor croÃ®t progressivement de kf Ã  f_pic
+                # km_factor croît progressivement de kf à f_pic
                 progress = build_count / max(1, n_build_weeks - 1) if n_build_weeks > 1 else 1.0
                 week_kf = kf + (f_pic - kf) * (progress ** calib.get("exp_progression", 0.75))
                 if i in assim:
@@ -852,14 +852,14 @@ def onboarding(
                 progress_map[i] = progress
                 pool_idx += 1
                 build_count += 1
-        content[n_surcharge + 1] = m1_cal.get(6, MODULE1[6])  # dÃ©charge calibrÃ©e
-        content[n_surcharge + 2] = _semaine_taper_course()     # taper prÃ©-course (pas de prÃ©pa tests)
+        content[n_surcharge + 1] = m1_cal.get(6, MODULE1[6])  # décharge calibrée
+        content[n_surcharge + 2] = _semaine_taper_course()     # taper pré-course (pas de prépa tests)
         content[n_semaines] = _semaine_course(obj_course.date_course, obj_course.nom)
 
         # Adaptation au profil : allures selon distance, sortie longue, variantes, terrain
         content = appliquer_profil_au_contenu(content, profil, calib, progress_map)
 
-        # Enrichissement des descriptions avec allures rÃ©elles
+        # Enrichissement des descriptions avec allures réelles
         if vma_for_paces and vma_for_paces >= 5.0:
             content = enrichir_paces_vma(content, vma_for_paces)
 
@@ -871,7 +871,7 @@ def onboarding(
         adapted = adapter_contenu_course(muscu_adapter(content, n_muscu, current_user.sexe), n_course)
         _inserer_seances_en_session(db, mc, adapted)
     else:
-        # Programme standard 2 macrocycles avec sessions calibrÃ©es
+        # Programme standard 2 macrocycles avec sessions calibrées
         modules = {1: MODULE1, 2: MODULE2, 3: MODULE3}
         n_muscu = current_user.seances_muscu_semaine or 2
         n_course = current_user.seances_course_semaine or 3
@@ -911,7 +911,7 @@ def onboarding(
 
 
 # ---------------------------------------------------------------------------
-# Mise Ã  jour des paramÃ¨tres programme + rÃ©gÃ©nÃ©ration des sÃ©ances Ã  venir
+# Mise à jour des paramètres programme + régénération des séances à venir
 # ---------------------------------------------------------------------------
 
 class UpdateProgrammeSchema(BaseModel):
@@ -925,7 +925,7 @@ class UpdateProgrammeSchema(BaseModel):
     frequence_tests_semaines: Optional[int] = Field(None, ge=1, le=52)
 
 
-@app.patch("/api/utilisateur/programme", summary="Modifier les paramÃ¨tres programme et rÃ©gÃ©nÃ©rer les sÃ©ances futures")
+@app.patch("/api/utilisateur/programme", summary="Modifier les paramètres programme et régénérer les séances futures")
 def update_programme(
     payload: UpdateProgrammeSchema,
     current_user: Utilisateur = Depends(get_current_user),
@@ -939,7 +939,7 @@ def update_programme(
     )
     import json as _json
 
-    # 1. Mettre Ã  jour les prÃ©fÃ©rences utilisateur
+    # 1. Mettre à jour les préférences utilisateur
     if payload.type_programme is not None:
         current_user.type_programme = payload.type_programme
     if payload.seances_semaine is not None:
@@ -958,7 +958,7 @@ def update_programme(
         current_user.frequence_tests_semaines = payload.frequence_tests_semaines
     db.flush()
 
-    # 2. Identifier les semaines non dÃ©marrÃ©es (aucune sÃ©ance avec journal)
+    # 2. Identifier les semaines non démarrées (aucune séance avec journal)
     today = date.today()
     mcs = db.query(Macrocycle).filter(Macrocycle.utilisateur_id == current_user.id).all()
 
@@ -1006,7 +1006,7 @@ def update_programme(
             .all()
         )
 
-        # NumÃ©ros des semaines futures non dÃ©marrÃ©es Ã  rÃ©gÃ©nÃ©rer
+        # Numéros des semaines futures non démarrées à régénérer
         nums_a_regenerer: set[int] = set()
         for sem in sems:
             if sem.date_debut < today:
@@ -1018,7 +1018,7 @@ def update_programme(
             )
             if has_journal:
                 continue
-            # Supprimer les sÃ©ances non validÃ©es de cette semaine
+            # Supprimer les séances non validées de cette semaine
             ids_seances = [s.id for s in seances_sem]
             if ids_seances:
                 db.query(ExerciceSeance).filter(ExerciceSeance.seance_id.in_(ids_seances)).delete(synchronize_session=False)
@@ -1037,7 +1037,7 @@ def update_programme(
         if current_user.type_programme == "velo":
             continue
 
-        # PrÃ©parer le contenu calibrÃ© pour ce macrocycle
+        # Préparer le contenu calibré pour ce macrocycle
         module_data = modules.get(mc.numero_cycle, MODULE1)
         calibrated = calibrer_module(module_data, kf, af, rf)
         calibrated = _apc_upd(calibrated, profil_upd, calib)
@@ -1045,7 +1045,7 @@ def update_programme(
             calibrated = enrichir_paces_vma(calibrated, vma_for_paces)
         adapted = adapter_contenu_course(muscu_adapter(calibrated, n_muscu, current_user.sexe), n_course)
 
-        # Injecter uniquement les semaines vidÃ©es (sans toucher aux semaines passÃ©es)
+        # Injecter uniquement les semaines vidées (sans toucher aux semaines passées)
         semaines_map = {s.numero_semaine: s for s in sems}
         for num_sem, seances_data in adapted.items():
             if num_sem not in nums_a_regenerer:
@@ -1096,7 +1096,7 @@ def update_programme(
 
 
 # ---------------------------------------------------------------------------
-# SchÃ©mas Pydantic
+# Schémas Pydantic
 # ---------------------------------------------------------------------------
 
 class ProfilFCSchema(BaseModel):
@@ -1104,11 +1104,11 @@ class ProfilFCSchema(BaseModel):
     fc_repos: Optional[int] = Field(None, gt=0, lt=150)
     poids_kg: Optional[float] = Field(None, gt=0, lt=300)
 
-@app.get("/api/utilisateur/profil-fc", summary="RÃ©cupÃ¨re fc_max, fc_repos et poids_kg de l'utilisateur")
+@app.get("/api/utilisateur/profil-fc", summary="Récupère fc_max, fc_repos et poids_kg de l'utilisateur")
 def get_profil_fc(current_user: Utilisateur = Depends(get_current_user)):
     return {"fc_max": current_user.fc_max, "fc_repos": current_user.fc_repos, "poids_kg": current_user.poids_kg}
 
-@app.patch("/api/utilisateur/profil-fc", summary="Met Ã  jour fc_max, fc_repos et/ou poids_kg")
+@app.patch("/api/utilisateur/profil-fc", summary="Met à jour fc_max, fc_repos et/ou poids_kg")
 def patch_profil_fc(payload: ProfilFCSchema, current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
     from models import PoidsUtilisateur
     if payload.fc_max is not None: current_user.fc_max = payload.fc_max
@@ -1145,7 +1145,7 @@ class PreferencesSchema(BaseModel):
     seances_muscu_semaine: Optional[int] = Field(None, ge=1, le=5)
     frequence_tests_semaines: Optional[int] = Field(None, ge=2, le=16)
 
-@app.patch("/api/utilisateur/preferences", summary="Met Ã  jour les prÃ©fÃ©rences d'entraÃ®nement")
+@app.patch("/api/utilisateur/preferences", summary="Met à jour les préférences d'entraînement")
 def patch_preferences(payload: PreferencesSchema, current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
     if payload.seances_muscu_semaine is not None:
         current_user.seances_muscu_semaine = payload.seances_muscu_semaine
@@ -1165,7 +1165,7 @@ class ProfilInfosSchema(BaseModel):
     date_naissance: Optional[str] = None  # "YYYY-MM-DD" ou null pour effacer
     poids_kg: Optional[float] = Field(None, gt=0, lt=300)
 
-@app.patch("/api/utilisateur/infos", summary="Met Ã  jour les informations personnelles")
+@app.patch("/api/utilisateur/infos", summary="Met à jour les informations personnelles")
 def patch_utilisateur_infos(
     payload: ProfilInfosSchema,
     current_user: Utilisateur = Depends(get_current_user),
@@ -1181,7 +1181,7 @@ def patch_utilisateur_infos(
             Utilisateur.id != current_user.id,
         ).first()
         if existing:
-            raise HTTPException(409, "Cet email est dÃ©jÃ  utilisÃ©")
+            raise HTTPException(409, "Cet email est déjà utilisé")
         current_user.email = payload.email
     if payload.sexe is not None:
         current_user.sexe = payload.sexe
@@ -1216,7 +1216,7 @@ def patch_password(
     return {"ok": True}
 
 
-@app.get("/api/utilisateur/preferences", summary="RÃ©cupÃ¨re les prÃ©fÃ©rences d'entraÃ®nement")
+@app.get("/api/utilisateur/preferences", summary="Récupère les préférences d'entraînement")
 def get_preferences(current_user: Utilisateur = Depends(get_current_user)):
     return {
         "seances_muscu_semaine": current_user.seances_muscu_semaine or 2,
@@ -1233,7 +1233,7 @@ class CreerEvaluationSchema(BaseModel):
 
 
 class DemiCooperSchema(BaseModel):
-    distance_metres: float = Field(..., gt=0, description="Distance parcourue en 6 minutes (mÃ¨tres)")
+    distance_metres: float = Field(..., gt=0, description="Distance parcourue en 6 minutes (mètres)")
     conditions: Optional[str] = None
     fc_max: Optional[int] = Field(None, gt=0, lt=250)
 
@@ -1259,7 +1259,7 @@ class AMRAPBenchmarkSchema(BaseModel):
 
 
 class JournalSeanceSchema(BaseModel):
-    utilisateur_id: Optional[int] = None  # ignorÃ© â€” on utilise current_user.id
+    utilisateur_id: Optional[int] = None  # ignoré — on utilise current_user.id
     completee: bool = True
     rpe: Optional[float] = Field(None, ge=1, le=10)
     rpe_cible: Optional[float] = Field(None, ge=1, le=10)
@@ -1277,10 +1277,10 @@ class JournalSeanceSchema(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Routes â€” Ã‰valuations
+# Routes — Évaluations
 # ---------------------------------------------------------------------------
 
-@app.delete("/api/evaluations/incompletes", summary="Supprime les Ã©valuations sans AMRAP ET sans Max 1 min")
+@app.delete("/api/evaluations/incompletes", summary="Supprime les évaluations sans AMRAP ET sans Max 1 min")
 def supprimer_evaluations_incompletes(current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
     evals = db.query(JournalEvaluationSeance).filter(JournalEvaluationSeance.utilisateur_id == current_user.id).all()
     supprimes = 0
@@ -1292,12 +1292,12 @@ def supprimer_evaluations_incompletes(current_user: Utilisateur = Depends(get_cu
     return {"supprimes": supprimes}
 
 
-@app.delete("/api/evaluations/{evaluation_id}", summary="Supprimer une Ã©valuation")
+@app.delete("/api/evaluations/{evaluation_id}", summary="Supprimer une évaluation")
 def supprimer_evaluation(evaluation_id: int, current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
     evaluation = db.get(JournalEvaluationSeance, evaluation_id)
     if not evaluation or evaluation.utilisateur_id != current_user.id:
-        raise HTTPException(404, "Ã‰valuation introuvable")
-    # Supprimer les biomÃ©tries crÃ©Ã©es par le Demi-Cooper de cette Ã©valuation
+        raise HTTPException(404, "Évaluation introuvable")
+    # Supprimer les biométries créées par le Demi-Cooper de cette évaluation
     if evaluation.demi_cooper and evaluation.demi_cooper.id_biometrie_instantanee:
         bio = db.get(BiometrieUtilisateur, evaluation.demi_cooper.id_biometrie_instantanee)
         if bio:
@@ -1312,18 +1312,18 @@ class ModifierEvaluationSchema(BaseModel):
     amrap_tours: Optional[float] = None
     max_1min: Optional[list[dict]] = None  # [{"exercice_id": int, "repetitions": int}]
 
-@app.patch("/api/evaluations/{evaluation_id}", summary="Modifier les donnÃ©es d'une Ã©valuation existante")
+@app.patch("/api/evaluations/{evaluation_id}", summary="Modifier les données d'une évaluation existante")
 def modifier_evaluation(evaluation_id: int, payload: ModifierEvaluationSchema, current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
     evaluation = db.get(JournalEvaluationSeance, evaluation_id)
     if not evaluation or evaluation.utilisateur_id != current_user.id:
-        raise HTTPException(404, "Ã‰valuation introuvable")
+        raise HTTPException(404, "Évaluation introuvable")
 
     if payload.distance_metres is not None:
         cooper = evaluation.demi_cooper
         if cooper:
             cooper.distance_metres = payload.distance_metres
             cooper.vma_calculee_kmh = ResultatDemiCooper.calculer_vma(payload.distance_metres)
-            # Met Ã  jour la biomÃ©trie liÃ©e
+            # Met à jour la biométrie liée
             bio = (
                 db.query(BiometrieUtilisateur)
                 .filter(BiometrieUtilisateur.utilisateur_id == evaluation.utilisateur_id)
@@ -1352,7 +1352,7 @@ def modifier_evaluation(evaluation_id: int, payload: ModifierEvaluationSchema, c
     return {"ok": True}
 
 
-@app.get("/api/evaluations/historique", summary="Historique des Ã©valuations passÃ©es")
+@app.get("/api/evaluations/historique", summary="Historique des évaluations passées")
 def historique_evaluations(current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
     evals = (
         db.query(JournalEvaluationSeance)
@@ -1380,7 +1380,7 @@ def historique_evaluations(current_user: Utilisateur = Depends(get_current_user)
     return {"evaluations": result}
 
 
-@app.post("/api/evaluations/", summary="CrÃ©er une session d'Ã©valuation")
+@app.post("/api/evaluations/", summary="Créer une session d'évaluation")
 def creer_evaluation(payload: CreerEvaluationSchema, current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
     evaluation = JournalEvaluationSeance(
         utilisateur_id=current_user.id,
@@ -1396,7 +1396,7 @@ def creer_evaluation(payload: CreerEvaluationSchema, current_user: Utilisateur =
 
 @app.post(
     "/api/evaluations/{evaluation_id}/demi-cooper",
-    summary="Enregistrer un rÃ©sultat Demi-Cooper et recalculer la VMA",
+    summary="Enregistrer un résultat Demi-Cooper et recalculer la VMA",
 )
 def enregistrer_demi_cooper(
     evaluation_id: int,
@@ -1406,18 +1406,18 @@ def enregistrer_demi_cooper(
 ):
     evaluation = db.get(JournalEvaluationSeance, evaluation_id)
     if not evaluation or evaluation.utilisateur_id != current_user.id:
-        raise HTTPException(404, "Ã‰valuation introuvable")
+        raise HTTPException(404, "Évaluation introuvable")
 
     vma = ResultatDemiCooper.calculer_vma(payload.distance_metres)
 
-    # CrÃ©er le snapshot biomÃ©trique avec toutes les zones recalculÃ©es
+    # Créer le snapshot biométrique avec toutes les zones recalculées
     biometrie = BiometrieUtilisateur.depuis_demi_cooper(
         utilisateur_id=evaluation.utilisateur_id,
         distance_metres=payload.distance_metres,
         fc_max=payload.fc_max,
     )
     db.add(biometrie)
-    db.flush()  # obtenir l'id avant de le rÃ©fÃ©rencer
+    db.flush()  # obtenir l'id avant de le référencer
 
     resultat = ResultatDemiCooper(
         evaluation_id=evaluation_id,
@@ -1445,7 +1445,7 @@ def enregistrer_demi_cooper(
 
 @app.post(
     "/api/evaluations/{evaluation_id}/max-1min",
-    summary="Enregistrer les scores Max RÃ©pÃ©titions 1 Minute",
+    summary="Enregistrer les scores Max Répétitions 1 Minute",
 )
 def enregistrer_max_1min(
     evaluation_id: int,
@@ -1455,7 +1455,7 @@ def enregistrer_max_1min(
 ):
     evaluation = db.get(JournalEvaluationSeance, evaluation_id)
     if not evaluation or evaluation.utilisateur_id != current_user.id:
-        raise HTTPException(404, "Ã‰valuation introuvable")
+        raise HTTPException(404, "Évaluation introuvable")
 
     resultats = []
     for item in payload:
@@ -1484,7 +1484,7 @@ def enregistrer_amrap_benchmark(
 ):
     evaluation = db.get(JournalEvaluationSeance, evaluation_id)
     if not evaluation or evaluation.utilisateur_id != current_user.id:
-        raise HTTPException(404, "Ã‰valuation introuvable")
+        raise HTTPException(404, "Évaluation introuvable")
 
     benchmark = ResultatAMRAPBenchmark(
         evaluation_id=evaluation_id,
@@ -1507,12 +1507,12 @@ def enregistrer_amrap_benchmark(
 
 
 # ---------------------------------------------------------------------------
-# Routes â€” Journalisation des sÃ©ances
+# Routes — Journalisation des séances
 # ---------------------------------------------------------------------------
 
 @app.post(
     "/api/seances/{seance_id}/journal",
-    summary="Journaliser une sÃ©ance complÃ©tÃ©e",
+    summary="Journaliser une séance complétée",
 )
 def journaliser_seance(
     seance_id: int,
@@ -1523,7 +1523,7 @@ def journaliser_seance(
     seance = _obtenir_seance_utilisateur(db, seance_id, current_user)
 
     if seance.journal:
-        raise HTTPException(409, "Journal dÃ©jÃ  crÃ©Ã© pour cette sÃ©ance â€” utilisez PATCH")
+        raise HTTPException(409, "Journal déjà créé pour cette séance — utilisez PATCH")
 
     # RPE cible automatique depuis la zone de la séance si non fourni
     _RPE_PAR_ZONE = {"Z1": 5.0, "Z2": 6.0, "Z3": 7.0, "Z4": 8.0, "Z5": 9.0}
@@ -1579,7 +1579,7 @@ class PrefillSeanceSchema(BaseModel):
 
 @app.post(
     "/api/seances/{seance_id}/journal/prefill",
-    summary="PrÃ©-remplit les mÃ©triques physiques â€” en attente du RPE",
+    summary="Pré-remplit les métriques physiques — en attente du RPE",
 )
 def prefill_seance(
     seance_id: int,
@@ -1639,7 +1639,7 @@ def _conseil_recuperation(rpe: float) -> dict:
 
 @app.patch(
     "/api/seances/{seance_id}/journal/valider",
-    summary="Finalise la sÃ©ance avec le RPE â€” marque completee=True",
+    summary="Finalise la séance avec le RPE — marque completee=True",
 )
 def valider_rpe(
     seance_id: int,
@@ -1649,7 +1649,7 @@ def valider_rpe(
 ):
     seance = _obtenir_seance_utilisateur(db, seance_id, current_user)
     if not seance.journal:
-        raise HTTPException(404, "Journal introuvable â€” lance d'abord un prefill")
+        raise HTTPException(404, "Journal introuvable — lance d'abord un prefill")
     seance.journal.rpe = payload.rpe
     seance.journal.notes = payload.notes
     seance.journal.completee = True
@@ -1659,7 +1659,7 @@ def valider_rpe(
 
 @app.delete(
     "/api/seances/{seance_id}/journal",
-    summary="Supprime le journal d'une sÃ©ance (annule la validation)",
+    summary="Supprime le journal d'une séance (annule la validation)",
 )
 def supprimer_journal_seance(
     seance_id: int,
@@ -1679,7 +1679,7 @@ class PlanifierSchema(BaseModel):
     heure_planifiee: Optional[str] = None  # "HH:MM" ou null
 
 
-@app.patch("/api/seances/{seance_id}/planifier", summary="Planifie ou dÃ©planifie une sÃ©ance")
+@app.patch("/api/seances/{seance_id}/planifier", summary="Planifie ou déplanifie une séance")
 def planifier_seance(
     seance_id: int,
     payload: PlanifierSchema,
@@ -1704,7 +1704,7 @@ class PushSubscribeSchema(BaseModel):
     auth: str
 
 
-@app.get("/api/push/vapid-public-key", summary="Retourne la clÃ© publique VAPID")
+@app.get("/api/push/vapid-public-key", summary="Retourne la clé publique VAPID")
 def get_vapid_public_key():
     return {"publicKey": _VAPID_PUBLIC}
 
@@ -1748,19 +1748,19 @@ def push_unsubscribe(
 
 
 
-@app.post("/api/push/test", summary="Envoie une notification push de test Ã  l'utilisateur connectÃ©")
+@app.post("/api/push/test", summary="Envoie une notification push de test à l'utilisateur connecté")
 def push_test(
     current_user: Utilisateur = Depends(get_current_user),
     db: Session = Depends(obtenir_session),
 ):
     if not _PUSH_ENABLED or not _VAPID_PRIVATE:
-        raise HTTPException(503, "Push non configurÃ© sur ce serveur")
+        raise HTTPException(503, "Push non configuré sur ce serveur")
     subs = db.query(PushSubscription).filter_by(utilisateur_id=current_user.id).all()
     if not subs:
-        raise HTTPException(404, "Aucun abonnement push enregistrÃ© pour cet utilisateur")
+        raise HTTPException(404, "Aucun abonnement push enregistré pour cet utilisateur")
     import json as _json
     payload = _json.dumps({
-        "title": "Coach EPC â€” Test ðŸ””",
+        "title": "Coach EPC — Test 🔔",
         "body": "Les notifications push fonctionnent correctement !",
         "tag": "test-push",
         "url": "/profil",
@@ -1789,7 +1789,7 @@ def push_test(
 
 @app.patch(
     "/api/seances/{seance_id}/journal",
-    summary="Modifie les donnÃ©es d'un journal existant",
+    summary="Modifie les données d'un journal existant",
 )
 def modifier_journal_seance(
     seance_id: int,
@@ -1835,34 +1835,34 @@ def _extraire_metriques_forme(texte: str) -> dict:
     """Parse le texte OCR d'un screenshot de l'app Forme (Apple Watch)."""
     metriques = {}
 
-    # DurÃ©e â€” ex. "40:00" ou "1:05:30"
+    # Durée — ex. "40:00" ou "1:05:30"
     m = re.search(r"\b(\d{1,2}):(\d{2})(?::(\d{2}))?\b", texte)
     if m:
         if m.group(3):
             metriques["duree_reelle_min"] = int(m.group(1)) * 60 + int(m.group(2))
         else:
             metriques["duree_reelle_min"] = int(m.group(1)) * 60 + int(m.group(2))
-            # Si format MM:SS et durÃ©e < 10 min, probablement des secondes
+            # Si format MM:SS et durée < 10 min, probablement des secondes
             if metriques["duree_reelle_min"] < 10:
                 metriques["duree_reelle_min"] = int(m.group(1))
 
-    # Distance â€” ex. "6,19 KM" ou "6.19 KM"
+    # Distance — ex. "6,19 KM" ou "6.19 KM"
     m = re.search(r"([\d][,\.][\d]+|\d+)\s*K[Mm]", texte)
     if m:
         metriques["distance_reelle_km"] = float(m.group(1).replace(",", "."))
 
-    # DÃ©nivelÃ© â€” ex. "DÃ©nivelÃ© : 19 M" ou "19 m"
-    m = re.search(r"[Dd][Ã©e]niv[eÃ©]l[eÃ©]\s*:?\s*(\d+)\s*[Mm]", texte)
+    # Dénivelé — ex. "Dénivelé : 19 M" ou "19 m"
+    m = re.search(r"[Dd][ée]niv[eé]l[eé]\s*:?\s*(\d+)\s*[Mm]", texte)
     if m:
         metriques["dplus_reel_m"] = int(m.group(1))
 
-    # FC moyenne â€” ex. "Moyenne : 153 BPM" (la premiÃ¨re occurrence)
+    # FC moyenne — ex. "Moyenne : 153 BPM" (la première occurrence)
     matches_bpm = re.findall(r"[Mm]oyenne\s*:?\s*(\d+)\s*[Bb][Pp][Mm]", texte)
     if matches_bpm:
         metriques["fc_moyenne_bpm"] = int(matches_bpm[0])
 
-    # FC max â€” ex. "89â€“165 BPM" ou "89-165 BPM"
-    m = re.search(r"(\d+)\s*[â€“-]\s*(\d+)\s*[Bb][Pp][Mm]", texte)
+    # FC max — ex. "89–165 BPM" ou "89-165 BPM"
+    m = re.search(r"(\d+)\s*[–-]\s*(\d+)\s*[Bb][Pp][Mm]", texte)
     if m:
         metriques["fc_max_bpm"] = int(m.group(2))
 
@@ -1871,7 +1871,7 @@ def _extraire_metriques_forme(texte: str) -> dict:
 
 @app.post(
     "/api/seances/{seance_id}/journal/analyse-screenshot",
-    summary="Analyse un screenshot Forme via OCR et prÃ©-remplit les mÃ©triques",
+    summary="Analyse un screenshot Forme via OCR et pré-remplit les métriques",
 )
 async def analyser_screenshot(
     seance_id: int,
@@ -1893,11 +1893,11 @@ async def analyser_screenshot(
         result, _ = ocr(arr)
         texte = "\n".join(r[1] for r in result) if result else ""
     except Exception as exc:
-        raise HTTPException(500, f"OCR Ã©chouÃ© : {exc}")
+        raise HTTPException(500, f"OCR échoué : {exc}")
 
     metriques = _extraire_metriques_forme(texte)
     if not metriques:
-        raise HTTPException(422, f"Aucune mÃ©trique dÃ©tectÃ©e. Texte extrait : {texte[:300]!r}")
+        raise HTTPException(422, f"Aucune métrique détectée. Texte extrait : {texte[:300]!r}")
 
     existing = seance.journal
     if existing:
@@ -1917,10 +1917,10 @@ async def analyser_screenshot(
 
 
 # ---------------------------------------------------------------------------
-# Routes â€” Semaine courante
+# Routes — Semaine courante
 # ---------------------------------------------------------------------------
 
-@app.get("/api/semaine-courante", summary="Retourne les sÃ©ances de la semaine en cours")
+@app.get("/api/semaine-courante", summary="Retourne les séances de la semaine en cours")
 def semaine_courante(current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
     aujourd_hui = date.today()
 
@@ -1936,7 +1936,7 @@ def semaine_courante(current_user: Utilisateur = Depends(get_current_user), db: 
     )
 
     if not semaine:
-        # Retourne la prochaine semaine Ã  venir si aucune en cours
+        # Retourne la prochaine semaine à venir si aucune en cours
         semaine = (
             db.query(SemaineEntrainement)
             .join(Macrocycle)
@@ -1949,7 +1949,7 @@ def semaine_courante(current_user: Utilisateur = Depends(get_current_user), db: 
         )
 
     if not semaine:
-        raise HTTPException(404, "Aucune semaine trouvÃ©e")
+        raise HTTPException(404, "Aucune semaine trouvée")
 
     mc = semaine.macrocycle
     return {
@@ -1960,7 +1960,7 @@ def semaine_courante(current_user: Utilisateur = Depends(get_current_user), db: 
         "macrocycle": {
             "id": mc.id,
             "numero_cycle": mc.numero_cycle,
-            "nom": {1: "Module 1 â€” Adaptation", 2: "Module 2 â€” RÃ©vÃ©lation", 3: "Module 3 â€” Confirmation"}.get(mc.numero_cycle, f"Module {mc.numero_cycle}"),
+            "nom": {1: "Module 1 — Adaptation", 2: "Module 2 — Révélation", 3: "Module 3 — Confirmation"}.get(mc.numero_cycle, f"Module {mc.numero_cycle}"),
         },
         "seances": [
             {
@@ -2004,12 +2004,12 @@ def semaine_courante(current_user: Utilisateur = Depends(get_current_user), db: 
 
 
 # ---------------------------------------------------------------------------
-# Routes â€” Macrocycles
+# Routes — Macrocycles
 # ---------------------------------------------------------------------------
 
 @app.get(
     "/api/macrocycles/{macrocycle_id}/semaines",
-    summary="RÃ©cupÃ©rer les semaines d'un macrocycle avec leurs sÃ©ances",
+    summary="Récupérer les semaines d'un macrocycle avec leurs séances",
 )
 def obtenir_semaines_macrocycle(
     macrocycle_id: int,
@@ -2067,12 +2067,12 @@ def obtenir_semaines_macrocycle(
 
 
 # ---------------------------------------------------------------------------
-# Routes â€” Analytique
+# Routes — Analytique
 # ---------------------------------------------------------------------------
 
 @app.get(
     "/api/analytics/tendances-physiologiques",
-    summary="Ã‰volution VMA et scores Max 1 min au fil des macrocycles",
+    summary="Évolution VMA et scores Max 1 min au fil des macrocycles",
 )
 def tendances_physiologiques(
     current_user: Utilisateur = Depends(get_current_user),
@@ -2083,7 +2083,7 @@ def tendances_physiologiques(
 
 @app.get(
     "/api/analytics/distribution-volume",
-    summary="KilomÃ©trage hebdomadaire, D+ cumulÃ© et rÃ©partition musculaire Push/Pull/Jambes",
+    summary="Kilométrage hebdomadaire, D+ cumulé et répartition musculaire Push/Pull/Jambes",
 )
 def distribution_volume(
     macrocycle_id: Optional[int] = Query(None),
@@ -2095,7 +2095,7 @@ def distribution_volume(
 
 @app.get(
     "/api/analytics/biometrie-recuperation",
-    summary="Tendance RPE et Ratio Charge AiguÃ«/Chronique (ACWA) avec alerte risque blessure",
+    summary="Tendance RPE et Ratio Charge Aiguë/Chronique (ACWA) avec alerte risque blessure",
 )
 def biometrie_recuperation(
     macrocycle_id: Optional[int] = Query(None),
@@ -2184,12 +2184,12 @@ SLUGS_EVALUATION = [
     "pistol-squat-droit",
 ]
 
-@app.get("/api/programme/toutes-semaines", summary="Toutes les semaines du programme â€” vue Ã  plat sans notion de module")
+@app.get("/api/programme/toutes-semaines", summary="Toutes les semaines du programme — vue à plat sans notion de module")
 def toutes_semaines_programme(current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
     user = current_user
     mcs = db.query(Macrocycle).filter(Macrocycle.utilisateur_id == user.id).order_by(Macrocycle.numero_cycle).all()
 
-    # Correction automatique du nombre de sÃ©ances par semaine (bulk SQL)
+    # Correction automatique du nombre de séances par semaine (bulk SQL)
     # Désactivée en mode manuel : l'utilisateur gère lui-même ses séances.
     try:
       if user.programme_auto:
@@ -2485,13 +2485,13 @@ def lister_macrocycles(current_user: Utilisateur = Depends(get_current_user), db
             "numero_cycle": mc.numero_cycle,
             "date_debut": str(mc.date_debut),
             "date_fin": str(mc.date_fin),
-            "nom": {1: "Module 1 â€” Adaptation", 2: "Module 2 â€” RÃ©vÃ©lation", 3: "Module 3 â€” Confirmation"}.get(mc.numero_cycle, f"Module {mc.numero_cycle}"),
+            "nom": {1: "Module 1 — Adaptation", 2: "Module 2 — Révélation", 3: "Module 3 — Confirmation"}.get(mc.numero_cycle, f"Module {mc.numero_cycle}"),
         }
         for mc in mcs
     ]
 
 
-@app.post("/api/admin/seed-seances", summary="GÃ©nÃ¨re toutes les sÃ©ances des 16 semaines EPC (2 macrocycles)")
+@app.post("/api/admin/seed-seances", summary="Génère toutes les séances des 16 semaines EPC (2 macrocycles)")
 def seed_seances_route(db: Session = Depends(obtenir_session), _admin: None = Depends(verifier_admin_token)):
     from seed_seances import seed_module1, seed_module2, seed_module3
     try:
@@ -2500,10 +2500,10 @@ def seed_seances_route(db: Session = Depends(obtenir_session), _admin: None = De
         seed_module3()
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Erreur seed : {exc}")
-    return {"message": "Seed terminÃ©."}
+    return {"message": "Seed terminé."}
 
 
-@app.post("/api/admin/init-macrocycles", summary="CrÃ©e les 2 macrocycles si absents (pour utilisateurs existants)")
+@app.post("/api/admin/init-macrocycles", summary="Crée les 2 macrocycles si absents (pour utilisateurs existants)")
 def init_macrocycles(utilisateur_id: int = Query(1), db: Session = Depends(obtenir_session), _admin: None = Depends(verifier_admin_token)):
     from models import Utilisateur, SemaineEntrainement
     from periodization_rules import BLUEPRINT_MACROCYCLE, generer_dates_semaines
@@ -2545,7 +2545,7 @@ def init_macrocycles(utilisateur_id: int = Query(1), db: Session = Depends(obten
     return {"macrocycles_crees": crees, "deja_existants": list(existants)}
 
 
-@app.post("/api/admin/reseed", summary="RÃ©insÃ¨re les exercices par dÃ©faut")
+@app.post("/api/admin/reseed", summary="Réinsère les exercices par défaut")
 def reseed(db: Session = Depends(obtenir_session), _admin: None = Depends(verifier_admin_token)):
     from models import VariationExercice
     from periodization_rules import EXERCICES_DEFAUT
@@ -2585,7 +2585,7 @@ def exercices_evaluation(db: Session = Depends(obtenir_session)):
 
 
 # ---------------------------------------------------------------------------
-# Objectif course â€” race goal
+# Objectif course — race goal
 # ---------------------------------------------------------------------------
 
 def _extraire_infos_course(url: str) -> dict:
@@ -2813,7 +2813,7 @@ def _allures_depuis_objectif(distance_km: float, objectif_temps_min: int) -> dic
     }
 
 
-@app.get("/api/objectif-course", summary="RÃ©cupÃ¨re le prochain objectif de course")
+@app.get("/api/objectif-course", summary="Récupère le prochain objectif de course")
 def get_objectif_course(current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
     obj = (
         db.query(ObjectifCourse)
@@ -2822,7 +2822,7 @@ def get_objectif_course(current_user: Utilisateur = Depends(get_current_user), d
         .first()
     )
     if not obj:
-        raise HTTPException(status_code=404, detail="Aucun objectif de course enregistrÃ©")
+        raise HTTPException(status_code=404, detail="Aucun objectif de course enregistré")
     jours_restants = (obj.date_course - date.today()).days
     allures = _allures_depuis_objectif(obj.distance_km, obj.objectif_temps_min)
     h, m = divmod(obj.objectif_temps_min, 60)
@@ -2851,7 +2851,7 @@ def set_objectif_course(
     try:
         date_course = datetime.strptime(payload.date_course, "%d/%m/%Y").date()
     except ValueError:
-        raise HTTPException(400, "Format de date invalide â€” attendu jj/mm/aaaa")
+        raise HTTPException(400, "Format de date invalide — attendu jj/mm/aaaa")
     obj = ObjectifCourse(
         utilisateur_id=current_user.id,
         nom=payload.nom,
@@ -2879,13 +2879,13 @@ def set_objectif_course(
 
 
 # ---------------------------------------------------------------------------
-# Admin â€” reset macrocycles (dates)
+# Admin — reset macrocycles (dates)
 # ---------------------------------------------------------------------------
 
-@app.post("/api/admin/reset-macrocycles", summary="RecrÃ©e les 3 macrocycles depuis la date indiquÃ©e")
+@app.post("/api/admin/reset-macrocycles", summary="Recrée les 3 macrocycles depuis la date indiquée")
 def reset_macrocycles(
     utilisateur_id: int = Query(1),
-    date_debut: Optional[str] = Query(None, description="Date dÃ©but au format jj/mm/aaaa (dÃ©faut : lundi prochain)"),
+    date_debut: Optional[str] = Query(None, description="Date début au format jj/mm/aaaa (défaut : lundi prochain)"),
     db: Session = Depends(obtenir_session),
     _admin: None = Depends(verifier_admin_token),
 ):
@@ -2901,7 +2901,7 @@ def reset_macrocycles(
         try:
             debut_mc1 = datetime.strptime(date_debut, "%d/%m/%Y").date()
         except ValueError:
-            raise HTTPException(400, "Format de date invalide â€” attendu jj/mm/aaaa")
+            raise HTTPException(400, "Format de date invalide — attendu jj/mm/aaaa")
     else:
         today = date.today()
         jours = (7 - today.weekday()) % 7 or 7  # lundi prochain
@@ -2941,20 +2941,20 @@ def reset_macrocycles(
 
     db.commit()
     return {
-        "message": "Macrocycles recrÃ©Ã©s. Lance maintenant /api/admin/seed-seances.",
+        "message": "Macrocycles recréés. Lance maintenant /api/admin/seed-seances.",
         "macrocycles": crees,
     }
 
 
 # ---------------------------------------------------------------------------
-# Programme â€” initialisation depuis l'UI
+# Programme — initialisation depuis l'UI
 # ---------------------------------------------------------------------------
 
 class InitProgrammePayload(BaseModel):
-    date_debut: str = Field(..., description="Date dÃ©but du programme (lundi) au format jj/mm/aaaa")
+    date_debut: str = Field(..., description="Date début du programme (lundi) au format jj/mm/aaaa")
 
 
-@app.get("/api/programme/statut", summary="Statut du programme : existe-t-il ? quelle date de dÃ©but ?")
+@app.get("/api/programme/statut", summary="Statut du programme : existe-t-il ? quelle date de début ?")
 def statut_programme(current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
     mcs = db.query(Macrocycle).filter(Macrocycle.utilisateur_id == current_user.id).order_by(Macrocycle.numero_cycle).all()
     if not mcs:
@@ -2979,17 +2979,17 @@ def statut_programme(current_user: Utilisateur = Depends(get_current_user), db: 
     }
 
 
-@app.post("/api/programme/corriger-seances", summary="Supprime les sÃ©ances en excÃ¨s pour respecter seances_semaine")
+@app.post("/api/programme/corriger-seances", summary="Supprime les séances en excès pour respecter seances_semaine")
 def corriger_seances(
     current_user: Utilisateur = Depends(get_current_user),
     db: Session = Depends(obtenir_session),
 ):
     """
-    Sans recrÃ©er le programme, retire les sÃ©ances course et muscu en surnombre
+    Sans recréer le programme, retire les séances course et muscu en surnombre
     pour que chaque semaine respecte seances_semaine total.
-    PrioritÃ© de suppression course : EF Z2 (jour le plus tÃ´t) en premier.
-    PrioritÃ© de suppression muscu  : complÃ©ment EMOM (titre contient '3e sÃ©ance') en premier.
-    SÃ©ances dÃ©jÃ  validÃ©es (journal) : jamais supprimÃ©es.
+    Priorité de suppression course : EF Z2 (jour le plus tôt) en premier.
+    Priorité de suppression muscu  : complément EMOM (titre contient '3e séance') en premier.
+    Séances déjà validées (journal) : jamais supprimées.
     """
     user = current_user
     n_muscu = user.seances_muscu_semaine or 2
@@ -3005,7 +3005,7 @@ def corriger_seances(
     supprimees = 0
     for sem in semaines:
         seances = db.query(SeanceEntrainement).filter(SeanceEntrainement.semaine_id == sem.id).all()
-        # Ne touche pas aux sÃ©ances dÃ©jÃ  validÃ©es
+        # Ne touche pas aux séances déjà validées
         non_validees = [s for s in seances if not s.journal]
 
         courses_nv = sorted(
@@ -3015,12 +3015,12 @@ def corriger_seances(
         muscu_types = {TypeSeance.EMOM, TypeSeance.AMRAP, TypeSeance.GYM_UPPER, TypeSeance.GYM_LOWER, TypeSeance.GYM_FULL}
         muscu_nv = [s for s in non_validees if s.type_seance in muscu_types]
 
-        # Supprimer l'excÃ¨s de course (du plus tÃ´t = EF au plus tard)
+        # Supprimer l'excès de course (du plus tôt = EF au plus tard)
         while len(courses_nv) > n_course:
             db.delete(courses_nv.pop(0))
             supprimees += 1
 
-        # Supprimer l'excÃ¨s de muscu (complÃ©ment EMOM en prioritÃ© = titre contient '3e')
+        # Supprimer l'excès de muscu (complément EMOM en priorité = titre contient '3e')
         total_muscu_target = seances_total - n_course
         muscu_nv_sorted = sorted(muscu_nv, key=lambda s: (0 if "3e" in (s.titre or "") else 1))
         while len(muscu_nv_sorted) > total_muscu_target:
@@ -3031,16 +3031,16 @@ def corriger_seances(
     return {"ok": True, "seances_supprimees": supprimees, "n_course_cible": n_course, "n_muscu_cible": total_muscu_target}
 
 
-@app.delete("/api/programme", summary="Supprime tous les macrocycles et sÃ©ances de l'utilisateur")
+@app.delete("/api/programme", summary="Supprime tous les macrocycles et séances de l'utilisateur")
 def supprimer_programme(current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
     mcs = db.query(Macrocycle).filter(Macrocycle.utilisateur_id == current_user.id).all()
     for mc in mcs:
         db.delete(mc)
     db.commit()
-    return {"message": f"{len(mcs)} macrocycle(s) supprimÃ©(s)."}
+    return {"message": f"{len(mcs)} macrocycle(s) supprimé(s)."}
 
 
-@app.post("/api/programme/initialiser", summary="GÃ©nÃ¨re le programme depuis la date choisie dans l'UI")
+@app.post("/api/programme/initialiser", summary="Génère le programme depuis la date choisie dans l'UI")
 def initialiser_programme(payload: InitProgrammePayload, current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
     from models import SemaineEntrainement
     from periodization_rules import (
@@ -3056,10 +3056,10 @@ def initialiser_programme(payload: InitProgrammePayload, current_user: Utilisate
     try:
         debut_mc1 = datetime.strptime(payload.date_debut, "%d/%m/%Y").date()
     except ValueError:
-        raise HTTPException(400, "Format de date invalide â€” attendu jj/mm/aaaa")
+        raise HTTPException(400, "Format de date invalide — attendu jj/mm/aaaa")
 
     if debut_mc1.weekday() != 0:
-        raise HTTPException(400, "La date de dÃ©but doit Ãªtre un lundi")
+        raise HTTPException(400, "La date de début doit être un lundi")
 
     user = current_user
 
@@ -3076,15 +3076,15 @@ def initialiser_programme(payload: InitProgrammePayload, current_user: Utilisate
     db.flush()
 
     try:
-        # â”€â”€ CAS 1 : course planifiÃ©e â†’ programme adaptatif N semaines â”€â”€â”€â”€â”€â”€â”€
+        # ── CAS 1 : course planifiée → programme adaptatif N semaines ───────
         if obj:
             n_semaines = (obj.date_course - debut_mc1).days // 7
             if n_semaines < 4:
-                raise HTTPException(400, f"La course est dans {n_semaines} semaine(s) â€” trop proche (minimum 4 semaines).")
+                raise HTTPException(400, f"La course est dans {n_semaines} semaine(s) — trop proche (minimum 4 semaines).")
 
             n_surcharge = n_semaines - 3
 
-            # Calibration v2 avant blueprint (progression individualisÃ©e)
+            # Calibration v2 avant blueprint (progression individualisée)
             historique = {}
             if user.historique_perf:
                 import json as _json
@@ -3102,7 +3102,7 @@ def initialiser_programme(payload: InitProgrammePayload, current_user: Utilisate
             blueprint = generer_blueprint_course_v2(n_semaines, cal)
             dates = [debut_mc1 + timedelta(weeks=i) for i in range(n_semaines)]
 
-            # Injection des semaines d'Ã©valuation dans le blueprint (AVANT insertion en BDD)
+            # Injection des semaines d'évaluation dans le blueprint (AVANT insertion en BDD)
             eval_freq = user.frequence_tests_semaines or 8
             for regle in blueprint:
                 if regle.numero <= n_surcharge and regle.numero % eval_freq == 0:
@@ -3177,10 +3177,10 @@ def initialiser_programme(payload: InitProgrammePayload, current_user: Utilisate
             content[n_surcharge + 2] = _semaine_taper_course()
             content[n_semaines]      = _semaine_course(obj.date_course, obj.nom)
 
-            # Adaptation au profil (spÃ©cificitÃ© distance, sortie longue, variantes, terrain)
+            # Adaptation au profil (spécificité distance, sortie longue, variantes, terrain)
             content = appliquer_profil_au_contenu(content, profil, cal, progress_map)
 
-            # Enrichissement allures rÃ©elles
+            # Enrichissement allures réelles
             if vma_init and vma_init >= 5.0:
                 content = enrichir_paces_vma(content, vma_init)
 
@@ -3194,12 +3194,12 @@ def initialiser_programme(payload: InitProgrammePayload, current_user: Utilisate
             db.commit()
 
             return {
-                "message": f"Programme orientÃ© course gÃ©nÃ©rÃ© : {n_semaines} semaines ({n_surcharge} de build + 2 de taper + semaine course).",
+                "message": f"Programme orienté course généré : {n_semaines} semaines ({n_surcharge} de build + 2 de taper + semaine course).",
                 "semaines_totales": n_semaines,
                 "course": obj.nom,
             }
 
-        # â”€â”€ CAS 2 : pas de course â†’ programme standard 3 Ã— 8 semaines â”€â”€â”€â”€â”€â”€â”€
+        # ── CAS 2 : pas de course → programme standard 3 × 8 semaines ───────
         # Recalibration si historique dispo
         historique_std = {}
         if user.historique_perf:
@@ -3272,7 +3272,7 @@ def initialiser_programme(payload: InitProgrammePayload, current_user: Utilisate
 
         db.commit()
         return {
-            "message": "Programme performance gÃ©nÃ©rale gÃ©nÃ©rÃ© : 3 modules Ã— 8 semaines.",
+            "message": "Programme performance générale généré : 3 modules × 8 semaines.",
             "semaines_totales": 24,
         }
 
@@ -3280,11 +3280,11 @@ def initialiser_programme(payload: InitProgrammePayload, current_user: Utilisate
         raise
     except Exception as exc:
         db.rollback()
-        raise HTTPException(500, detail=f"Erreur gÃ©nÃ©ration : {type(exc).__name__}: {exc}")
+        raise HTTPException(500, detail=f"Erreur génération : {type(exc).__name__}: {exc}")
 
 
 # ---------------------------------------------------------------------------
-# Intelligence sportive â€” analyse objectif + recalibration
+# Intelligence sportive — analyse objectif + recalibration
 # ---------------------------------------------------------------------------
 
 @app.get("/api/programme/analyse-objectif", summary="Analyse VMA cible vs actuelle pour l'objectif en cours")
@@ -3326,7 +3326,7 @@ def analyse_objectif(
             "atteignable" if delta is not None and delta <= 0 else
             "ambitieux" if delta is not None and delta <= 1.5 else
             "challenge" if delta is not None and delta <= 3.5 else
-            "trÃ¨s ambitieux"
+            "très ambitieux"
         )
 
         allures_train = None
@@ -3371,11 +3371,11 @@ def analyse_objectif(
     except Exception as exc:
         import traceback
         traceback.print_exc()
-        # Retourner un rÃ©sultat vide plutÃ´t qu'un 500 pour ne pas bloquer le Dashboard
+        # Retourner un résultat vide plutôt qu'un 500 pour ne pas bloquer le Dashboard
         return {"objectif": None, "vma_actuelle": None, "vma_requise": None, "delta_vma": None, "_error": str(exc)}
 
 
-@app.get("/api/programme/alerte-fatigue", summary="DÃ©tecte une fatigue excessive sur les 3 derniÃ¨res sÃ©ances")
+@app.get("/api/programme/alerte-fatigue", summary="Détecte une fatigue excessive sur les 3 dernières séances")
 def alerte_fatigue(
     current_user: Utilisateur = Depends(get_current_user),
     db: Session = Depends(obtenir_session),
@@ -3396,7 +3396,7 @@ def alerte_fatigue(
         return {
             "alerte": True,
             "rpe_moyen": rpe_moyen,
-            "message": f"RPE moyen de {rpe_moyen}/10 sur tes 3 derniÃ¨res sÃ©ances. Une semaine de dÃ©charge est recommandÃ©e.",
+            "message": f"RPE moyen de {rpe_moyen}/10 sur tes 3 dernières séances. Une semaine de décharge est recommandée.",
         }
     return {"alerte": False}
 
@@ -3682,42 +3682,42 @@ def corriger_emom_3e_seance(
     return {"ok": True, "nb_semaines_corrigees": nb_corriges}
 
 
-@app.post("/api/programme/recalibrer", summary="Recalibre les sÃ©ances restantes aprÃ¨s un test d'Ã©valuation")
+@app.post("/api/programme/recalibrer", summary="Recalibre les séances restantes après un test d'évaluation")
 def recalibrer_programme(
     current_user: Utilisateur = Depends(get_current_user),
     db: Session = Depends(obtenir_session),
 ):
     """
-    AprÃ¨s une semaine d'Ã©valuation, met Ã  jour la VMA et recalibre
-    les descriptions de toutes les sÃ©ances de course futures avec les nouvelles allures.
+    Après une semaine d'évaluation, met à jour la VMA et recalibre
+    les descriptions de toutes les séances de course futures avec les nouvelles allures.
     """
     from datetime import date as date_cls
     from seed_seances import enrichir_paces_vma, calculer_paces_vma
 
-    # VMA la plus rÃ©cente
+    # VMA la plus récente
     bio = db.query(BiometrieUtilisateur).filter(
         BiometrieUtilisateur.utilisateur_id == current_user.id
     ).order_by(BiometrieUtilisateur.enregistre_le.desc()).first()
     if not bio:
-        raise HTTPException(400, "Aucune biomÃ©trie disponible. Effectuez d'abord un test Demi-Cooper.")
+        raise HTTPException(400, "Aucune biométrie disponible. Effectuez d'abord un test Demi-Cooper.")
 
     vma = bio.vma_kmh
     if not vma or vma < 5.0:
-        raise HTTPException(400, "VMA invalide ou non calculÃ©e.")
+        raise HTTPException(400, "VMA invalide ou non calculée.")
 
     paces = calculer_paces_vma(vma)
     zone_prefix = {
-        "Z1": f"â”€â”€ Coach ({vma:.1f} km/h VMA) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€\nAllure cible : {paces['Z1']} (Z1 â€” rÃ©cupÃ©ration â€” 60-65% VMA)\nâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€\n",
-        "Z2": f"â”€â”€ Coach ({vma:.1f} km/h VMA) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€\nAllure cible : {paces['Z2']} (Z2 â€” endurance fond. â€” 65-75% VMA)\nâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€\n",
-        "Z3": f"â”€â”€ Coach ({vma:.1f} km/h VMA) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€\nAllure cible : {paces['Z3']} (Z3 â€” tempo â€” 75-85% VMA)\nâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€\n",
-        "Z4": f"â”€â”€ Coach ({vma:.1f} km/h VMA) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€\nAllure cible : {paces['Z4']} (Z4 â€” seuil lactique â€” 85-95% VMA)\nâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€\n",
-        "Z5": f"â”€â”€ Coach ({vma:.1f} km/h VMA) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€\nAllure effort : {paces['Z5']} (Z5 â€” VOâ‚‚max â€” 100-105% VMA)\nAllure rÃ©cup  : {paces['recup']} (Z1)\nâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€\n",
+        "Z1": f"── Coach ({vma:.1f} km/h VMA) ────────────────\nAllure cible : {paces['Z1']} (Z1 — récupération — 60-65% VMA)\n──────────────────────────────────────\n",
+        "Z2": f"── Coach ({vma:.1f} km/h VMA) ────────────────\nAllure cible : {paces['Z2']} (Z2 — endurance fond. — 65-75% VMA)\n──────────────────────────────────────\n",
+        "Z3": f"── Coach ({vma:.1f} km/h VMA) ────────────────\nAllure cible : {paces['Z3']} (Z3 — tempo — 75-85% VMA)\n──────────────────────────────────────\n",
+        "Z4": f"── Coach ({vma:.1f} km/h VMA) ────────────────\nAllure cible : {paces['Z4']} (Z4 — seuil lactique — 85-95% VMA)\n──────────────────────────────────────\n",
+        "Z5": f"── Coach ({vma:.1f} km/h VMA) ────────────────\nAllure effort : {paces['Z5']} (Z5 — VO₂max — 100-105% VMA)\nAllure récup  : {paces['recup']} (Z1)\n──────────────────────────────────────\n",
     }
 
     today = date_cls.today()
     updated = 0
 
-    # Mettre Ã  jour toutes les sÃ©ances de course futures
+    # Mettre à jour toutes les séances de course futures
     mcs = db.query(Macrocycle).filter(Macrocycle.utilisateur_id == current_user.id).all()
     for mc in mcs:
         for semaine in mc.semaines:
@@ -3732,9 +3732,9 @@ def recalibrer_programme(
                     continue
                 # Supprimer l'ancien bloc Coach s'il existe
                 desc = seance.description or ""
-                coach_end = desc.find("â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€\n")
-                if coach_end >= 0 and "â”€â”€ Coach" in desc[:coach_end]:
-                    desc = desc[coach_end + len("â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€\n"):]
+                coach_end = desc.find("──────────────────────────────────────\n")
+                if coach_end >= 0 and "── Coach" in desc[:coach_end]:
+                    desc = desc[coach_end + len("──────────────────────────────────────\n"):]
                 seance.description = prefix + desc
                 updated += 1
 
@@ -3748,17 +3748,17 @@ def recalibrer_programme(
             "Z5": paces["Z5"],
         },
         "seances_mises_a_jour": updated,
-        "message": f"Recalibration effectuÃ©e avec VMA {vma:.1f} km/h. {updated} sÃ©ance(s) de course mises Ã  jour.",
+        "message": f"Recalibration effectuée avec VMA {vma:.1f} km/h. {updated} séance(s) de course mises à jour.",
     }
 
 
 # ---------------------------------------------------------------------------
-# SantÃ©
+# Santé
 # ---------------------------------------------------------------------------
 
 @app.get("/", include_in_schema=False)
 def racine():
-    return {"statut": "Coach EPC opÃ©rationnel", "docs": "/docs"}
+    return {"statut": "Coach EPC opérationnel", "docs": "/docs"}
 
 
 @app.get("/health", include_in_schema=False)
@@ -3767,13 +3767,13 @@ def sante():
 
 
 # ---------------------------------------------------------------------------
-# Migration donnÃ©es historiques â†’ nouveau compte
+# Migration données historiques → nouveau compte
 # ---------------------------------------------------------------------------
 
 class MigrationSchema(BaseModel):
     ancien_user_id: int = 1
 
-@app.post("/api/admin/migrer-donnees", summary="RÃ©affecte les donnÃ©es d'un ancien compte vers le compte connectÃ©")
+@app.post("/api/admin/migrer-donnees", summary="Réaffecte les données d'un ancien compte vers le compte connecté")
 def migrer_donnees(
     payload: MigrationSchema,
     current_user: Utilisateur = Depends(get_current_user),
@@ -3791,7 +3791,7 @@ def migrer_donnees(
 
     stats = {}
 
-    # Macrocycles (cascade : SemaineEntrainement â†’ SeanceEntrainement)
+    # Macrocycles (cascade : SemaineEntrainement → SeanceEntrainement)
     mcs = db.query(Macrocycle).filter(Macrocycle.utilisateur_id == ancien_id).all()
     for mc in mcs:
         mc.utilisateur_id = nouveau_id
