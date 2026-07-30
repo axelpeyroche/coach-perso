@@ -1217,11 +1217,26 @@ export default function Programme() {
     <div className="p-4 md:p-8 w-full space-y-5 min-w-0">
 
       {/* En-tête */}
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Programme</h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
-          {semaines.length} semaines au total
-        </p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Programme</h2>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+            {semaines.length} semaines au total
+          </p>
+        </div>
+        {semaines.length > 6 && (
+          <select
+            value={idx}
+            onChange={(e) => setSemIdx(Number(e.target.value))}
+            aria-label="Aller directement à une semaine"
+            className="text-xs px-2.5 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 focus:outline-none focus:ring-2 focus:ring-brand shrink-0">
+            {semaines.map((s, i) => (
+              <option key={s.semaine_globale} value={i}>
+                Semaine {s.semaine_globale}{i === idxCourant ? " (en cours)" : ""}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
 
       {/* Sélecteur semaine — scroll horizontal, drag souris desktop */}
