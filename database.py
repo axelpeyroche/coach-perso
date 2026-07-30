@@ -68,6 +68,8 @@ def creer_tables() -> None:
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS programme_auto BOOLEAN DEFAULT TRUE",
         # Nombre de séances vélo par semaine
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS seances_velo_semaine INTEGER",
+        # Photo de profil (remplace le stockage localStorage côté frontend)
+        "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS photo_url TEXT",
         # Index sur les clés étrangères — accélère les requêtes filtrées par
         # utilisateur/séance/évaluation, absentes des tables déjà existantes
         # en production (Base.metadata.create_all ne les crée que sur les

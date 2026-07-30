@@ -424,6 +424,7 @@ def me(current_user: Utilisateur = Depends(get_current_user), db: Session = Depe
         "date_naissance": str(dn) if dn else None,
         "age": age,
         "poids_kg": current_user.poids_kg,
+        "photo_url": current_user.photo_url,
         "fc_max": current_user.fc_max,
         "fc_repos": current_user.fc_repos,
         "vma_kmh": round(derniere_bio.vma_kmh, 1) if derniere_bio else None,
@@ -471,6 +472,7 @@ def reset_onboarding(current_user: Utilisateur = Depends(get_current_user), db: 
         "date_naissance": str(dn) if dn else None,
         "age": age,
         "poids_kg": current_user.poids_kg,
+        "photo_url": current_user.photo_url,
         "fc_max": current_user.fc_max,
         "fc_repos": current_user.fc_repos,
         "onboarding_complet": False,
@@ -1255,6 +1257,30 @@ def patch_utilisateur_infos(
                 raise HTTPException(400, "Format date invalide, attendu YYYY-MM-DD")
         else:
             current_user.date_naissance = None
+    db.commit()
+    return {"ok": True}
+
+
+# Pas de stockage objet dédié (S3, etc.) : la photo est enregistrée telle
+# quelle en base sous forme de data URL, d'où la limite de taille stricte.
+MAX_PHOTO_DATA_URL_LEN = 2_000_000  # ~1,5 Mo décodé
+
+class PhotoSchema(BaseModel):
+    photo_url: Optional[str] = None
+
+@app.patch("/api/utilisateur/photo", summary="Met à jour (ou supprime) la photo de profil")
+def patch_utilisateur_photo(
+    payload: PhotoSchema,
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(obtenir_session),
+):
+    photo = payload.photo_url
+    if photo:
+        if not photo.startswith("data:image/"):
+            raise HTTPException(400, "Format de photo invalide")
+        if len(photo) > MAX_PHOTO_DATA_URL_LEN:
+            raise HTTPException(413, "Photo trop grande (max environ 1,5 Mo)")
+    current_user.photo_url = photo
     db.commit()
     return {"ok": True}
 

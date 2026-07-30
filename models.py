@@ -130,6 +130,9 @@ class Utilisateur(Base):
     fc_repos: Mapped[Optional[int]] = mapped_column(Integer, comment="FC de repos (bpm)")
     poids_kg: Mapped[Optional[float]] = mapped_column(Float, comment="Poids corporel (kg)")
 
+    # Photo de profil (data URL base64, cf. absence de stockage objet dédié)
+    photo_url: Mapped[Optional[str]] = mapped_column(Text)
+
     # Relations
     biometries: Mapped[list["BiometrieUtilisateur"]] = relationship(
         back_populates="utilisateur",

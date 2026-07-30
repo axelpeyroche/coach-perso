@@ -90,36 +90,48 @@ function PushToggle() {
 }
 
 // ── Avatar ─────────────────────────────────────────────────────────────────
-function Avatar({ userId, initials }) {
-  const [photo, setPhoto] = useState(null);
+const MAX_PHOTO_FILE_BYTES = 1_500_000; // ~2 Mo une fois encodée en base64, cf. limite backend
+
+function Avatar({ initials, photoUrl, onPhotoChange }) {
+  const [photo, setPhoto] = useState(photoUrl || null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [errMsg, setErrMsg] = useState("");
   const galleryRef = useRef(null);
   const cameraRef = useRef(null);
 
   useEffect(() => {
-    if (userId) {
-      const stored = localStorage.getItem(`profilePhoto_${userId}`);
-      if (stored) setPhoto(stored);
+    setPhoto(photoUrl || null);
+  }, [photoUrl]);
+
+  async function savePhoto(dataUrl) {
+    setErrMsg("");
+    try {
+      await api.patch("/utilisateur/photo", { photo_url: dataUrl });
+      setPhoto(dataUrl);
+      onPhotoChange?.(dataUrl);
+    } catch (e) {
+      setErrMsg(getErrorMessage(e, "Erreur lors de l'enregistrement de la photo"));
     }
-  }, [userId]);
+  }
 
   function handleFile(e) {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.size > MAX_PHOTO_FILE_BYTES) {
+      setErrMsg("Photo trop grande (max environ 1,5 Mo)");
+      setMenuOpen(false);
+      e.target.value = "";
+      return;
+    }
     const reader = new FileReader();
-    reader.onload = ev => {
-      const dataUrl = ev.target.result;
-      setPhoto(dataUrl);
-      localStorage.setItem(`profilePhoto_${userId}`, dataUrl);
-    };
+    reader.onload = ev => savePhoto(ev.target.result);
     reader.readAsDataURL(file);
     setMenuOpen(false);
     e.target.value = "";
   }
 
   function removePhoto() {
-    setPhoto(null);
-    localStorage.removeItem(`profilePhoto_${userId}`);
+    savePhoto(null);
     setMenuOpen(false);
   }
 
@@ -175,6 +187,8 @@ function Avatar({ userId, initials }) {
 
       <input ref={galleryRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
       <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFile} />
+
+      {errMsg && <p className="absolute top-full mt-1 left-1/2 -translate-x-1/2 w-40 text-[11px] text-red-400 text-center leading-tight">{errMsg}</p>}
     </div>
   );
 }
@@ -838,7 +852,11 @@ export default function Profil({ dark, setDark }) {
 
       {/* Avatar + nom */}
       <div className="flex flex-col items-center mb-6">
-        <Avatar userId={user?.id} initials={initials} />
+        <Avatar
+          initials={initials}
+          photoUrl={user?.photo_url}
+          onPhotoChange={(url) => setUser(u => u ? { ...u, photo_url: url } : u)}
+        />
         <h1 className="text-xl font-bold text-gray-900 dark:text-white mt-3">{user?.prenom} {user?.nom}</h1>
         <p className="text-sm text-gray-400 mt-0.5">{user?.email}</p>
       </div>
