@@ -12,6 +12,7 @@ import {
 import Card from "../components/Card";
 import clsx from "clsx";
 import { useAuth } from "../AuthContext";
+import { getErrorMessage } from "../utils/errors";
 
 function LineCursor({ x, y, width, height }) {
   return <line x1={x + width / 2} y1={y} x2={x + width / 2} y2={y + height} stroke="#9ca3af" strokeWidth={1} />;
@@ -120,7 +121,7 @@ function ModalAjoutPoids({ dernier, onClose }) {
       setUser(u => u ? { ...u, poids_kg: data.poids_kg } : u);
       onClose();
     },
-    onError: () => setErr("Erreur — réessaie"),
+    onError: (e) => setErr(getErrorMessage(e, "Erreur — réessaie")),
   });
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={onClose}>

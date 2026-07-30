@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getSemaineCourante, journaliserSeance } from "../api";
 import Card from "../components/Card";
 import clsx from "clsx";
+import { getErrorMessage } from "../utils/errors";
 
 
 const TYPE_ICONS = { COURSE: "🏃", AMRAP: "🔥", EMOM: "⏱️", EVALUATION: "🎯", DECHARGE: "🧘", REPOS: "😴" };
@@ -176,7 +177,9 @@ function FormulaireSeance({ seance, onSuccess }) {
       </button>
 
       {mutation.isError && (
-        <p className="text-xs text-red-500 text-center">Erreur API — réessaie ou vérifie la connexion.</p>
+        <p className="text-xs text-red-500 text-center">
+          {getErrorMessage(mutation.error, "Erreur — réessaie ou vérifie la connexion.")}
+        </p>
       )}
     </div>
   );

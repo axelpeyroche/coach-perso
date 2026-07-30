@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import api from "../api";
 import { getImportToken, regenererImportToken } from "../api";
+import { getErrorMessage } from "../utils/errors";
 
 function urlBase64ToUint8Array(b64) {
   const pad = "=".repeat((4 - (b64.length % 4)) % 4);
@@ -60,8 +61,7 @@ function PushToggle() {
         setStatus("on");
       }
     } catch (e) {
-      const msg = e?.response?.data?.detail || e?.message || String(e);
-      setErrMsg(msg);
+      setErrMsg(getErrorMessage(e, "Erreur lors de l'activation des notifications"));
       setStatus("off");
     }
   }
@@ -237,7 +237,7 @@ function EditInfosModal({ user, onClose, onSaved }) {
       }
       onClose();
     } catch (e) {
-      setErr(e?.response?.data?.detail || "Erreur — réessaie");
+      setErr(getErrorMessage(e, "Erreur — réessaie"));
     } finally {
       setSaving(false);
     }
@@ -296,7 +296,7 @@ function EditPasswordModal({ onClose }) {
       });
       setDone(true);
     } catch (e) {
-      setErr(e?.response?.data?.detail || "Erreur — réessaie");
+      setErr(getErrorMessage(e, "Erreur — réessaie"));
     } finally {
       setSaving(false);
     }
@@ -373,7 +373,7 @@ function EditProgrammeModal({ user, onClose, onSaved }) {
       }
       setDone(true);
     } catch (e) {
-      setErr(e?.response?.data?.detail || "Erreur — réessaie");
+      setErr(getErrorMessage(e, "Erreur — réessaie"));
     } finally {
       setSaving(false);
     }

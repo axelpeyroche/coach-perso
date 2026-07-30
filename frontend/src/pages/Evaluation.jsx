@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getHistoriqueEvaluations, modifierEvaluation, supprimerEvaluation } from "../api";
 import Card from "../components/Card";
 import clsx from "clsx";
+import { getErrorMessage } from "../utils/errors";
 
 
 function ModalEditerEval({ ev, onClose }) {
@@ -97,7 +98,11 @@ function ModalEditerEval({ ev, onClose }) {
             {saveMut.isPending ? "…" : "Enregistrer"}
           </button>
         </div>
-        {(saveMut.isError || deleteMut.isError) && <p className="text-xs text-red-500 text-center">Erreur — réessaie.</p>}
+        {(saveMut.isError || deleteMut.isError) && (
+          <p className="text-xs text-red-500 text-center">
+            {getErrorMessage(saveMut.error || deleteMut.error, "Erreur — réessaie.")}
+          </p>
+        )}
       </div>
     </div>
   );

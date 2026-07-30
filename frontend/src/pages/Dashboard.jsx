@@ -6,6 +6,7 @@ import { useAuth } from "../AuthContext";
 import Card from "../components/Card";
 import StatTile from "../components/StatTile";
 import clsx from "clsx";
+import { getErrorMessage } from "../utils/errors";
 
 
 const ZONE_COLORS = {
@@ -86,7 +87,7 @@ function FormulaireObjectif({ onClose }) {
             </p>
           )}
           {mutExtraire.isError && (
-            <p className="text-xs mt-1 text-red-500">{mutExtraire.error?.response?.data?.detail ?? "Impossible de récupérer les infos"}</p>
+            <p className="text-xs mt-1 text-red-500">{getErrorMessage(mutExtraire.error, "Impossible de récupérer les infos")}</p>
           )}
         </div>
         <div>
@@ -135,7 +136,7 @@ function FormulaireObjectif({ onClose }) {
             className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
         </div>
       </div>
-      {mut.isError && <p className="text-xs text-red-500">{mut.error?.message ?? "Erreur"}</p>}
+      {mut.isError && <p className="text-xs text-red-500">{getErrorMessage(mut.error, "Erreur lors de l'enregistrement de l'objectif")}</p>}
       <div className="flex gap-2">
         <button onClick={onClose}
           className="flex-1 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-sm text-gray-500">Annuler</button>
@@ -270,7 +271,7 @@ function BlocAnalyseObjectif() {
       qc.invalidateQueries({ queryKey: ["analyse-objectif"] });
       alert(`Recalibration OK — VMA ${data.vma} km/h\nZ2 : ${data.allures.Z2} · Z4 : ${data.allures.Z4} · Z5 : ${data.allures.Z5}\n${data.seances_mises_a_jour} séance(s) mises à jour.`);
     },
-    onError: (e) => alert(e?.response?.data?.detail ?? "Erreur recalibration"),
+    onError: (e) => alert(getErrorMessage(e, "Erreur recalibration")),
   });
 
   if (isLoading || !analyse?.objectif) return null;
@@ -386,7 +387,7 @@ function BlocObjectifComplet({ vma }) {
       qc.invalidateQueries({ queryKey: ["analyse-objectif"] });
       alert(`Recalibration OK — VMA ${data.vma} km/h\nZ2 : ${data.allures.Z2} · Z4 : ${data.allures.Z4} · Z5 : ${data.allures.Z5}\n${data.seances_mises_a_jour} séance(s) mises à jour.`);
     },
-    onError: (e) => alert(e?.response?.data?.detail ?? "Erreur recalibration"),
+    onError: (e) => alert(getErrorMessage(e, "Erreur recalibration")),
   });
 
   if (isLoading) return null;
@@ -706,7 +707,7 @@ function BlessureModal({ onClose }) {
       const finStr = fin.toLocaleDateString("fr-FR", { day: "numeric", month: "long" });
       alert(`Blessure enregistrée — repos affiché dans le calendrier jusqu'au ${finStr}.`);
     },
-    onError: (e) => alert(e?.response?.data?.detail ?? "Erreur lors de la mise à jour"),
+    onError: (e) => alert(getErrorMessage(e, "Erreur lors de la mise à jour")),
   });
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -797,7 +798,7 @@ function ModalReconfigurer({ onClose }) {
       setUser(userData);
       navigate("/onboarding");
     },
-    onError: (e) => alert(e?.response?.data?.detail ?? "Erreur lors de la suppression du programme"),
+    onError: (e) => alert(getErrorMessage(e, "Erreur lors de la suppression du programme")),
   });
 
   const inputCls = "w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand";
@@ -873,7 +874,7 @@ function ModalReconfigurer({ onClose }) {
             </div>
 
             {mutModifier.isError && (
-              <p className="text-xs text-red-500">{mutModifier.error?.response?.data?.detail ?? "Erreur de génération"}</p>
+              <p className="text-xs text-red-500">{getErrorMessage(mutModifier.error, "Erreur de génération")}</p>
             )}
 
             <button
@@ -1046,10 +1047,9 @@ function SetupProgramme({ objectifCourse, onDone }) {
 
         {mut.isError && (
           <p className="text-xs text-red-500">
-            {mut.error?.response?.data?.detail
-              || (mut.error?.code === "ECONNABORTED" ? "Timeout — le serveur met trop longtemps à répondre. Réessaie." : null)
-              || mut.error?.message
-              || "Erreur inconnue"}
+            {mut.error?.code === "ECONNABORTED"
+              ? "Timeout — le serveur met trop longtemps à répondre. Réessaie."
+              : getErrorMessage(mut.error, "Erreur lors de la génération du programme")}
           </p>
         )}
         {mut.isSuccess && (

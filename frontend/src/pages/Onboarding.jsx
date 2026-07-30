@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import clsx from "clsx";
 import { useAuth } from "../AuthContext";
 import api from "../api";
+import { getErrorMessage } from "../utils/errors";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -491,7 +492,7 @@ export default function Onboarding() {
       setUser(me.data);
       navigate("/");
     } catch (e) {
-      setErr(e?.response?.data?.detail ?? "Erreur lors de la configuration");
+      setErr(getErrorMessage(e, "Erreur lors de la configuration"));
     } finally {
       setLoading(false);
     }

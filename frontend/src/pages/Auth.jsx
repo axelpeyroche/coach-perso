@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import clsx from "clsx";
 import { useAuth } from "../AuthContext";
 import api from "../api";
+import { getErrorMessage } from "../utils/errors";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -53,7 +54,7 @@ function FormLogin({ onSwitch }) {
       if (!r.data.onboarding_complet) navigate("/onboarding");
       else navigate("/");
     } catch (e) {
-      setErr(e?.response?.data?.detail ?? "Erreur de connexion");
+      setErr(getErrorMessage(e, "Erreur de connexion"));
     } finally {
       setLoading(false);
     }
@@ -102,17 +103,7 @@ function FormRegister({ onSwitch, onSuccess }) {
       const r = await api.post("/auth/register", payload);
       onSuccess(r.data.access_token);
     } catch (e) {
-      const status = e?.response?.status;
-      const detail = e?.response?.data?.detail;
-      if (!e?.response) {
-        setErr("Impossible de contacter le serveur — vérifie ta connexion");
-      } else if (status === 422) {
-        setErr("Données invalides — vérifie les champs");
-      } else if (typeof detail === "string") {
-        setErr(detail);
-      } else {
-        setErr(`Erreur ${status ?? "?"} lors de l'inscription`);
-      }
+      setErr(getErrorMessage(e, "Erreur lors de l'inscription"));
     } finally {
       setLoading(false);
     }

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient, keepPreviousData } from "@tansta
 import api, { getToutesSemaines, journaliserSeance, validerRPE, getProfilFC, supprimerJournal, modifierJournal, planifierSeance, creerEvaluation, enregistrerDemiCooper, enregistrerMax1Min, enregistrerAmrapBenchmark, getExercicesEvaluation, getHistoriqueEvaluations, modifierEvaluation, supprimerEvaluation, corrigerEmom, corrigerDureesCourse, adapterCharge, creerSeance, supprimerSeance, modifierSeance } from "../api";
 import clsx from "clsx";
 import { useAuth } from "../AuthContext";
+import { getErrorMessage } from "../utils/errors";
 
 
 // ─── Constantes ────────────────────────────────────────────────────────────
@@ -187,7 +188,7 @@ function FormulaireEditEvaluation({ seance, onClose }) {
           {saveMut.isPending ? "..." : "Enregistrer ✓"}
         </button>
       </div>
-      {saveMut.isError && <p className="text-xs text-red-500 text-center">Erreur — réessaie.</p>}
+      {saveMut.isError && <p className="text-xs text-red-500 text-center">{getErrorMessage(saveMut.error, "Erreur — réessaie.")}</p>}
     </div>
   );
 }
@@ -254,7 +255,7 @@ function FormulaireEvaluation({ seance, onClose, onDone }) {
       qc.invalidateQueries({ queryKey: ["evaluations-historique"] });
       onDone();
     } catch (e) {
-      setError("Erreur — réessaie.");
+      setError(getErrorMessage(e, "Erreur — réessaie."));
     } finally {
       setSaving(false);
     }
@@ -551,13 +552,9 @@ function FormulaireLog({ seance, onClose, onDone, modeEdit = false }) {
           {mut.isPending ? "..." : modeEdit ? "Enregistrer ✓" : "Valider ✓"}
         </button>
       </div>
-      {mut.isError && (() => {
-        const d = mut.error?.response?.data?.detail;
-        const msg = Array.isArray(d)
-          ? d.map(x => `${(x.loc ?? []).slice(-1)[0] ?? ""}: ${x.msg}`).join(" · ")
-          : (typeof d === "string" ? d : (mut.error?.message || "Erreur — réessaie."));
-        return <p className="text-xs text-red-500 text-center">{msg}</p>;
-      })()}
+      {mut.isError && (
+        <p className="text-xs text-red-500 text-center">{getErrorMessage(mut.error, "Erreur — réessaie.")}</p>
+      )}
     </div>
   );
 }
@@ -1420,21 +1417,7 @@ function ModalAjoutSeance({ semaineId, semaine, seanceExistante, onClose }) {
       ? modifierSeance(seanceExistante.id, buildPayload())
       : creerSeance({ semaine_id: semaineId, ...buildPayload() }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["toutes-semaines"] }); onClose(); },
-    onError: (e) => {
-      const d = e?.response?.data?.detail;
-      let msg;
-      if (Array.isArray(d)) {
-        // Erreur de validation FastAPI (422) : detail = [{loc, msg, ...}]
-        msg = d.map(x => `${(x.loc ?? []).slice(-1)[0] ?? ""}: ${x.msg}`).join(" · ");
-      } else if (typeof d === "string") {
-        msg = d;
-      } else if (e?.response?.status) {
-        msg = `Erreur ${e.response.status}`;
-      } else {
-        msg = e?.message || "Erreur lors de la création";
-      }
-      setErr(msg);
-    },
+    onError: (e) => setErr(getErrorMessage(e, "Erreur lors de la création")),
   });
 
   const inputCls = "w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand";
