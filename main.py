@@ -148,8 +148,7 @@ async def _handler_exception_global(request: Request, exc: Exception):
     On renvoie ici un JSON 500 AVEC les en-têtes CORS pour que le message d'erreur
     réel soit lisible dans l'interface.
     """
-    import traceback
-    traceback.print_exc()
+    logger.exception("Exception non gérée")
     origin = request.headers.get("origin")
     headers = {}
     if origin in _ALLOWED_ORIGINS:
@@ -157,12 +156,12 @@ async def _handler_exception_global(request: Request, exc: Exception):
         headers["Access-Control-Allow-Credentials"] = "true"
     return JSONResponse(
         status_code=500,
-        content={"detail": f"Erreur serveur : {exc}"},
+        content={"detail": "Erreur serveur interne"},
         headers=headers,
     )
 
 # ---------------------------------------------------------------------------
-# Auth — JWT + bcrypt
+# Auth — JWT + PBKDF2-HMAC-SHA256
 # ---------------------------------------------------------------------------
 
 import hashlib, hmac as _hmac, os as _os, base64 as _b64, secrets as _secrets
@@ -364,8 +363,9 @@ def register(payload: RegisterSchema, db: Session = Depends(obtenir_session)):
             raise HTTPException(400, "Format date_naissance invalide — attendu YYYY-MM-DD")
     try:
         password_hash = _hash_password(payload.password)
-    except Exception as e:
-        raise HTTPException(500, f"Erreur hachage mot de passe: {e}")
+    except Exception:
+        logger.exception("Erreur hachage mot de passe")
+        raise HTTPException(500, "Erreur lors de la création du compte")
     try:
         user = Utilisateur(
             email=payload.email,
@@ -380,9 +380,10 @@ def register(payload: RegisterSchema, db: Session = Depends(obtenir_session)):
         db.add(user)
         db.commit()
         db.refresh(user)
-    except Exception as e:
+    except Exception:
         db.rollback()
-        raise HTTPException(500, f"Erreur base de données: {e}")
+        logger.exception("Erreur base de données lors de la création du compte")
+        raise HTTPException(500, "Erreur lors de la création du compte")
     token = _create_token(user.id)
     return {"access_token": token, "token_type": "bearer", "user_id": user.id, "onboarding_complet": False}
 
@@ -1968,8 +1969,9 @@ async def analyser_screenshot(
     contenu = await file.read()
     try:
         texte = await run_in_threadpool(_executer_ocr_bloquant, contenu)
-    except Exception as exc:
-        raise HTTPException(500, f"OCR échoué : {exc}")
+    except Exception:
+        logger.exception("OCR échoué")
+        raise HTTPException(500, "Échec de l'analyse du screenshot")
 
     metriques = _extraire_metriques_forme(texte)
     if not metriques:
@@ -2442,11 +2444,10 @@ def creer_seance_personnalisee(
         return {"id": seance.id, "message": "Séance créée."}
     except HTTPException:
         raise
-    except Exception as exc:
+    except Exception:
         db.rollback()
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(500, f"Erreur création séance : {exc}")
+        logger.exception("Erreur création séance")
+        raise HTTPException(500, "Erreur lors de la création de la séance")
 
 
 @app.delete("/api/seances/{seance_id}", summary="Supprime une séance (et son journal)")
@@ -2545,11 +2546,10 @@ def modifier_seance_personnalisee(
         return {"id": seance.id, "message": "Séance modifiée."}
     except HTTPException:
         raise
-    except Exception as exc:
+    except Exception:
         db.rollback()
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(500, f"Erreur modification séance : {exc}")
+        logger.exception("Erreur modification séance")
+        raise HTTPException(500, "Erreur lors de la modification de la séance")
 
 
 @app.get("/api/macrocycles", summary="Liste tous les macrocycles de l'utilisateur")
@@ -2574,8 +2574,9 @@ def seed_seances_route(db: Session = Depends(obtenir_session), _admin: None = De
         seed_module1()
         seed_module2()
         seed_module3()
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Erreur seed : {exc}")
+    except Exception:
+        logger.exception("Erreur seed séances")
+        raise HTTPException(status_code=500, detail="Erreur lors du seed des séances")
     return {"message": "Seed terminé."}
 
 
@@ -3273,9 +3274,10 @@ def initialiser_programme(payload: InitProgrammePayload, current_user: Utilisate
 
     except HTTPException:
         raise
-    except Exception as exc:
+    except Exception:
         db.rollback()
-        raise HTTPException(500, detail=f"Erreur génération : {type(exc).__name__}: {exc}")
+        logger.exception("Erreur génération programme")
+        raise HTTPException(500, detail="Erreur lors de la génération du programme")
 
 
 # ---------------------------------------------------------------------------
