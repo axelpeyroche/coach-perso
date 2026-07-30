@@ -2,12 +2,15 @@
 Configuration de la connexion SQLAlchemy et utilitaires de session.
 """
 
+import logging
 import os
 
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 from models import Base
+
+logger = logging.getLogger(__name__)
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./coach_epc.db")
 
@@ -92,9 +95,14 @@ def creer_tables() -> None:
     with engine.begin() as conn:
         for stmt in _migrations:
             try:
-                conn.execute(text(stmt))
+                # Savepoint par instruction : une migration qui échoue (ex. clause
+                # non supportée par SQLite en local) ne doit pas invalider la
+                # transaction pour les instructions suivantes.
+                with conn.begin_nested():
+                    conn.execute(text(stmt))
             except Exception:
-                pass
+                if not DATABASE_URL.startswith("sqlite"):
+                    logger.warning("Migration ignorée (échec) : %s", stmt)
 
     # ALTER TYPE ADD VALUE ne peut pas s'exécuter dans une transaction PostgreSQL
     _enum_migrations = [
@@ -113,7 +121,7 @@ def creer_tables() -> None:
                 try:
                     cur.execute(stmt)
                 except Exception:
-                    pass
+                    logger.warning("Migration enum ignorée (échec) : %s", stmt)
             cur.close()
         finally:
             raw.close()

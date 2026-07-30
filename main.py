@@ -25,6 +25,7 @@ import socket as _socket
 import json as _json_mod
 
 import io
+import logging
 import os
 import re
 import threading as _threading
@@ -37,6 +38,8 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from jose import JWTError, jwt
+
+logger = logging.getLogger(__name__)
 
 try:
     from apscheduler.schedulers.background import BackgroundScheduler
@@ -116,6 +119,7 @@ def _initialiser_donnees_demo():
                     db.add(sem)
             db.commit()
     except Exception:
+        logger.exception("Échec de l'initialisation des données de démo")
         db.rollback()
     finally:
         db.close()
@@ -192,6 +196,7 @@ def _verify_password(plain: str, hashed: str) -> bool:
         new_key = hashlib.pbkdf2_hmac("sha256", plain.encode(), salt, 260_000)
         return _hmac.compare_digest(key, new_key)
     except Exception:
+        logger.warning("Hash de mot de passe illisible/corrompu rencontré lors de la vérification")
         return False
 
 def _create_token(user_id: int) -> str:
@@ -978,6 +983,7 @@ def update_programme(
         try:
             hist_upd = _json.loads(current_user.historique_perf)
         except Exception:
+            logger.warning("historique_perf illisible pour l'utilisateur %s", current_user.id)
             hist_upd = {}
     profil_upd = _cp_upd(current_user, db, hist_upd)
     calib = _cv2_upd(hist_upd, profil_upd)
@@ -1544,7 +1550,7 @@ def journaliser_seance(
                 distance_km += payload.distance_repos_km
             distance_km = round(distance_km, 3) if distance_km else None
         except Exception:
-            pass
+            logger.warning("details_intervalles illisible pour la séance %s", seance_id)
 
     journal = JournalSeance(
         utilisateur_id=current_user.id,
@@ -1825,7 +1831,7 @@ def modifier_journal_seance(
                 if total > 0:
                     j.distance_reelle_km = round(total, 3)
             except Exception:
-                pass
+                logger.warning("details_intervalles illisible pour la séance %s", seance_id)
     if payload.distance_reelle_km is not None:
         j.distance_reelle_km = payload.distance_reelle_km
     j.completee = True
@@ -3110,6 +3116,7 @@ def initialiser_programme(payload: InitProgrammePayload, current_user: Utilisate
                 try:
                     historique = _json.loads(user.historique_perf)
                 except Exception:
+                    logger.warning("historique_perf illisible pour l'utilisateur %s", user.id)
                     historique = {}
             from intelligence_programme import (
                 construire_profil, calibration_v2, generer_blueprint_course_v2,
@@ -3226,6 +3233,7 @@ def initialiser_programme(payload: InitProgrammePayload, current_user: Utilisate
             try:
                 historique_std = _json_std.loads(user.historique_perf)
             except Exception:
+                logger.warning("historique_perf illisible pour l'utilisateur %s", user.id)
                 historique_std = {}
         from intelligence_programme import (
             construire_profil as _cp_std, calibration_v2 as _cv2_std,
