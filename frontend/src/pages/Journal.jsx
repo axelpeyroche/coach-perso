@@ -4,21 +4,11 @@ import { getSemaineCourante, journaliserSeance } from "../api";
 import Card from "../components/Card";
 import clsx from "clsx";
 import { getErrorMessage } from "../utils/errors";
+import { getRpeLabel, getRpeColorClass } from "../utils/rpe";
 
 
 const TYPE_ICONS = { COURSE: "🏃", AMRAP: "🔥", EMOM: "⏱️", EVALUATION: "🎯", DECHARGE: "🧘", REPOS: "😴" };
 const TYPE_LABELS = { COURSE: "Course", AMRAP: "AMRAP", EMOM: "EMOM", EVALUATION: "Évaluation", DECHARGE: "Décharge", REPOS: "Repos" };
-
-const RPE_COLORS = [
-  "", "text-blue-400", "text-blue-500", "text-green-400", "text-green-500",
-  "text-yellow-400", "text-yellow-500", "text-orange-400", "text-orange-500",
-  "text-red-400", "text-red-500",
-];
-const RPE_LABELS = [
-  "", "Très facile", "Facile", "Modéré", "Confortable",
-  "Un peu difficile", "Difficile", "Très difficile", "Très dur",
-  "Extrême", "Maximum absolu",
-];
 
 function formatDuree(min) {
   if (!min) return null;
@@ -144,8 +134,8 @@ function FormulaireSeance({ seance, onSuccess }) {
       <div>
         <div className="flex justify-between items-baseline mb-2">
           <label className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Effort perçu (RPE)</label>
-          <span className={clsx("text-base font-bold", RPE_COLORS[Math.round(rpe)])}>
-            {rpe}/10 — <span className="text-sm font-medium">{RPE_LABELS[Math.round(rpe)]}</span>
+          <span className={clsx("text-base font-bold", getRpeColorClass(rpe))}>
+            {rpe}/10 — <span className="text-sm font-medium">{getRpeLabel(rpe)}</span>
           </span>
         </div>
         <input

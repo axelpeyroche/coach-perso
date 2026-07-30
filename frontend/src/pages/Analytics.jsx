@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
   LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Legend, ReferenceLine,
@@ -7,12 +7,12 @@ import {
 import {
   getTendancesPhysiologiques, getDistributionVolume, getBiometrieRecuperation,
   getZonesFC, getAllureEndurance, getPredictionCourse, getRecords,
-  getEvenements, getSeancesSemaine, getHistoriquePoids, patchProfilFC,
+  getEvenements, getSeancesSemaine, getHistoriquePoids,
 } from "../api";
 import Card from "../components/Card";
 import clsx from "clsx";
 import { useAuth } from "../AuthContext";
-import { getErrorMessage } from "../utils/errors";
+import ModalPoids from "../components/ModalPoids";
 
 function LineCursor({ x, y, width, height }) {
   return <line x1={x + width / 2} y1={y} x2={x + width / 2} y2={y + height} stroke="#9ca3af" strokeWidth={1} />;
@@ -106,44 +106,6 @@ function ModalSemaine({ numero, filtre = "toutes", onClose }) {
 // ─── Page Stats ─────────────────────────────────────────────────────────────
 
 const ZONE_FC_COLORS = { Z1: "#60a5fa", Z2: "#4ade80", Z3: "#facc15", Z4: "#fb923c", Z5: "#f87171" };
-
-function ModalAjoutPoids({ dernier, onClose }) {
-  const qc = useQueryClient();
-  const { setUser } = useAuth();
-  const [poids, setPoids] = useState(dernier ? String(dernier) : "");
-  const [err, setErr] = useState("");
-  const mut = useMutation({
-    mutationFn: () => patchProfilFC({ poids_kg: parseFloat(poids) }),
-    onSuccess: (data) => {
-      qc.invalidateQueries({ queryKey: ["historique-poids"] });
-      qc.invalidateQueries({ queryKey: ["profil-fc"] });
-      // Met à jour le poids dans les infos personnelles (AuthContext)
-      setUser(u => u ? { ...u, poids_kg: data.poids_kg } : u);
-      onClose();
-    },
-    onError: (e) => setErr(getErrorMessage(e, "Erreur — réessaie")),
-  });
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={onClose}>
-      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-xs p-6 space-y-4" onClick={e => e.stopPropagation()}>
-        <h3 className="text-base font-bold text-gray-900 dark:text-white">Nouveau poids</h3>
-        <div>
-          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Poids (kg)</label>
-          <input type="number" step="0.1" autoFocus value={poids} onChange={e => setPoids(e.target.value)} placeholder="72.5"
-            className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
-        </div>
-        {err && <p className="text-xs text-red-500">{err}</p>}
-        <div className="flex gap-2">
-          <button onClick={onClose} className="flex-1 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-sm text-gray-500">Annuler</button>
-          <button onClick={() => { setErr(""); mut.mutate(); }} disabled={mut.isPending || !parseFloat(poids)}
-            className="flex-1 py-2 rounded-xl bg-brand text-white font-semibold text-sm disabled:opacity-50">
-            {mut.isPending ? "…" : "Enregistrer"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export default function Analytics({ dark }) {
   const { user } = useAuth();
@@ -547,7 +509,7 @@ export default function Analytics({ dark }) {
         ) : <Vide />}
       </Card>
 
-      {poidsModal && <ModalAjoutPoids dernier={poidsData[poidsData.length - 1]?.poids} onClose={() => setPoidsModal(false)} />}
+      {poidsModal && <ModalPoids initialValue={poidsData[poidsData.length - 1]?.poids} onClose={() => setPoidsModal(false)} />}
       {semaineDetail != null && <ModalSemaine numero={semaineDetail.numero} filtre={semaineDetail.filtre} onClose={() => setSemaineDetail(null)} />}
     </div>
   );

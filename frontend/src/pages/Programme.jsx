@@ -5,6 +5,7 @@ import clsx from "clsx";
 import { useAuth } from "../AuthContext";
 import { getErrorMessage } from "../utils/errors";
 import ConfirmDialog from "../components/ConfirmDialog";
+import { getRpeLabel, getRpeColorClass } from "../utils/rpe";
 
 
 // ─── Constantes ────────────────────────────────────────────────────────────
@@ -26,11 +27,6 @@ const ZONE_PILL = {
   Z4: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
   Z5: "bg-red-100    text-red-700   dark:bg-red-900/30  dark:text-red-400",
 };
-const RPE_COLOR = ["","text-green-400","text-green-500","text-green-600","text-yellow-400",
-  "text-yellow-500","text-yellow-600","text-orange-400","text-orange-500","text-red-400","text-red-500"];
-const RPE_LABEL = ["","Facile","Facile","Facile","Modéré",
-  "Modéré","Modéré","Difficile","Difficile","Maximum","Maximum"];
-
 function fmt(min) {
   if (!min) return null;
   const h = Math.floor(min / 60), m = min % 60;
@@ -220,9 +216,6 @@ function FormulaireEvaluation({ seance, onClose, onDone }) {
   const [rpe, setRpe]           = useState(7);
   const [notes, setNotes]       = useState("");
 
-  const RPE_LABEL = { 1:"Très facile",2:"Facile",3:"Modéré",4:"Assez facile",5:"Moyen",6:"Un peu difficile",7:"Difficile",8:"Très difficile",9:"Extrêmement difficile",10:"Maximum" };
-  const RPE_COLOR = { 1:"text-green-500",2:"text-green-500",3:"text-green-500",4:"text-lime-500",5:"text-yellow-500",6:"text-orange-400",7:"text-orange-500",8:"text-red-500",9:"text-red-600",10:"text-red-700" };
-
   const [saving, setSaving] = useState(false);
   const [error, setError]   = useState(null);
 
@@ -319,7 +312,7 @@ function FormulaireEvaluation({ seance, onClose, onDone }) {
       <div>
         <div className="flex justify-between items-baseline mb-2">
           <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Effort perçu (RPE)</span>
-          <span className={clsx("text-sm font-bold", RPE_COLOR[Math.round(rpe)])}>{rpe}/10 — {RPE_LABEL[Math.round(rpe)]}</span>
+          <span className={clsx("text-sm font-bold", getRpeColorClass(rpe))}>{rpe}/10 — {getRpeLabel(rpe)}</span>
         </div>
         <input type="range" min={1} max={10} step={0.5} value={rpe} onChange={e => setRpe(parseFloat(e.target.value))} className="w-full accent-brand" />
         <div className="flex justify-between text-xs text-gray-400 mt-0.5"><span>1 facile</span><span>10 max</span></div>
@@ -523,8 +516,8 @@ function FormulaireLog({ seance, onClose, onDone, modeEdit = false }) {
       <div>
         <div className="flex justify-between items-baseline mb-2">
           <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Effort perçu (RPE)</span>
-          <span className={clsx("text-sm font-bold", RPE_COLOR[Math.round(rpe)])}>
-            {rpe}/10 — {RPE_LABEL[Math.round(rpe)]}
+          <span className={clsx("text-sm font-bold", getRpeColorClass(rpe))}>
+            {rpe}/10 — {getRpeLabel(rpe)}
           </span>
         </div>
         <input type="range" min={1} max={10} step={0.5} value={rpe}

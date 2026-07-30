@@ -9,6 +9,7 @@ import clsx from "clsx";
 import { getErrorMessage } from "../utils/errors";
 import ConfirmDialog from "../components/ConfirmDialog";
 import AlertDialog from "../components/AlertDialog";
+import ModalPoids from "../components/ModalPoids";
 
 
 const ZONE_COLORS = {
@@ -1171,42 +1172,6 @@ function ModalFC({ profil, onClose }) {
   );
 }
 
-// ─── Modal poids seul (même fenêtre que le "+" du graphique dans Stats) ──────
-function ModalPoids({ profil, onClose }) {
-  const qc = useQueryClient();
-  const { setUser } = useAuth();
-  const [poids, setPoids] = useState(profil?.poids_kg ? String(profil.poids_kg) : "");
-  const mut = useMutation({
-    mutationFn: () => patchProfilFC({ poids_kg: parseFloat(poids) }),
-    onSuccess: (data) => {
-      qc.invalidateQueries({ queryKey: ["profil-fc"] });
-      qc.invalidateQueries({ queryKey: ["historique-poids"] });
-      // Met à jour le poids dans les infos personnelles (AuthContext)
-      setUser(u => u ? { ...u, poids_kg: data.poids_kg } : u);
-      onClose();
-    },
-  });
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={onClose}>
-      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-xl w-full max-w-xs p-6 space-y-4" onClick={e => e.stopPropagation()}>
-        <h3 className="text-base font-bold text-gray-900 dark:text-white">Nouveau poids</h3>
-        <div>
-          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Poids (kg)</label>
-          <input type="number" step="0.1" autoFocus placeholder="72.5" value={poids} onChange={e => setPoids(e.target.value)}
-            className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand" />
-        </div>
-        <div className="flex gap-2">
-          <button onClick={onClose} className="flex-1 py-2 rounded-xl border border-gray-200 dark:border-gray-700 text-sm text-gray-500">Annuler</button>
-          <button onClick={() => mut.mutate()} disabled={mut.isPending || !parseFloat(poids)}
-            className="flex-1 py-2 rounded-xl bg-brand text-white font-semibold text-sm disabled:opacity-50">
-            {mut.isPending ? "…" : "Enregistrer"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ─── Dashboard ──────────────────────────────────────────────────────────────
 
 export default function Dashboard() {
@@ -1318,8 +1283,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <StatTile label="VMA actuelle"    value={derniereVMA ? `${derniereVMA.valeur} km/h` : "—"} sub="Demi-Cooper"   color="green" />
         <StatTile label="Poids"           value={profilFC?.poids_kg ? `${profilFC.poids_kg} kg` : "—"} sub={<button onClick={() => setShowModalPoids(true)} className="text-brand hover:underline">Mettre à jour</button>} color="blue" />
-        <div className="rounded-2xl p-4 backdrop-blur-xl bg-orange-400/20 dark:bg-orange-500/12 text-orange-800 dark:text-orange-300 border border-orange-300/50 dark:border-orange-400/15">
-          <p className="text-xs font-medium opacity-70 mb-1">Km cette semaine</p>
+        <StatTile label="Km cette semaine" color="orange">
           <div className="grid grid-cols-2 divide-x divide-orange-300/40 dark:divide-orange-400/20">
             <div className="flex flex-col items-center text-center pr-2">
               <p className="text-[11px] opacity-60">🏃 course</p>
@@ -1330,7 +1294,7 @@ export default function Dashboard() {
               <p className="text-xl font-bold leading-tight">{derniereACWA ? (derniereACWA.km_velo ?? 0) : "—"}</p>
             </div>
           </div>
-        </div>
+        </StatTile>
         <StatTile label="Ratio ACWA"      value={derniereACWA?.ratio ?? "—"} sub={derniereACWA?.alerte_risque ? "⚠️ Élevé" : "Normal"} color={derniereACWA?.alerte_risque ? "red" : "purple"} />
       </div>
 
@@ -1381,7 +1345,7 @@ export default function Dashboard() {
         </Card>
       )}
       {showModalFC && <ModalFC profil={profilFC} onClose={() => setShowModalFC(false)} />}
-      {showModalPoids && <ModalPoids profil={profilFC} onClose={() => setShowModalPoids(false)} />}
+      {showModalPoids && <ModalPoids initialValue={profilFC?.poids_kg} onClose={() => setShowModalPoids(false)} />}
 
       {!derniereVMA && !derniereACWA && !zones && (
         <Card title="Démarrer">

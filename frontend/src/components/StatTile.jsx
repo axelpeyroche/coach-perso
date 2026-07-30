@@ -8,12 +8,16 @@ const COULEURS = {
   purple: "bg-purple-400/20 dark:bg-purple-500/12 text-purple-800 dark:text-purple-300 border border-purple-300/50 dark:border-purple-400/15",
 };
 
-export default function StatTile({ label, value, sub, color = "blue" }) {
+export default function StatTile({ label, value, sub, color = "blue", children }) {
   return (
     <div className={clsx("rounded-2xl p-4 flex flex-col gap-1 backdrop-blur-xl", COULEURS[color])}>
       <p className="text-xs font-medium opacity-70">{label}</p>
-      <p className="text-xl font-bold leading-tight">{value}</p>
-      {sub && <p className="text-xs opacity-60">{sub}</p>}
+      {children ?? (
+        <>
+          <p className="text-xl font-bold leading-tight">{value}</p>
+          {sub && <p className="text-xs opacity-60">{sub}</p>}
+        </>
+      )}
     </div>
   );
 }
