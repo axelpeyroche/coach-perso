@@ -1,6 +1,6 @@
 import { useAuth } from "../AuthContext";
 import { useState, useEffect, useRef } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "../api";
 import { getImportToken, regenererImportToken } from "../api";
 import { getErrorMessage } from "../utils/errors";
@@ -95,7 +95,7 @@ const MAX_PHOTO_FILE_BYTES = 1_500_000; // ~2 Mo une fois encodée en base64, cf
 function Avatar({ initials, photoUrl, onPhotoChange }) {
   const [photo, setPhoto] = useState(photoUrl || null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [errMsg, setErrMsg] = useState("");
+  const [sizeErr, setSizeErr] = useState("");
   const galleryRef = useRef(null);
   const cameraRef = useRef(null);
 
@@ -103,37 +103,38 @@ function Avatar({ initials, photoUrl, onPhotoChange }) {
     setPhoto(photoUrl || null);
   }, [photoUrl]);
 
-  async function savePhoto(dataUrl) {
-    setErrMsg("");
-    try {
-      await api.patch("/utilisateur/photo", { photo_url: dataUrl });
+  const mutation = useMutation({
+    mutationFn: (dataUrl) => api.patch("/utilisateur/photo", { photo_url: dataUrl }),
+    onSuccess: (_data, dataUrl) => {
       setPhoto(dataUrl);
       onPhotoChange?.(dataUrl);
-    } catch (e) {
-      setErrMsg(getErrorMessage(e, "Erreur lors de l'enregistrement de la photo"));
-    }
-  }
+    },
+  });
 
   function handleFile(e) {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > MAX_PHOTO_FILE_BYTES) {
-      setErrMsg("Photo trop grande (max environ 1,5 Mo)");
+      setSizeErr("Photo trop grande (max environ 1,5 Mo)");
       setMenuOpen(false);
       e.target.value = "";
       return;
     }
+    setSizeErr("");
     const reader = new FileReader();
-    reader.onload = ev => savePhoto(ev.target.result);
+    reader.onload = ev => mutation.mutate(ev.target.result);
     reader.readAsDataURL(file);
     setMenuOpen(false);
     e.target.value = "";
   }
 
   function removePhoto() {
-    savePhoto(null);
+    setSizeErr("");
+    mutation.mutate(null);
     setMenuOpen(false);
   }
+
+  const errMsg = sizeErr || (mutation.isError ? getErrorMessage(mutation.error, "Erreur lors de l'enregistrement de la photo") : "");
 
   return (
     <div className="relative">
@@ -230,31 +231,27 @@ function EditInfosModal({ user, onClose, onSaved }) {
     date_naissance: user?.date_naissance || "",
     poids_kg: user?.poids_kg ?? "",
   });
-  const [err, setErr] = useState("");
-  const [saving, setSaving] = useState(false);
+
+  const mutation = useMutation({
+    mutationFn: (payload) => api.patch("/utilisateur/infos", payload),
+    onSuccess: async () => { await onSaved(); onClose(); },
+  });
 
   function set(k) { return e => setForm(f => ({ ...f, [k]: e.target.value })); }
 
-  async function save() {
-    setSaving(true); setErr("");
-    try {
-      const payload = {};
-      if (form.prenom !== (user?.prenom || "")) payload.prenom = form.prenom;
-      if (form.nom !== (user?.nom || "")) payload.nom = form.nom;
-      if (form.email !== (user?.email || "")) payload.email = form.email;
-      if (form.sexe !== (user?.sexe || "")) payload.sexe = form.sexe;
-      if (form.date_naissance !== (user?.date_naissance || "")) payload.date_naissance = form.date_naissance || null;
-      const newPoids = form.poids_kg !== "" ? parseFloat(form.poids_kg) : null;
-      if (newPoids !== user?.poids_kg) payload.poids_kg = newPoids;
-      if (Object.keys(payload).length > 0) {
-        await api.patch("/utilisateur/infos", payload);
-        await onSaved();
-      }
+  function save() {
+    const payload = {};
+    if (form.prenom !== (user?.prenom || "")) payload.prenom = form.prenom;
+    if (form.nom !== (user?.nom || "")) payload.nom = form.nom;
+    if (form.email !== (user?.email || "")) payload.email = form.email;
+    if (form.sexe !== (user?.sexe || "")) payload.sexe = form.sexe;
+    if (form.date_naissance !== (user?.date_naissance || "")) payload.date_naissance = form.date_naissance || null;
+    const newPoids = form.poids_kg !== "" ? parseFloat(form.poids_kg) : null;
+    if (newPoids !== user?.poids_kg) payload.poids_kg = newPoids;
+    if (Object.keys(payload).length > 0) {
+      mutation.mutate(payload);
+    } else {
       onClose();
-    } catch (e) {
-      setErr(getErrorMessage(e, "Erreur — réessaie"));
-    } finally {
-      setSaving(false);
     }
   }
 
@@ -282,10 +279,10 @@ function EditInfosModal({ user, onClose, onSaved }) {
       <Field label="Poids (kg)">
         <input type="number" step="0.1" min="20" max="300" className={inputCls} value={form.poids_kg} onChange={set("poids_kg")} />
       </Field>
-      {err && <p className="text-xs text-red-500 mb-3">{err}</p>}
-      <button onClick={save} disabled={saving}
+      {mutation.isError && <p className="text-xs text-red-500 mb-3">{getErrorMessage(mutation.error, "Erreur — réessaie")}</p>}
+      <button onClick={save} disabled={mutation.isPending}
         className="w-full py-3 rounded-xl bg-brand text-white font-semibold text-sm disabled:opacity-50 hover:bg-brand-dark transition-colors">
-        {saving ? "Enregistrement…" : "Enregistrer"}
+        {mutation.isPending ? "Enregistrement…" : "Enregistrer"}
       </button>
     </Modal>
   );
@@ -294,32 +291,29 @@ function EditInfosModal({ user, onClose, onSaved }) {
 // ── Edit password modal ────────────────────────────────────────────────────
 function EditPasswordModal({ onClose }) {
   const [form, setForm] = useState({ ancien: "", nouveau: "", confirmer: "" });
-  const [err, setErr] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [done, setDone] = useState(false);
+  const [validationErr, setValidationErr] = useState("");
+
+  const mutation = useMutation({
+    mutationFn: () => api.patch("/utilisateur/password", {
+      ancien_mot_de_passe: form.ancien,
+      nouveau_mot_de_passe: form.nouveau,
+    }),
+  });
 
   function set(k) { return e => setForm(f => ({ ...f, [k]: e.target.value })); }
 
-  async function save() {
-    if (form.nouveau !== form.confirmer) { setErr("Les mots de passe ne correspondent pas"); return; }
-    if (form.nouveau.length < 8) { setErr("Minimum 8 caractères requis"); return; }
-    setSaving(true); setErr("");
-    try {
-      await api.patch("/utilisateur/password", {
-        ancien_mot_de_passe: form.ancien,
-        nouveau_mot_de_passe: form.nouveau,
-      });
-      setDone(true);
-    } catch (e) {
-      setErr(getErrorMessage(e, "Erreur — réessaie"));
-    } finally {
-      setSaving(false);
-    }
+  function save() {
+    if (form.nouveau !== form.confirmer) { setValidationErr("Les mots de passe ne correspondent pas"); return; }
+    if (form.nouveau.length < 8) { setValidationErr("Minimum 8 caractères requis"); return; }
+    setValidationErr("");
+    mutation.mutate();
   }
+
+  const err = validationErr || (mutation.isError ? getErrorMessage(mutation.error, "Erreur — réessaie") : "");
 
   return (
     <Modal title="Modifier le mot de passe" onClose={onClose}>
-      {done ? (
+      {mutation.isSuccess ? (
         <div className="text-center py-6">
           <div className="text-4xl mb-3">✓</div>
           <p className="text-brand font-semibold mb-4">Mot de passe modifié</p>
@@ -337,9 +331,9 @@ function EditPasswordModal({ onClose }) {
             <input type="password" className={inputCls} value={form.confirmer} onChange={set("confirmer")} autoComplete="new-password" />
           </Field>
           {err && <p className="text-xs text-red-500 mb-3">{err}</p>}
-          <button onClick={save} disabled={saving}
+          <button onClick={save} disabled={mutation.isPending}
             className="w-full py-3 rounded-xl bg-brand text-white font-semibold text-sm disabled:opacity-50 hover:bg-brand-dark transition-colors">
-            {saving ? "Enregistrement…" : "Modifier le mot de passe"}
+            {mutation.isPending ? "Enregistrement…" : "Modifier le mot de passe"}
           </button>
         </>
       )}
@@ -359,42 +353,38 @@ function EditProgrammeModal({ user, onClose, onSaved }) {
     type_course:            user?.type_course || "route",
     frequence_tests_semaines: user?.frequence_tests_semaines ?? 8,
   });
-  const [err, setErr] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [done, setDone] = useState(false);
+  const [noChange, setNoChange] = useState(false);
+
+  const mutation = useMutation({
+    mutationFn: (payload) => api.patch("/utilisateur/programme", payload),
+    onSuccess: () => onSaved(),
+  });
 
   function set(k) { return e => setForm(f => ({ ...f, [k]: typeof e === "object" ? e.target.value : e })); }
   function setNum(k) { return e => setForm(f => ({ ...f, [k]: parseInt(e.target.value) || 0 })); }
 
-  async function save() {
-    setSaving(true); setErr("");
-    try {
-      // En hybride, le total est la somme muscu + course + vélo
-      const totalSeances = form.type_programme === "hybride"
-        ? form.seances_muscu_semaine + form.seances_course_semaine + form.seances_velo_semaine
-        : form.seances_semaine;
-      const payload = {};
-      if (form.type_programme         !== user?.type_programme)         payload.type_programme         = form.type_programme;
-      if (totalSeances                !== user?.seances_semaine)        payload.seances_semaine        = totalSeances;
-      if (form.seances_muscu_semaine  !== user?.seances_muscu_semaine)  payload.seances_muscu_semaine  = form.seances_muscu_semaine;
-      if (form.seances_course_semaine !== user?.seances_course_semaine) payload.seances_course_semaine = form.seances_course_semaine;
-      if (form.seances_velo_semaine   !== user?.seances_velo_semaine)   payload.seances_velo_semaine   = form.seances_velo_semaine;
-      if (form.type_muscu             !== user?.type_muscu)             payload.type_muscu             = form.type_muscu;
-      if (form.type_course            !== user?.type_course)            payload.type_course            = form.type_course;
-      if (form.frequence_tests_semaines !== user?.frequence_tests_semaines) payload.frequence_tests_semaines = form.frequence_tests_semaines;
-      if (Object.keys(payload).length > 0) {
-        await api.patch("/utilisateur/programme", payload);
-        await onSaved();
-      }
-      setDone(true);
-    } catch (e) {
-      setErr(getErrorMessage(e, "Erreur — réessaie"));
-    } finally {
-      setSaving(false);
+  function save() {
+    // En hybride, le total est la somme muscu + course + vélo
+    const totalSeances = form.type_programme === "hybride"
+      ? form.seances_muscu_semaine + form.seances_course_semaine + form.seances_velo_semaine
+      : form.seances_semaine;
+    const payload = {};
+    if (form.type_programme         !== user?.type_programme)         payload.type_programme         = form.type_programme;
+    if (totalSeances                !== user?.seances_semaine)        payload.seances_semaine        = totalSeances;
+    if (form.seances_muscu_semaine  !== user?.seances_muscu_semaine)  payload.seances_muscu_semaine  = form.seances_muscu_semaine;
+    if (form.seances_course_semaine !== user?.seances_course_semaine) payload.seances_course_semaine = form.seances_course_semaine;
+    if (form.seances_velo_semaine   !== user?.seances_velo_semaine)   payload.seances_velo_semaine   = form.seances_velo_semaine;
+    if (form.type_muscu             !== user?.type_muscu)             payload.type_muscu             = form.type_muscu;
+    if (form.type_course            !== user?.type_course)            payload.type_course            = form.type_course;
+    if (form.frequence_tests_semaines !== user?.frequence_tests_semaines) payload.frequence_tests_semaines = form.frequence_tests_semaines;
+    if (Object.keys(payload).length > 0) {
+      mutation.mutate(payload);
+    } else {
+      setNoChange(true);
     }
   }
 
-  if (done) return (
+  if (mutation.isSuccess || noChange) return (
     <Modal title="Programme mis à jour" onClose={onClose}>
       <div className="text-center py-6 space-y-3">
         <div className="text-4xl">✓</div>
@@ -517,10 +507,10 @@ function EditProgrammeModal({ user, onClose, onSaved }) {
       <p className="text-xs text-amber-500 dark:text-amber-400 mb-3">
         ⚠️ Les séances futures non validées seront régénérées selon les nouveaux paramètres.
       </p>
-      {err && <p className="text-xs text-red-500 mb-3">{err}</p>}
-      <button onClick={save} disabled={saving}
+      {mutation.isError && <p className="text-xs text-red-500 mb-3">{getErrorMessage(mutation.error, "Erreur — réessaie")}</p>}
+      <button onClick={save} disabled={mutation.isPending}
         className="w-full py-3 rounded-xl bg-brand text-white font-semibold text-sm disabled:opacity-50 hover:bg-brand-dark transition-colors">
-        {saving ? "Mise à jour en cours…" : "Mettre à jour le programme"}
+        {mutation.isPending ? "Mise à jour en cours…" : "Mettre à jour le programme"}
       </button>
     </Modal>
   );
