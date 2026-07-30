@@ -16,6 +16,7 @@ Routes :
 from __future__ import annotations
 
 from datetime import datetime, date, timedelta
+from zoneinfo import ZoneInfo
 from typing import Optional
 import time as _time
 import urllib.parse as _urlparse
@@ -277,8 +278,16 @@ def _envoyer_push_seance(seance_id: int) -> None:
         db.close()
 
 
+_FUSEAU_DEFAUT = "Europe/Paris"
+
+
 def _planifier_notification(seance_id: int, date_planifiee, heure_planifiee: str | None) -> None:
-    """Ajoute ou supprime un job APScheduler pour la notification de la séance."""
+    """Ajoute ou supprime un job APScheduler pour la notification de la séance.
+
+    L'heure planifiée est saisie par l'utilisateur dans son fuseau horaire local
+    (détecté et envoyé par le navigateur) : on la convertit ici, pas en heure
+    serveur, sinon la notification part avec le décalage horaire du serveur.
+    """
     if not _PUSH_ENABLED or _scheduler is None:
         return
     job_id = f"seance-{seance_id}"
@@ -286,9 +295,20 @@ def _planifier_notification(seance_id: int, date_planifiee, heure_planifiee: str
     if not date_planifiee:
         return
     h, m = (int(x) for x in (heure_planifiee or "08:00").split(":"))
-    from datetime import datetime as _dt
-    run_at = _dt(date_planifiee.year, date_planifiee.month, date_planifiee.day, h, m)
-    if run_at > _dt.now():
+    db = next(obtenir_session())
+    try:
+        seance = db.get(SeanceEntrainement, seance_id)
+        semaine = db.get(SemaineEntrainement, seance.semaine_id) if seance else None
+        utilisateur = db.get(Utilisateur, semaine.macrocycle.utilisateur_id) if semaine else None
+        fuseau = (utilisateur.fuseau_horaire if utilisateur else None) or _FUSEAU_DEFAUT
+    finally:
+        db.close()
+    try:
+        tz = ZoneInfo(fuseau)
+    except Exception:
+        tz = ZoneInfo(_FUSEAU_DEFAUT)
+    run_at = datetime(date_planifiee.year, date_planifiee.month, date_planifiee.day, h, m, tzinfo=tz)
+    if run_at > datetime.now(tz):
         _scheduler.add_job(
             _envoyer_push_seance, "date",
             run_date=run_at, args=[seance_id], id=job_id,
@@ -307,8 +327,6 @@ def demarrage():
         # Re-planifie les notifications pour toutes les séances futures encore non validées
         db = next(obtenir_session())
         try:
-            from datetime import datetime as _dt
-            now = _dt.now()
             seances = db.query(SeanceEntrainement).filter(
                 SeanceEntrainement.date_planifiee.isnot(None)
             ).all()
@@ -425,6 +443,7 @@ def me(current_user: Utilisateur = Depends(get_current_user), db: Session = Depe
         "age": age,
         "poids_kg": current_user.poids_kg,
         "photo_url": current_user.photo_url,
+        "fuseau_horaire": current_user.fuseau_horaire,
         "fc_max": current_user.fc_max,
         "fc_repos": current_user.fc_repos,
         "vma_kmh": round(derniere_bio.vma_kmh, 1) if derniere_bio else None,
@@ -473,6 +492,7 @@ def reset_onboarding(current_user: Utilisateur = Depends(get_current_user), db: 
         "age": age,
         "poids_kg": current_user.poids_kg,
         "photo_url": current_user.photo_url,
+        "fuseau_horaire": current_user.fuseau_horaire,
         "fc_max": current_user.fc_max,
         "fc_repos": current_user.fc_repos,
         "onboarding_complet": False,
@@ -1298,6 +1318,105 @@ def patch_password(
     if not _verify_password(payload.ancien_mot_de_passe, current_user.password_hash):
         raise HTTPException(400, "Mot de passe actuel incorrect")
     current_user.password_hash = _hash_password(payload.nouveau_mot_de_passe)
+    db.commit()
+    return {"ok": True}
+
+
+class FuseauHoraireSchema(BaseModel):
+    fuseau_horaire: str
+
+@app.patch("/api/utilisateur/fuseau-horaire", summary="Enregistre le fuseau horaire détecté côté navigateur")
+def patch_fuseau_horaire(
+    payload: FuseauHoraireSchema,
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(obtenir_session),
+):
+    try:
+        ZoneInfo(payload.fuseau_horaire)
+    except Exception:
+        raise HTTPException(400, "Fuseau horaire invalide")
+    current_user.fuseau_horaire = payload.fuseau_horaire
+    db.commit()
+    return {"ok": True}
+
+
+@app.get("/api/utilisateur/export", summary="Exporte toutes les données du compte (portabilité RGPD)")
+def exporter_donnees(current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
+    """Dump générique (colonne par colonne) des données personnelles de l'utilisateur."""
+    import enum as _enum
+    from models import PoidsUtilisateur
+
+    def _dump(obj):
+        d = {}
+        for col in obj.__table__.columns:
+            v = getattr(obj, col.name)
+            if isinstance(v, (datetime, date)):
+                v = v.isoformat()
+            elif isinstance(v, _enum.Enum):
+                v = v.value
+            d[col.name] = v
+        return d
+
+    macrocycles = []
+    for mc in current_user.macrocycles:
+        semaines = []
+        for sem in mc.semaines:
+            seances = []
+            for s in sem.seances:
+                seance = _dump(s)
+                seance["exercices"] = [_dump(e) for e in s.exercices]
+                if s.journal:
+                    journal = _dump(s.journal)
+                    journal["exercices"] = [_dump(je) for je in s.journal.journaux_exercices]
+                    seance["journal"] = journal
+                else:
+                    seance["journal"] = None
+                seances.append(seance)
+            semaine = _dump(sem)
+            semaine["seances"] = seances
+            semaines.append(semaine)
+        macrocycle = _dump(mc)
+        macrocycle["semaines"] = semaines
+        macrocycles.append(macrocycle)
+
+    evaluations = []
+    for ev in current_user.journaux_evaluation:
+        e = _dump(ev)
+        e["demi_cooper"] = _dump(ev.demi_cooper) if ev.demi_cooper else None
+        e["resultats_max_1min"] = [_dump(r) for r in ev.resultats_max_1min]
+        e["benchmark_amrap"] = _dump(ev.benchmark_amrap) if ev.benchmark_amrap else None
+        evaluations.append(e)
+
+    poids = (
+        db.query(PoidsUtilisateur)
+        .filter_by(utilisateur_id=current_user.id)
+        .order_by(PoidsUtilisateur.enregistre_le)
+        .all()
+    )
+    objectifs = db.query(ObjectifCourse).filter_by(utilisateur_id=current_user.id).all()
+
+    profil = _dump(current_user)
+    profil.pop("password_hash", None)
+
+    return {
+        "profil": profil,
+        "historique_poids": [_dump(p) for p in poids],
+        "objectifs_course": [_dump(o) for o in objectifs],
+        "biometries": [_dump(b) for b in current_user.biometries],
+        "macrocycles": macrocycles,
+        "evaluations": evaluations,
+    }
+
+
+@app.delete("/api/utilisateur", summary="Supprime définitivement le compte et toutes les données associées")
+def supprimer_compte(current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
+    from models import PoidsUtilisateur
+    # Pas de relation ORM cascade déclarée sur Utilisateur pour ces 3 tables
+    # (cf. models.py) : suppression explicite avant celle de l'utilisateur.
+    db.query(PoidsUtilisateur).filter_by(utilisateur_id=current_user.id).delete()
+    db.query(ObjectifCourse).filter_by(utilisateur_id=current_user.id).delete()
+    db.query(PushSubscription).filter_by(utilisateur_id=current_user.id).delete()
+    db.delete(current_user)
     db.commit()
     return {"ok": True}
 

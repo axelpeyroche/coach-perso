@@ -133,6 +133,11 @@ class Utilisateur(Base):
     # Photo de profil (data URL base64, cf. absence de stockage objet dédié)
     photo_url: Mapped[Optional[str]] = mapped_column(Text)
 
+    # Fuseau horaire IANA (ex. "Europe/Paris"), détecté et envoyé par le
+    # navigateur — utilisé pour planifier les notifications push à l'heure
+    # locale réelle de l'utilisateur plutôt qu'à celle du serveur.
+    fuseau_horaire: Mapped[Optional[str]] = mapped_column(String(50))
+
     # Relations
     biometries: Mapped[list["BiometrieUtilisateur"]] = relationship(
         back_populates="utilisateur",

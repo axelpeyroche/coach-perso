@@ -70,6 +70,8 @@ def creer_tables() -> None:
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS seances_velo_semaine INTEGER",
         # Photo de profil (remplace le stockage localStorage côté frontend)
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS photo_url TEXT",
+        # Fuseau horaire IANA de l'utilisateur (planification des notifications push)
+        "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS fuseau_horaire VARCHAR(50)",
         # Index sur les clés étrangères — accélère les requêtes filtrées par
         # utilisateur/séance/évaluation, absentes des tables déjà existantes
         # en production (Base.metadata.create_all ne les crée que sur les

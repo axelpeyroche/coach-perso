@@ -192,3 +192,13 @@ export const getSeancesSemaine = (numero_semaine) =>
 // --- Import iOS Shortcuts ---
 export const getImportToken      = () => api.get("/auth/import-token").then((r) => r.data);
 export const regenererImportToken = () => api.post("/auth/import-token/regenerer").then((r) => r.data);
+
+// --- Fuseau horaire / export / suppression de compte ---
+export const patchFuseauHoraire = (fuseau_horaire) =>
+  api.patch("/utilisateur/fuseau-horaire", { fuseau_horaire }).then((r) => r.data);
+
+export const exporterDonnees = () =>
+  api.get("/utilisateur/export").then((r) => r.data);
+
+export const supprimerCompte = () =>
+  api.delete("/utilisateur").then((r) => r.data);

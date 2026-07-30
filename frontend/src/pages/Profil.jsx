@@ -2,7 +2,7 @@ import { useAuth } from "../AuthContext";
 import { useState, useEffect, useRef } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "../api";
-import { getImportToken, regenererImportToken } from "../api";
+import { getImportToken, regenererImportToken, exporterDonnees, supprimerCompte } from "../api";
 import { getErrorMessage } from "../utils/errors";
 import ConfirmDialog from "../components/ConfirmDialog";
 
@@ -822,6 +822,60 @@ rpe            → 7`}</pre>
   );
 }
 
+// ── Export / suppression de compte ──────────────────────────────────────────
+function DonneesCompte({ onDeleted }) {
+  const [confirmSuppr, setConfirmSuppr] = useState(false);
+
+  const exportMutation = useMutation({
+    mutationFn: exporterDonnees,
+    onSuccess: (data) => {
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "coach-perso-export.json";
+      a.click();
+      URL.revokeObjectURL(url);
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: supprimerCompte,
+    onSuccess: () => { setConfirmSuppr(false); onDeleted(); },
+  });
+
+  const errMsg = exportMutation.isError
+    ? getErrorMessage(exportMutation.error, "Erreur lors de l'export")
+    : deleteMutation.isError
+    ? getErrorMessage(deleteMutation.error, "Erreur lors de la suppression du compte")
+    : "";
+
+  return (
+    <div>
+      <button onClick={() => exportMutation.mutate()} disabled={exportMutation.isPending}
+        className="w-full flex items-center justify-between py-3 border-b border-gray-100 dark:border-gray-800 text-sm text-gray-700 dark:text-gray-300 disabled:opacity-50">
+        <span>Exporter mes données</span>
+        <span className="text-xs text-gray-400">{exportMutation.isPending ? "…" : "JSON"}</span>
+      </button>
+      <button onClick={() => setConfirmSuppr(true)}
+        className="w-full flex items-center justify-between py-3 text-sm text-red-500 dark:text-red-400">
+        <span>Supprimer mon compte</span>
+        <span className="text-xs">→</span>
+      </button>
+      {errMsg && <p className="text-xs text-red-400 pt-1">{errMsg}</p>}
+      <ConfirmDialog
+        open={confirmSuppr}
+        title="Supprimer définitivement ton compte ?"
+        message="Toutes tes données (programme, historique, évaluations) seront supprimées sans possibilité de récupération."
+        danger
+        pending={deleteMutation.isPending}
+        onConfirm={() => deleteMutation.mutate()}
+        onCancel={() => setConfirmSuppr(false)}
+      />
+    </div>
+  );
+}
+
 export default function Profil({ dark, setDark }) {
   const { user, setUser, logout } = useAuth();
   const qc = useQueryClient();
@@ -936,6 +990,11 @@ export default function Profil({ dark, setDark }) {
       {/* Intégrations */}
       <Section title="Intégrations">
         <ShortcutIOS />
+      </Section>
+
+      {/* Données du compte */}
+      <Section title="Données du compte">
+        <DonneesCompte onDeleted={logout} />
       </Section>
 
       {/* Déconnexion */}

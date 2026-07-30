@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect } from "react";
-import api, { setUnauthorizedHandler } from "./api";
+import api, { setUnauthorizedHandler, patchFuseauHoraire } from "./api";
 
 const AuthContext = createContext(null);
 
@@ -45,6 +45,17 @@ export function AuthProvider({ children }) {
     setUnauthorizedHandler(logout);
     return () => setUnauthorizedHandler(null);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Détecte le fuseau horaire du navigateur et le synchronise silencieusement
+  // côté serveur — utilisé pour planifier les notifications push à l'heure
+  // locale réelle de l'utilisateur plutôt qu'à celle du serveur.
+  useEffect(() => {
+    if (!user) return;
+    const detecte = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (detecte && detecte !== user.fuseau_horaire) {
+      patchFuseauHoraire(detecte).catch(() => {});
+    }
+  }, [user?.fuseau_horaire]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <AuthContext.Provider value={{ token, user, setUser, login, logout, loading }}>
