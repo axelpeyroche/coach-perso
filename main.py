@@ -27,8 +27,10 @@ import json as _json_mod
 import io
 import os
 import re
+import threading as _threading
 
 from fastapi import Depends, FastAPI, File, Header, HTTPException, Query, Request, Security, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -168,12 +170,12 @@ SECRET_KEY = os.getenv("JWT_SECRET")
 if not SECRET_KEY:
     # Pas de secret configuré (ex. variable d'env absente sur Render) : on génère un
     # secret aléatoire pour ce process plutôt que d'utiliser une valeur par défaut
-    # connue publiquement. Tous les tokens déjÃ  émis deviennent invalides Ã  chaque
+    # connue publiquement. Tous les tokens déjà émis deviennent invalides à chaque
     # redémarrage tant que JWT_SECRET n'est pas défini explicitement.
     SECRET_KEY = _secrets.token_hex(32)
     print("⚠️  JWT_SECRET non défini — génération d'un secret temporaire pour ce process. "
           "Définis la variable d'environnement JWT_SECRET pour éviter la déconnexion de "
-          "tous les utilisateurs Ã  chaque redémarrage.")
+          "tous les utilisateurs à chaque redémarrage.")
 
 http_bearer = HTTPBearer(auto_error=False)
 
@@ -222,7 +224,7 @@ def verifier_admin_token(x_admin_token: Optional[str] = Header(None)) -> None:
 
 
 def _obtenir_seance_utilisateur(db: Session, seance_id: int, current_user: "Utilisateur") -> "SeanceEntrainement":
-    """Récupère une séance en vérifiant qu'elle appartient bien Ã  l'utilisateur courant."""
+    """Récupère une séance en vérifiant qu'elle appartient bien à l'utilisateur courant."""
     seance = (
         db.query(SeanceEntrainement)
         .join(SemaineEntrainement, SeanceEntrainement.semaine_id == SemaineEntrainement.id)
@@ -1869,6 +1871,31 @@ def _extraire_metriques_forme(texte: str) -> dict:
     return metriques
 
 
+_ocr_singleton = None
+_ocr_lock = _threading.Lock()
+
+
+def _obtenir_ocr():
+    global _ocr_singleton
+    if _ocr_singleton is None:
+        with _ocr_lock:
+            if _ocr_singleton is None:
+                from rapidocr_onnxruntime import RapidOCR
+                _ocr_singleton = RapidOCR()
+    return _ocr_singleton
+
+
+def _executer_ocr_bloquant(contenu: bytes) -> str:
+    from PIL import Image
+    import numpy as np
+
+    image = Image.open(io.BytesIO(contenu)).convert("RGB")
+    arr = np.array(image)
+    ocr = _obtenir_ocr()
+    result, _ = ocr(arr)
+    return "\n".join(r[1] for r in result) if result else ""
+
+
 @app.post(
     "/api/seances/{seance_id}/journal/analyse-screenshot",
     summary="Analyse un screenshot Forme via OCR et pré-remplit les métriques",
@@ -1879,19 +1906,11 @@ async def analyser_screenshot(
     current_user: Utilisateur = Depends(get_current_user),
     db: Session = Depends(obtenir_session),
 ):
-    from PIL import Image
-    from rapidocr_onnxruntime import RapidOCR
-
     seance = _obtenir_seance_utilisateur(db, seance_id, current_user)
 
     contenu = await file.read()
     try:
-        image = Image.open(io.BytesIO(contenu)).convert("RGB")
-        import numpy as np
-        arr = np.array(image)
-        ocr = RapidOCR()
-        result, _ = ocr(arr)
-        texte = "\n".join(r[1] for r in result) if result else ""
+        texte = await run_in_threadpool(_executer_ocr_bloquant, contenu)
     except Exception as exc:
         raise HTTPException(500, f"OCR échoué : {exc}")
 
