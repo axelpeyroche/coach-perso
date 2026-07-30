@@ -65,6 +65,29 @@ def creer_tables() -> None:
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS programme_auto BOOLEAN DEFAULT TRUE",
         # Nombre de séances vélo par semaine
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS seances_velo_semaine INTEGER",
+        # Index sur les clés étrangères — accélère les requêtes filtrées par
+        # utilisateur/séance/évaluation, absentes des tables déjà existantes
+        # en production (Base.metadata.create_all ne les crée que sur les
+        # tables neuves).
+        "CREATE INDEX IF NOT EXISTS idx_poids_utilisateurs_utilisateur_id ON poids_utilisateurs (utilisateur_id)",
+        "CREATE INDEX IF NOT EXISTS idx_biometries_utilisateurs_utilisateur_id ON biometries_utilisateurs (utilisateur_id)",
+        "CREATE INDEX IF NOT EXISTS idx_variations_exercices_id_regression ON variations_exercices (id_regression)",
+        "CREATE INDEX IF NOT EXISTS idx_variations_exercices_id_progression ON variations_exercices (id_progression)",
+        "CREATE INDEX IF NOT EXISTS idx_macrocycles_utilisateur_id ON macrocycles (utilisateur_id)",
+        "CREATE INDEX IF NOT EXISTS idx_semaines_entrainement_macrocycle_id ON semaines_entrainement (macrocycle_id)",
+        "CREATE INDEX IF NOT EXISTS idx_seances_entrainement_semaine_id ON seances_entrainement (semaine_id)",
+        "CREATE INDEX IF NOT EXISTS idx_exercices_seance_seance_id ON exercices_seance (seance_id)",
+        "CREATE INDEX IF NOT EXISTS idx_exercices_seance_exercice_id ON exercices_seance (exercice_id)",
+        "CREATE INDEX IF NOT EXISTS idx_journaux_seances_utilisateur_id ON journaux_seances (utilisateur_id)",
+        "CREATE INDEX IF NOT EXISTS idx_journaux_exercices_journal_seance_id ON journaux_exercices (journal_seance_id)",
+        "CREATE INDEX IF NOT EXISTS idx_journaux_exercices_exercice_seance_id ON journaux_exercices (exercice_seance_id)",
+        "CREATE INDEX IF NOT EXISTS idx_journaux_evaluation_seance_utilisateur_id ON journaux_evaluation_seance (utilisateur_id)",
+        "CREATE INDEX IF NOT EXISTS idx_journaux_evaluation_seance_macrocycle_id ON journaux_evaluation_seance (macrocycle_id)",
+        "CREATE INDEX IF NOT EXISTS idx_resultats_demi_cooper_id_biometrie_instantanee ON resultats_demi_cooper (id_biometrie_instantanee)",
+        "CREATE INDEX IF NOT EXISTS idx_resultats_max_1min_evaluation_id ON resultats_max_1min (evaluation_id)",
+        "CREATE INDEX IF NOT EXISTS idx_resultats_max_1min_exercice_id ON resultats_max_1min (exercice_id)",
+        "CREATE INDEX IF NOT EXISTS idx_objectifs_course_utilisateur_id ON objectifs_course (utilisateur_id)",
+        "CREATE INDEX IF NOT EXISTS idx_push_subscriptions_utilisateur_id ON push_subscriptions (utilisateur_id)",
     ]
     with engine.begin() as conn:
         for stmt in _migrations:

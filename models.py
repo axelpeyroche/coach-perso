@@ -160,7 +160,7 @@ class PoidsUtilisateur(Base):
     __tablename__ = "poids_utilisateurs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    utilisateur_id: Mapped[int] = mapped_column(ForeignKey("utilisateurs.id"), nullable=False)
+    utilisateur_id: Mapped[int] = mapped_column(ForeignKey("utilisateurs.id"), nullable=False, index=True)
     poids_kg: Mapped[float] = mapped_column(Float, nullable=False)
     enregistre_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
@@ -182,7 +182,7 @@ class BiometrieUtilisateur(Base):
     __tablename__ = "biometries_utilisateurs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    utilisateur_id: Mapped[int] = mapped_column(ForeignKey("utilisateurs.id"), nullable=False)
+    utilisateur_id: Mapped[int] = mapped_column(ForeignKey("utilisateurs.id"), nullable=False, index=True)
     enregistre_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     # Marqueurs physiologiques principaux
@@ -344,11 +344,11 @@ class VariationExercice(Base):
     muscles_secondaires: Mapped[Optional[str]] = mapped_column(String(255))
     materiel: Mapped[Optional[str]] = mapped_column(String(120))
     id_regression: Mapped[Optional[int]] = mapped_column(
-        ForeignKey("variations_exercices.id"),
+        ForeignKey("variations_exercices.id"), index=True,
         comment="Alternative plus facile pour la mise à l'échelle automatique"
     )
     id_progression: Mapped[Optional[int]] = mapped_column(
-        ForeignKey("variations_exercices.id"),
+        ForeignKey("variations_exercices.id"), index=True,
         comment="Alternative plus difficile pour la mise à l'échelle automatique"
     )
     description: Mapped[Optional[str]] = mapped_column(Text)
@@ -385,7 +385,7 @@ class Macrocycle(Base):
     __tablename__ = "macrocycles"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    utilisateur_id: Mapped[int] = mapped_column(ForeignKey("utilisateurs.id"), nullable=False)
+    utilisateur_id: Mapped[int] = mapped_column(ForeignKey("utilisateurs.id"), nullable=False, index=True)
     numero_cycle: Mapped[int] = mapped_column(
         Integer, nullable=False, comment="Index séquentiel, commence à 1"
     )
@@ -412,7 +412,7 @@ class SemaineEntrainement(Base):
     __tablename__ = "semaines_entrainement"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    macrocycle_id: Mapped[int] = mapped_column(ForeignKey("macrocycles.id"), nullable=False)
+    macrocycle_id: Mapped[int] = mapped_column(ForeignKey("macrocycles.id"), nullable=False, index=True)
     numero_semaine: Mapped[int] = mapped_column(
         Integer, nullable=False, comment="Semaine dans le macrocycle, indexée à 1"
     )
@@ -450,7 +450,7 @@ class SeanceEntrainement(Base):
     __tablename__ = "seances_entrainement"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    semaine_id: Mapped[int] = mapped_column(ForeignKey("semaines_entrainement.id"), nullable=False)
+    semaine_id: Mapped[int] = mapped_column(ForeignKey("semaines_entrainement.id"), nullable=False, index=True)
     date_seance: Mapped[date] = mapped_column(Date, nullable=False)
     type_seance: Mapped[TypeSeance] = mapped_column(Enum(TypeSeance), nullable=False)
     titre: Mapped[Optional[str]] = mapped_column(String(200))
@@ -499,9 +499,9 @@ class ExerciceSeance(Base):
     __tablename__ = "exercices_seance"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    seance_id: Mapped[int] = mapped_column(ForeignKey("seances_entrainement.id"), nullable=False)
+    seance_id: Mapped[int] = mapped_column(ForeignKey("seances_entrainement.id"), nullable=False, index=True)
     exercice_id: Mapped[Optional[int]] = mapped_column(
-        ForeignKey("variations_exercices.id"), nullable=True
+        ForeignKey("variations_exercices.id"), nullable=True, index=True
     )
     nom_affichage: Mapped[Optional[str]] = mapped_column(
         String(200), comment="Nom libre pour les exercices sans slug (machines salle, etc.)"
@@ -563,7 +563,7 @@ class JournalSeance(Base):
     __tablename__ = "journaux_seances"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    utilisateur_id: Mapped[int] = mapped_column(ForeignKey("utilisateurs.id"), nullable=False)
+    utilisateur_id: Mapped[int] = mapped_column(ForeignKey("utilisateurs.id"), nullable=False, index=True)
     seance_id: Mapped[int] = mapped_column(
         ForeignKey("seances_entrainement.id"), unique=True, nullable=False
     )
@@ -609,9 +609,11 @@ class JournalExercice(Base):
     __tablename__ = "journaux_exercices"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    journal_seance_id: Mapped[int] = mapped_column(ForeignKey("journaux_seances.id"), nullable=False)
+    journal_seance_id: Mapped[int] = mapped_column(
+        ForeignKey("journaux_seances.id"), nullable=False, index=True
+    )
     exercice_seance_id: Mapped[int] = mapped_column(
-        ForeignKey("exercices_seance.id"), nullable=False
+        ForeignKey("exercices_seance.id"), nullable=False, index=True
     )
     numero_serie: Mapped[int] = mapped_column(Integer, default=1)
     reps_realisees: Mapped[Optional[int]] = mapped_column(Integer)
@@ -635,8 +637,8 @@ class JournalEvaluationSeance(Base):
     __tablename__ = "journaux_evaluation_seance"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    utilisateur_id: Mapped[int] = mapped_column(ForeignKey("utilisateurs.id"), nullable=False)
-    macrocycle_id: Mapped[Optional[int]] = mapped_column(ForeignKey("macrocycles.id"))
+    utilisateur_id: Mapped[int] = mapped_column(ForeignKey("utilisateurs.id"), nullable=False, index=True)
+    macrocycle_id: Mapped[Optional[int]] = mapped_column(ForeignKey("macrocycles.id"), index=True)
     evalue_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     est_induction: Mapped[bool] = mapped_column(
         Boolean, default=False,
@@ -679,7 +681,7 @@ class ResultatDemiCooper(Base):
         String(255), comment="Surface, météo, etc."
     )
     id_biometrie_instantanee: Mapped[Optional[int]] = mapped_column(
-        ForeignKey("biometries_utilisateurs.id"),
+        ForeignKey("biometries_utilisateurs.id"), index=True,
         comment="Pointe vers la ligne BiometrieUtilisateur créée depuis ce résultat"
     )
 
@@ -701,10 +703,10 @@ class ResultatMax1Min(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     evaluation_id: Mapped[int] = mapped_column(
-        ForeignKey("journaux_evaluation_seance.id"), nullable=False
+        ForeignKey("journaux_evaluation_seance.id"), nullable=False, index=True
     )
     exercice_id: Mapped[int] = mapped_column(
-        ForeignKey("variations_exercices.id"), nullable=False
+        ForeignKey("variations_exercices.id"), nullable=False, index=True
     )
     repetitions_realisees: Mapped[int] = mapped_column(Integer, nullable=False)
     notes: Mapped[Optional[str]] = mapped_column(String(255))
@@ -775,7 +777,7 @@ class ObjectifCourse(Base):
     __tablename__ = "objectifs_course"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    utilisateur_id: Mapped[int] = mapped_column(ForeignKey("utilisateurs.id"), nullable=False)
+    utilisateur_id: Mapped[int] = mapped_column(ForeignKey("utilisateurs.id"), nullable=False, index=True)
     nom: Mapped[str] = mapped_column(String(200), nullable=False)
     date_course: Mapped[date] = mapped_column(Date, nullable=False)
     distance_km: Mapped[float] = mapped_column(Float, nullable=False)
@@ -793,7 +795,7 @@ class PushSubscription(Base):
     __tablename__ = "push_subscriptions"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    utilisateur_id: Mapped[int] = mapped_column(ForeignKey("utilisateurs.id"), nullable=False)
+    utilisateur_id: Mapped[int] = mapped_column(ForeignKey("utilisateurs.id"), nullable=False, index=True)
     endpoint: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     p256dh: Mapped[str] = mapped_column(Text, nullable=False)
     auth: Mapped[str] = mapped_column(Text, nullable=False)
