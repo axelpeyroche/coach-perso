@@ -593,20 +593,21 @@ function ShortcutIOS() {
   }
 
   return (
-    <div className="py-3 space-y-3">
+    <div className="py-3">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Raccourci iOS (Apple Watch)</p>
           <p className="text-xs text-gray-400 mt-0.5">Importe tes séances depuis l'app Santé</p>
         </div>
-        <button onClick={visible ? () => setVisible(false) : chargerToken} disabled={loading}
+        <button onClick={chargerToken} disabled={loading}
           className="text-xs px-3 py-1.5 rounded-xl bg-brand text-white font-semibold hover:bg-brand-dark transition-colors disabled:opacity-50">
-          {loading ? "…" : visible ? "Masquer" : "Configurer"}
+          {loading ? "…" : "Configurer"}
         </button>
       </div>
 
       {visible && token && (
-        <div className="bg-gray-50 dark:bg-gray-800 rounded-xl p-4 space-y-4 text-xs">
+        <Modal title="Raccourci iOS (Apple Watch)" onClose={() => setVisible(false)}>
+        <div className="space-y-4 text-xs">
           {/* Token */}
           <div>
             <p className="font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1.5">Ton token d'accès</p>
@@ -815,6 +816,7 @@ rpe            → 7`}</pre>
             </div>
           </div>
         </div>
+        </Modal>
       )}
     </div>
   );
@@ -929,6 +931,11 @@ export default function Profil({ dark, setDark }) {
           <span className="text-sm text-gray-700 dark:text-gray-300">Notifications push</span>
           <PushToggle />
         </div>
+      </Section>
+
+      {/* Intégrations */}
+      <Section title="Intégrations">
+        <ShortcutIOS />
       </Section>
 
       {/* Déconnexion */}
