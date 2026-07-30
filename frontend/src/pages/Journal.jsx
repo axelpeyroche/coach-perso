@@ -55,6 +55,8 @@ function FormulaireSeance({ seance, onSuccess }) {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["semaine-courante"] });
+      qc.invalidateQueries({ queryKey: ["semaine-en-cours"] });
+      qc.invalidateQueries({ queryKey: ["resume-hebdo"] });
       onSuccess();
     },
   });

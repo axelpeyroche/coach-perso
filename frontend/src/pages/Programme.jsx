@@ -247,6 +247,8 @@ function FormulaireEvaluation({ seance, onClose, onDone }) {
 
       qc.invalidateQueries({ queryKey: ["toutes-semaines"] });
       qc.invalidateQueries({ queryKey: ["evaluations-historique"] });
+      qc.invalidateQueries({ queryKey: ["semaine-en-cours"] });
+      qc.invalidateQueries({ queryKey: ["resume-hebdo"] });
       onDone();
     } catch (e) {
       setError(getErrorMessage(e, "Erreur — réessaie."));
@@ -414,7 +416,12 @@ function FormulaireLog({ seance, onClose, onDone, modeEdit = false }) {
       if (modeEdit) return modifierJournal(seance.id, payload);
       return journaliserSeance(seance.id, payload);
     },
-    onSuccess: (data) => { qc.invalidateQueries({ queryKey: ["toutes-semaines"] }); if (!modeEdit) onDone(data?.conseil_recuperation); else onDone(); },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["toutes-semaines"] });
+      qc.invalidateQueries({ queryKey: ["semaine-en-cours"] });
+      qc.invalidateQueries({ queryKey: ["resume-hebdo"] });
+      if (!modeEdit) onDone(data?.conseil_recuperation); else onDone();
+    },
   });
 
   return (
@@ -772,6 +779,8 @@ function CarteSeance({ seance, zonesFC, manuel = false }) {
       setValide(false);
       qc.invalidateQueries({ queryKey: ["toutes-semaines"] });
       qc.invalidateQueries({ queryKey: ["evaluations-historique"] });
+      qc.invalidateQueries({ queryKey: ["semaine-en-cours"] });
+      qc.invalidateQueries({ queryKey: ["resume-hebdo"] });
     },
   });
 
