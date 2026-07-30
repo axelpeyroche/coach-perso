@@ -660,6 +660,95 @@ def _injecter_seances_velo(db, user, type_programme, semaines):
             ))
 
 
+def _parser_historique_perf(historique_perf_json, user_id):
+    """Parse le JSON historique_perf stocké en base, en journalisant les échecs."""
+    if not historique_perf_json:
+        return {}
+    try:
+        return _json_mod.loads(historique_perf_json)
+    except Exception:
+        logger.warning("historique_perf illisible pour l'utilisateur %s", user_id)
+        return {}
+
+
+def _calibration_utilisateur(db, user, historique):
+    """Construit le profil consolidé et la calibration v2 pour un utilisateur."""
+    from intelligence_programme import construire_profil, calibration_v2
+    profil = construire_profil(user, db, historique)
+    calib = calibration_v2(historique, profil)
+    return profil, calib
+
+
+def _vma_depuis_historique_ou_bio(db, user, historique):
+    """VMA connue via historique questionnaire, sinon dernière biométrie enregistrée."""
+    vma = None
+    if historique.get("vma_estimee"):
+        try:
+            vma = float(historique["vma_estimee"])
+        except (TypeError, ValueError):
+            pass
+    if vma is None:
+        bio = (
+            db.query(BiometrieUtilisateur)
+            .filter(BiometrieUtilisateur.utilisateur_id == user.id)
+            .order_by(BiometrieUtilisateur.enregistre_le.desc())
+            .first()
+        )
+        if bio:
+            vma = bio.vma_kmh
+    return vma
+
+
+def _supprimer_ancien_programme(db, user):
+    """Supprime les macrocycles existants de l'utilisateur (journaux d'abord pour éviter les FK)."""
+    old_seance_ids = [
+        s.id
+        for mc_old in db.query(Macrocycle).filter(Macrocycle.utilisateur_id == user.id).all()
+        for sem in mc_old.semaines
+        for s in sem.seances
+    ]
+    if old_seance_ids:
+        db.query(JournalSeance).filter(JournalSeance.seance_id.in_(old_seance_ids)).delete(synchronize_session=False)
+    for mc_old in db.query(Macrocycle).filter(Macrocycle.utilisateur_id == user.id).all():
+        db.delete(mc_old)
+    db.flush()
+
+
+def _generer_macrocycles_standard(db, user, debut_base, n_cycles, kf, af, rf, profil, calib, vma_for_paces, muscu_adapter, n_muscu, n_course):
+    """Génère n_cycles macrocycles de 8 semaines (blueprint standard, contenu calibré).
+
+    Factorise la boucle partagée par l'onboarding (2 cycles) et l'initialisation
+    manuelle du programme (3 cycles) — reste identique par ailleurs.
+    """
+    from periodization_rules import BLUEPRINT_MACROCYCLE, generer_dates_semaines
+    from intelligence_programme import appliquer_profil_au_contenu
+    from seed_seances import (
+        MODULE1, MODULE2, MODULE3, _inserer_seances_en_session, calibrer_module,
+        adapter_contenu_course, enrichir_paces_vma,
+    )
+    modules = {1: MODULE1, 2: MODULE2, 3: MODULE3}
+    for numero_cycle in range(1, n_cycles + 1):
+        debut_mc = debut_base + timedelta(weeks=8 * (numero_cycle - 1))
+        mc = Macrocycle(utilisateur_id=user.id, numero_cycle=numero_cycle,
+                        date_debut=debut_mc, date_fin=debut_mc + timedelta(weeks=8))
+        db.add(mc); db.flush()
+        for regle, ds in zip(BLUEPRINT_MACROCYCLE, generer_dates_semaines(debut_mc)):
+            km = round(regle.objectif_km_course * kf, 1) if regle.objectif_km_course else None
+            amrap = round(regle.objectif_amrap_min * af) if regle.objectif_amrap_min else None
+            db.add(SemaineEntrainement(macrocycle_id=mc.id, numero_semaine=regle.numero,
+                macrophase=regle.macrophase, date_debut=ds,
+                multiplicateur_volume=regle.multiplicateur_volume,
+                objectif_km_course=km, objectif_amrap_min=amrap))
+        db.flush()
+        module_data = modules.get(numero_cycle, MODULE1)
+        calibrated = calibrer_module(module_data, kf, af, rf)
+        calibrated = appliquer_profil_au_contenu(calibrated, profil, calib)
+        if vma_for_paces and vma_for_paces >= 5.0:
+            calibrated = enrichir_paces_vma(calibrated, vma_for_paces)
+        adapted = adapter_contenu_course(muscu_adapter(calibrated, n_muscu, user.sexe), n_course)
+        _inserer_seances_en_session(db, mc, adapted)
+
+
 @app.post("/api/auth/onboarding", summary="Complète l'onboarding et génère le programme")
 def onboarding(
     payload: OnboardingSchema,
@@ -669,7 +758,7 @@ def onboarding(
     import json as _json
     from models import SemaineEntrainement
     from periodization_rules import BLUEPRINT_MACROCYCLE, generer_dates_semaines, generer_blueprint_course
-    from seed_seances import MODULE1, MODULE2, MODULE3, _POOL_SURCHARGE, _semaine_course, _semaine_taper_course, _inserer_seances_en_session, calibrer_module, adapter_contenu_muscu, adapter_contenu_gym, adapter_contenu_course, enrichir_paces_vma
+    from seed_seances import MODULE1, _POOL_SURCHARGE, _semaine_course, _semaine_taper_course, _inserer_seances_en_session, calibrer_module, adapter_contenu_muscu, adapter_contenu_gym, adapter_contenu_course, enrichir_paces_vma
 
     # Sauvegarder préférences
     current_user.type_programme = payload.type_programme
@@ -724,17 +813,7 @@ def onboarding(
         debut = debut + timedelta(days=(7 - debut.weekday()) % 7)
 
     # Supprimer ancien programme si existant (journaux d'abord pour éviter FK)
-    old_seance_ids = [
-        s.id
-        for mc_old in db.query(Macrocycle).filter(Macrocycle.utilisateur_id == current_user.id).all()
-        for sem in mc_old.semaines
-        for s in sem.seances
-    ]
-    if old_seance_ids:
-        db.query(JournalSeance).filter(JournalSeance.seance_id.in_(old_seance_ids)).delete(synchronize_session=False)
-    for mc_old in db.query(Macrocycle).filter(Macrocycle.utilisateur_id == current_user.id).all():
-        db.delete(mc_old)
-    db.flush()
+    _supprimer_ancien_programme(db, current_user)
 
     # ── MODE MANUEL : pas de génération auto ────────────────────────────────
     # On crée une structure de semaines vides (macrocycle sans séances) que
@@ -879,30 +958,13 @@ def onboarding(
         _inserer_seances_en_session(db, mc, adapted)
     else:
         # Programme standard 2 macrocycles avec sessions calibrées
-        modules = {1: MODULE1, 2: MODULE2, 3: MODULE3}
         n_muscu = current_user.seances_muscu_semaine or 2
         n_course = current_user.seances_course_semaine or 3
         muscu_adapter = adapter_contenu_gym if current_user.type_muscu == "salle" else adapter_contenu_muscu
-        for numero_cycle in (1, 2):
-            debut_mc = debut + timedelta(weeks=8 * (numero_cycle - 1))
-            mc = Macrocycle(utilisateur_id=current_user.id, numero_cycle=numero_cycle,
-                            date_debut=debut_mc, date_fin=debut_mc + timedelta(weeks=8))
-            db.add(mc); db.flush()
-            for regle, ds in zip(BLUEPRINT_MACROCYCLE, generer_dates_semaines(debut_mc)):
-                km = round(regle.objectif_km_course * kf, 1) if regle.objectif_km_course else None
-                amrap = round(regle.objectif_amrap_min * af) if regle.objectif_amrap_min else None
-                db.add(SemaineEntrainement(macrocycle_id=mc.id, numero_semaine=regle.numero,
-                    macrophase=regle.macrophase, date_debut=ds,
-                    multiplicateur_volume=regle.multiplicateur_volume,
-                    objectif_km_course=km, objectif_amrap_min=amrap))
-            db.flush()
-            module_data = modules.get(numero_cycle, MODULE1)
-            calibrated = calibrer_module(module_data, kf, af, rf)
-            calibrated = appliquer_profil_au_contenu(calibrated, profil, calib)
-            if vma_for_paces and vma_for_paces >= 5.0:
-                calibrated = enrichir_paces_vma(calibrated, vma_for_paces)
-            adapted = adapter_contenu_course(muscu_adapter(calibrated, n_muscu, current_user.sexe), n_course)
-            _inserer_seances_en_session(db, mc, adapted)
+        _generer_macrocycles_standard(
+            db, current_user, debut, 2, kf, af, rf, profil, calib, vma_for_paces,
+            muscu_adapter, n_muscu, n_course,
+        )
 
     # ── Séances vélo de route (si la discipline est pratiquée) ──────────────
     semaines_all = (
@@ -940,11 +1002,10 @@ def update_programme(
 ):
     from seed_seances import (
         MODULE1, MODULE2, MODULE3,
-        _inserer_seances_en_session, calibrer_module,
+        calibrer_module,
         adapter_contenu_muscu, adapter_contenu_gym, adapter_contenu_course,
         enrichir_paces_vma,
     )
-    import json as _json
 
     # 1. Mettre à jour les préférences utilisateur
     if payload.type_programme is not None:
@@ -974,19 +1035,9 @@ def update_programme(
     n_course = current_user.seances_course_semaine if current_user.seances_course_semaine is not None else max(1, seances_total - n_muscu)
     muscu_adapter = adapter_contenu_gym if current_user.type_muscu == "salle" else adapter_contenu_muscu
 
-    from intelligence_programme import (
-        construire_profil as _cp_upd, calibration_v2 as _cv2_upd,
-        appliquer_profil_au_contenu as _apc_upd,
-    )
-    hist_upd = {}
-    if current_user.historique_perf:
-        try:
-            hist_upd = _json.loads(current_user.historique_perf)
-        except Exception:
-            logger.warning("historique_perf illisible pour l'utilisateur %s", current_user.id)
-            hist_upd = {}
-    profil_upd = _cp_upd(current_user, db, hist_upd)
-    calib = _cv2_upd(hist_upd, profil_upd)
+    from intelligence_programme import appliquer_profil_au_contenu as _apc_upd
+    hist_upd = _parser_historique_perf(current_user.historique_perf, current_user.id)
+    profil_upd, calib = _calibration_utilisateur(db, current_user, hist_upd)
     kf, af, rf = calib["km_factor"], calib["amrap_factor"], calib["reps_factor"]
 
     # VMA actuelle pour enrichissement descriptions
@@ -2933,12 +2984,7 @@ def reset_macrocycles(
         debut_mc1 = today + timedelta(days=jours)
 
     # Suppression des macrocycles existants (journaux d'abord pour éviter FK)
-    old_seance_ids_adm = [s.id for mc in db.query(Macrocycle).filter(Macrocycle.utilisateur_id == utilisateur_id).all() for sem in mc.semaines for s in sem.seances]
-    if old_seance_ids_adm:
-        db.query(JournalSeance).filter(JournalSeance.seance_id.in_(old_seance_ids_adm)).delete(synchronize_session=False)
-    for mc in db.query(Macrocycle).filter(Macrocycle.utilisateur_id == utilisateur_id).all():
-        db.delete(mc)
-    db.flush()
+    _supprimer_ancien_programme(db, user)
 
     debuts = {1: debut_mc1, 2: debut_mc1 + timedelta(weeks=8), 3: debut_mc1 + timedelta(weeks=16)}
     crees = []
@@ -3068,12 +3114,10 @@ def supprimer_programme(current_user: Utilisateur = Depends(get_current_user), d
 @app.post("/api/programme/initialiser", summary="Génère le programme depuis la date choisie dans l'UI")
 def initialiser_programme(payload: InitProgrammePayload, current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
     from models import SemaineEntrainement
-    from periodization_rules import (
-        BLUEPRINT_MACROCYCLE, generer_dates_semaines, generer_blueprint_course,
-    )
+    from periodization_rules import generer_blueprint_course
     from models import TypeMacrophase
     from seed_seances import (
-        MODULE1, MODULE2, MODULE3,
+        MODULE1,
         _POOL_SURCHARGE, _semaine_course, _semaine_taper_course, _inserer_seances_en_session,
         calibrer_module, adapter_contenu_muscu, adapter_contenu_gym, adapter_contenu_course, enrichir_paces_vma,
     )
@@ -3093,12 +3137,7 @@ def initialiser_programme(payload: InitProgrammePayload, current_user: Utilisate
     ).order_by(ObjectifCourse.id.desc()).first()
 
     # Suppression des macrocycles existants (journaux d'abord pour éviter FK)
-    old_seance_ids_init = [s.id for mc_old in db.query(Macrocycle).filter(Macrocycle.utilisateur_id == user.id).all() for sem in mc_old.semaines for s in sem.seances]
-    if old_seance_ids_init:
-        db.query(JournalSeance).filter(JournalSeance.seance_id.in_(old_seance_ids_init)).delete(synchronize_session=False)
-    for mc_old in db.query(Macrocycle).filter(Macrocycle.utilisateur_id == user.id).all():
-        db.delete(mc_old)
-    db.flush()
+    _supprimer_ancien_programme(db, user)
 
     try:
         # ── CAS 1 : course planifiée → programme adaptatif N semaines ───────
@@ -3110,20 +3149,11 @@ def initialiser_programme(payload: InitProgrammePayload, current_user: Utilisate
             n_surcharge = n_semaines - 3
 
             # Calibration v2 avant blueprint (progression individualisée)
-            historique = {}
-            if user.historique_perf:
-                import json as _json
-                try:
-                    historique = _json.loads(user.historique_perf)
-                except Exception:
-                    logger.warning("historique_perf illisible pour l'utilisateur %s", user.id)
-                    historique = {}
             from intelligence_programme import (
-                construire_profil, calibration_v2, generer_blueprint_course_v2,
-                semaines_assimilation, appliquer_profil_au_contenu,
+                generer_blueprint_course_v2, semaines_assimilation, appliquer_profil_au_contenu,
             )
-            profil = construire_profil(user, db, historique)
-            cal = calibration_v2(historique, profil)
+            historique = _parser_historique_perf(user.historique_perf, user.id)
+            profil, cal = _calibration_utilisateur(db, user, historique)
 
             blueprint = generer_blueprint_course_v2(n_semaines, cal)
             dates = [debut_mc1 + timedelta(weeks=i) for i in range(n_semaines)]
@@ -3162,18 +3192,7 @@ def initialiser_programme(payload: InitProgrammePayload, current_user: Utilisate
             m1_cal_init = calibrer_module(MODULE1, kf_init, af_init, rf_init)
 
             # VMA pour enrichissement des allures cibles
-            vma_init = None
-            if historique.get("vma_estimee"):
-                try:
-                    vma_init = float(historique["vma_estimee"])
-                except (TypeError, ValueError):
-                    pass
-            if vma_init is None:
-                bio = db.query(BiometrieUtilisateur).filter(
-                    BiometrieUtilisateur.utilisateur_id == user.id
-                ).order_by(BiometrieUtilisateur.enregistre_le.desc()).first()
-                if bio:
-                    vma_init = bio.vma_kmh
+            vma_init = _vma_depuis_historique_ou_bio(db, user, historique)
 
             # Volume progressif
             vol_pic = _calculer_volume_pic(obj.distance_km)
@@ -3227,75 +3246,24 @@ def initialiser_programme(payload: InitProgrammePayload, current_user: Utilisate
 
         # ── CAS 2 : pas de course → programme standard 3 × 8 semaines ───────
         # Recalibration si historique dispo
-        historique_std = {}
-        if user.historique_perf:
-            import json as _json_std
-            try:
-                historique_std = _json_std.loads(user.historique_perf)
-            except Exception:
-                logger.warning("historique_perf illisible pour l'utilisateur %s", user.id)
-                historique_std = {}
-        from intelligence_programme import (
-            construire_profil as _cp_std, calibration_v2 as _cv2_std,
-            appliquer_profil_au_contenu as _apc_std,
-        )
-        profil_std = _cp_std(user, db, historique_std)
-        cal_std = _cv2_std(historique_std, profil_std)
+        historique_std = _parser_historique_perf(user.historique_perf, user.id)
+        profil_std, cal_std = _calibration_utilisateur(db, user, historique_std)
         kf_std = cal_std["km_factor"]
         af_std = cal_std["amrap_factor"]
         rf_std = cal_std["reps_factor"]
 
         # VMA pour allures
-        vma_std = None
-        if historique_std.get("vma_estimee"):
-            try:
-                vma_std = float(historique_std["vma_estimee"])
-            except (TypeError, ValueError):
-                pass
-        if vma_std is None:
-            bio_std = db.query(BiometrieUtilisateur).filter(
-                BiometrieUtilisateur.utilisateur_id == user.id
-            ).order_by(BiometrieUtilisateur.enregistre_le.desc()).first()
-            if bio_std:
-                vma_std = bio_std.vma_kmh
+        vma_std = _vma_depuis_historique_ou_bio(db, user, historique_std)
 
         n_muscu = user.seances_muscu_semaine or 2
         seances_total = user.seances_semaine or 5
         n_course = user.seances_course_semaine if user.seances_course_semaine is not None else max(1, seances_total - n_muscu)
         n_course = min(n_course, max(1, seances_total - n_muscu))
         muscu_adapter = adapter_contenu_gym if user.type_muscu == "salle" else adapter_contenu_muscu
-        mcs_crees = []
-        for numero_cycle in range(1, 4):
-            debut = debut_mc1 + timedelta(weeks=8 * (numero_cycle - 1))
-            mc = Macrocycle(
-                utilisateur_id=user.id,
-                numero_cycle=numero_cycle,
-                date_debut=debut,
-                date_fin=debut + timedelta(weeks=8),
-            )
-            db.add(mc)
-            db.flush()
-            for regle, date_sem in zip(BLUEPRINT_MACROCYCLE, generer_dates_semaines(debut)):
-                km = round(regle.objectif_km_course * kf_std, 1) if regle.objectif_km_course else None
-                amrap = round(regle.objectif_amrap_min * af_std) if regle.objectif_amrap_min else None
-                db.add(SemaineEntrainement(
-                    macrocycle_id=mc.id,
-                    numero_semaine=regle.numero,
-                    macrophase=regle.macrophase,
-                    date_debut=date_sem,
-                    multiplicateur_volume=regle.multiplicateur_volume,
-                    objectif_km_course=km,
-                    objectif_amrap_min=amrap,
-                ))
-            db.flush()
-            module_data = {1: MODULE1, 2: MODULE2, 3: MODULE3}[numero_cycle]
-            calibrated_std = calibrer_module(module_data, kf_std, af_std, rf_std)
-            calibrated_std = _apc_std(calibrated_std, profil_std, cal_std)
-            if vma_std and vma_std >= 5.0:
-                calibrated_std = enrichir_paces_vma(calibrated_std, vma_std)
-            adapted_std = adapter_contenu_course(muscu_adapter(calibrated_std, n_muscu, user.sexe), n_course)
-            _inserer_seances_en_session(db, mc, adapted_std)
-            mcs_crees.append(numero_cycle)
+        _generer_macrocycles_standard(
+            db, user, debut_mc1, 3, kf_std, af_std, rf_std, profil_std, cal_std, vma_std,
+            muscu_adapter, n_muscu, n_course,
+        )
 
         db.commit()
         return {
