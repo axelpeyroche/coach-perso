@@ -808,3 +808,18 @@ class PushSubscription(Base):
     p256dh: Mapped[str] = mapped_column(Text, nullable=False)
     auth: Mapped[str] = mapped_column(Text, nullable=False)
     cree_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+# ---------------------------------------------------------------------------
+# Chat coach — historique de conversation avec l'agent Claude
+# ---------------------------------------------------------------------------
+
+class MessageChatCoach(Base):
+    """Un message (utilisateur ou assistant) de la conversation avec le coach IA."""
+    __tablename__ = "messages_chat_coach"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    utilisateur_id: Mapped[int] = mapped_column(ForeignKey("utilisateurs.id"), nullable=False, index=True)
+    role: Mapped[str] = mapped_column(String(20), nullable=False)  # "user" | "assistant"
+    contenu: Mapped[str] = mapped_column(Text, nullable=False)
+    cree_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

@@ -29,3 +29,6 @@ alembic/versions/*.pyc
 
 # Render / CI
 .render-buildpacks.json
+
+# Frontend
+node_modules/

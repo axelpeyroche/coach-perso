@@ -23,6 +23,7 @@ from routers import (
     admin,
     analytics,
     auth,
+    chat,
     evaluations,
     import_ios,
     journal,
@@ -91,6 +92,7 @@ app.include_router(seances.router)
 app.include_router(admin.router)
 app.include_router(objectif_course.router)
 app.include_router(import_ios.router)
+app.include_router(chat.router)
 
 
 # ---------------------------------------------------------------------------

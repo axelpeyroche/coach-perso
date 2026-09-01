@@ -202,3 +202,13 @@ export const exporterDonnees = () =>
 
 export const supprimerCompte = () =>
   api.delete("/utilisateur").then((r) => r.data);
+
+// --- Chat coach IA ---
+export const getChatHistory = () =>
+  api.get("/chat/history").then((r) => r.data);
+
+export const envoyerMessageChat = (message) =>
+  api.post("/chat/message", { message }, { timeout: 60000 }).then((r) => r.data);
+
+export const supprimerChatHistory = () =>
+  api.delete("/chat/history").then((r) => r.data);
