@@ -111,38 +111,27 @@ const Champs = ({ lignes }) => (
 );
 
 const ETAPES_RACCOURCI = (url) => [
-  ["Rechercher des échantillons de santé", "Type : Entraînements · Date de début : dans les 3 derniers jours · Limite : désactivée."],
-  ["Répéter avec chaque élément", "Entrée : les échantillons trouvés. L'étape 3 se place à l'intérieur de la boucle."],
-  ["Obtenir le contenu de l'URL (dans la boucle)", <>
-    URL : <code>{url}/activites/import</code> · Méthode : POST · Corps de la requête : JSON, avec ces champs de type Texte.
-    Pour une propriété : insère la variable « Élément de répétition », touche-la, puis choisis la propriété.
-    <Champs lignes={[
-      ["token", "ton token (ci-dessus)"],
-      ["type", "Élément de répétition › Type d'entraînement"],
-      ["debut", "› Date de début (touche-la → Format de date : ISO 8601)"],
-      ["fin", "› Date de fin (ISO 8601)"],
-      ["duree", "› Durée"],
-      ["distance", "› Distance"],
-      ["calories", "› Énergie active"],
-    ]} />
-  </>],
-  ["Fin de la répétition", "Rien à régler."],
   ["Rechercher des échantillons de santé (une action par type)", <>
-    Limite désactivée pour chacune. Renomme chaque résultat (touche la variable › Renommer) pour t'y retrouver à l'étape 6.
+    Limite désactivée pour chacune. Après chaque recherche, ajoute « Définir la variable » pour nommer le résultat.
     <Champs lignes={[
       ["7 derniers jours", "Fréquence cardiaque au repos · Variabilité de la fréquence cardiaque · VO2 max"],
-      ["3 derniers jours", "Fréquence cardiaque · Puissance de course · Vitesse de course · Longueur de foulée · Oscillation verticale · Temps de contact au sol · Nombre de pas"],
+      ["3 derniers jours", "Minutes d'exercice · Distance (marche et course) · Distance à vélo · Énergie active · Fréquence cardiaque · Puissance de course · Vitesse de course · Longueur de foulée · Oscillation verticale · Temps de contact au sol · Nombre de pas"],
       ["3 derniers jours, si proposé", "Effort de l'entraînement (noté) · Effort estimé de l'entraînement"],
     ]} />
   </>],
   ["Obtenir le contenu de l'URL", <>
-    Même URL, POST, JSON en Texte. Pour chaque type, deux champs : <code>&lt;type&gt;_valeurs</code> = la liste trouvée › Valeur,
-    et <code>&lt;type&gt;_dates</code> = la liste › Date de début (ISO 8601). Un type absent est simplement ignoré.
+    URL : <code>{url}/activites/import</code> · Méthode : POST · Corps : JSON, champs de type Texte.
+    Pour chaque type, deux champs : <code>&lt;type&gt;_valeurs</code> = la variable › Valeur,
+    et <code>&lt;type&gt;_dates</code> = la variable › Date de début (ISO 8601). Un type absent est simplement ignoré.
     <Champs lignes={[
-      ["token", "ton token"],
+      ["token", "ton token (ci-dessus)"],
       ["fc_repos_…", "FC au repos"],
       ["vfc_…", "Variabilité"],
       ["vo2max_…", "VO2 max"],
+      ["exercice_…", "Minutes d'exercice"],
+      ["distance_…", "Distance (marche et course)"],
+      ["distance_velo_…", "Distance à vélo"],
+      ["energie_…", "Énergie active"],
       ["fc_…", "Fréquence cardiaque"],
       ["puissance_…", "Puissance de course"],
       ["vitesse_…", "Vitesse de course"],
@@ -153,11 +142,12 @@ const ETAPES_RACCOURCI = (url) => [
       ["effort_…", "Effort noté sur la montre"],
       ["effort_estime_…", "Effort estimé par la montre"],
     ]} />
-    Le carnet rattache chaque échantillon à la séance pendant laquelle il a été mesuré : FC moyenne / max / min, zones FC
-    (calculées depuis ton profil), puissance, allure, foulée, oscillation, temps de contact, pas, et RPE depuis le score d'effort
-    (la charge s'en déduit). Les valeurs déjà connues (export Santé, saisie manuelle) ne sont pas écrasées.
+    Le carnet reconstitue les séances à partir des minutes d'exercice (au moins 15 min d'affilée) : course si la montre a
+    mesuré des métriques de course, vélo s'il y a de la distance à vélo, sinon « Séance à préciser » (change le type en un
+    clic ; une séance supprimée n'est pas recréée). Il y rattache ensuite FC, zones, puissance, allure, foulée, pas et RPE
+    depuis le score d'effort. Les valeurs d'un export Santé ou saisies à la main restent prioritaires.
   </>],
-  ["Afficher une notification (facultatif)", "Contenu : « Contenu de l'URL » — le carnet répond par exemple « 5 mesure(s) de forme · 2 séance(s) complétée(s) »."],
+  ["Afficher une notification (facultatif)", "Contenu : « Contenu de l'URL » — le carnet répond par exemple « 5 mesure(s) de forme · 1 séance(s) détectée(s) · 1 séance(s) complétée(s) »."],
 ];
 
 function BlocRaccourci() {
@@ -177,6 +167,7 @@ function BlocRaccourci() {
     type: "Course à pied", debut: "2026-10-05T07:30:00+02:00", fin: "2026-10-05T08:22:00+02:00",
     duree: "50 min", distance: "10,2 km", calories: "690 kcal",
     vfc_valeurs: "56\n47,9", vfc_dates: "2026-10-04T06:10:00+02:00\n2026-10-05T05:58:00+02:00",
+    exercice_valeurs: "1 min\n1 min\n…", exercice_dates: "2026-10-05T07:30:00+02:00\n2026-10-05T07:31:00+02:00\n…",
     fc_valeurs: "128\n141\n…", fc_dates: "2026-10-05T07:30:05+02:00\n2026-10-05T07:30:10+02:00\n…",
     puissance_valeurs: "251 W\n…", puissance_dates: "2026-10-05T07:31:00+02:00\n…",
     effort_estime_valeurs: "6,4", effort_estime_dates: "2026-10-05T08:22:00+02:00",

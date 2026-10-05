@@ -187,6 +187,34 @@ def _rpe_estime(details: Optional[str]) -> bool:
     return isinstance(d, dict) and d.get("rpe_source") == "estime_apple"
 
 
+def _detectee_auto(a: Activite) -> bool:
+    try:
+        d = json.loads(a.details) if a.details else None
+    except ValueError:
+        return False
+    return isinstance(d, dict) and bool(d.get("detection_auto"))
+
+
+def _remplacer_detectee(p: Activite, donnees: dict) -> None:
+    ancien = json.loads(p.details) if p.details else {}
+    nouveau = json.loads(donnees["details"]) if donnees.get("details") else {}
+    rpe_confirme = p.rpe is not None and ancien.get("rpe_source") != "estime_apple"
+    sport_modifie = p.sport != ancien.get("sport_detecte")  # type corrigé à la main
+    for k, v in donnees.items():
+        if v is None or k == "details" or (k == "rpe" and rpe_confirme) or (k == "sport" and sport_modifie):
+            continue
+        if k in ("notes", "titre") and getattr(p, k) and getattr(p, k) != TITRE_A_PRECISER:
+            continue  # saisis à la main
+        setattr(p, k, v)
+    if p.titre == TITRE_A_PRECISER:
+        p.titre = None
+    det = {k: v for k, v in ancien.items() if k not in ("detection_auto", "sport_detecte", "champs_raccourci", "nb_echantillons")}
+    det.update(nouveau)
+    if rpe_confirme:
+        det.pop("rpe_source", None)
+    p.details = json.dumps(det, ensure_ascii=False) if det else None
+
+
 def importer_activite(db: Session, user_id: int, source: str, donnees: dict,
                       id_externe: Optional[str] = None, maj_si_existe: bool = True) -> tuple[Activite, str]:
     """
@@ -245,6 +273,11 @@ def importer_activite(db: Session, user_id: int, source: str, donnees: dict,
             .all()
         )
         for p in candidates:
+            if _detectee_auto(p) and not _sans_heure(debut) and abs((p.debut - debut).total_seconds()) <= 15 * 60:
+                # Séance reconstituée par le raccourci : la vraie séance (export Santé…)
+                # la remplace, en gardant ce qui a été calculé ou saisi entre-temps
+                _remplacer_detectee(p, donnees)
+                return p, "fusion"
             if famille_sport(p.sport) != fam:
                 continue
             sans_heure = _sans_heure(debut) or _sans_heure(p.debut)
@@ -902,7 +935,15 @@ ECHANTILLONS = {
     "pas":         "pas",
     "effort":      "effort noté (1-10)",
     "effort_estime": "effort estimé par la montre (1-10)",
+    # Servent à reconstituer les séances quand Raccourcis ne donne pas les entraînements
+    "exercice":      "min",
+    "distance":      "km (marche et course)",
+    "distance_velo": "km",
+    "energie":       "kcal",
 }
+TITRE_A_PRECISER = "Séance à préciser"
+SEANCE_MIN = 15          # minutes d'exercice consécutives pour former une séance
+PAUSE_MAX = 5            # minutes sans exercice tolérées dans une séance
 
 
 def _details_dict(a: Activite) -> dict:
@@ -1049,6 +1090,85 @@ def enrichir_activites(db: Session, user: Utilisateur, ech: dict[str, list[tuple
         a.details = json.dumps(det, ensure_ascii=False) if det else None
         if (a.fc_moyenne_bpm, a.fc_max_bpm, a.rpe, a.details) != avant:
             n += 1
+    db.flush()
+    return n
+
+
+def _ignorees(user: Utilisateur) -> list[str]:
+    try:
+        v = json.loads(user.seances_ignorees) if user.seances_ignorees else []
+    except ValueError:
+        v = []
+    return v if isinstance(v, list) else []
+
+
+def memoriser_seance_ignoree(user: Utilisateur, a: Activite) -> None:
+    """Une séance reconstituée qu'on supprime ne doit pas réapparaître au prochain envoi."""
+    if _detectee_auto(a) and a.debut:
+        user.seances_ignorees = json.dumps((_ignorees(user) + [a.debut.isoformat()])[-60:])
+
+
+def _blocs_exercice(points: list[tuple[datetime, float]]) -> list[tuple[datetime, datetime, float]]:
+    """Regroupe les minutes d'exercice en blocs continus → [(début, fin, minutes)]."""
+    blocs = []
+    for d, minutes in sorted(points):
+        fin = d + timedelta(minutes=max(1.0, minutes))
+        if blocs and d - blocs[-1][1] <= timedelta(minutes=PAUSE_MAX):
+            deb, f, m = blocs[-1]
+            blocs[-1] = (deb, max(f, fin), m + minutes)
+        else:
+            blocs.append((d, fin, minutes))
+    return [b for b in blocs if b[2] >= SEANCE_MIN]
+
+
+def detecter_seances(db: Session, user: Utilisateur, ech: dict[str, list[tuple[datetime, float]]]) -> int:
+    """
+    Reconstitue les séances à partir des minutes d'exercice de l'Apple Watch,
+    quand Raccourcis ne donne pas accès aux entraînements. Le type est déduit des
+    autres échantillons : métriques de course → course, distance à vélo → vélo,
+    marche rapide → ignorée, sinon « Séance à préciser ». Un créneau déjà couvert
+    par une séance (importée, saisie ou détectée) n'est pas recréé.
+    Retourne le nombre de séances créées.
+    """
+    blocs = _blocs_exercice(ech.get("exercice", []))
+    if not blocs:
+        return 0
+    existantes = [
+        (a.debut, fin_activite(a)) for a in db.query(Activite)
+        .filter(Activite.utilisateur_id == user.id,
+                Activite.debut >= blocs[0][0] - timedelta(days=1), Activite.debut <= blocs[-1][1])
+        .all()
+    ]
+    ignorees = set(_ignorees(user))
+    somme = lambda t, deb, fin: sum(v for d, v in ech.get(t, []) if deb <= d < fin)
+    compte = lambda t, deb, fin: sum(1 for d, _ in ech.get(t, []) if deb <= d < fin)
+
+    n = 0
+    for deb, fin, _ in blocs:
+        deb, fin = deb.replace(second=0, microsecond=0), fin.replace(second=0, microsecond=0)
+        if deb.isoformat() in ignorees or any(d <= fin and f >= deb for d, f in existantes):
+            continue
+        heures = (fin - deb).total_seconds() / 3600
+        dist_pied, dist_velo = somme("distance", deb, fin), somme("distance_velo", deb, fin)
+        course = compte("vitesse", deb, fin) + compte("puissance", deb, fin) + compte("foulee", deb, fin)
+        if course >= 3 or (dist_pied >= 1 and dist_pied / heures >= 7.5):
+            sport, dist = "course", dist_pied
+        elif dist_velo >= 1:
+            sport, dist = "velo", dist_velo
+        elif dist_pied >= 1 and dist_pied / heures >= 3:
+            continue  # marche rapide : pas une séance d'entraînement
+        else:
+            sport, dist = "autre", None
+        cal = somme("energie", deb, fin)
+        donnees = {
+            "sport": sport, "titre": TITRE_A_PRECISER if sport == "autre" else None,
+            "debut": deb, "duree_sec": int((fin - deb).total_seconds()),
+            "distance_km": round(dist, 3) if dist else None, "calories": round(cal) if cal else None,
+            "details": {"fin": fin.isoformat(timespec="seconds"), "detection_auto": True, "sport_detecte": sport},
+        }
+        importer_activite(db, user.id, "apple_sante", donnees, id_externe=f"auto-{deb:%Y%m%dT%H%M}")
+        existantes.append((deb, fin))
+        n += 1
     db.flush()
     return n
 

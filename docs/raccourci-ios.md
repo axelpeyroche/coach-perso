@@ -1,7 +1,7 @@
 # Raccourci iOS « Carnet » — construction pas à pas
 
 Le raccourci envoie au carnet, chaque jour :
-- les séances des 3 derniers jours (type, début, fin, durée, distance, calories) ;
+- les minutes d'exercice, distances et calories des 3 derniers jours, à partir desquelles le carnet reconstitue tes séances ;
 - les mesures de forme des 7 derniers jours (FC au repos, VFC, VO2max) ;
 - les échantillons des 3 derniers jours (FC, puissance, vitesse, foulée, oscillation, temps de contact, pas, effort), que le carnet rattache à chaque séance.
 
@@ -25,39 +25,22 @@ Nom : `Token` · Entrée : *Texte*.
 
 ---
 
-## Partie B — les séances
+## Partie B — les séances (rien à construire)
 
-**3. Rechercher des échantillons de santé**
-- Type : **Entraînements**
-- Filtre : **Date de début** · **est dans les derniers** · **3 jours**
-- Trier par : Date de début · Limite : **désactivée**
+Raccourcis ne donne pas accès aux entraînements sur ton iPhone : le carnet **reconstitue les séances** à partir des minutes d'exercice de la montre (au moins 15 minutes d'affilée, pauses de 5 min tolérées).
 
-**4. Répéter avec chaque élément**
-Entrée : *Échantillons de santé* (le résultat de l'étape 3). L'étape 5 se place **à l'intérieur** de la boucle.
+- Métriques de course pendant le créneau (vitesse, puissance, foulée) → **Course**.
+- Distance à vélo → **Vélo**.
+- Marche rapide → ignorée.
+- Sinon → **Séance à préciser** : ouvre-la dans le carnet et choisis le type (muscu, yoga…). Si ce n'était pas une séance, supprime-la : elle ne sera pas recréée.
 
-**5. Obtenir le contenu de l'URL** (dans la boucle)
-- URL : `https://coach-perso.onrender.com/api/activites/import`
-- Touche **Afficher plus** → Méthode : **POST** · Corps de la requête : **JSON**
-- Ajoute ces champs, tous de type **Texte** :
-
-| Clé | Valeur à insérer |
-|---|---|
-| `token` | variable *Token* |
-| `type` | *Élément de répétition* → propriété **Type d'entraînement** |
-| `debut` | *Élément de répétition* → **Date de début**, puis Format de date : **ISO 8601** |
-| `fin` | *Élément de répétition* → **Date de fin**, puis **ISO 8601** |
-| `duree` | *Élément de répétition* → **Durée** |
-| `distance` | *Élément de répétition* → **Distance** |
-| `calories` | *Élément de répétition* → **Énergie active** |
-
-**6. Fin de la répétition**
-Elle est ajoutée automatiquement par l'étape 4 : rien à faire, vérifie juste que l'étape 5 est bien entre les deux.
+Si tu fais un jour un export Santé complet, ses séances remplacent celles reconstituées (type exact, D+, météo) en gardant ce que tu as corrigé à la main.
 
 ---
 
 ## Partie C — forme et détail des séances
 
-Pour **chaque ligne** du tableau ci-dessous, ajoute deux actions **après** « Fin de la répétition » :
+Pour **chaque ligne** du tableau ci-dessous, ajoute deux actions à la suite de la Partie A :
 
 1. **Rechercher des échantillons de santé** : type indiqué, filtre **Date de début est dans les derniers N jours**, limite **désactivée** ;
 2. **Définir la variable** : nom indiqué, entrée *Échantillons de santé*.
@@ -66,9 +49,13 @@ Pour **chaque ligne** du tableau ci-dessous, ajoute deux actions **après** « F
 
 | # | Type (dans la liste iOS) | Jours | Nom de la variable |
 |---|---|---|---|
-| 7 | Fréquence cardiaque au repos | 7 | `FCRepos` |
-| 8 | Variabilité de la fréquence cardiaque | 7 | `VFC` |
-| 9 | VO2 max | 7 | `VO2` |
+| 3 | Fréquence cardiaque au repos | 7 | `FCRepos` |
+| 4 | Variabilité de la fréquence cardiaque | 7 | `VFC` |
+| 5 | VO2 max | 7 | `VO2` |
+| 6 | Minutes d'exercice | 3 | `Exercice` |
+| 7 | Distance (marche et course) | 3 | `Distance` |
+| 8 | Distance à vélo | 3 | `DistanceVelo` |
+| 9 | Énergie active | 3 | `Energie` |
 | 10 | Fréquence cardiaque | 3 | `FC` |
 | 11 | Puissance de course | 3 | `Puissance` |
 | 12 | Vitesse de course | 3 | `Vitesse` |
@@ -79,10 +66,13 @@ Pour **chaque ligne** du tableau ci-dessous, ajoute deux actions **après** « F
 | 17 | Effort de l'entraînement *(si proposé)* | 3 | `Effort` |
 | 18 | Effort estimé de l'entraînement *(si proposé)* | 3 | `EffortEstime` |
 
-Si un type n'existe pas dans la liste de ton iPhone, saute-le : le carnet fonctionne sans.
+Si un type n'existe pas dans la liste de ton iPhone, saute-le : le carnet fonctionne sans. Seule exception : **Minutes d'exercice** est indispensable, c'est elle qui permet de reconstituer les séances.
 
 **19. Obtenir le contenu de l'URL**
-Même URL, **POST**, corps **JSON**. Pour chaque variable de la partie C, ajoute **deux** champs de type **Texte** :
+- URL : `https://coach-perso.onrender.com/api/activites/import`
+- Touche **Afficher plus** → Méthode : **POST** · Corps de la requête : **JSON**
+
+Pour chaque variable de la partie C, ajoute **deux** champs de type **Texte** :
 - `…_valeurs` : la variable → propriété **Valeur** ;
 - `…_dates` : la variable → propriété **Date de début** → Format **ISO 8601** (si l'option de format n'apparaît pas, laisse tel quel : le carnet comprend aussi les dates écrites en français).
 
@@ -92,6 +82,10 @@ Même URL, **POST**, corps **JSON**. Pour chaque variable de la partie C, ajoute
 | `fc_repos_valeurs` | `fc_repos_dates` | FCRepos |
 | `vfc_valeurs` | `vfc_dates` | VFC |
 | `vo2max_valeurs` | `vo2max_dates` | VO2 |
+| `exercice_valeurs` | `exercice_dates` | Exercice |
+| `distance_valeurs` | `distance_dates` | Distance |
+| `distance_velo_valeurs` | `distance_velo_dates` | DistanceVelo |
+| `energie_valeurs` | `energie_dates` | Energie |
 | `fc_valeurs` | `fc_dates` | FC |
 | `puissance_valeurs` | `puissance_dates` | Puissance |
 | `vitesse_valeurs` | `vitesse_dates` | Vitesse |
@@ -106,7 +100,7 @@ Les clés doivent être écrites **exactement** ainsi : minuscules, sans accent,
 
 **20. Afficher une notification** (facultatif)
 Corps : variable *Contenu de l'URL*. Le carnet répond par exemple :
-`5 mesure(s) de forme · 2 séance(s) complétée(s) (FC, puissance, effort…)`
+`5 mesure(s) de forme · 1 séance(s) détectée(s) · 1 séance(s) complétée(s) (FC, puissance, effort…)`
 
 ---
 
@@ -136,7 +130,8 @@ iOS bloque l'accès à Santé quand l'iPhone est verrouillé : si l'automatisati
 |---|---|
 | `Token invalide` | Token mal collé à l'étape 1, ou régénéré depuis sur la page Sources. |
 | `Aucune activité ni mesure fournie` | Aucune séance ni mesure sur la période, ou clés mal orthographiées. |
-| `0 séance(s) complétée(s)` | Aucun échantillon de FC ne tombe pendant une séance : vérifie le filtre « 3 jours » des étapes 10 à 18. |
+| Aucune séance détectée | Vérifie les champs `exercice_valeurs` / `exercice_dates` et le filtre « 3 jours » de « Minutes d'exercice ». |
+| `0 séance(s) complétée(s)` | Aucun échantillon de FC ne tombe pendant une séance : vérifie le filtre « 3 jours » des étapes 6 à 18. |
 | Rien ne se passe à l'automatisation | Ouvre Raccourcis → Automatisation et vérifie « Exécuter immédiatement ». |
 
 ⚠️ Le raccourci contient ton token : ne le partage pas par lien iCloud tel quel. Si tu veux le partager, vide d'abord l'étape 1.

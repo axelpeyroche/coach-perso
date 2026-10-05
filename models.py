@@ -73,6 +73,10 @@ class Utilisateur(Base):
     # Token Claude : lecture du carnet + écriture du plan (script outils/carnet.py)
     claude_token: Mapped[Optional[str]] = mapped_column(String(64))
 
+    # Séances détectées automatiquement puis supprimées (JSON : débuts ISO),
+    # pour ne pas les recréer au prochain envoi du raccourci
+    seances_ignorees: Mapped[Optional[str]] = mapped_column(Text)
+
     # Ancienne connexion Strava OAuth (conservée, non utilisée)
     strava_athlete_id: Mapped[Optional[int]] = mapped_column(Integer)
     strava_access_token: Mapped[Optional[str]] = mapped_column(String(255))

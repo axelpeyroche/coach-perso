@@ -187,6 +187,7 @@ def supprimer_activite(
     db: Session = Depends(obtenir_session),
 ):
     a = _activite_utilisateur(db, current_user, activite_id)
+    cs.memoriser_seance_ignoree(current_user, a)
     db.delete(a)
     db.commit()
     return {"ok": True}
@@ -447,6 +448,12 @@ def _unite_echantillon(t: str, n: float, unite: str) -> Optional[float]:
         return n * 1000 if u == "s" or (not u and n < 3) else n
     if t == "puissance" and u == "kw":
         return n * 1000
+    if t in ("distance", "distance_velo"):
+        return n / 1000 if u == "m" else (n * 1.609344 if u == "mi" else n)
+    if t == "energie":
+        return n / 4.184 if u == "kj" else n
+    if t == "exercice":
+        return n / 60 if u == "s" else (n * 60 if u == "h" else n)
     return n
 
 
@@ -485,6 +492,7 @@ def importer_activites(payload: ImportActivitesSchema, db: Session = Depends(obt
             cs.fusionner_details(act, {"fin": _date_import(x.fin, tz).isoformat(timespec="seconds")})
     db.flush()
     mesures = cs.importer_mesures(db, user.id, items_mesures)
+    detectees = cs.detecter_seances(db, user, ech) if ech else 0
     completees = cs.enrichir_activites(db, user, ech) if ech else 0
     db.commit()
     morceaux = []
@@ -493,9 +501,12 @@ def importer_activites(payload: ImportActivitesSchema, db: Session = Depends(obt
     if items_mesures:
         morceaux.append(f"{mesures['cree'] + mesures['maj']} mesure(s) de forme"
                         + (f", {mesures['ignore']} ignorée(s)" if mesures["ignore"] else ""))
+    if detectees:
+        morceaux.append(f"{detectees} séance(s) détectée(s)")
     if ech:
         morceaux.append(f"{completees} séance(s) complétée(s) (FC, puissance, effort…)")
-    return {"ok": True, **bilan, "mesures": mesures, "seances_completees": completees,
+    return {"ok": True, **bilan, "mesures": mesures, "seances_detectees": detectees,
+            "seances_completees": completees,
             "message": " · ".join(morceaux)}
 
 

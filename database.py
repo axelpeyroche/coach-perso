@@ -69,6 +69,8 @@ def creer_tables() -> None:
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS strava_derniere_synchro TIMESTAMP",
         # Token Claude (plan d'entraînement)
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS claude_token VARCHAR(64)",
+        # Séances détectées par le raccourci puis supprimées
+        "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS seances_ignorees TEXT",
         # Index sur les clés étrangères, absents des tables déjà existantes en
         # production (Base.metadata.create_all ne les crée que sur les tables neuves).
         "CREATE INDEX IF NOT EXISTS idx_poids_utilisateurs_utilisateur_id ON poids_utilisateurs (utilisateur_id)",
