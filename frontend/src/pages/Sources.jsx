@@ -98,14 +98,49 @@ function BlocFichier() {
 }
 
 // ── Raccourci iOS (Apple Santé) ────────────────────────────────────────────
+// Champs Texte du corps JSON : [clé, valeur à insérer]
+const Champs = ({ lignes }) => (
+  <span className="mt-1 grid grid-cols-[auto,1fr] gap-x-2 gap-y-0.5">
+    {lignes.map(([k, v]) => (
+      <span key={k} className="contents">
+        <code className="text-gray-800 dark:text-gray-200">{k}</code>
+        <span>{v}</span>
+      </span>
+    ))}
+  </span>
+);
+
 const ETAPES_RACCOURCI = (url) => [
-  ["Rechercher des échantillons de santé", "Type : Entraînements · Date de début : dans les 7 derniers jours (ou « est après » 01/01/2026 pour le premier import de l'historique) · Trier par date de début · Limite : désactivée"],
-  ["Répéter avec chaque élément", "Entrée : les échantillons trouvés. Les étapes 3 à 6 sont à l'intérieur de la boucle."],
-  ["Obtenir les détails des échantillons de santé (× 6)", "Sur « Élément de répétition » : Type d'entraînement, Date de début, Date de fin, Durée, Distance, Énergie active (et Fréquence cardiaque moyenne si proposée)."],
-  ["Formater la date (× 2)", "Date de début puis Date de fin → format « ISO 8601 », heure incluse."],
-  ["Dictionnaire", "type → Type d'entraînement · debut → date de début formatée · fin → date de fin formatée · duree_sec → Durée · distance_km → Distance · calories → Énergie active · fc_moyenne_bpm → FC moyenne"],
-  ["Obtenir le contenu de l'URL", `URL : ${url}/activites/import · Méthode : POST · Corps : JSON avec token (Texte) = ton token et activite (Dictionnaire) = le dictionnaire de l'étape 5`],
-  ["Fin de la répétition, puis Afficher une notification", "« Séances envoyées au carnet ✓ »"],
+  ["Rechercher des échantillons de santé", "Type : Entraînements · Date de début : dans les 3 derniers jours · Limite : désactivée."],
+  ["Répéter avec chaque élément", "Entrée : les échantillons trouvés. L'étape 3 se place à l'intérieur de la boucle."],
+  ["Obtenir le contenu de l'URL (dans la boucle)", <>
+    URL : <code>{url}/activites/import</code> · Méthode : POST · Corps de la requête : JSON, avec ces champs de type Texte.
+    Pour une propriété : insère la variable « Élément de répétition », touche-la, puis choisis la propriété.
+    <Champs lignes={[
+      ["token", "ton token (ci-dessus)"],
+      ["type", "Élément de répétition › Type d'entraînement"],
+      ["debut", "› Date de début (touche-la → Format de date : ISO 8601)"],
+      ["fin", "› Date de fin (ISO 8601)"],
+      ["duree", "› Durée"],
+      ["distance", "› Distance"],
+      ["calories", "› Énergie active"],
+    ]} />
+  </>],
+  ["Fin de la répétition", "Rien à régler."],
+  ["Rechercher des échantillons de santé (× 3)", "Fréquence cardiaque au repos, puis Variabilité de la fréquence cardiaque, puis VO2 max · chacune : dans les 7 derniers jours, limite désactivée."],
+  ["Obtenir le contenu de l'URL", <>
+    Même URL, POST, JSON en Texte. Insère chaque liste d'échantillons trouvée à l'étape 5, touche-la et choisis la propriété :
+    <Champs lignes={[
+      ["token", "ton token"],
+      ["fc_repos_valeurs", "FC au repos › Valeur"],
+      ["fc_repos_dates", "FC au repos › Date de début (ISO 8601)"],
+      ["vfc_valeurs", "Variabilité › Valeur"],
+      ["vfc_dates", "Variabilité › Date de début (ISO 8601)"],
+      ["vo2max_valeurs", "VO2 max › Valeur"],
+      ["vo2max_dates", "VO2 max › Date de début (ISO 8601)"],
+    ]} />
+  </>],
+  ["Afficher une notification (facultatif)", "Contenu : « Contenu de l'URL » — le carnet répond par exemple « 5 mesure(s) de forme »."],
 ];
 
 function BlocRaccourci() {
@@ -122,7 +157,9 @@ function BlocRaccourci() {
 
   const exemple = JSON.stringify({
     token: "TON_TOKEN",
-    activite: { type: "Course à pied", debut: "2026-10-05T07:30:00+02:00", fin: "2026-10-05T08:22:00+02:00", distance_km: 10.2, fc_moyenne_bpm: 148, calories: 690 },
+    type: "Course à pied", debut: "2026-10-05T07:30:00+02:00", fin: "2026-10-05T08:22:00+02:00",
+    duree: "50 min", distance: "10,2 km", calories: "690 kcal",
+    vfc_valeurs: "56\n47,9", vfc_dates: "2026-10-04T06:10:00+02:00\n2026-10-05T05:58:00+02:00",
   }, null, 2);
 
   return (
@@ -130,7 +167,7 @@ function BlocRaccourci() {
       <div className="space-y-3 text-sm text-gray-600 dark:text-gray-300">
         <p>
           Apple ne permet pas aux sites web de lire Santé directement : un raccourci iOS envoie tes entraînements
-          (Apple Watch ou autres apps synchronisées avec Santé) vers ton carnet. Lance-le à la main ou via une
+          (Apple Watch ou autres apps synchronisées avec Santé) et tes mesures de forme (FC au repos, VFC, VO2max) vers ton carnet. Lance-le à la main ou via une
           automatisation quotidienne. Renvoyer plusieurs fois la même séance ne crée pas de doublon, et les doublons avec Strava sont fusionnés automatiquement.
         </p>
         <button className={btnSecondaire} onClick={ouvrir}>{ouvert ? "Masquer le guide" : "Configurer le raccourci"}</button>
@@ -166,14 +203,23 @@ function BlocRaccourci() {
               <summary className="cursor-pointer text-gray-500">Format JSON accepté (pour un script ou un autre outil)</summary>
               <pre className="mt-2 bg-gray-900 text-gray-100 rounded-lg p-3 overflow-x-auto">{exemple}</pre>
               <p className="mt-1 text-gray-400">
-                Aussi accepté : <code>activites</code> (liste), <code>duree_min</code>, <code>distance_m</code>, <code>dplus_m</code>,
-                <code> fc_max_bpm</code>, <code>rpe</code>, <code>notes</code>, <code>id</code> (identifiant unique pour éviter les doublons).
+                Les unités écrites par iOS (« km », « m », « kcal », « min ») et les dates localisées sont comprises.
+                Aussi accepté : <code>activites</code> (liste), <code>mesures</code> (liste de {"{type, date, valeur}"}),
+                <code> dplus_m</code>, <code>fc_moyenne_bpm</code>, <code>fc_max_bpm</code>, <code>rpe</code>, <code>notes</code>,
+                <code> id</code> (identifiant unique pour éviter les doublons).
               </p>
             </details>
-            <p className="text-xs text-gray-400">
-              Astuce : Raccourcis → Automatisation → « Heure de la journée » (ex. 21 h, tous les jours) → exécuter ce raccourci
-              sans demander : ton carnet se remplit tout seul.
-            </p>
+            <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-3 text-xs space-y-1">
+              <p className="font-semibold text-gray-700 dark:text-gray-200">Pour que ça tourne tout seul</p>
+              <p>
+                Raccourcis → Automatisation → <b>+</b> → « App » → Forme → « Est fermée » → « Exécuter immédiatement »
+                → ce raccourci. Ajoute une 2ᵉ automatisation « Heure de la journée » (ex. 7 h 30, tous les jours) en filet de sécurité.
+              </p>
+              <p className="text-gray-400">
+                iOS bloque l'accès à Santé quand l'iPhone est verrouillé : une exécution peut alors échouer, la suivante
+                rattrape (le raccourci regarde 3 jours en arrière, sans créer de doublon).
+              </p>
+            </div>
           </div>
         )}
       </div>
