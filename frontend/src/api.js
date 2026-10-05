@@ -77,6 +77,8 @@ export const supprimerObjectif = (id) => api.delete(`/objectifs/${id}`).then((r)
 export const getStatsCarnet = (sport) =>
   api.get("/stats", { params: sport ? { sport } : {} }).then((r) => r.data);
 
+export const getMesures = (jours = 365) => api.get("/mesures", { params: { jours } }).then((r) => r.data);
+
 export const getAnalyseToken = () => api.get("/analyse/token").then((r) => r.data);
 export const regenererAnalyseToken = () => api.post("/analyse/token/regenerer").then((r) => r.data);
 

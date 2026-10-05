@@ -5,6 +5,7 @@ import {
 } from "recharts";
 import Card from "../components/Card";
 import StatTile from "../components/StatTile";
+import { FormeGraphiques } from "../components/Forme";
 import { getStatsCarnet } from "../api";
 import { SPORTS, sportInfo, fmtAllureSec, fmtDate, nombre } from "../carnet";
 
@@ -129,6 +130,8 @@ export default function StatsCarnet() {
             <StatTile label={`Année ${new Date().getFullYear()}`} color="green" value={`${nombre(t.annee.distance_km, 0)} km`} sub={`${t.annee.nb} séances · ${nombre(t.annee.duree_h, 0)} h · ${t.annee.dplus_m} m D+`} />
             <StatTile label="Régularité" color="orange" value={`${s.regularite.serie_semaines} sem.`} sub={`d'affilée · ${s.regularite.jours_actifs_28j} j actifs / 28`} />
           </div>
+
+          {!sport && <FormeGraphiques />}
 
           <div className="grid gap-4 lg:grid-cols-3">
             <div className="lg:col-span-2">

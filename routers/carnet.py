@@ -102,6 +102,8 @@ def _appliquer(a: Activite, p: ActiviteSchema, db: Session, user: Utilisateur) -
     data = p.model_dump()
     data["sport"] = cs.normaliser_sport(p.sport)
     data["debut"] = _parse_datetime(p.debut)
+    if isinstance(data.get("details"), dict) and p.rpe is not None:
+        data["details"].pop("rpe_source", None)  # RPE confirmé par l'utilisateur
     if isinstance(data.get("details"), (dict, list)):
         import json
         data["details"] = json.dumps(data["details"], ensure_ascii=False)
@@ -213,11 +215,18 @@ class ActiviteImportee(BaseModel):
     notes: Optional[str] = None
 
 
+class MesureImportee(BaseModel):
+    type: str                            # fc_repos | vfc | vo2max (ou nom Apple)
+    date: Union[str, float]
+    valeur: float
+
+
 class ImportActivitesSchema(BaseModel):
     token: str
     source: str = "apple_sante"
     activites: Optional[list[ActiviteImportee]] = None
     activite: Optional[ActiviteImportee] = None
+    mesures: Optional[list[MesureImportee]] = None
 
 
 def _convertir_import(x: ActiviteImportee) -> tuple[str, dict]:
@@ -247,7 +256,7 @@ def importer_activites(payload: ImportActivitesSchema, db: Session = Depends(obt
     if not user:
         raise HTTPException(401, "Token invalide")
     lot = list(payload.activites or []) + ([payload.activite] if payload.activite else [])
-    if not lot:
+    if not lot and not payload.mesures:
         raise HTTPException(400, "Aucune activité fournie")
     source = payload.source if payload.source in ("apple_sante", "fichier", "strava") else "apple_sante"
     bilan = {"cree": 0, "maj": 0, "fusion": 0, "inchange": 0}
@@ -255,8 +264,12 @@ def importer_activites(payload: ImportActivitesSchema, db: Session = Depends(obt
         id_ext, donnees = _convertir_import(x)
         _, statut = cs.importer_activite(db, user.id, source, donnees, id_externe=id_ext)
         bilan[statut] += 1
+    mesures = cs.importer_mesures(
+        db, user.id, [(m.type, _parse_datetime(m.date).date(), m.valeur) for m in payload.mesures or []]
+    )
     db.commit()
-    return {"ok": True, **bilan, "message": f"{bilan['cree']} ajoutée(s), {bilan['maj'] + bilan['fusion']} mise(s) à jour"}
+    return {"ok": True, **bilan, "mesures": mesures,
+            "message": f"{bilan['cree']} ajoutée(s), {bilan['maj'] + bilan['fusion']} mise(s) à jour"}
 
 
 @router.post("/api/activites/import-fichier", summary="Import CSV (export Strava activities.csv ou CSV du carnet)")
@@ -270,6 +283,11 @@ async def importer_fichier(
         contenu = brut.decode("utf-8-sig")
     except UnicodeDecodeError:
         contenu = brut.decode("latin-1")
+    mesures = cs.parser_csv_mesures(contenu)
+    if mesures is not None:
+        bilan = cs.importer_mesures(db, current_user.id, mesures)
+        db.commit()
+        return {"ok": True, "source": "mesures", "lignes": len(mesures), **bilan, "fusion": 0, "inchange": bilan["ignore"]}
     source, lignes = cs.parser_csv(contenu)
     if not lignes:
         raise HTTPException(400, "Aucune activité reconnue dans ce fichier (colonnes de date introuvables ?)")
@@ -387,6 +405,15 @@ def stats(
     db: Session = Depends(obtenir_session),
 ):
     return cs.calculer_stats(_activites(db, current_user.id), sport=sport)
+
+
+@router.get("/api/mesures", summary="Mesures de forme (FC repos, VFC, VO2max) : séries et moyennes")
+def mesures(
+    jours: int = Query(365, ge=7, le=3650),
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(obtenir_session),
+):
+    return cs.series_mesures(db, current_user.id, jours=jours)
 
 
 # ---------------------------------------------------------------------------

@@ -24,7 +24,7 @@ function Code({ children }) {
 }
 
 function invaliderCarnet(qc) {
-  ["activites", "stats-carnet", "objectifs"].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+  ["activites", "stats-carnet", "objectifs", "mesures"].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
 }
 
 function telecharger(contenu, nom, type) {
@@ -86,7 +86,9 @@ function BlocFichier() {
         </button>
         {res && (res.ok ? (
           <p className="text-xs text-green-600 dark:text-green-400">
-            ✓ {res.lignes} ligne(s) lue(s) ({res.source}) : {res.cree} ajoutée(s), {res.maj + res.fusion} mise(s) à jour, {res.inchange} inchangée(s)
+            {res.source === "mesures"
+              ? `✓ ${res.lignes} mesure(s) de forme lue(s) : ${res.cree} ajoutée(s), ${res.maj} mise(s) à jour, ${res.ignore} ignorée(s)`
+              : `✓ ${res.lignes} ligne(s) lue(s) (${res.source}) : ${res.cree} ajoutée(s), ${res.maj + res.fusion} mise(s) à jour, ${res.inchange} inchangée(s)`}
           </p>
         ) : <p className="text-xs text-red-500">{String(res.msg)}</p>)}
       </div>

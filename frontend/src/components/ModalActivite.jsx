@@ -138,6 +138,9 @@ export default function ModalActivite({ activite, onClose }) {
               <option value="">À noter</option>
               {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => <option key={n} value={n}>{n}</option>)}
             </select>
+            {activite?.rpe_estime && (
+              <p className="text-[11px] text-gray-400 mt-1">Pré-rempli avec l'effort estimé par l'Apple Watch : enregistre pour le confirmer.</p>
+            )}
           </Champ>
           <Champ label="Ressenti">
             <select className={inputCls} value={f.ressenti} onChange={set("ressenti")}>

@@ -105,6 +105,24 @@ class PoidsUtilisateur(Base):
 
 
 # ---------------------------------------------------------------------------
+# Mesures de forme quotidiennes (Apple Santé)
+# ---------------------------------------------------------------------------
+
+class MesureSante(Base):
+    """Une valeur journalière : FC au repos, VFC (SDNN) ou VO2max."""
+    __tablename__ = "mesures_sante"
+    __table_args__ = (
+        UniqueConstraint("utilisateur_id", "type", "jour", name="uq_mesure_sante_jour"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    utilisateur_id: Mapped[int] = mapped_column(ForeignKey("utilisateurs.id"), nullable=False, index=True)
+    type: Mapped[str] = mapped_column(String(20), nullable=False)  # fc_repos | vfc | vo2max
+    jour: Mapped[date] = mapped_column(Date, nullable=False)
+    valeur: Mapped[float] = mapped_column(Float, nullable=False)
+
+
+# ---------------------------------------------------------------------------
 # Ancien objectif course (migré vers Objectif au besoin)
 # ---------------------------------------------------------------------------
 

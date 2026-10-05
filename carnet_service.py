@@ -18,7 +18,7 @@ from typing import Iterable, Optional
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from models import Activite, Objectif, Utilisateur
+from models import Activite, MesureSante, Objectif, Utilisateur
 
 # ---------------------------------------------------------------------------
 # Sports
@@ -131,6 +131,10 @@ def charge(a: Activite) -> float:
 def serialiser_activite(a: Activite) -> dict:
     allure = allure_sec_km(a)
     v = vitesse_kmh(a)
+    try:
+        details = json.loads(a.details) if a.details else None
+    except ValueError:
+        details = None
     return {
         "id": a.id,
         "source": a.source,
@@ -154,7 +158,9 @@ def serialiser_activite(a: Activite) -> dict:
         "notes": a.notes,
         "est_competition": bool(a.est_competition),
         "objectif_id": a.objectif_id,
-        "details": json.loads(a.details) if a.details else None,
+        "details": details,
+        # RPE pré-rempli à partir de l'effort estimé par l'Apple Watch (à confirmer)
+        "rpe_estime": a.rpe is not None and isinstance(details, dict) and details.get("rpe_source") == "estime_apple",
     }
 
 
@@ -170,6 +176,15 @@ CHAMPS_ACTIVITE = (
 
 def _sans_heure(d: datetime) -> bool:
     return (d.hour, d.minute, d.second) == (0, 0, 0)
+
+
+def _rpe_estime(details: Optional[str]) -> bool:
+    """Vrai si le RPE vient de l'effort estimé par l'Apple Watch (pas encore confirmé)."""
+    try:
+        d = json.loads(details) if details else None
+    except ValueError:
+        return False
+    return isinstance(d, dict) and d.get("rpe_source") == "estime_apple"
 
 
 def importer_activite(db: Session, user_id: int, source: str, donnees: dict,
@@ -201,6 +216,13 @@ def importer_activite(db: Session, user_id: int, source: str, donnees: dict,
         if existante:
             if not maj_si_existe:
                 return existante, "inchange"
+            if (existante.rpe is not None and not _rpe_estime(existante.details)
+                    and _rpe_estime(donnees.get("details"))):
+                # RPE déjà noté/confirmé : l'estimation Apple ne l'écrase pas
+                det = json.loads(donnees["details"])
+                det.pop("rpe_source", None)
+                donnees = {**donnees, "details": json.dumps(det, ensure_ascii=False)}
+                donnees.pop("rpe", None)
             for k, v in donnees.items():
                 if v is None:
                     continue
@@ -553,6 +575,7 @@ def construire_export(db: Session, user: Utilisateur) -> dict:
         "profil": _profil(db, user),
         "objectifs": [progression_objectif(o, acts) for o in objectifs],
         "stats": {k: v for k, v in stats.items() if k not in ("allures",)},
+        "forme": series_mesures(db, user.id),
         "activites": [serialiser_activite(a) for a in acts],
     }
 
@@ -633,14 +656,35 @@ def export_markdown(data: dict) -> str:
         l.append(f"| {w['semaine']} | {w['nb']} | {w['km_pied']} | {w['duree_h']} | {w['dplus_m']} | {w['charge']} |")
     l.append("")
 
+    forme = data.get("forme") or {}
+    if any(forme.get(k, {}).get("points") for k in MESURES):
+        l += ["## Forme (Apple Santé)", "",
+              "| Mesure | Dernière valeur | Moyenne 7 j | Moyenne 28 j | Moyenne 90 j |", "|---|---|---|---|---|"]
+        for k, m in MESURES.items():
+            f = forme.get(k) or {}
+            if f.get("points"):
+                d = f["derniere"]
+                l.append(f"| {m['label']} ({m['unite']}) | {d['valeur']} ({d['jour']}) | {f['moy_7j']} | {f['moy_28j']} | {f['moy_90j']} |")
+        l += ["", "### Mesures hebdomadaires (moyennes)", "",
+              "| Semaine du | " + " | ".join(m["label"] for m in MESURES.values()) + " |",
+              "|---" * (len(MESURES) + 1) + "|"]
+        semaines = sorted({w for k in MESURES for w in (forme.get(k) or {}).get("hebdo", {})}, reverse=True)
+        for w in semaines[:26]:
+            l.append(f"| {w} | " + " | ".join(_cell((forme.get(k) or {}).get("hebdo", {}).get(w)) for k in MESURES) + " |")
+        l.append("")
+
     l += [f"## Activités ({len(data['activites'])})", "",
+          "_RPE suivi de « (est.) » : effort estimé par l'Apple Watch, non noté par l'athlète._", "",
           "| Date | Sport | Titre | Durée | Distance (km) | D+ (m) | Allure / vitesse | FC moy | FC max | RPE | Compét. | Notes |",
           "|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for a in data["activites"]:
         vit = a["allure_str"] or (f"{a['vitesse_kmh']} km/h" if a["vitesse_kmh"] else "")
+        rpe = a["rpe"]
+        if rpe is not None and a.get("rpe_estime"):
+            rpe = f"{rpe:g} (est.)"
         l.append("| " + " | ".join(_cell(x) for x in [
             (a["debut"] or "")[:16].replace("T", " "), a["sport_label"], a["titre"], a["duree_str"], a["distance_km"],
-            a["dplus_m"], vit, a["fc_moyenne_bpm"], a["fc_max_bpm"], a["rpe"], "oui" if a["est_competition"] else "",
+            a["dplus_m"], vit, a["fc_moyenne_bpm"], a["fc_max_bpm"], rpe, "oui" if a["est_competition"] else "",
             a["notes"],
         ]) + " |")
     l.append("")
@@ -766,3 +810,95 @@ def parser_csv(contenu: str) -> tuple[str, list[tuple[Optional[str], dict]]]:
                 pass
         lignes.append(((get(i_id) or "").strip() or None, donnees))
     return ("strava" if strava else "fichier"), lignes
+
+
+# ---------------------------------------------------------------------------
+# Mesures de forme (FC au repos, VFC, VO2max) — une valeur par jour
+# ---------------------------------------------------------------------------
+
+MESURES = {
+    "fc_repos": {"label": "FC au repos", "unite": "bpm", "min": 25, "max": 120},
+    "vfc":      {"label": "VFC (SDNN)",  "unite": "ms",  "min": 5,  "max": 300},
+    "vo2max":   {"label": "VO2max",      "unite": "ml/kg/min", "min": 15, "max": 95},
+}
+_ALIAS_MESURES = {
+    "fc_repos": "fc_repos", "fcrepos": "fc_repos", "restingheartrate": "fc_repos", "fc_au_repos": "fc_repos",
+    "vfc": "vfc", "hrv": "vfc", "heartratevariabilitysdnn": "vfc", "variabilite": "vfc",
+    "vo2max": "vo2max", "vo2": "vo2max",
+}
+
+
+def normaliser_mesure(t: Optional[str]) -> Optional[str]:
+    cle = re.sub(r"[^a-z0-9_]", "", _sans_accents(str(t or "")).lower().replace(" ", "_").replace("hkquantitytypeidentifier", ""))
+    return _ALIAS_MESURES.get(cle) or _ALIAS_MESURES.get(cle.replace("_", ""))
+
+
+def importer_mesures(db: Session, user_id: int, items: Iterable[tuple[str, date, float]]) -> dict:
+    """Ajoute ou remplace des mesures journalières (clé : type + jour)."""
+    bilan = {"cree": 0, "maj": 0, "ignore": 0}
+    vus: dict[tuple[str, date], MesureSante] = {}
+    for t, jour, valeur in items:
+        t = normaliser_mesure(t)
+        if not t or valeur is None or not (MESURES[t]["min"] <= valeur <= MESURES[t]["max"]):
+            bilan["ignore"] += 1
+            continue
+        m = vus.get((t, jour)) or (
+            db.query(MesureSante)
+            .filter(MesureSante.utilisateur_id == user_id, MesureSante.type == t, MesureSante.jour == jour)
+            .first()
+        )
+        if m:
+            m.valeur = round(valeur, 1)
+            bilan["maj"] += 1
+        else:
+            m = MesureSante(utilisateur_id=user_id, type=t, jour=jour, valeur=round(valeur, 1))
+            db.add(m)
+            bilan["cree"] += 1
+        vus[(t, jour)] = m
+    db.flush()
+    return bilan
+
+
+def parser_csv_mesures(contenu: str) -> Optional[list[tuple[str, date, float]]]:
+    """CSV « date;type;valeur ». Retourne None si le fichier n'a pas ce format."""
+    entete = contenu.split("\n", 1)[0]
+    delim = ";" if entete.count(";") >= entete.count(",") else ","
+    lecteur = csv.reader(io.StringIO(contenu), delimiter=delim)
+    cols = [_sans_accents(c).strip().lower() for c in next(lecteur, [])]
+    if not {"date", "type", "valeur"} <= set(cols):
+        return None
+    i_d, i_t, i_v = cols.index("date"), cols.index("type"), cols.index("valeur")
+    items = []
+    for r in lecteur:
+        if len(r) <= max(i_d, i_t, i_v):
+            continue
+        d = _date_souple(r[i_d])
+        if d:
+            items.append((r[i_t], d.date(), _num(r[i_v])))
+    return items
+
+
+def series_mesures(db: Session, user_id: int, jours: int = 365, aujourd_hui: Optional[date] = None) -> dict:
+    """Pour chaque mesure : points journaliers, moyennes 7/28/90 j, moyennes hebdomadaires."""
+    auj = aujourd_hui or date.today()
+    rows = (
+        db.query(MesureSante)
+        .filter(MesureSante.utilisateur_id == user_id, MesureSante.jour > auj - timedelta(days=jours))
+        .order_by(MesureSante.jour).all()
+    )
+    moy = lambda xs: round(sum(xs) / len(xs), 1) if xs else None
+    out = {}
+    for t, info in MESURES.items():
+        pts = [(r.jour, r.valeur) for r in rows if r.type == t]
+        hebdo = defaultdict(list)
+        for j, v in pts:
+            hebdo[(j - timedelta(days=j.weekday())).isoformat()].append(v)
+        fen = lambda n: moy([v for j, v in pts if j > auj - timedelta(days=n)])
+        out[t] = {
+            **info,
+            "points": [{"jour": j.isoformat(), "valeur": v} for j, v in pts],
+            "derniere": {"jour": pts[-1][0].isoformat(), "valeur": pts[-1][1]} if pts else None,
+            "moy_7j": fen(7), "moy_28j": fen(28), "moy_90j": fen(90),
+            "hebdo": {w: moy(vs) for w, vs in sorted(hebdo.items())},
+        }
+    return out

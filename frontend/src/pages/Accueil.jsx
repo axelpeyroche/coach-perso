@@ -6,6 +6,7 @@ import Card from "../components/Card";
 import StatTile from "../components/StatTile";
 import ActiviteLigne from "../components/ActiviteLigne";
 import ModalActivite from "../components/ModalActivite";
+import { FormeTuiles } from "../components/Forme";
 import { ObjectifCarte } from "./Objectifs";
 import { useAuth } from "../AuthContext";
 import { getActivites, getObjectifs, getStatsCarnet } from "../api";
@@ -64,6 +65,8 @@ export default function Accueil() {
             sub={`${stats.regularite.jours_actifs_28j} jours actifs / 28`} />
         </div>
       )}
+
+      <FormeTuiles />
 
       <div className="grid gap-4 lg:grid-cols-5">
         <div className="lg:col-span-3 space-y-4">
