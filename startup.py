@@ -1,6 +1,6 @@
 """
 Script de démarrage exécuté avant uvicorn sur Render.
-Se limite aux migrations DB — le programme est initialisé via l'UI.
+Crée les tables manquantes et applique les migrations de colonnes.
 """
 from database import creer_tables
 

@@ -47,8 +47,7 @@ export function AuthProvider({ children }) {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Détecte le fuseau horaire du navigateur et le synchronise silencieusement
-  // côté serveur — utilisé pour planifier les notifications push à l'heure
-  // locale réelle de l'utilisateur plutôt qu'à celle du serveur.
+  // côté serveur (conversion des dates UTC de l'export Strava).
   useEffect(() => {
     if (!user) return;
     const detecte = Intl.DateTimeFormat().resolvedOptions().timeZone;

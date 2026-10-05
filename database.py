@@ -12,7 +12,7 @@ from models import Base
 
 logger = logging.getLogger(__name__)
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./coach_epc.db")
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./carnet.db")
 
 # Render injecte une URL postgres:// — SQLAlchemy requiert postgresql://
 if DATABASE_URL.startswith("postgres://"):
@@ -33,12 +33,9 @@ def creer_tables() -> None:
     Base.metadata.create_all(bind=engine)
     # Migrations manuelles pour les colonnes ajoutées après la création initiale
     _migrations = [
-        "ALTER TABLE exercices_seance ADD COLUMN IF NOT EXISTS duree_bloc_min INTEGER",
-        "ALTER TABLE semaines_entrainement DROP CONSTRAINT IF EXISTS ck_numero_semaine_plage",
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS fc_max INTEGER",
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS fc_repos INTEGER",
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS poids_kg FLOAT",
-        "ALTER TABLE journaux_seances ADD COLUMN IF NOT EXISTS details_intervalles TEXT",
         # Auth + onboarding
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255)",
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS prenom VARCHAR(120)",
@@ -53,15 +50,6 @@ def creer_tables() -> None:
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS historique_perf TEXT",
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS type_course VARCHAR(20)",
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS type_muscu VARCHAR(20)",
-        # Exercices libres (machines salle, etc.)
-        "ALTER TABLE exercices_seance ADD COLUMN IF NOT EXISTS nom_affichage VARCHAR(200)",
-        "ALTER TABLE exercices_seance ADD COLUMN IF NOT EXISTS series INTEGER",
-        "ALTER TABLE exercices_seance ALTER COLUMN exercice_id DROP NOT NULL",
-        # Planification libre par l'utilisateur
-        "ALTER TABLE seances_entrainement ADD COLUMN IF NOT EXISTS date_planifiee DATE",
-        "ALTER TABLE seances_entrainement ADD COLUMN IF NOT EXISTS heure_planifiee VARCHAR(5)",
-        "ALTER TABLE journaux_seances ADD COLUMN IF NOT EXISTS distance_repos_km FLOAT",
-        "ALTER TABLE journaux_seances ADD COLUMN IF NOT EXISTS type_course VARCHAR(20)",
         # Token d'import iOS Shortcuts
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS import_token VARCHAR(64)",
         # Mode de génération du programme (auto vs manuel)
@@ -70,7 +58,7 @@ def creer_tables() -> None:
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS seances_velo_semaine INTEGER",
         # Photo de profil (remplace le stockage localStorage côté frontend)
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS photo_url TEXT",
-        # Fuseau horaire IANA de l'utilisateur (planification des notifications push)
+        # Fuseau horaire IANA de l'utilisateur
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS fuseau_horaire VARCHAR(50)",
         # Carnet : lien d'analyse + connexion Strava
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS analyse_token VARCHAR(64)",
@@ -79,29 +67,10 @@ def creer_tables() -> None:
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS strava_refresh_token VARCHAR(255)",
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS strava_expires_at INTEGER",
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS strava_derniere_synchro TIMESTAMP",
-        # Index sur les clés étrangères — accélère les requêtes filtrées par
-        # utilisateur/séance/évaluation, absentes des tables déjà existantes
-        # en production (Base.metadata.create_all ne les crée que sur les
-        # tables neuves).
+        # Index sur les clés étrangères, absents des tables déjà existantes en
+        # production (Base.metadata.create_all ne les crée que sur les tables neuves).
         "CREATE INDEX IF NOT EXISTS idx_poids_utilisateurs_utilisateur_id ON poids_utilisateurs (utilisateur_id)",
-        "CREATE INDEX IF NOT EXISTS idx_biometries_utilisateurs_utilisateur_id ON biometries_utilisateurs (utilisateur_id)",
-        "CREATE INDEX IF NOT EXISTS idx_variations_exercices_id_regression ON variations_exercices (id_regression)",
-        "CREATE INDEX IF NOT EXISTS idx_variations_exercices_id_progression ON variations_exercices (id_progression)",
-        "CREATE INDEX IF NOT EXISTS idx_macrocycles_utilisateur_id ON macrocycles (utilisateur_id)",
-        "CREATE INDEX IF NOT EXISTS idx_semaines_entrainement_macrocycle_id ON semaines_entrainement (macrocycle_id)",
-        "CREATE INDEX IF NOT EXISTS idx_seances_entrainement_semaine_id ON seances_entrainement (semaine_id)",
-        "CREATE INDEX IF NOT EXISTS idx_exercices_seance_seance_id ON exercices_seance (seance_id)",
-        "CREATE INDEX IF NOT EXISTS idx_exercices_seance_exercice_id ON exercices_seance (exercice_id)",
-        "CREATE INDEX IF NOT EXISTS idx_journaux_seances_utilisateur_id ON journaux_seances (utilisateur_id)",
-        "CREATE INDEX IF NOT EXISTS idx_journaux_exercices_journal_seance_id ON journaux_exercices (journal_seance_id)",
-        "CREATE INDEX IF NOT EXISTS idx_journaux_exercices_exercice_seance_id ON journaux_exercices (exercice_seance_id)",
-        "CREATE INDEX IF NOT EXISTS idx_journaux_evaluation_seance_utilisateur_id ON journaux_evaluation_seance (utilisateur_id)",
-        "CREATE INDEX IF NOT EXISTS idx_journaux_evaluation_seance_macrocycle_id ON journaux_evaluation_seance (macrocycle_id)",
-        "CREATE INDEX IF NOT EXISTS idx_resultats_demi_cooper_id_biometrie_instantanee ON resultats_demi_cooper (id_biometrie_instantanee)",
-        "CREATE INDEX IF NOT EXISTS idx_resultats_max_1min_evaluation_id ON resultats_max_1min (evaluation_id)",
-        "CREATE INDEX IF NOT EXISTS idx_resultats_max_1min_exercice_id ON resultats_max_1min (exercice_id)",
         "CREATE INDEX IF NOT EXISTS idx_objectifs_course_utilisateur_id ON objectifs_course (utilisateur_id)",
-        "CREATE INDEX IF NOT EXISTS idx_push_subscriptions_utilisateur_id ON push_subscriptions (utilisateur_id)",
     ]
     with engine.begin() as conn:
         for stmt in _migrations:
@@ -114,28 +83,6 @@ def creer_tables() -> None:
             except Exception:
                 if not DATABASE_URL.startswith("sqlite"):
                     logger.warning("Migration ignorée (échec) : %s", stmt)
-
-    # ALTER TYPE ADD VALUE ne peut pas s'exécuter dans une transaction PostgreSQL
-    _enum_migrations = [
-        "ALTER TYPE typeseance ADD VALUE IF NOT EXISTS 'GYM_UPPER'",
-        "ALTER TYPE typeseance ADD VALUE IF NOT EXISTS 'GYM_LOWER'",
-        "ALTER TYPE typeseance ADD VALUE IF NOT EXISTS 'GYM_FULL'",
-        "ALTER TYPE typeseance ADD VALUE IF NOT EXISTS 'BLESSURE'",
-        "ALTER TYPE typeseance ADD VALUE IF NOT EXISTS 'VELO'",
-    ]
-    if not DATABASE_URL.startswith("sqlite"):
-        raw = engine.raw_connection()
-        try:
-            raw.set_isolation_level(0)  # AUTOCOMMIT
-            cur = raw.cursor()
-            for stmt in _enum_migrations:
-                try:
-                    cur.execute(stmt)
-                except Exception:
-                    logger.warning("Migration enum ignorée (échec) : %s", stmt)
-            cur.close()
-        finally:
-            raw.close()
 
 
 def obtenir_session():

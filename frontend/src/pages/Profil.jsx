@@ -2,92 +2,9 @@ import { useAuth } from "../AuthContext";
 import { useState, useEffect, useRef } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "../api";
-import { getImportToken, regenererImportToken, exporterDonnees, supprimerCompte } from "../api";
+import { exporterDonnees, supprimerCompte } from "../api";
 import { getErrorMessage } from "../utils/errors";
 import ConfirmDialog from "../components/ConfirmDialog";
-
-function urlBase64ToUint8Array(b64) {
-  const pad = "=".repeat((4 - (b64.length % 4)) % 4);
-  const raw = atob((b64 + pad).replace(/-/g, "+").replace(/_/g, "/"));
-  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
-}
-
-// ── Push toggle ────────────────────────────────────────────────────────────
-function PushToggle() {
-  const [status, setStatus] = useState("off"); // off|on|working|unsupported|denied
-  const [errMsg, setErrMsg] = useState("");
-
-  useEffect(() => {
-    if (!("Notification" in window) || !("serviceWorker" in navigator) || !("PushManager" in window)) {
-      setStatus("unsupported"); return;
-    }
-    if (Notification.permission === "denied") { setStatus("denied"); return; }
-    // Vérifier abonnement existant en arrière-plan, bouton actif immédiatement
-    navigator.serviceWorker.ready
-      .then(r => r.pushManager.getSubscription())
-      .then(sub => { if (sub) setStatus("on"); })
-      .catch(() => {});
-  }, []);
-
-  async function toggle() {
-    setErrMsg("");
-    setStatus("working");
-    try {
-      const reg = await navigator.serviceWorker.ready;
-      const existing = await reg.pushManager.getSubscription();
-
-      if (existing) {
-        // DÉSABONNEMENT — aucune demande de permission, juste désinscrire
-        await existing.unsubscribe();
-        try {
-          await api.delete("/push/unsubscribe", { data: { endpoint: existing.endpoint } });
-        } catch (_) { /* subscription déjà absente en base, ignoré */ }
-        setStatus("off");
-      } else {
-        // ABONNEMENT — demander la permission en premier (proche du geste)
-        if (Notification.permission !== "granted") {
-          const perm = await Notification.requestPermission();
-          if (perm === "denied") { setStatus("denied"); return; }
-          if (perm !== "granted") { setStatus("off"); return; }
-        }
-        const { data: vapidData } = await api.get("/push/vapid-public-key");
-        const vapidKey = vapidData?.publicKey || import.meta.env.VITE_VAPID_PUBLIC_KEY;
-        if (!vapidKey) throw new Error("Clé VAPID manquante côté serveur");
-        const sub = await reg.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(vapidKey),
-        });
-        const j = sub.toJSON();
-        await api.post("/push/subscribe", { endpoint: j.endpoint, p256dh: j.keys.p256dh, auth: j.keys.auth });
-        setStatus("on");
-      }
-    } catch (e) {
-      setErrMsg(getErrorMessage(e, "Erreur lors de l'activation des notifications"));
-      setStatus("off");
-    }
-  }
-
-  if (status === "unsupported") return <span className="text-xs text-gray-400 italic">Non supporté sur cet appareil</span>;
-
-  if (status === "denied") return (
-    <div className="text-right">
-      <span className="text-xs text-red-400 leading-tight">Bloquées — à autoriser<br/>dans les paramètres du navigateur</span>
-    </div>
-  );
-
-  const on = status === "on";
-  const busy = status === "working";
-
-  return (
-    <div className="flex flex-col items-end gap-1">
-      <button onClick={toggle} disabled={busy}
-        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:opacity-50 ${on ? "bg-brand" : "bg-gray-200 dark:bg-gray-700"}`}>
-        <span className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${on ? "translate-x-6" : "translate-x-1"}`} />
-      </button>
-      {errMsg && <p className="text-[10px] text-red-400 max-w-[180px] text-right leading-tight">{errMsg}</p>}
-    </div>
-  );
-}
 
 // ── Avatar ─────────────────────────────────────────────────────────────────
 const MAX_PHOTO_FILE_BYTES = 1_500_000; // ~2 Mo une fois encodée en base64, cf. limite backend
@@ -341,186 +258,7 @@ function EditPasswordModal({ onClose }) {
   );
 }
 
-// ── Edit programme modal ───────────────────────────────────────────────────
-function EditProgrammeModal({ user, onClose, onSaved }) {
-  const [form, setForm] = useState({
-    type_programme:         user?.type_programme || "hybride",
-    seances_semaine:        user?.seances_semaine ?? 5,
-    seances_muscu_semaine:  user?.seances_muscu_semaine ?? 3,
-    seances_course_semaine: user?.seances_course_semaine ?? 2,
-    seances_velo_semaine:   user?.seances_velo_semaine ?? 1,
-    type_muscu:             user?.type_muscu || "poids_corps",
-    type_course:            user?.type_course || "route",
-    frequence_tests_semaines: user?.frequence_tests_semaines ?? 8,
-  });
-  const [noChange, setNoChange] = useState(false);
-
-  const mutation = useMutation({
-    mutationFn: (payload) => api.patch("/utilisateur/programme", payload),
-    onSuccess: () => onSaved(),
-  });
-
-  function set(k) { return e => setForm(f => ({ ...f, [k]: typeof e === "object" ? e.target.value : e })); }
-  function setNum(k) { return e => setForm(f => ({ ...f, [k]: parseInt(e.target.value) || 0 })); }
-
-  function save() {
-    // En hybride, le total est la somme muscu + course + vélo
-    const totalSeances = form.type_programme === "hybride"
-      ? form.seances_muscu_semaine + form.seances_course_semaine + form.seances_velo_semaine
-      : form.seances_semaine;
-    const payload = {};
-    if (form.type_programme         !== user?.type_programme)         payload.type_programme         = form.type_programme;
-    if (totalSeances                !== user?.seances_semaine)        payload.seances_semaine        = totalSeances;
-    if (form.seances_muscu_semaine  !== user?.seances_muscu_semaine)  payload.seances_muscu_semaine  = form.seances_muscu_semaine;
-    if (form.seances_course_semaine !== user?.seances_course_semaine) payload.seances_course_semaine = form.seances_course_semaine;
-    if (form.seances_velo_semaine   !== user?.seances_velo_semaine)   payload.seances_velo_semaine   = form.seances_velo_semaine;
-    if (form.type_muscu             !== user?.type_muscu)             payload.type_muscu             = form.type_muscu;
-    if (form.type_course            !== user?.type_course)            payload.type_course            = form.type_course;
-    if (form.frequence_tests_semaines !== user?.frequence_tests_semaines) payload.frequence_tests_semaines = form.frequence_tests_semaines;
-    if (Object.keys(payload).length > 0) {
-      mutation.mutate(payload);
-    } else {
-      setNoChange(true);
-    }
-  }
-
-  if (mutation.isSuccess || noChange) return (
-    <Modal title="Programme mis à jour" onClose={onClose}>
-      <div className="text-center py-6 space-y-3">
-        <div className="text-4xl">✓</div>
-        <p className="text-brand font-semibold">Les séances à venir ont été régénérées.</p>
-        <button onClick={onClose} className="px-6 py-2 rounded-xl bg-brand text-white text-sm font-medium">Fermer</button>
-      </div>
-    </Modal>
-  );
-
-  const showMuscu  = form.type_programme === "muscu" || form.type_programme === "hybride";
-  const showCourse = form.type_programme === "course" || form.type_programme === "hybride";
-  const isVelo     = form.type_programme === "velo";
-
-  const isHybride = form.type_programme === "hybride";
-
-  function handleTypeProgramme(newType) {
-    setForm(f => {
-      const total = f.seances_semaine;
-      let muscu = f.seances_muscu_semaine, course = f.seances_course_semaine, velo = f.seances_velo_semaine;
-      if (newType === "muscu")  { muscu = total; course = 0; velo = 0; }
-      if (newType === "course") { course = total; muscu = 0; velo = 0; }
-      if (newType === "velo")   { velo = total; muscu = 0; course = 0; }
-      if (newType === "hybride") { muscu = f.seances_muscu_semaine || 2; course = f.seances_course_semaine || 2; velo = f.seances_velo_semaine || 1; }
-      return { ...f, type_programme: newType, seances_muscu_semaine: muscu, seances_course_semaine: course, seances_velo_semaine: velo };
-    });
-  }
-
-  const totalHybride = form.seances_muscu_semaine + form.seances_course_semaine + form.seances_velo_semaine;
-
-  return (
-    <Modal title="Modifier le programme" onClose={onClose}>
-      <Field label="Type de programme">
-        <div className="grid grid-cols-2 gap-2">
-          {[["hybride","Hybride"],["course","Course"],["muscu","Muscu"],["velo","Vélo de route"]].map(([val, label]) => (
-            <button key={val} onClick={() => handleTypeProgramme(val)}
-              className={`py-2 rounded-xl text-sm font-semibold border transition-colors ${form.type_programme === val ? "bg-brand text-white border-brand" : "border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-brand hover:text-brand"}`}>
-              {label}
-            </button>
-          ))}
-        </div>
-        {isVelo && (
-          <p className="text-xs text-gray-400 dark:text-gray-500 mt-2">
-            🚴 Programme vélo : sorties PMA, sweet spot, endurance et sortie longue générées automatiquement.
-          </p>
-        )}
-      </Field>
-
-      {/* Hybride : 3 curseurs indépendants, total = somme */}
-      {isHybride ? (
-        <>
-          <Field label={`Séances / semaine — total : ${totalHybride}`}>
-            <div className="h-1" />
-          </Field>
-          <Field label="Séances muscu / semaine">
-            <div className="flex items-center gap-3">
-              <input type="range" min={0} max={8} value={form.seances_muscu_semaine}
-                onChange={e => setForm(f => ({ ...f, seances_muscu_semaine: parseInt(e.target.value) }))}
-                className="flex-1 accent-brand" />
-              <span className="text-sm font-bold text-gray-900 dark:text-white w-4 text-right">{form.seances_muscu_semaine}</span>
-            </div>
-          </Field>
-          <Field label="Séances course / semaine">
-            <div className="flex items-center gap-3">
-              <input type="range" min={0} max={8} value={form.seances_course_semaine}
-                onChange={e => setForm(f => ({ ...f, seances_course_semaine: parseInt(e.target.value) }))}
-                className="flex-1 accent-brand" />
-              <span className="text-sm font-bold text-gray-900 dark:text-white w-4 text-right">{form.seances_course_semaine}</span>
-            </div>
-          </Field>
-          <Field label="Séances vélo / semaine">
-            <div className="flex items-center gap-3">
-              <input type="range" min={0} max={8} value={form.seances_velo_semaine}
-                onChange={e => setForm(f => ({ ...f, seances_velo_semaine: parseInt(e.target.value) }))}
-                className="flex-1 accent-brand" />
-              <span className="text-sm font-bold text-gray-900 dark:text-white w-4 text-right">{form.seances_velo_semaine}</span>
-            </div>
-          </Field>
-        </>
-      ) : (
-        /* Discipline unique : un seul curseur total mappé sur la bonne discipline */
-        <Field label="Séances / semaine">
-          <div className="flex items-center gap-3">
-            <input type="range" min={1} max={10} value={form.seances_semaine}
-              onChange={e => {
-                const total = parseInt(e.target.value);
-                setForm(f => ({
-                  ...f, seances_semaine: total,
-                  seances_muscu_semaine:  f.type_programme === "muscu"  ? total : 0,
-                  seances_course_semaine: f.type_programme === "course" ? total : 0,
-                  seances_velo_semaine:   f.type_programme === "velo"   ? total : 0,
-                }));
-              }} className="flex-1 accent-brand" />
-            <span className="text-sm font-bold text-gray-900 dark:text-white w-4 text-right">{form.seances_semaine}</span>
-          </div>
-        </Field>
-      )}
-      {showMuscu && (
-        <Field label="Type de musculation">
-          <select className={inputCls} value={form.type_muscu} onChange={set("type_muscu")}>
-            <option value="poids_corps">Poids du corps</option>
-            <option value="salle">Salle de sport</option>
-          </select>
-        </Field>
-      )}
-      {showCourse && (
-        <Field label="Type de course">
-          <select className={inputCls} value={form.type_course} onChange={set("type_course")}>
-            <option value="route">Route</option>
-            <option value="trail">Trail</option>
-            <option value="route_trail">Route & Trail</option>
-          </select>
-        </Field>
-      )}
-      <Field label="Tests d'évaluation toutes les">
-        <div className="flex items-center gap-3">
-          <input type="range" min={2} max={16} value={form.frequence_tests_semaines} onChange={setNum("frequence_tests_semaines")} className="flex-1 accent-brand" />
-          <span className="text-sm font-bold text-gray-900 dark:text-white w-16 text-right">{form.frequence_tests_semaines} sem.</span>
-        </div>
-      </Field>
-      <p className="text-xs text-amber-500 dark:text-amber-400 mb-3">
-        ⚠️ Les séances futures non validées seront régénérées selon les nouveaux paramètres.
-      </p>
-      {mutation.isError && <p className="text-xs text-red-500 mb-3">{getErrorMessage(mutation.error, "Erreur — réessaie")}</p>}
-      <button onClick={save} disabled={mutation.isPending}
-        className="w-full py-3 rounded-xl bg-brand text-white font-semibold text-sm disabled:opacity-50 hover:bg-brand-dark transition-colors">
-        {mutation.isPending ? "Mise à jour en cours…" : "Mettre à jour le programme"}
-      </button>
-    </Modal>
-  );
-}
-
 // ── Layout components ──────────────────────────────────────────────────────
-const PROG_LABEL = { course: "Course", muscu: "Musculation", hybride: "Hybride", velo: "Vélo de route" };
-const MUSCU_LABEL = { poids_corps: "Poids du corps", salle: "Salle de sport" };
-const COURSE_LABEL = { route: "Route", trail: "Trail", route_trail: "Route & Trail" };
-
 function Row({ label, value }) {
   if (!value && value !== 0) return null;
   return (
@@ -553,271 +291,6 @@ function BioStat({ label, value, unit }) {
         {value != null && unit && <span className="text-xs font-normal text-gray-400 ml-0.5">{unit}</span>}
       </span>
       <span className="text-xs text-gray-400 mt-0.5">{label}</span>
-    </div>
-  );
-}
-
-// ── Page ───────────────────────────────────────────────────────────────────
-function ShortcutIOS() {
-  const [token, setToken] = useState(null);
-  const [visible, setVisible] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [confirmRegen, setConfirmRegen] = useState(false);
-  const apiUrl = (import.meta.env.VITE_API_URL || "/api").replace(/\/api$/, "");
-
-  async function chargerToken() {
-    setLoading(true);
-    try {
-      const data = await getImportToken();
-      setToken(data.import_token);
-      setVisible(true);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function regenerer() {
-    setConfirmRegen(false);
-    setLoading(true);
-    try {
-      const data = await regenererImportToken();
-      setToken(data.import_token);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function copier(text) {
-    navigator.clipboard.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
-  }
-
-  return (
-    <div className="py-3">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Raccourci iOS (Apple Watch)</p>
-          <p className="text-xs text-gray-400 mt-0.5">Importe tes séances depuis l'app Santé</p>
-        </div>
-        <button onClick={chargerToken} disabled={loading}
-          className="text-xs px-3 py-1.5 rounded-xl bg-brand text-white font-semibold hover:bg-brand-dark transition-colors disabled:opacity-50">
-          {loading ? "…" : "Configurer"}
-        </button>
-      </div>
-
-      {visible && token && (
-        <Modal title="Raccourci iOS (Apple Watch)" onClose={() => setVisible(false)}>
-        <div className="space-y-4 text-xs">
-          {/* Token */}
-          <div>
-            <p className="font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1.5">Ton token d'accès</p>
-            <div className="flex items-center gap-2">
-              <code className="flex-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-xs font-mono text-gray-800 dark:text-gray-200 break-all">
-                {token}
-              </code>
-              <button onClick={() => copier(token)}
-                className="shrink-0 px-3 py-2 rounded-lg bg-brand text-white font-semibold hover:bg-brand-dark transition-colors">
-                {copied ? "✓" : "Copier"}
-              </button>
-            </div>
-            <button onClick={() => setConfirmRegen(true)} disabled={loading}
-              className="mt-1.5 text-gray-400 hover:text-red-500 transition-colors underline text-xs">
-              Regénérer le token
-            </button>
-            <ConfirmDialog
-              open={confirmRegen}
-              title="Regénérer le token ?"
-              message="L'ancien ne fonctionnera plus dans le raccourci."
-              danger
-              pending={loading}
-              onConfirm={regenerer}
-              onCancel={() => setConfirmRegen(false)}
-            />
-          </div>
-
-          {/* URL API */}
-          <div>
-            <p className="font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1.5">URL de ton coach</p>
-            <div className="flex items-center gap-2">
-              <code className="flex-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-xs font-mono text-gray-800 dark:text-gray-200 break-all">
-                {apiUrl}
-              </code>
-              <button onClick={() => copier(apiUrl)}
-                className="shrink-0 px-3 py-2 rounded-lg bg-brand text-white font-semibold hover:bg-brand-dark transition-colors">
-                Copier
-              </button>
-            </div>
-          </div>
-
-          {/* Instructions détaillées */}
-          <div className="space-y-3">
-            <p className="font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide text-xs">Guide de configuration — 13 étapes</p>
-            <p className="text-gray-500 dark:text-gray-400">Ouvre l'app <strong className="text-gray-700 dark:text-gray-300">Raccourcis</strong> sur iPhone, crée un nouveau raccourci (bouton <strong className="text-gray-700 dark:text-gray-300">+</strong>), puis ajoute les actions dans l'ordre ci-dessous.</p>
-
-            {/* Section 1 */}
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-2">
-                <div className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
-                <span className="text-xs font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">Section 1 — Configuration initiale</span>
-                <div className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
-              </div>
-              {[
-                { n: "1", title: "Action : Texte", body: "Ajoute une action Texte. Colle ton token dans le champ.", note: "Appuie sur la flèche en bas → \"Mémoriser dans la variable\" → nomme-la TOKEN" },
-                { n: "2", title: "Action : Texte", body: `Ajoute une action Texte. Colle l'URL : ${apiUrl}`, note: "Mémorise dans la variable API_URL" },
-              ].map(({ n, title, body, note }) => (
-                <div key={n} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-3 flex gap-3">
-                  <span className="shrink-0 w-6 h-6 rounded-lg bg-brand text-white flex items-center justify-center text-xs font-bold">{n}</span>
-                  <div className="space-y-0.5 min-w-0">
-                    <p className="text-xs font-semibold text-brand uppercase tracking-wide">{title}</p>
-                    <p className="text-gray-700 dark:text-gray-300">{body}</p>
-                    {note && <p className="text-gray-400 italic">{note}</p>}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Section 2 */}
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-2">
-                <div className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
-                <span className="text-xs font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">Section 2 — Choisir la séance</span>
-                <div className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
-              </div>
-              {[
-                { n: "3", title: "Action : Contenu d'une URL", body: null, fields: [["URL", "Variable API_URL + /api/import/seances-recentes?token= + Variable TOKEN"], ["Méthode", "GET"]], note: "Pour insérer une variable : appuie longuement dans le champ URL → \"Insérer une variable\"" },
-                { n: "4", title: "Action : Valeur du dictionnaire", body: "L'entrée est le résultat de l'étape 3.", fields: [["Clé", "seances"]], note: "Mémorise le résultat dans la variable SEANCES" },
-                { n: "5", title: "Action : Choisir dans une liste", body: null, fields: [["Liste", "Variable SEANCES"], ["Invite", "Quelle séance valider ?"]], note: "Mémorise dans la variable SEANCE" },
-                { n: "6", title: "Action : Valeur du dictionnaire", body: null, fields: [["Dictionnaire", "Variable SEANCE"], ["Clé", "id"]], note: "Mémorise dans la variable SEANCE_ID" },
-              ].map(({ n, title, body, fields, note }) => (
-                <div key={n} className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-3 flex gap-3">
-                  <span className="shrink-0 w-6 h-6 rounded-lg bg-brand text-white flex items-center justify-center text-xs font-bold">{n}</span>
-                  <div className="space-y-1.5 min-w-0 w-full">
-                    <p className="text-xs font-semibold text-brand uppercase tracking-wide">{title}</p>
-                    {body && <p className="text-gray-700 dark:text-gray-300">{body}</p>}
-                    {fields && (
-                      <div className="space-y-1">
-                        {fields.map(([k, v]) => (
-                          <div key={k} className="flex gap-2 bg-gray-50 dark:bg-gray-800 rounded-lg px-2.5 py-1.5">
-                            <span className="text-gray-400 shrink-0 w-16">{k}</span>
-                            <span className="text-gray-700 dark:text-gray-300 font-mono text-xs break-all">{v}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {note && <p className="text-gray-400 italic">{note}</p>}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Section 3 */}
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-2">
-                <div className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
-                <span className="text-xs font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">Section 3 — Données Apple Watch</span>
-                <div className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
-              </div>
-              {[
-                { n: "7", title: "Action : Rechercher des échantillons de santé", body: null, fields: [["Type", "Entraînement"], ["Trier par", "Date de début (décroissant)"], ["Limite", "5"]], note: null },
-                { n: "8", title: "Action : Choisir dans une liste", body: null, fields: [["Liste", "Résultats de l'étape 7"], ["Invite", "Quel workout Apple Watch ?"]], note: "Mémorise dans la variable WORKOUT" },
-                { n: "9", title: "Action : Obtenir les détails d'un échantillon de santé × 3", body: "Répète cette action 3 fois. L'entrée doit être la variable WORKOUT à chaque fois.", fields: [["Détail 1", "Durée (en secondes) → Variable DUREE_SEC"], ["Détail 2", "Distance → Variable DISTANCE_KM"], ["Détail 3", "Fréquence cardiaque moy. → Variable FC_MOY"]], note: null },
-                { n: "10", title: "Action : Calculer", body: "La durée est en secondes, il faut la convertir en minutes.", fields: [["Opération", "Variable DUREE_SEC ÷ 60"]], note: "Mémorise dans la variable DUREE_MIN" },
-              ].map(({ n, title, body, fields, note }) => (
-                <div key={n} className="bg-white dark:bg-gray-900 border border-orange-200 dark:border-orange-900/50 rounded-xl p-3 flex gap-3">
-                  <span className="shrink-0 w-6 h-6 rounded-lg bg-orange-500 text-white flex items-center justify-center text-xs font-bold">{n}</span>
-                  <div className="space-y-1.5 min-w-0 w-full">
-                    <p className="text-xs font-semibold text-orange-500 uppercase tracking-wide">{title}</p>
-                    {body && <p className="text-gray-700 dark:text-gray-300">{body}</p>}
-                    {fields && (
-                      <div className="space-y-1">
-                        {fields.map(([k, v]) => (
-                          <div key={k} className="flex gap-2 bg-gray-50 dark:bg-gray-800 rounded-lg px-2.5 py-1.5">
-                            <span className="text-gray-400 shrink-0 w-20">{k}</span>
-                            <span className="text-gray-700 dark:text-gray-300 font-mono text-xs break-all">{v}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {note && <p className="text-gray-400 italic">{note}</p>}
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Section 4 */}
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-2">
-                <div className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
-                <span className="text-xs font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">Section 4 — Envoyer au coach</span>
-                <div className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
-              </div>
-
-              {/* Étape 11 : Dictionnaire */}
-              <div className="bg-white dark:bg-gray-900 border border-green-200 dark:border-green-900/50 rounded-xl p-3 flex gap-3">
-                <span className="shrink-0 w-6 h-6 rounded-lg bg-green-500 text-white flex items-center justify-center text-xs font-bold">11</span>
-                <div className="space-y-1.5 min-w-0 w-full">
-                  <p className="text-xs font-semibold text-green-600 dark:text-green-400 uppercase tracking-wide">Action : Dictionnaire</p>
-                  <p className="text-gray-700 dark:text-gray-300">Crée un dictionnaire avec les paires clé/valeur suivantes. Pour chaque valeur, appuie sur le champ → "Insérer une variable".</p>
-                  <div className="bg-gray-900 rounded-lg p-2.5 overflow-x-auto">
-                    <pre className="font-mono text-xs text-gray-100 whitespace-pre">{`token          → Variable TOKEN
-seance_id      → Variable SEANCE_ID
-duree_min      → Variable DUREE_MIN
-distance_km    → Variable DISTANCE_KM
-fc_moyenne_bpm → Variable FC_MOY
-rpe            → 7`}</pre>
-                  </div>
-                </div>
-              </div>
-
-              {/* Étape 12 : POST */}
-              <div className="bg-white dark:bg-gray-900 border border-green-200 dark:border-green-900/50 rounded-xl p-3 flex gap-3">
-                <span className="shrink-0 w-6 h-6 rounded-lg bg-green-500 text-white flex items-center justify-center text-xs font-bold">12</span>
-                <div className="space-y-1.5 min-w-0 w-full">
-                  <p className="text-xs font-semibold text-green-600 dark:text-green-400 uppercase tracking-wide">Action : Contenu d'une URL</p>
-                  <div className="space-y-1">
-                    {[
-                      ["URL", `Variable API_URL + /api/import/workout`],
-                      ["Méthode", "POST"],
-                      ["Corps de la requête", "JSON"],
-                      ["Corps JSON", "Dictionnaire (étape 11)"],
-                    ].map(([k, v]) => (
-                      <div key={k} className="flex gap-2 bg-gray-50 dark:bg-gray-800 rounded-lg px-2.5 py-1.5">
-                        <span className="text-gray-400 shrink-0 w-28">{k}</span>
-                        <span className="text-gray-700 dark:text-gray-300 font-mono text-xs break-all">{v}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Étape 13 : Confirmation */}
-              <div className="bg-white dark:bg-gray-900 border border-green-200 dark:border-green-900/50 rounded-xl p-3 flex gap-3">
-                <span className="shrink-0 w-6 h-6 rounded-lg bg-green-500 text-white flex items-center justify-center text-xs font-bold">13</span>
-                <div className="space-y-1.5 min-w-0 w-full">
-                  <p className="text-xs font-semibold text-green-600 dark:text-green-400 uppercase tracking-wide">Action : Afficher le résultat</p>
-                  <div className="flex gap-2 bg-gray-50 dark:bg-gray-800 rounded-lg px-2.5 py-1.5">
-                    <span className="text-gray-400 shrink-0 w-16">Texte</span>
-                    <span className="text-gray-700 dark:text-gray-300 font-mono text-xs">✓ Séance importée dans le coach !</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Résumé utilisation */}
-            <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl p-3 space-y-1.5">
-              <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Utilisation au quotidien</p>
-              <ol className="space-y-1 text-gray-600 dark:text-gray-400 list-decimal list-inside">
-                <li>Tu finis ton entraînement (la Watch enregistre automatiquement)</li>
-                <li>Tu ouvres le raccourci sur iPhone</li>
-                <li>Tu choisis la séance dans ton programme</li>
-                <li>Tu choisis le bon workout Watch</li>
-                <li>Tout s'importe — durée, distance, FC ✓</li>
-              </ol>
-            </div>
-          </div>
-        </div>
-        </Modal>
-      )}
     </div>
   );
 }
@@ -866,7 +339,7 @@ function DonneesCompte({ onDeleted }) {
       <ConfirmDialog
         open={confirmSuppr}
         title="Supprimer définitivement ton compte ?"
-        message="Toutes tes données (programme, historique, évaluations) seront supprimées sans possibilité de récupération."
+        message="Toutes tes données (séances, objectifs, historique) seront supprimées sans possibilité de récupération."
         danger
         pending={deleteMutation.isPending}
         onConfirm={() => deleteMutation.mutate()}
@@ -881,15 +354,12 @@ export default function Profil({ dark, setDark }) {
   const qc = useQueryClient();
   const [editInfos, setEditInfos] = useState(false);
   const [editPwd, setEditPwd] = useState(false);
-  const [editProgramme, setEditProgramme] = useState(false);
 
   const initials = [user?.prenom?.[0], user?.nom?.[0]].filter(Boolean).join("").toUpperCase() || "?";
 
   async function refreshUser() {
     const r = await api.get("/auth/me");
     setUser(r.data);
-    // Le programme a pu changer → rafraîchir toutes les données dépendantes
-    // (semaine en cours, séances, stats, objectif…) affichées ailleurs.
     qc.invalidateQueries();
   }
 
@@ -932,64 +402,24 @@ export default function Profil({ dark, setDark }) {
         </button>
       </Section>
 
-      {/* Programme */}
-      <Section title="Programme" action={
-        <button onClick={() => setEditProgramme(true)}
-          className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-          title="Modifier">
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-          </svg>
-        </button>
-      }>
-        {(() => {
-          const t = user?.type_programme;
-          const hasMuscu  = t === "muscu"  || t === "hybride";
-          const hasCourse = t === "course" || t === "hybride";
-          const hasVelo   = t === "velo"   || t === "hybride";
-          return (
-            <>
-              <Row label="Type" value={PROG_LABEL[t] ?? t} />
-              {hasMuscu  && <Row label="Type muscu"  value={MUSCU_LABEL[user?.type_muscu] ?? user?.type_muscu} />}
-              {hasCourse && <Row label="Type course" value={COURSE_LABEL[user?.type_course] ?? user?.type_course} />}
-              <Row label="Séances / semaine" value={user?.seances_semaine} />
-              {hasMuscu  && <Row label="Séances muscu"  value={user?.seances_muscu_semaine ?? 0} />}
-              {hasCourse && <Row label="Séances course" value={user?.seances_course_semaine ?? 0} />}
-              {hasVelo   && <Row label="Séances vélo"   value={user?.seances_velo_semaine ?? 0} />}
-              <Row label="Tests toutes les" value={user?.frequence_tests_semaines ? `${user.frequence_tests_semaines} semaines` : null} />
-            </>
-          );
-        })()}
-      </Section>
-
       {/* Physiologie */}
       <Section title="Physiologie">
         <div className="flex divide-x divide-gray-100 dark:divide-gray-800">
           <BioStat label="FC max"   value={user?.fc_max}   unit="bpm" />
           <BioStat label="FC repos" value={user?.fc_repos} unit="bpm" />
-          <BioStat label="VMA"      value={user?.vma_kmh}  unit="km/h" />
           <BioStat label="Poids"    value={user?.poids_kg} unit="kg" />
         </div>
       </Section>
 
       {/* Apparence */}
       <Section title="Apparence">
-        <div className="flex items-center justify-between py-3 border-b border-gray-100 dark:border-gray-800">
+        <div className="flex items-center justify-between py-3">
           <span className="text-sm text-gray-700 dark:text-gray-300">Mode sombre</span>
           <button onClick={() => setDark(d => !d)}
             className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${dark ? "bg-brand" : "bg-gray-200 dark:bg-gray-700"}`}>
             <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${dark ? "translate-x-6" : "translate-x-1"}`} />
           </button>
         </div>
-        <div className="flex items-center justify-between py-3">
-          <span className="text-sm text-gray-700 dark:text-gray-300">Notifications push</span>
-          <PushToggle />
-        </div>
-      </Section>
-
-      {/* Intégrations */}
-      <Section title="Intégrations">
-        <ShortcutIOS />
       </Section>
 
       {/* Données du compte */}
@@ -1008,7 +438,6 @@ export default function Profil({ dark, setDark }) {
 
       {editInfos && <EditInfosModal user={user} onClose={() => setEditInfos(false)} onSaved={refreshUser} />}
       {editPwd && <EditPasswordModal onClose={() => setEditPwd(false)} />}
-      {editProgramme && <EditProgrammeModal user={user} onClose={() => setEditProgramme(false)} onSaved={refreshUser} />}
     </div>
   );
 }

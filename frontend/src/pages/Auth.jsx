@@ -51,8 +51,7 @@ function FormLogin({ onSwitch }) {
       const r = await api.post("/auth/login", { email, password });
       const me = await api.get("/auth/me", { headers: { Authorization: `Bearer ${r.data.access_token}` } });
       login(r.data.access_token, me.data);
-      if (!r.data.onboarding_complet) navigate("/onboarding");
-      else navigate("/");
+      navigate("/");
     } catch (e) {
       setErr(getErrorMessage(e, "Erreur de connexion"));
     } finally {
@@ -160,10 +159,9 @@ export default function Auth() {
   const navigate = useNavigate();
 
   async function handleRegisterSuccess(token) {
-    // Récupère le profil puis redirige vers onboarding
     const me = await api.get("/auth/me", { headers: { Authorization: `Bearer ${token}` } });
     login(token, me.data);
-    navigate("/onboarding");
+    navigate("/");
   }
 
   return (
@@ -172,8 +170,8 @@ export default function Auth() {
         {/* Logo */}
         <div className="text-center mb-8">
           <div className="text-5xl mb-3">⚡</div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Coach Perso</h1>
-          <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Ton programme d'entraînement personnalisé</p>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Mon carnet</h1>
+          <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Toutes tes séances, tous tes sports</p>
         </div>
 
         <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-8 shadow-sm">

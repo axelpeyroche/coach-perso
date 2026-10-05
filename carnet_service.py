@@ -1,6 +1,6 @@
 """
 Logique métier du carnet d'activités : normalisation des sports, import
-dédoublonné, rapatriement de l'historique du programme, statistiques,
+dédoublonné, statistiques,
 progression des objectifs et export (Markdown / JSON / CSV) pour analyse.
 """
 
@@ -15,9 +15,10 @@ from collections import defaultdict
 from datetime import date, datetime, timedelta
 from typing import Iterable, Optional
 
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from models import Activite, BiometrieUtilisateur, JournalSeance, Objectif, Utilisateur
+from models import Activite, Objectif, Utilisateur
 
 # ---------------------------------------------------------------------------
 # Sports
@@ -167,6 +168,10 @@ CHAMPS_ACTIVITE = (
 )
 
 
+def _sans_heure(d: datetime) -> bool:
+    return (d.hour, d.minute, d.second) == (0, 0, 0)
+
+
 def importer_activite(db: Session, user_id: int, source: str, donnees: dict,
                       id_externe: Optional[str] = None, maj_si_existe: bool = True) -> tuple[Activite, str]:
     """
@@ -177,7 +182,9 @@ def importer_activite(db: Session, user_id: int, source: str, donnees: dict,
     2. Même activité venant d'une autre source (même famille de sport, début à
        ±15 min) → fusion : on complète les champs vides de l'existante au lieu
        de créer un doublon (ex. une sortie remontée à la fois par Strava et
-       Apple Santé).
+       Apple Santé). Une séance saisie sans heure (début à 00:00, ex. CSV
+       d'historique) correspond à toute séance du même jour et de la même
+       famille : l'heure précise remplace alors minuit.
     3. Sinon création.
     """
     if isinstance(donnees.get("details"), (dict, list)):
@@ -195,97 +202,46 @@ def importer_activite(db: Session, user_id: int, source: str, donnees: dict,
             if not maj_si_existe:
                 return existante, "inchange"
             for k, v in donnees.items():
-                if v is not None:
-                    setattr(existante, k, v)
+                if v is None:
+                    continue
+                if (k == "debut" and _sans_heure(v) and not _sans_heure(existante.debut)
+                        and v.date() == existante.debut.date()):
+                    continue  # ne pas écraser une heure précise par minuit
+                setattr(existante, k, v)
             return existante, "maj"
 
     debut = donnees.get("debut")
     if debut:
         fam = famille_sport(donnees.get("sport", "autre"))
-        proches = (
+        jour = datetime.combine(debut.date(), datetime.min.time())
+        candidates = (
             db.query(Activite)
             .filter(Activite.utilisateur_id == user_id,
                     Activite.source != source,
-                    Activite.debut >= debut - timedelta(minutes=15),
-                    Activite.debut <= debut + timedelta(minutes=15))
+                    Activite.debut >= min(jour, debut - timedelta(minutes=15)),
+                    Activite.debut <= max(jour + timedelta(days=1), debut + timedelta(minutes=15)))
             .all()
         )
-        for p in proches:
-            if famille_sport(p.sport) == fam:
-                for k, v in donnees.items():
-                    if v is not None and getattr(p, k) in (None, ""):
-                        setattr(p, k, v)
-                return p, "fusion"
+        for p in candidates:
+            if famille_sport(p.sport) != fam:
+                continue
+            sans_heure = _sans_heure(debut) or _sans_heure(p.debut)
+            if sans_heure:
+                if p.debut.date() != debut.date():
+                    continue
+            elif abs((p.debut - debut).total_seconds()) > 15 * 60:
+                continue
+            heure_precise = _sans_heure(p.debut) and not _sans_heure(debut)
+            for k, v in donnees.items():
+                if v is not None and (getattr(p, k) in (None, "") or (k == "debut" and heure_precise)):
+                    setattr(p, k, v)
+            return p, "fusion"
 
     a = Activite(utilisateur_id=user_id, source=source,
                  id_externe=str(id_externe) if id_externe else None, **donnees)
     db.add(a)
     db.flush()
     return a, "cree"
-
-
-# ---------------------------------------------------------------------------
-# Rapatriement des journaux du programme EPC
-# ---------------------------------------------------------------------------
-
-_TYPE_SEANCE_SPORT = {
-    "COURSE": "course", "VELO": "velo", "EMOM": "hiit", "AMRAP": "hiit",
-    "GYM_UPPER": "muscu", "GYM_LOWER": "muscu", "GYM_FULL": "muscu",
-}
-
-
-def rapatrier_journaux_programme(db: Session, user_id: int) -> int:
-    """Copie chaque séance validée du programme dans le carnet (idempotent,
-    clé `programme/journal-<id>`). Retourne le nombre d'activités créées."""
-    deja = {
-        r[0] for r in db.query(Activite.id_externe)
-        .filter(Activite.utilisateur_id == user_id, Activite.source == "programme").all()
-    }
-    journaux = (
-        db.query(JournalSeance)
-        .filter(JournalSeance.utilisateur_id == user_id, JournalSeance.completee.is_(True))
-        .all()
-    )
-    crees = 0
-    for j in journaux:
-        cle = f"journal-{j.id}"
-        if cle in deja:
-            continue
-        s = j.seance
-        type_s = s.type_seance.value if s and s.type_seance else None
-        sport = _TYPE_SEANCE_SPORT.get(type_s)
-        if sport == "course" and j.type_course == "trail":
-            sport = "trail"
-        if not sport:
-            sport = "course" if j.distance_reelle_km else "autre"
-        jour = (s.date_planifiee or s.date_seance) if s else None
-        if jour:
-            heure = j.enregistre_le.time() if j.enregistre_le else datetime.min.time().replace(hour=12)
-            debut = datetime.combine(jour, heure)
-        else:
-            debut = j.enregistre_le or datetime.utcnow()
-        details = {"type_seance": type_s, "programme_seance_id": j.seance_id}
-        if j.details_intervalles:
-            try:
-                details["intervalles"] = json.loads(j.details_intervalles)
-            except ValueError:
-                pass
-        if j.tours_amrap_completes is not None:
-            details["tours_amrap"] = j.tours_amrap_completes
-        if j.total_reps_enregistrees is not None:
-            details["total_reps"] = j.total_reps_enregistrees
-        db.add(Activite(
-            utilisateur_id=user_id, source="programme", id_externe=cle, sport=sport,
-            titre=s.titre if s else None, debut=debut,
-            duree_sec=j.duree_reelle_min * 60 if j.duree_reelle_min else None,
-            distance_km=j.distance_reelle_km, dplus_m=j.dplus_reel_m,
-            fc_moyenne_bpm=j.fc_moyenne_bpm, fc_max_bpm=j.fc_max_bpm,
-            rpe=j.rpe, notes=j.notes, details=json.dumps(details, ensure_ascii=False),
-        ))
-        crees += 1
-    if crees:
-        db.flush()
-    return crees
 
 
 # ---------------------------------------------------------------------------
@@ -561,12 +517,15 @@ def progression_objectif(o: Objectif, acts: list[Activite], aujourd_hui: Optiona
 # ---------------------------------------------------------------------------
 
 def _profil(db: Session, user: Utilisateur) -> dict:
-    bio = (
-        db.query(BiometrieUtilisateur)
-        .filter(BiometrieUtilisateur.utilisateur_id == user.id)
-        .order_by(BiometrieUtilisateur.enregistre_le.desc())
-        .first()
-    )
+    # Dernière VMA mesurée par l'ancien programme (table conservée en base, non mappée)
+    vma = None
+    try:
+        with db.begin_nested():
+            vma = db.execute(text(
+                "SELECT vma_kmh FROM biometries_utilisateurs WHERE utilisateur_id = :u "
+                "ORDER BY enregistre_le DESC LIMIT 1"), {"u": user.id}).scalar()
+    except Exception:
+        vma = None
     age = None
     if user.date_naissance:
         t = date.today()
@@ -575,7 +534,7 @@ def _profil(db: Session, user: Utilisateur) -> dict:
     return {
         "prenom": user.prenom, "sexe": user.sexe, "age": age, "poids_kg": user.poids_kg,
         "fc_max": user.fc_max, "fc_repos": user.fc_repos,
-        "vma_kmh": round(bio.vma_kmh, 1) if bio else None,
+        "vma_kmh": round(vma, 1) if vma else None,
     }
 
 
@@ -748,12 +707,15 @@ def parser_csv(contenu: str) -> tuple[str, list[tuple[Optional[str], dict]]]:
 
     i_id = idx("activity id", "id de l'activite")
     strava = i_id is not None
+    if not strava:
+        i_id = idx("id_externe")
     i_date = idx("activity date", "date de l'activite", "debut", "date")
     i_nom = idx("activity name", "nom de l'activite", "titre")
     i_type = idx("activity type", "type d'activite", "sport")
     i_desc = idx("activity description", "description de l'activite", "notes")
     # Strava répète « Elapsed Time » et « Distance » : la 2e occurrence est en secondes/mètres
     i_moving = idx("moving time", "temps de deplacement", "duree_sec")
+    i_duree_min = None if strava else idx("duree_min")
     i_dist = [k for k, n in enumerate(norm) if n in ("distance", "distance_km")]
     i_dplus = idx("elevation gain", "denivele positif", "dplus_m")
     i_fcm = idx("average heart rate", "frequence cardiaque moyenne", "fc_moyenne_bpm")
@@ -778,6 +740,8 @@ def parser_csv(contenu: str) -> tuple[str, list[tuple[Optional[str], dict]]]:
             else:
                 dist = _num(get(i_dist[0]))
         duree = _num(get(i_moving))
+        if not duree and _num(get(i_duree_min)):
+            duree = _num(get(i_duree_min)) * 60
         rpe = _num(get(i_rpe))
         donnees = {
             "sport": normaliser_sport(get(i_type)),
@@ -794,5 +758,5 @@ def parser_csv(contenu: str) -> tuple[str, list[tuple[Optional[str], dict]]]:
         }
         if not strava and i_comp is not None:
             donnees["est_competition"] = str(get(i_comp)).strip().lower() in ("1", "true", "oui", "vrai")
-        lignes.append((get(i_id) if strava else None, donnees))
+        lignes.append(((get(i_id) or "").strip() or None, donnees))
     return ("strava" if strava else "fichier"), lignes

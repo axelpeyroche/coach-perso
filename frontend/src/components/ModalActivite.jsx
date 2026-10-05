@@ -60,6 +60,7 @@ export default function ModalActivite({ activite, onClose }) {
     e.preventDefault();
     const duree_sec = parseDuree(f.duree);
     if (f.duree && duree_sec == null) { setErreur("Durée illisible (ex. 45, 1:05:30 ou 52:10)"); return; }
+    if (f.rpe === "") { setErreur("Note ton ressenti d'effort (RPE sur 10) avant d'enregistrer."); return; }
     enregistrer.mutate({
       sport: f.sport,
       titre: f.titre || null,
@@ -132,9 +133,9 @@ export default function ModalActivite({ activite, onClose }) {
           <Champ label="FC max">
             <input inputMode="numeric" className={inputCls} value={f.fc_max_bpm} onChange={set("fc_max_bpm")} />
           </Champ>
-          <Champ label="RPE (1-10)">
-            <select className={inputCls} value={f.rpe} onChange={set("rpe")}>
-              <option value="">—</option>
+          <Champ label="RPE (1-10) *">
+            <select required className={`${inputCls} ${f.rpe === "" ? "ring-1 ring-orange-400" : ""}`} value={f.rpe} onChange={set("rpe")}>
+              <option value="">À noter</option>
               {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => <option key={n} value={n}>{n}</option>)}
             </select>
           </Champ>

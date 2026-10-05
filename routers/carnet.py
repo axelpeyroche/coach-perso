@@ -289,16 +289,6 @@ async def importer_fichier(
     return {"ok": True, "source": source, "lignes": len(lignes), **bilan}
 
 
-@router.post("/api/activites/rapatrier-programme", summary="Copie les séances validées du programme EPC dans le carnet")
-def rapatrier_programme(
-    current_user: Utilisateur = Depends(get_current_user),
-    db: Session = Depends(obtenir_session),
-):
-    n = cs.rapatrier_journaux_programme(db, current_user.id)
-    db.commit()
-    return {"ok": True, "crees": n}
-
-
 # ---------------------------------------------------------------------------
 # Objectifs
 # ---------------------------------------------------------------------------

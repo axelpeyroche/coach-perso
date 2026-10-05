@@ -1,9 +1,9 @@
 """
-API FastAPI — Coach d'Entraînement Hybride EPC.
+API FastAPI — Carnet de suivi multi-sport.
 
 Point d'entrée de l'application : création de l'app, middleware CORS, gestion
-d'erreur globale, démarrage (création des tables + scheduler de notifications)
-et montage des routers par domaine (voir le dossier `routers/`).
+d'erreur globale et montage des routers par domaine (voir `routers/`).
+La création des tables est faite par `startup.py` avant le lancement d'uvicorn.
 """
 
 from __future__ import annotations
@@ -18,28 +18,12 @@ from fastapi.responses import JSONResponse
 
 logger = logging.getLogger(__name__)
 
-import deps
-from routers import (
-    admin,
-    analytics,
-    auth,
-    carnet,
-    chat,
-    evaluations,
-    import_ios,
-    journal,
-    objectif_course,
-    programme,
-    push,
-    seances,
-    strava,
-    utilisateur,
-)
+from routers import auth, carnet, utilisateur
 
 app = FastAPI(
-    title="Coach EPC — API",
-    description="API du coach d'entraînement hybride Course & Musculation au poids du corps.",
-    version="1.0.0",
+    title="Carnet — API",
+    description="API du carnet de suivi multi-sport (séances, imports, objectifs, statistiques).",
+    version="2.0.0",
 )
 
 _ALLOWED_ORIGINS = [
@@ -78,25 +62,9 @@ async def _handler_exception_global(request: Request, exc: Exception):
     )
 
 
-@app.on_event("startup")
-def demarrage():
-    deps.demarrage()
-
-
 app.include_router(auth.router)
 app.include_router(utilisateur.router)
-app.include_router(evaluations.router)
-app.include_router(journal.router)
-app.include_router(push.router)
-app.include_router(analytics.router)
-app.include_router(programme.router)
-app.include_router(seances.router)
-app.include_router(admin.router)
-app.include_router(objectif_course.router)
-app.include_router(import_ios.router)
-app.include_router(chat.router)
 app.include_router(carnet.router)
-app.include_router(strava.router)
 
 
 # ---------------------------------------------------------------------------
@@ -105,7 +73,7 @@ app.include_router(strava.router)
 
 @app.get("/", include_in_schema=False)
 def racine():
-    return {"statut": "Coach EPC opérationnel", "docs": "/docs"}
+    return {"statut": "Carnet opérationnel", "docs": "/docs"}
 
 
 @app.get("/health", include_in_schema=False)

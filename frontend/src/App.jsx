@@ -1,23 +1,16 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, lazy, Suspense } from "react";
 import { Routes, Route, NavLink, Navigate, useLocation, useNavigate } from "react-router-dom";
 import clsx from "clsx";
 import { useAuth } from "./AuthContext";
-import { usePushNotifications } from "./usePush";
-import Dashboard from "./pages/Dashboard";
-import Programme from "./pages/Programme";
-import Evaluation from "./pages/Evaluation";
-import Analytics from "./pages/Analytics";
-import Calendrier from "./pages/Calendrier";
-import Profil from "./pages/Profil";
 import Auth from "./pages/Auth";
-import Onboarding from "./pages/Onboarding";
-import Timers from "./pages/Timers";
-import Chat from "./pages/Chat";
-import Accueil from "./pages/Accueil";
-import Carnet from "./pages/Carnet";
-import Objectifs from "./pages/Objectifs";
-import StatsCarnet from "./pages/StatsCarnet";
-import Sources from "./pages/Sources";
+
+// Pages chargées à la demande : chaque page (et recharts) dans son propre chunk
+const Accueil = lazy(() => import("./pages/Accueil"));
+const Carnet = lazy(() => import("./pages/Carnet"));
+const Objectifs = lazy(() => import("./pages/Objectifs"));
+const StatsCarnet = lazy(() => import("./pages/StatsCarnet"));
+const Sources = lazy(() => import("./pages/Sources"));
+const Profil = lazy(() => import("./pages/Profil"));
 
 // ── SVG Icons ──────────────────────────────────────────────────────────────
 const Icon = {
@@ -43,34 +36,6 @@ const Icon = {
       <path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
     </svg>
   ),
-  Dashboard: () => (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-      <rect x="3" y="3" width="7" height="7" rx="1.5" />
-      <rect x="14" y="3" width="7" height="7" rx="1.5" />
-      <rect x="3" y="14" width="7" height="7" rx="1.5" />
-      <rect x="14" y="14" width="7" height="7" rx="1.5" />
-    </svg>
-  ),
-  Programme: () => (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-      <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2" />
-      <rect x="9" y="3" width="6" height="4" rx="1" />
-      <path d="M9 12h6M9 16h4" />
-    </svg>
-  ),
-  Calendrier: () => (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-      <rect x="3" y="4" width="18" height="18" rx="2" />
-      <path d="M16 2v4M8 2v4M3 10h18M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01" />
-    </svg>
-  ),
-  Evaluation: () => (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-      <circle cx="12" cy="12" r="9" />
-      <circle cx="12" cy="12" r="3" />
-      <path d="M12 3v2M12 19v2M3 12h2M19 12h2" />
-    </svg>
-  ),
   Stats: () => (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
       <path d="M3 20h18M7 20V10M12 20V4M17 20v-7" />
@@ -80,18 +45,6 @@ const Icon = {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
       <circle cx="12" cy="8" r="4" />
       <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
-    </svg>
-  ),
-  Timers: () => (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-      <circle cx="12" cy="13" r="8" />
-      <path d="M12 9v4l2.5 2.5" />
-      <path d="M5 3l4 2M19 3l-4 2" />
-    </svg>
-  ),
-  Chat: () => (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
-      <path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z" />
     </svg>
   ),
 };
@@ -106,17 +59,6 @@ const NAV = [
   { to: "/profil",    label: "Profil",    IconC: Icon.Profil },
 ];
 
-// Ancien programme EPC : conservé, accessible depuis la sidebar et l'accueil mobile.
-// Le coach IA (/chat) est en pause : route conservée mais retirée du menu.
-const NAV_PROGRAMME = [
-  { to: "/programme-dashboard", label: "Tableau de bord", IconC: Icon.Dashboard },
-  { to: "/programme",           label: "Programme",       IconC: Icon.Programme },
-  { to: "/calendrier",          label: "Calendrier",      IconC: Icon.Calendrier },
-  { to: "/evaluation",          label: "Évaluation",      IconC: Icon.Evaluation },
-  { to: "/analytics",           label: "Analytics",       IconC: Icon.Stats },
-  { to: "/timers",              label: "Timers",          IconC: Icon.Timers },
-];
-
 function SidebarLink({ to, label, IconC }) {
   return (
     <NavLink to={to} end={to === "/"}
@@ -129,24 +71,6 @@ function SidebarLink({ to, label, IconC }) {
       <IconC />
       <span>{label}</span>
     </NavLink>
-  );
-}
-
-function SectionProgramme() {
-  const { pathname } = useLocation();
-  const actif = NAV_PROGRAMME.some(n => pathname.startsWith(n.to));
-  const [ouvert, setOuvert] = useState(actif);
-  useEffect(() => { if (actif) setOuvert(true); }, [actif]);
-
-  return (
-    <div className="mt-4 pt-4 border-t border-gray-200/60 dark:border-white/10">
-      <button onClick={() => setOuvert(o => !o)}
-        className="w-full flex items-center justify-between px-4 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300">
-        Programme EPC
-        <span className={clsx("transition-transform", ouvert && "rotate-90")}>›</span>
-      </button>
-      {ouvert && <div className="mt-1 space-y-1">{NAV_PROGRAMME.map(n => <SidebarLink key={n.to} {...n} />)}</div>}
-    </div>
   );
 }
 
@@ -289,7 +213,7 @@ function RequireAuth({ children }) {
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center">
       <div className="animate-pulse text-purple-400 dark:text-purple-300">
-        <Icon.Dashboard />
+        <Icon.Carnet />
       </div>
     </div>
   );
@@ -297,26 +221,8 @@ function RequireAuth({ children }) {
   return children;
 }
 
-function RequireOnboarding({ children }) {
-  const { user, loading } = useAuth();
-  if (loading) return null;
-  if (user && !user.onboarding_complet) return <Navigate to="/onboarding" replace />;
-  return children;
-}
-
 export default function App() {
-  const { user, setUser } = useAuth();
-  usePushNotifications();
-
-  // Retour OAuth Strava : rafraîchit le profil et nettoie l'URL
-  useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("strava") === "ok") {
-      import("./api").then(({ default: api }) =>
-        api.get("/auth/me").then(r => setUser(r.data))
-      );
-      window.history.replaceState({}, "", window.location.pathname);
-    }
-  }, []);
+  const { user } = useAuth();
 
   const [dark, setDark] = useState(() => {
     const saved = localStorage.getItem("theme");
@@ -334,18 +240,16 @@ export default function App() {
     <LiquidBackground />
     <Routes>
       <Route path="/login" element={<Auth />} />
-      <Route path="/onboarding" element={<RequireAuth><Onboarding /></RequireAuth>} />
 
       <Route path="/*" element={
         <RequireAuth>
-          <RequireOnboarding>
             <div className="min-h-screen flex" style={{ overflowX: "clip" }}>
 
               {/* ── Sidebar desktop ── */}
               <aside className="hidden md:flex flex-col w-56 shrink-0 border-r glass-nav px-3 py-6 gap-1 fixed top-0 left-0 h-full z-20 overflow-y-auto">
                 <NavLink to="/" className="block px-4 mb-6 hover:opacity-75 transition-opacity">
-                  <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Coach</p>
-                  <h1 className="text-lg font-bold bg-gradient-to-r from-violet-600 to-indigo-500 dark:from-violet-300 dark:to-indigo-300 bg-clip-text text-transparent mt-0.5">Coach Perso</h1>
+                  <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Suivi</p>
+                  <h1 className="text-lg font-bold bg-gradient-to-r from-violet-600 to-indigo-500 dark:from-violet-300 dark:to-indigo-300 bg-clip-text text-transparent mt-0.5">Mon carnet</h1>
                   {user && (
                     <p className="text-xs text-gray-400 dark:text-gray-500 mt-0.5 truncate">
                       {user.prenom} {user.nom}
@@ -353,7 +257,6 @@ export default function App() {
                   )}
                 </NavLink>
                 {NAV.map(n => <SidebarLink key={n.to} {...n} />)}
-                <SectionProgramme />
               </aside>
 
               {/* ── Header mobile — flottant, sans fond visible ── */}
@@ -372,7 +275,7 @@ export default function App() {
                   style={{ pointerEvents: "auto" }}
                 >
                   <span className="text-xl drop-shadow-md">⚡</span>
-                  <span className="text-base font-bold drop-shadow-md bg-gradient-to-r from-violet-600 to-indigo-500 dark:from-violet-300 dark:to-indigo-300 bg-clip-text text-transparent">Coach Perso</span>
+                  <span className="text-base font-bold drop-shadow-md bg-gradient-to-r from-violet-600 to-indigo-500 dark:from-violet-300 dark:to-indigo-300 bg-clip-text text-transparent">Mon carnet</span>
                 </NavLink>
               </header>
 
@@ -382,28 +285,23 @@ export default function App() {
                 style={{ overflowX: "clip" }}
               >
                 <ScrollToTop />
+                <Suspense fallback={<p className="p-8 text-sm text-gray-400">Chargement…</p>}>
                 <Routes>
                   <Route path="/"           element={<Accueil />} />
                   <Route path="/carnet"     element={<Carnet />} />
                   <Route path="/objectifs"  element={<Objectifs />} />
                   <Route path="/stats"      element={<StatsCarnet />} />
                   <Route path="/sources"    element={<Sources />} />
-                  <Route path="/programme-dashboard" element={<Dashboard />} />
-                  <Route path="/programme"  element={<Programme />} />
-                  <Route path="/evaluation" element={<Evaluation />} />
-                  <Route path="/calendrier" element={<Calendrier />} />
-                  <Route path="/analytics"  element={<Analytics dark={dark} />} />
-                  <Route path="/timers"     element={<Timers />} />
-                  <Route path="/chat"       element={<Chat />} />
                   <Route path="/profil"     element={<Profil dark={dark} setDark={setDark} />} />
+                  <Route path="*"           element={<Navigate to="/" replace />} />
                 </Routes>
+                </Suspense>
               </main>
 
               {/* ── Bottom nav mobile ── */}
               <BottomNav />
 
             </div>
-          </RequireOnboarding>
         </RequireAuth>
       } />
     </Routes>

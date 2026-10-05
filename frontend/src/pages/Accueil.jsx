@@ -113,18 +113,6 @@ export default function Accueil() {
         </div>
       </div>
 
-      {/* Sur mobile, la barre du bas ne montre que le carnet : accès à l'ancien programme ici */}
-      <div className="md:hidden">
-        <Card title="Programme EPC">
-          <div className="flex flex-wrap gap-2">
-            {[["/programme-dashboard", "Tableau de bord"], ["/programme", "Programme"], ["/calendrier", "Calendrier"],
-              ["/evaluation", "Évaluation"], ["/analytics", "Analytics"], ["/timers", "Timers"]].map(([to, l]) => (
-              <Link key={to} to={to} className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300">{l}</Link>
-            ))}
-          </div>
-        </Card>
-      </div>
-
       {modal !== undefined && <ModalActivite activite={modal} onClose={() => setModal(undefined)} />}
     </div>
   );

@@ -1,7 +1,7 @@
 {
-  "name": "Coach Perso EPC",
-  "short_name": "Coach EPC",
-  "description": "Entraînement hybride course & musculation",
+  "name": "Carnet de suivi",
+  "short_name": "Carnet",
+  "description": "Carnet de suivi multi-sport",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#f9fafb",
