@@ -693,7 +693,7 @@ def parser_csv(contenu: str) -> tuple[str, list[tuple[Optional[str], dict]]]:
     Reconnaît l'export Strava (activities.csv, colonnes anglaises ou françaises)
     et le CSV générique du carnet. Retourne (source, [(id_externe, données)]).
     """
-    echantillon = contenu[:4096]
+    echantillon = contenu.split("\n", 1)[0]  # en-tête seul : les détails JSON contiennent des virgules
     delim = ";" if echantillon.count(";") > echantillon.count(",") else ","
     lecteur = csv.reader(io.StringIO(contenu), delimiter=delim)
     entetes = next(lecteur, [])
@@ -723,6 +723,7 @@ def parser_csv(contenu: str) -> tuple[str, list[tuple[Optional[str], dict]]]:
     i_cal = idx("calories")
     i_rpe = idx("perceived exertion", "effort percu", "rpe")
     i_comp = idx("commute", "est_competition")
+    i_details = None if strava else idx("details")
 
     lignes = []
     for row in lecteur:
@@ -758,5 +759,10 @@ def parser_csv(contenu: str) -> tuple[str, list[tuple[Optional[str], dict]]]:
         }
         if not strava and i_comp is not None:
             donnees["est_competition"] = str(get(i_comp)).strip().lower() in ("1", "true", "oui", "vrai")
+        if get(i_details):
+            try:
+                donnees["details"] = json.loads(get(i_details))
+            except ValueError:
+                pass
         lignes.append(((get(i_id) or "").strip() or None, donnees))
     return ("strava" if strava else "fichier"), lignes

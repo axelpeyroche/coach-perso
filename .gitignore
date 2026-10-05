@@ -32,3 +32,8 @@ alembic/versions/*.pyc
 
 # Frontend
 node_modules/
+
+# Exports de données personnelles (santé, historique)
+import_*.csv
+historique_*.csv
+*.fit
