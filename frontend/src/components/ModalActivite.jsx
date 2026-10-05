@@ -42,7 +42,7 @@ export default function ModalActivite({ activite, onClose }) {
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value }));
 
   const invalider = () => {
-    ["activites", "stats-carnet", "objectifs"].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+    ["activites", "stats-carnet", "objectifs", "plan"].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
   };
 
   const enregistrer = useMutation({

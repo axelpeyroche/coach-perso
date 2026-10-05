@@ -8,6 +8,7 @@ import ActiviteLigne from "../components/ActiviteLigne";
 import ModalActivite from "../components/ModalActivite";
 import { FormeTuiles } from "../components/Forme";
 import { ObjectifCarte } from "./Objectifs";
+import { ProchainesSeances } from "./Plan";
 import { useAuth } from "../AuthContext";
 import { getActivites, getObjectifs, getStatsCarnet } from "../api";
 import { nombre, btnPrimaire, btnSecondaire } from "../carnet";
@@ -69,7 +70,8 @@ export default function Accueil() {
       <FormeTuiles />
 
       <div className="grid gap-4 lg:grid-cols-5">
-        <div className="lg:col-span-3 space-y-4">
+        <div className="lg:col-span-3 space-y-4 min-w-0">
+          <ProchainesSeances />
           <Card title="Dernières activités" action={<Link to="/carnet" className="text-xs text-brand hover:underline">Tout voir</Link>}>
             {!liste ? (
               <p className="text-sm text-gray-400">Chargement…</p>
@@ -94,7 +96,7 @@ export default function Accueil() {
           )}
         </div>
 
-        <div className="lg:col-span-2 space-y-4">
+        <div className="lg:col-span-2 space-y-4 min-w-0">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-semibold text-gray-800 dark:text-gray-200">Objectifs en cours</h3>
             <Link to="/objectifs" className="text-xs text-brand hover:underline">Gérer</Link>

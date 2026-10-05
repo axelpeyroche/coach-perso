@@ -18,7 +18,7 @@ from typing import Iterable, Optional
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from models import Activite, MesureSante, Objectif, Utilisateur
+from models import Activite, MesureSante, Objectif, SeancePrevue, Utilisateur
 
 # ---------------------------------------------------------------------------
 # Sports
@@ -576,7 +576,8 @@ def construire_export(db: Session, user: Utilisateur) -> dict:
         "objectifs": [progression_objectif(o, acts) for o in objectifs],
         "stats": {k: v for k, v in stats.items() if k not in ("allures",)},
         "forme": series_mesures(db, user.id),
-        "activites": [serialiser_activite(a) for a in acts],
+        "plan": lister_plan(db, user.id, date.today() - timedelta(days=28), date.today() + timedelta(days=42)),
+        "activites":[serialiser_activite(a) for a in acts],
     }
 
 
@@ -671,6 +672,33 @@ def export_markdown(data: dict) -> str:
         semaines = sorted({w for k in MESURES for w in (forme.get(k) or {}).get("hebdo", {})}, reverse=True)
         for w in semaines[:26]:
             l.append(f"| {w} | " + " | ".join(_cell((forme.get(k) or {}).get("hebdo", {}).get(w)) for k in MESURES) + " |")
+        l.append("")
+
+    plan = data.get("plan") or []
+    if plan:
+        libelle = {"realisee": "réalisée", "sautee": "sautée", "a_venir": "à venir",
+                   "aujourdhui": "aujourd'hui", "manquee": "non faite"}
+        l += ["## Plan (4 semaines passées → 6 semaines à venir)", "",
+              "| Date | Sport | Séance | Prévu | RPE cible | Statut | Réalisé | Commentaire | id_externe |",
+              "|---|---|---|---|---|---|---|---|---|"]
+        for p in plan:
+            prevu = " · ".join(x for x in [
+                f"{p['duree_min']} min" if p["duree_min"] else "",
+                f"{p['distance_km']:g} km" if p["distance_km"] else "",
+                f"{p['dplus_m']} m D+" if p["dplus_m"] else "",
+            ] if x)
+            a = p["activite"]
+            fait = ""
+            if a:
+                fait = " · ".join(str(x) for x in [a["duree_str"], f"{a['distance_km']} km" if a["distance_km"] else "",
+                                                   a["allure_str"], f"FC {a['fc_moyenne_bpm']}" if a["fc_moyenne_bpm"] else "",
+                                                   f"RPE {a['rpe']:g}" if a["rpe"] is not None else ""] if x)
+            seance = p["titre"] + (f" — {p['description'][:240]}" if p["description"] else "")
+            l.append("| " + " | ".join(_cell(x) for x in [
+                p["jour"], p["sport_label"], seance, prevu,
+                f"{p['rpe_cible']:g}" if p["rpe_cible"] is not None else None, libelle.get(p["statut"], p["statut"]),
+                fait, p["commentaire"], p["id_externe"],
+            ]) + " |")
         l.append("")
 
     l += [f"## Activités ({len(data['activites'])})", "",
@@ -902,3 +930,144 @@ def series_mesures(db: Session, user_id: int, jours: int = 365, aujourd_hui: Opt
             "hebdo": {w: moy(vs) for w, vs in sorted(hebdo.items())},
         }
     return out
+
+
+# ---------------------------------------------------------------------------
+# Plan : séances prévues et rapprochement avec les activités réalisées
+# ---------------------------------------------------------------------------
+
+CHAMPS_PREVUE = ("jour", "ordre", "sport", "titre", "description", "duree_min", "distance_km",
+                 "dplus_m", "rpe_cible", "objectif_id")
+
+
+def _candidates(prevue: SeancePrevue, acts: list[Activite], prises: set[int]) -> list[Activite]:
+    """Activités du même jour et de la même famille de sport, pas déjà rattachées.
+    Une activité de moins de 40 % de la durée prévue (ex. vélotaf pour une sortie
+    longue) n'est pas retenue."""
+    res = []
+    for a in acts:
+        if a.id in prises or a.debut.date() != prevue.jour:
+            continue
+        if famille_sport(a.sport) != famille_sport(prevue.sport):
+            continue
+        if prevue.duree_min and a.duree_sec and a.duree_sec < prevue.duree_min * 60 * 0.4:
+            continue
+        res.append(a)
+    return res
+
+
+def rapprocher_plan(db: Session, user_id: int, aujourd_hui: Optional[date] = None, jours: int = 60) -> int:
+    """Relie automatiquement les séances prévues passées à l'activité réalisée.
+    Retourne le nombre de nouveaux rapprochements."""
+    auj = aujourd_hui or date.today()
+    debut = auj - timedelta(days=jours)
+    prevues = (
+        db.query(SeancePrevue)
+        .filter(SeancePrevue.utilisateur_id == user_id, SeancePrevue.jour >= debut, SeancePrevue.jour <= auj)
+        .order_by(SeancePrevue.jour, SeancePrevue.ordre, SeancePrevue.id).all()
+    )
+    a_relier = [p for p in prevues if p.activite_id is None and not p.lien_manuel and p.statut != "sautee"]
+    if not a_relier:
+        return 0
+    acts = (
+        db.query(Activite)
+        .filter(Activite.utilisateur_id == user_id,
+                Activite.debut >= datetime.combine(debut, datetime.min.time()),
+                Activite.debut < datetime.combine(auj + timedelta(days=1), datetime.min.time()))
+        .all()
+    )
+    prises = {p.activite_id for p in prevues if p.activite_id}
+    n = 0
+    for p in a_relier:
+        cand = _candidates(p, acts, prises)
+        if not cand:
+            continue
+        cible = (p.duree_min or 0) * 60
+        a = min(cand, key=lambda a: abs((a.duree_sec or 0) - cible)) if cible else max(cand, key=lambda a: a.duree_sec or 0)
+        p.activite_id = a.id
+        prises.add(a.id)
+        n += 1
+    db.flush()
+    return n
+
+
+def statut_prevue(p: SeancePrevue, aujourd_hui: Optional[date] = None) -> str:
+    auj = aujourd_hui or date.today()
+    if p.activite_id:
+        return "realisee"
+    if p.statut == "sautee":
+        return "sautee"
+    if p.jour > auj:
+        return "a_venir"
+    return "aujourdhui" if p.jour == auj else "manquee"
+
+
+def serialiser_prevue(p: SeancePrevue, activite: Optional[Activite] = None,
+                      aujourd_hui: Optional[date] = None) -> dict:
+    info = SPORTS.get(p.sport, SPORTS["autre"])
+    d = {
+        "id": p.id, "id_externe": p.id_externe, "jour": p.jour.isoformat(), "ordre": p.ordre,
+        "sport": p.sport, "sport_label": info["label"], "emoji": info["emoji"],
+        "titre": p.titre, "description": p.description, "duree_min": p.duree_min,
+        "distance_km": p.distance_km, "dplus_m": p.dplus_m, "rpe_cible": p.rpe_cible,
+        "objectif_id": p.objectif_id, "commentaire": p.commentaire, "lien_manuel": bool(p.lien_manuel),
+        "statut": statut_prevue(p, aujourd_hui), "activite": None,
+    }
+    if activite:
+        d["activite"] = serialiser_activite(activite)
+    return d
+
+
+def lister_plan(db: Session, user_id: int, depuis: date, jusqu_a: date,
+                aujourd_hui: Optional[date] = None) -> list[dict]:
+    rapprocher_plan(db, user_id, aujourd_hui)
+    prevues = (
+        db.query(SeancePrevue)
+        .filter(SeancePrevue.utilisateur_id == user_id, SeancePrevue.jour >= depuis, SeancePrevue.jour <= jusqu_a)
+        .order_by(SeancePrevue.jour, SeancePrevue.ordre, SeancePrevue.id).all()
+    )
+    ids = [p.activite_id for p in prevues if p.activite_id]
+    acts = {a.id: a for a in db.query(Activite).filter(Activite.id.in_(ids)).all()} if ids else {}
+    return [serialiser_prevue(p, acts.get(p.activite_id), aujourd_hui) for p in prevues]
+
+
+def enregistrer_plan(db: Session, user_id: int, items: list[dict],
+                     remplacer: Optional[tuple[date, date]] = None,
+                     aujourd_hui: Optional[date] = None) -> dict:
+    """
+    Crée ou met à jour des séances prévues (clé : id_externe).
+    Le statut, le rapprochement et le commentaire de l'athlète sont conservés.
+    `remplacer=(depuis, jusqu_a)` supprime les séances de la période absentes de
+    l'envoi, sauf celles déjà passées, réalisées ou sautées (l'historique reste).
+    """
+    auj = aujourd_hui or date.today()
+    bilan = {"cree": 0, "maj": 0, "supprime": 0}
+    envoyes: set[str] = set()
+    for x in items:
+        id_ext = x.get("id_externe") or f"{x['jour'].isoformat()}-{x['sport']}-{x.get('ordre') or 0}"
+        envoyes.add(id_ext)
+        p = (db.query(SeancePrevue)
+             .filter(SeancePrevue.utilisateur_id == user_id, SeancePrevue.id_externe == id_ext).first())
+        if p:
+            if p.jour != x["jour"] and not p.lien_manuel:
+                p.activite_id = None  # séance déplacée : le rapprochement sera recalculé
+            bilan["maj"] += 1
+        else:
+            p = SeancePrevue(utilisateur_id=user_id, id_externe=id_ext, statut="prevue")
+            db.add(p)
+            bilan["cree"] += 1
+        for k in CHAMPS_PREVUE:
+            if k in x:
+                setattr(p, k, x[k])
+        if p.ordre is None:
+            p.ordre = 0
+    if remplacer:
+        depuis, jusqu_a = remplacer
+        for p in (db.query(SeancePrevue)
+                  .filter(SeancePrevue.utilisateur_id == user_id,
+                          SeancePrevue.jour >= max(depuis, auj), SeancePrevue.jour <= jusqu_a).all()):
+            if p.id_externe not in envoyes and p.activite_id is None and p.statut != "sautee":
+                db.delete(p)
+                bilan["supprime"] += 1
+    db.flush()
+    return bilan

@@ -70,6 +70,9 @@ class Utilisateur(Base):
     # Token du lien d'analyse en lecture seule (export pour Claude)
     analyse_token: Mapped[Optional[str]] = mapped_column(String(64))
 
+    # Token Claude : lecture du carnet + écriture du plan (script outils/carnet.py)
+    claude_token: Mapped[Optional[str]] = mapped_column(String(64))
+
     # Ancienne connexion Strava OAuth (conservée, non utilisée)
     strava_athlete_id: Mapped[Optional[int]] = mapped_column(Integer)
     strava_access_token: Mapped[Optional[str]] = mapped_column(String(255))
@@ -182,6 +185,40 @@ class Activite(Base):
     objectif_id: Mapped[Optional[int]] = mapped_column(ForeignKey("objectifs.id", ondelete="SET NULL"), index=True)
     details: Mapped[Optional[str]] = mapped_column(Text, comment="JSON libre : exercices, splits, données brutes de la source")
     cree_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class SeancePrevue(Base):
+    """
+    Séance planifiée (envoyée par Claude via le token Claude, ou saisie).
+
+    `id_externe` permet à Claude de renvoyer un plan sans créer de doublons.
+    `activite_id` relie la séance à l'activité réellement effectuée : posé
+    automatiquement par rapprochement (même jour, même famille de sport) ou à la main.
+    """
+    __tablename__ = "seances_prevues"
+    __table_args__ = (
+        UniqueConstraint("utilisateur_id", "id_externe", name="uq_seance_prevue_externe"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    utilisateur_id: Mapped[int] = mapped_column(ForeignKey("utilisateurs.id"), nullable=False, index=True)
+    id_externe: Mapped[Optional[str]] = mapped_column(String(100))
+    jour: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    ordre: Mapped[int] = mapped_column(Integer, default=0)  # plusieurs séances le même jour
+    sport: Mapped[str] = mapped_column(String(30), nullable=False)
+    titre: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, comment="Contenu détaillé (échauffement, blocs, consignes)")
+    duree_min: Mapped[Optional[int]] = mapped_column(Integer)
+    distance_km: Mapped[Optional[float]] = mapped_column(Float)
+    dplus_m: Mapped[Optional[int]] = mapped_column(Integer)
+    rpe_cible: Mapped[Optional[float]] = mapped_column(Float)
+    objectif_id: Mapped[Optional[int]] = mapped_column(ForeignKey("objectifs.id", ondelete="SET NULL"), index=True)
+    statut: Mapped[str] = mapped_column(String(20), default="prevue")  # prevue | sautee
+    activite_id: Mapped[Optional[int]] = mapped_column(ForeignKey("activites.id", ondelete="SET NULL"), index=True)
+    lien_manuel: Mapped[bool] = mapped_column(Boolean, default=False, comment="Rapprochement fixé à la main : ne pas recalculer")
+    commentaire: Mapped[Optional[str]] = mapped_column(Text, comment="Note de l'athlète (pourquoi sautée, ressenti…)")
+    cree_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    maj_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
 
 class Objectif(Base):

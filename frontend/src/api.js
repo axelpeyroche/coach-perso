@@ -79,6 +79,15 @@ export const getStatsCarnet = (sport) =>
 
 export const getMesures = (jours = 365) => api.get("/mesures", { params: { jours } }).then((r) => r.data);
 
+// --- Plan (séances prévues) ---
+export const getPlan = (depuis, jusqu_a) => api.get("/plan", { params: { depuis, jusqu_a } }).then((r) => r.data);
+export const creerPrevue = (payload) => api.post("/plan", payload).then((r) => r.data);
+export const modifierPrevue = (id, payload) => api.patch(`/plan/${id}`, payload).then((r) => r.data);
+export const supprimerPrevue = (id) => api.delete(`/plan/${id}`).then((r) => r.data);
+export const getActivitesProches = (id) => api.get(`/plan/${id}/activites`).then((r) => r.data);
+export const getClaudeToken = () => api.get("/claude/token").then((r) => r.data);
+export const regenererClaudeToken = () => api.post("/claude/token/regenerer").then((r) => r.data);
+
 export const getAnalyseToken = () => api.get("/analyse/token").then((r) => r.data);
 export const regenererAnalyseToken = () => api.post("/analyse/token/regenerer").then((r) => r.data);
 

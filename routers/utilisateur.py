@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from database import obtenir_session
 from deps import _hash_password, _verify_password, get_current_user
-from models import Activite, MesureSante, Objectif, ObjectifCourse, PoidsUtilisateur, Utilisateur
+from models import Activite, MesureSante, Objectif, ObjectifCourse, PoidsUtilisateur, SeancePrevue, Utilisateur
 
 router = APIRouter()
 
@@ -227,6 +227,7 @@ def supprimer_compte(current_user: Utilisateur = Depends(get_current_user), db: 
             pass
     db.query(PoidsUtilisateur).filter_by(utilisateur_id=current_user.id).delete()
     db.query(MesureSante).filter_by(utilisateur_id=current_user.id).delete()
+    db.query(SeancePrevue).filter_by(utilisateur_id=current_user.id).delete()
     db.query(ObjectifCourse).filter_by(utilisateur_id=current_user.id).delete()
     db.query(Activite).filter_by(utilisateur_id=current_user.id).delete()
     db.query(Objectif).filter_by(utilisateur_id=current_user.id).delete()

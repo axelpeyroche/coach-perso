@@ -6,6 +6,7 @@ import Auth from "./pages/Auth";
 
 // Pages chargées à la demande : chaque page (et recharts) dans son propre chunk
 const Accueil = lazy(() => import("./pages/Accueil"));
+const Plan = lazy(() => import("./pages/Plan"));
 const Carnet = lazy(() => import("./pages/Carnet"));
 const Objectifs = lazy(() => import("./pages/Objectifs"));
 const StatsCarnet = lazy(() => import("./pages/StatsCarnet"));
@@ -23,6 +24,12 @@ const Icon = {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
       <path d="M5 4a2 2 0 012-2h11v18H7a2 2 0 00-2 2V4z" />
       <path d="M5 20a2 2 0 012-2h11M9 7h6M9 11h4" />
+    </svg>
+  ),
+  Plan: () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+      <rect x="3" y="5" width="18" height="16" rx="2" />
+      <path d="M3 10h18M8 3v4M16 3v4M8 14h2M14 14h2M8 17h2" />
     </svg>
   ),
   Objectifs: () => (
@@ -52,6 +59,7 @@ const Icon = {
 // Carnet de suivi : navigation principale (sidebar + barre mobile)
 const NAV = [
   { to: "/",          label: "Accueil",   IconC: Icon.Accueil },
+  { to: "/plan",      label: "Plan",      IconC: Icon.Plan },
   { to: "/carnet",    label: "Carnet",    IconC: Icon.Carnet },
   { to: "/objectifs", label: "Objectifs", IconC: Icon.Objectifs },
   { to: "/stats",     label: "Stats",     IconC: Icon.Stats },
@@ -288,6 +296,7 @@ export default function App() {
                 <Suspense fallback={<p className="p-8 text-sm text-gray-400">Chargement…</p>}>
                 <Routes>
                   <Route path="/"           element={<Accueil />} />
+                  <Route path="/plan"       element={<Plan />} />
                   <Route path="/carnet"     element={<Carnet />} />
                   <Route path="/objectifs"  element={<Objectifs />} />
                   <Route path="/stats"      element={<StatsCarnet />} />

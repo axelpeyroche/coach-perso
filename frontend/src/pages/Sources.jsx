@@ -5,6 +5,7 @@ import ConfirmDialog from "../components/ConfirmDialog";
 import {
   importerFichierActivites, getImportToken, regenererImportToken,
   getAnalyseToken, regenererAnalyseToken, exporterCarnet, urlApiAbsolue,
+  getClaudeToken, regenererClaudeToken,
 } from "../api";
 import { btnPrimaire, btnSecondaire } from "../carnet";
 
@@ -24,7 +25,7 @@ function Code({ children }) {
 }
 
 function invaliderCarnet(qc) {
-  ["activites", "stats-carnet", "objectifs", "mesures"].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+  ["activites", "stats-carnet", "objectifs", "mesures", "plan"].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
 }
 
 function telecharger(contenu, nom, type) {
@@ -281,10 +282,50 @@ function BlocClaude() {
   );
 }
 
+// ── Plan avec Claude Code ──────────────────────────────────────────────────
+function BlocPlanClaude() {
+  const qc = useQueryClient();
+  const [copie, copier] = useCopie();
+  const [visible, setVisible] = useState(false);
+  const [confirmRegen, setConfirmRegen] = useState(false);
+  const { data } = useQuery({ queryKey: ["claude-token"], queryFn: getClaudeToken });
+  const token = data?.claude_token ?? "";
+  const ligneEnv = `CARNET_TOKEN=${token}`;
+
+  return (
+    <div id="plan">
+      <Card title="🗓️ Plan avec Claude Code">
+        <div className="space-y-3 text-sm text-gray-600 dark:text-gray-300">
+          <p>
+            Claude Code lit ton carnet et t'envoie tes séances prévues (onglet <strong>Plan</strong>) avec ce token,
+            via le script <code>outils/carnet.py</code>. Ajoute la ligne ci-dessous dans le fichier <code>.env</code> du projet.
+          </p>
+          <div className="flex gap-2 items-start">
+            <Code>{token ? (visible ? ligneEnv : "CARNET_TOKEN=••••••••••••••••") : "…"}</Code>
+            <button className={btnSecondaire} disabled={!token} onClick={() => setVisible(!visible)}>{visible ? "Masquer" : "Afficher"}</button>
+            <button className={btnSecondaire} disabled={!token} onClick={() => copier(ligneEnv, "env")}>{copie === "env" ? "✓" : "Copier"}</button>
+          </div>
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            Ce token donne la lecture de tout le carnet et l'écriture du plan : ne le partage pas.
+          </p>
+          <button className="text-xs text-gray-400 hover:text-red-500 underline" onClick={() => setConfirmRegen(true)}>
+            Régénérer le token (invalide l'ancien)
+          </button>
+        </div>
+      </Card>
+      <ConfirmDialog open={confirmRegen} title="Régénérer le token Claude ?" danger
+        message="L'ancien token ne fonctionnera plus : il faudra mettre à jour le fichier .env."
+        onConfirm={async () => { await regenererClaudeToken(); qc.invalidateQueries({ queryKey: ["claude-token"] }); setConfirmRegen(false); }}
+        onCancel={() => setConfirmRegen(false)} />
+    </div>
+  );
+}
+
 export default function Sources() {
   useEffect(() => {
-    if (window.location.hash === "#claude") {
-      setTimeout(() => document.getElementById("claude")?.scrollIntoView({ behavior: "smooth" }), 300);
+    const ancre = window.location.hash.slice(1);
+    if (ancre === "claude" || ancre === "plan") {
+      setTimeout(() => document.getElementById(ancre)?.scrollIntoView({ behavior: "smooth" }), 300);
     }
   }, []);
 
@@ -300,6 +341,7 @@ export default function Sources() {
         <BlocFichier />
       </div>
       <BlocClaude />
+      <BlocPlanClaude />
     </div>
   );
 }

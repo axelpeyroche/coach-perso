@@ -18,7 +18,7 @@ from fastapi.responses import JSONResponse
 
 logger = logging.getLogger(__name__)
 
-from routers import auth, carnet, utilisateur
+from routers import auth, carnet, plan, utilisateur
 
 app = FastAPI(
     title="Carnet — API",
@@ -65,6 +65,7 @@ async def _handler_exception_global(request: Request, exc: Exception):
 app.include_router(auth.router)
 app.include_router(utilisateur.router)
 app.include_router(carnet.router)
+app.include_router(plan.router)
 
 
 # ---------------------------------------------------------------------------
