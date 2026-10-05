@@ -203,6 +203,60 @@ export const exporterDonnees = () =>
 export const supprimerCompte = () =>
   api.delete("/utilisateur").then((r) => r.data);
 
+// --- Carnet : activités ---
+export const getActivites = (params = {}) =>
+  api.get("/activites", { params }).then((r) => r.data);
+
+export const creerActivite = (payload) =>
+  api.post("/activites", payload).then((r) => r.data);
+
+export const modifierActivite = (id, payload) =>
+  api.put(`/activites/${id}`, payload).then((r) => r.data);
+
+export const supprimerActivite = (id) =>
+  api.delete(`/activites/${id}`).then((r) => r.data);
+
+export const importerFichierActivites = (fichier) => {
+  const fd = new FormData();
+  fd.append("fichier", fichier);
+  return api.post("/activites/import-fichier", fd, {
+    headers: { "Content-Type": "multipart/form-data" }, timeout: 120000,
+  }).then((r) => r.data);
+};
+
+export const rapatrierProgramme = () =>
+  api.post("/activites/rapatrier-programme").then((r) => r.data);
+
+// --- Carnet : objectifs ---
+export const getObjectifs = () => api.get("/objectifs").then((r) => r.data);
+export const creerObjectif = (payload) => api.post("/objectifs", payload).then((r) => r.data);
+export const modifierObjectif = (id, payload) => api.put(`/objectifs/${id}`, payload).then((r) => r.data);
+export const supprimerObjectif = (id) => api.delete(`/objectifs/${id}`).then((r) => r.data);
+
+// --- Carnet : stats & export ---
+export const getStatsCarnet = (sport) =>
+  api.get("/stats", { params: sport ? { sport } : {} }).then((r) => r.data);
+
+export const getAnalyseToken = () => api.get("/analyse/token").then((r) => r.data);
+export const regenererAnalyseToken = () => api.post("/analyse/token/regenerer").then((r) => r.data);
+
+export const exporterCarnet = (format = "md") =>
+  api.get("/export/carnet", { params: { format }, responseType: format === "json" ? "json" : "text" })
+    .then((r) => r.data);
+
+// URL absolue de l'API (pour les liens à partager : lien d'analyse, raccourci iOS)
+export const urlApiAbsolue = () => {
+  const base = api.defaults.baseURL || "/api";
+  return base.startsWith("http") ? base.replace(/\/$/, "") : `${window.location.origin}${base}`;
+};
+
+// --- Strava ---
+export const getStravaStatut = () => api.get("/strava/statut").then((r) => r.data);
+export const getStravaUrl = () => api.get("/strava/connecter").then((r) => r.data);
+export const synchroniserStrava = (params = {}) =>
+  api.post("/strava/synchroniser", null, { params, timeout: 60000 }).then((r) => r.data);
+export const deconnecterStrava = () => api.delete("/strava").then((r) => r.data);
+
 // --- Chat coach IA ---
 export const getChatHistory = () =>
   api.get("/chat/history").then((r) => r.data);

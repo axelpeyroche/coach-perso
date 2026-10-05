@@ -72,6 +72,13 @@ def creer_tables() -> None:
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS photo_url TEXT",
         # Fuseau horaire IANA de l'utilisateur (planification des notifications push)
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS fuseau_horaire VARCHAR(50)",
+        # Carnet : lien d'analyse + connexion Strava
+        "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS analyse_token VARCHAR(64)",
+        "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS strava_athlete_id INTEGER",
+        "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS strava_access_token VARCHAR(255)",
+        "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS strava_refresh_token VARCHAR(255)",
+        "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS strava_expires_at INTEGER",
+        "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS strava_derniere_synchro TIMESTAMP",
         # Index sur les clés étrangères — accélère les requêtes filtrées par
         # utilisateur/séance/évaluation, absentes des tables déjà existantes
         # en production (Base.metadata.create_all ne les crée que sur les

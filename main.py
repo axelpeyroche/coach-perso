@@ -23,6 +23,7 @@ from routers import (
     admin,
     analytics,
     auth,
+    carnet,
     chat,
     evaluations,
     import_ios,
@@ -31,6 +32,7 @@ from routers import (
     programme,
     push,
     seances,
+    strava,
     utilisateur,
 )
 
@@ -93,6 +95,8 @@ app.include_router(admin.router)
 app.include_router(objectif_course.router)
 app.include_router(import_ios.router)
 app.include_router(chat.router)
+app.include_router(carnet.router)
+app.include_router(strava.router)
 
 
 # ---------------------------------------------------------------------------

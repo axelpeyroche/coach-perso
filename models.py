@@ -125,6 +125,16 @@ class Utilisateur(Base):
     # Token d'import (iOS Shortcuts)
     import_token: Mapped[Optional[str]] = mapped_column(String(64))
 
+    # Token du lien d'analyse en lecture seule (export pour Claude)
+    analyse_token: Mapped[Optional[str]] = mapped_column(String(64))
+
+    # Connexion Strava (OAuth)
+    strava_athlete_id: Mapped[Optional[int]] = mapped_column(Integer)
+    strava_access_token: Mapped[Optional[str]] = mapped_column(String(255))
+    strava_refresh_token: Mapped[Optional[str]] = mapped_column(String(255))
+    strava_expires_at: Mapped[Optional[int]] = mapped_column(Integer, comment="Epoch (s) d'expiration de l'access token")
+    strava_derniere_synchro: Mapped[Optional[datetime]] = mapped_column(DateTime)
+
     # Physiologie
     fc_max: Mapped[Optional[int]] = mapped_column(Integer, comment="FC max mesurée (bpm)")
     fc_repos: Mapped[Optional[int]] = mapped_column(Integer, comment="FC de repos (bpm)")
@@ -807,6 +817,77 @@ class PushSubscription(Base):
     endpoint: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     p256dh: Mapped[str] = mapped_column(Text, nullable=False)
     auth: Mapped[str] = mapped_column(Text, nullable=False)
+    cree_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+# ---------------------------------------------------------------------------
+# Carnet — activités réalisées et objectifs
+# ---------------------------------------------------------------------------
+
+class Activite(Base):
+    """
+    Une activité sportive réellement effectuée — cœur du carnet.
+
+    Indépendante du programme généré : peut provenir d'une saisie manuelle,
+    de Strava, d'Apple Santé (raccourci iOS), d'un fichier importé ou d'un
+    journal de séance du programme EPC (rapatriement de l'historique).
+    `id_externe` permet de dédoublonner les imports répétés d'une même source.
+    """
+    __tablename__ = "activites"
+    __table_args__ = (
+        UniqueConstraint("utilisateur_id", "source", "id_externe", name="uq_activite_source_externe"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    utilisateur_id: Mapped[int] = mapped_column(ForeignKey("utilisateurs.id"), nullable=False, index=True)
+    source: Mapped[str] = mapped_column(String(20), nullable=False, default="manuel")  # manuel | strava | apple_sante | fichier | programme
+    id_externe: Mapped[Optional[str]] = mapped_column(String(100))
+    sport: Mapped[str] = mapped_column(String(30), nullable=False)  # course | trail | velo | marche | randonnee | natation | muscu | hiit | yoga | autre
+    titre: Mapped[Optional[str]] = mapped_column(String(200))
+    debut: Mapped[datetime] = mapped_column(DateTime, nullable=False, index=True)
+    duree_sec: Mapped[Optional[int]] = mapped_column(Integer)
+    distance_km: Mapped[Optional[float]] = mapped_column(Float)
+    dplus_m: Mapped[Optional[int]] = mapped_column(Integer)
+    fc_moyenne_bpm: Mapped[Optional[int]] = mapped_column(Integer)
+    fc_max_bpm: Mapped[Optional[int]] = mapped_column(Integer)
+    calories: Mapped[Optional[int]] = mapped_column(Integer)
+    rpe: Mapped[Optional[float]] = mapped_column(Float)
+    ressenti: Mapped[Optional[int]] = mapped_column(Integer, comment="Ressenti global 1-5")
+    notes: Mapped[Optional[str]] = mapped_column(Text)
+    est_competition: Mapped[bool] = mapped_column(Boolean, default=False)
+    objectif_id: Mapped[Optional[int]] = mapped_column(ForeignKey("objectifs.id", ondelete="SET NULL"), index=True)
+    details: Mapped[Optional[str]] = mapped_column(Text, comment="JSON libre : exercices, splits, données brutes de la source")
+    cree_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class Objectif(Base):
+    """
+    Objectif sportif : course officielle (date, distance, D+, temps visé)
+    ou objectif personnel chiffré (ex. 1000 km de course sur l'année,
+    100 séances, 20 tractions…).
+    """
+    __tablename__ = "objectifs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    utilisateur_id: Mapped[int] = mapped_column(ForeignKey("utilisateurs.id"), nullable=False, index=True)
+    type: Mapped[str] = mapped_column(String(20), nullable=False)  # course | perso
+    titre: Mapped[str] = mapped_column(String(200), nullable=False)
+    sport: Mapped[Optional[str]] = mapped_column(String(30))
+    date_cible: Mapped[Optional[date]] = mapped_column(Date)
+    date_debut: Mapped[Optional[date]] = mapped_column(Date, comment="Début de la période comptée (objectif perso)")
+    # Course officielle
+    distance_km: Mapped[Optional[float]] = mapped_column(Float)
+    dplus_m: Mapped[Optional[int]] = mapped_column(Integer)
+    temps_cible_sec: Mapped[Optional[int]] = mapped_column(Integer)
+    url: Mapped[Optional[str]] = mapped_column(Text)
+    # Objectif perso : métrique cumulée sur la période
+    metrique: Mapped[Optional[str]] = mapped_column(String(30))  # distance_km | duree_h | dplus_m | nb_seances | valeur_libre
+    valeur_cible: Mapped[Optional[float]] = mapped_column(Float)
+    valeur_actuelle: Mapped[Optional[float]] = mapped_column(Float, comment="Pour métrique valeur_libre, saisie à la main")
+    unite: Mapped[Optional[str]] = mapped_column(String(30))
+    statut: Mapped[str] = mapped_column(String(20), default="actif")  # actif | atteint | abandonne
+    resultat_temps_sec: Mapped[Optional[int]] = mapped_column(Integer)
+    notes: Mapped[Optional[str]] = mapped_column(Text)
     cree_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 

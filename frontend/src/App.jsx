@@ -13,9 +13,36 @@ import Auth from "./pages/Auth";
 import Onboarding from "./pages/Onboarding";
 import Timers from "./pages/Timers";
 import Chat from "./pages/Chat";
+import Accueil from "./pages/Accueil";
+import Carnet from "./pages/Carnet";
+import Objectifs from "./pages/Objectifs";
+import StatsCarnet from "./pages/StatsCarnet";
+import Sources from "./pages/Sources";
 
 // ── SVG Icons ──────────────────────────────────────────────────────────────
 const Icon = {
+  Accueil: () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+      <path d="M3 10.5L12 3l9 7.5V20a1 1 0 01-1 1h-5v-6h-6v6H4a1 1 0 01-1-1v-9.5z" />
+    </svg>
+  ),
+  Carnet: () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+      <path d="M5 4a2 2 0 012-2h11v18H7a2 2 0 00-2 2V4z" />
+      <path d="M5 20a2 2 0 012-2h11M9 7h6M9 11h4" />
+    </svg>
+  ),
+  Objectifs: () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+      <path d="M5 21V4M5 4h11l-2 4 2 4H5" />
+    </svg>
+  ),
+  Sources: () => (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
+      <path d="M12 3v12M7 10l5 5 5-5" />
+      <path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
+    </svg>
+  ),
   Dashboard: () => (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5">
       <rect x="3" y="3" width="7" height="7" rx="1.5" />
@@ -69,15 +96,25 @@ const Icon = {
   ),
 };
 
+// Carnet de suivi : navigation principale (sidebar + barre mobile)
 const NAV = [
-  { to: "/",           label: "Dashboard",  mobileLabel: "Home",  IconC: Icon.Dashboard },
-  { to: "/programme",  label: "Programme",  mobileLabel: "Prog.", IconC: Icon.Programme },
-  { to: "/calendrier", label: "Calendrier", mobileLabel: "Cal.",  IconC: Icon.Calendrier },
-  { to: "/evaluation", label: "Évaluation", mobileLabel: "Éval.",  IconC: Icon.Evaluation },
-  { to: "/analytics",  label: "Stats",      IconC: Icon.Stats },
-  { to: "/timers",     label: "Timers",     IconC: Icon.Timers },
-  { to: "/chat",       label: "Coach IA",   mobileLabel: "Coach", IconC: Icon.Chat },
-  { to: "/profil",     label: "Profil",     IconC: Icon.Profil },
+  { to: "/",          label: "Accueil",   IconC: Icon.Accueil },
+  { to: "/carnet",    label: "Carnet",    IconC: Icon.Carnet },
+  { to: "/objectifs", label: "Objectifs", IconC: Icon.Objectifs },
+  { to: "/stats",     label: "Stats",     IconC: Icon.Stats },
+  { to: "/sources",   label: "Sources",   IconC: Icon.Sources },
+  { to: "/profil",    label: "Profil",    IconC: Icon.Profil },
+];
+
+// Ancien programme EPC : conservé, accessible depuis la sidebar et l'accueil mobile.
+// Le coach IA (/chat) est en pause : route conservée mais retirée du menu.
+const NAV_PROGRAMME = [
+  { to: "/programme-dashboard", label: "Tableau de bord", IconC: Icon.Dashboard },
+  { to: "/programme",           label: "Programme",       IconC: Icon.Programme },
+  { to: "/calendrier",          label: "Calendrier",      IconC: Icon.Calendrier },
+  { to: "/evaluation",          label: "Évaluation",      IconC: Icon.Evaluation },
+  { to: "/analytics",           label: "Analytics",       IconC: Icon.Stats },
+  { to: "/timers",              label: "Timers",          IconC: Icon.Timers },
 ];
 
 function SidebarLink({ to, label, IconC }) {
@@ -92,6 +129,24 @@ function SidebarLink({ to, label, IconC }) {
       <IconC />
       <span>{label}</span>
     </NavLink>
+  );
+}
+
+function SectionProgramme() {
+  const { pathname } = useLocation();
+  const actif = NAV_PROGRAMME.some(n => pathname.startsWith(n.to));
+  const [ouvert, setOuvert] = useState(actif);
+  useEffect(() => { if (actif) setOuvert(true); }, [actif]);
+
+  return (
+    <div className="mt-4 pt-4 border-t border-gray-200/60 dark:border-white/10">
+      <button onClick={() => setOuvert(o => !o)}
+        className="w-full flex items-center justify-between px-4 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300">
+        Programme EPC
+        <span className={clsx("transition-transform", ouvert && "rotate-90")}>›</span>
+      </button>
+      {ouvert && <div className="mt-1 space-y-1">{NAV_PROGRAMME.map(n => <SidebarLink key={n.to} {...n} />)}</div>}
+    </div>
   );
 }
 
@@ -287,7 +342,7 @@ export default function App() {
             <div className="min-h-screen flex" style={{ overflowX: "clip" }}>
 
               {/* ── Sidebar desktop ── */}
-              <aside className="hidden md:flex flex-col w-56 shrink-0 border-r glass-nav px-3 py-6 gap-1 fixed top-0 left-0 h-full z-20">
+              <aside className="hidden md:flex flex-col w-56 shrink-0 border-r glass-nav px-3 py-6 gap-1 fixed top-0 left-0 h-full z-20 overflow-y-auto">
                 <NavLink to="/" className="block px-4 mb-6 hover:opacity-75 transition-opacity">
                   <p className="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-widest">Coach</p>
                   <h1 className="text-lg font-bold bg-gradient-to-r from-violet-600 to-indigo-500 dark:from-violet-300 dark:to-indigo-300 bg-clip-text text-transparent mt-0.5">Coach Perso</h1>
@@ -298,6 +353,7 @@ export default function App() {
                   )}
                 </NavLink>
                 {NAV.map(n => <SidebarLink key={n.to} {...n} />)}
+                <SectionProgramme />
               </aside>
 
               {/* ── Header mobile — flottant, sans fond visible ── */}
@@ -327,7 +383,12 @@ export default function App() {
               >
                 <ScrollToTop />
                 <Routes>
-                  <Route path="/"           element={<Dashboard />} />
+                  <Route path="/"           element={<Accueil />} />
+                  <Route path="/carnet"     element={<Carnet />} />
+                  <Route path="/objectifs"  element={<Objectifs />} />
+                  <Route path="/stats"      element={<StatsCarnet />} />
+                  <Route path="/sources"    element={<Sources />} />
+                  <Route path="/programme-dashboard" element={<Dashboard />} />
                   <Route path="/programme"  element={<Programme />} />
                   <Route path="/evaluation" element={<Evaluation />} />
                   <Route path="/calendrier" element={<Calendrier />} />

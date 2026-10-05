@@ -416,9 +416,13 @@ def exporter_donnees(current_user: Utilisateur = Depends(get_current_user), db: 
         .all()
     )
     objectifs = db.query(ObjectifCourse).filter_by(utilisateur_id=current_user.id).all()
+    from models import Activite, Objectif
+    activites = db.query(Activite).filter_by(utilisateur_id=current_user.id).order_by(Activite.debut).all()
+    objectifs_carnet = db.query(Objectif).filter_by(utilisateur_id=current_user.id).all()
 
     profil = _dump(current_user)
-    profil.pop("password_hash", None)
+    for secret in ("password_hash", "strava_access_token", "strava_refresh_token"):
+        profil.pop(secret, None)
 
     return {
         "profil": profil,
@@ -427,17 +431,22 @@ def exporter_donnees(current_user: Utilisateur = Depends(get_current_user), db: 
         "biometries": [_dump(b) for b in current_user.biometries],
         "macrocycles": macrocycles,
         "evaluations": evaluations,
+        "activites": [_dump(a) for a in activites],
+        "objectifs": [_dump(o) for o in objectifs_carnet],
     }
 
 
 @router.delete("/api/utilisateur", summary="Supprime définitivement le compte et toutes les données associées")
 def supprimer_compte(current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
-    from models import PoidsUtilisateur
+    from models import Activite, MessageChatCoach, Objectif, PoidsUtilisateur
     # Pas de relation ORM cascade déclarée sur Utilisateur pour ces 3 tables
     # (cf. models.py) : suppression explicite avant celle de l'utilisateur.
     db.query(PoidsUtilisateur).filter_by(utilisateur_id=current_user.id).delete()
     db.query(ObjectifCourse).filter_by(utilisateur_id=current_user.id).delete()
     db.query(PushSubscription).filter_by(utilisateur_id=current_user.id).delete()
+    db.query(Activite).filter_by(utilisateur_id=current_user.id).delete()
+    db.query(Objectif).filter_by(utilisateur_id=current_user.id).delete()
+    db.query(MessageChatCoach).filter_by(utilisateur_id=current_user.id).delete()
     db.delete(current_user)
     db.commit()
     return {"ok": True}
