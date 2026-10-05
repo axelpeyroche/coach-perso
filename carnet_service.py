@@ -887,6 +887,172 @@ def importer_mesures(db: Session, user_id: int, items: Iterable[tuple[str, date,
     return bilan
 
 
+# ---------------------------------------------------------------------------
+# Échantillons Apple Santé rattachés aux séances (raccourci iOS)
+# ---------------------------------------------------------------------------
+
+# type → (clé dans les détails ou colonne, agrégation) ; unités déjà converties
+ECHANTILLONS = {
+    "fc":          "bpm",
+    "puissance":   "W",
+    "vitesse":     "km/h",
+    "foulee":      "m",
+    "oscillation": "cm",
+    "contact_sol": "ms",
+    "pas":         "pas",
+    "effort":      "effort noté (1-10)",
+    "effort_estime": "effort estimé par la montre (1-10)",
+}
+
+
+def _details_dict(a: Activite) -> dict:
+    try:
+        d = json.loads(a.details) if a.details else {}
+    except ValueError:
+        d = {}
+    return d if isinstance(d, dict) else {}
+
+
+def fin_activite(a: Activite) -> datetime:
+    """Fin réelle (pauses comprises) si connue, sinon début + durée."""
+    fin = _details_dict(a).get("fin")
+    if fin:
+        try:
+            return datetime.fromisoformat(str(fin))
+        except ValueError:
+            pass
+    return a.debut + timedelta(seconds=a.duree_sec or 0)
+
+
+def fusionner_details(a: Activite, nouveaux: dict, ecraser: bool = False) -> None:
+    det = _details_dict(a)
+    for k, v in nouveaux.items():
+        if v is not None and (ecraser or k not in det):
+            det[k] = v
+    a.details = json.dumps(det, ensure_ascii=False) if det else None
+
+
+def _moyenne_ponderee(points: list[tuple[datetime, float]], fin: datetime) -> tuple[float, list[float]]:
+    """Moyenne pondérée par le temps (un point vaut jusqu'au suivant, 30 s max)."""
+    poids = []
+    for i, (d, _) in enumerate(points):
+        suivant = points[i + 1][0] if i + 1 < len(points) else min(fin, d + timedelta(seconds=5))
+        poids.append(max(1.0, min(30.0, (suivant - d).total_seconds())))
+    total = sum(poids)
+    return sum(v * p for (_, v), p in zip(points, poids)) / total, poids
+
+
+def _zones_fc(points, poids, fc_max: Optional[int], fc_repos: Optional[int]) -> Optional[list[dict]]:
+    """5 zones de Karvonen (50-60-70-80-90 % de la FC de réserve), en minutes."""
+    if not fc_max or not fc_repos or fc_max <= fc_repos:
+        return None
+    res = fc_max - fc_repos
+    bornes = [round(fc_repos + p * res) for p in (0.6, 0.7, 0.8, 0.9)]
+    minutes = [0.0] * 5
+    for (_, v), p in zip(points, poids):
+        minutes[sum(v >= b for b in bornes)] += p / 60
+    lim = [None] + bornes + [None]
+    return [{"min": lim[i], "max": lim[i + 1], "min_passees": round(minutes[i], 1)} for i in range(5)]
+
+
+def enrichir_activites(db: Session, user: Utilisateur, ech: dict[str, list[tuple[datetime, float]]]) -> int:
+    """
+    Complète les séances avec les échantillons bruts envoyés par le raccourci
+    (FC, puissance, vitesse, foulée, oscillation, temps de contact, pas, effort).
+    Un champ n'est rempli que s'il est vide ou s'il a déjà été calculé ainsi :
+    les valeurs de l'export Santé ou saisies à la main ne sont pas écrasées.
+    Retourne le nombre de séances complétées.
+    """
+    dates = [d for pts in ech.values() for d, _ in pts]
+    if not dates:
+        return 0
+    acts = (
+        db.query(Activite)
+        .filter(Activite.utilisateur_id == user.id,
+                Activite.debut >= min(dates) - timedelta(days=1), Activite.debut <= max(dates))
+        .all()
+    )
+    fenetres = {a.id: (a.debut, fin_activite(a)) for a in acts if a.duree_sec}
+
+    # Un score d'effort se rattache à la séance dont le début est le plus proche
+    efforts: dict[tuple[int, str], float] = {}
+    for t in ("effort", "effort_estime"):
+        for d, v in ech.get(t, []):
+            proches = [(abs((d - deb).total_seconds()), aid) for aid, (deb, fin) in fenetres.items()
+                       if deb - timedelta(minutes=3) <= d <= fin + timedelta(minutes=3)]
+            if proches:
+                efforts[(min(proches)[1], t)] = v
+
+    n = 0
+    for a in acts:
+        if a.id not in fenetres:
+            continue
+        debut, fin = fenetres[a.id]
+        det = _details_dict(a)
+        calc = set(det.get("champs_raccourci", []))
+        avant = (a.fc_moyenne_bpm, a.fc_max_bpm, a.rpe, a.details)
+
+        def colonne(champ, v):
+            if v is not None and (getattr(a, champ) is None or champ in calc):
+                setattr(a, champ, v)
+                calc.add(champ)
+
+        def detail(cle, v):
+            if v is not None and (cle not in det or cle in calc):
+                det[cle] = v
+                calc.add(cle)
+
+        nb = dict(det.get("nb_echantillons") or {})
+
+        def dans(t):
+            # Un envoi plus pauvre que le précédent (fenêtre tronquée) ne recalcule rien
+            pts = sorted((d, v) for d, v in ech.get(t, []) if debut <= d <= fin)
+            if not pts or len(pts) < nb.get(t, 0):
+                return []
+            nb[t] = len(pts)
+            return pts
+
+        fc = dans("fc")
+        if len(fc) >= 3:
+            moy, poids = _moyenne_ponderee(fc, fin)
+            colonne("fc_moyenne_bpm", round(moy))
+            colonne("fc_max_bpm", round(max(v for _, v in fc)))
+            detail("fc_min_bpm", round(min(v for _, v in fc)))
+            detail("zones_fc", _zones_fc(fc, poids, user.fc_max, user.fc_repos))
+        for t, cle_moy, cle_max in (("puissance", "puissance_moy_w", "puissance_max_w"),
+                                    ("vitesse", "vitesse_moy_kmh", None), ("foulee", "foulee_m", None),
+                                    ("oscillation", "oscillation_cm", None), ("contact_sol", "contact_sol_ms", None)):
+            pts = dans(t)
+            if pts:
+                detail(cle_moy, round(_moyenne_ponderee(pts, fin)[0], 2))
+                if cle_max:
+                    detail(cle_max, round(max(v for _, v in pts), 2))
+        pas = dans("pas")
+        if pas:
+            detail("pas", round(sum(v for _, v in pas)))
+
+        note = efforts.get((a.id, "effort"))
+        estime = efforts.get((a.id, "effort_estime"))
+        if estime is not None:
+            detail("effort_estime_apple", round(estime, 1))
+        if note is not None and (a.rpe is None or det.get("rpe_source") == "estime_apple"):
+            a.rpe = max(1, min(10, round(note)))  # effort noté sur la montre = RPE confirmé
+            det.pop("rpe_source", None)
+        elif estime is not None and (a.rpe is None or det.get("rpe_source") == "estime_apple"):
+            a.rpe = max(1, min(10, round(estime)))
+            det["rpe_source"] = "estime_apple"
+
+        if calc:
+            det["champs_raccourci"] = sorted(calc)
+        if nb:
+            det["nb_echantillons"] = nb
+        a.details = json.dumps(det, ensure_ascii=False) if det else None
+        if (a.fc_moyenne_bpm, a.fc_max_bpm, a.rpe, a.details) != avant:
+            n += 1
+    db.flush()
+    return n
+
+
 def parser_csv_mesures(contenu: str) -> Optional[list[tuple[str, date, float]]]:
     """CSV « date;type;valeur ». Retourne None si le fichier n'a pas ce format."""
     entete = contenu.split("\n", 1)[0]

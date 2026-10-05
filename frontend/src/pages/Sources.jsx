@@ -127,20 +127,37 @@ const ETAPES_RACCOURCI = (url) => [
     ]} />
   </>],
   ["Fin de la répétition", "Rien à régler."],
-  ["Rechercher des échantillons de santé (× 3)", "Fréquence cardiaque au repos, puis Variabilité de la fréquence cardiaque, puis VO2 max · chacune : dans les 7 derniers jours, limite désactivée."],
-  ["Obtenir le contenu de l'URL", <>
-    Même URL, POST, JSON en Texte. Insère chaque liste d'échantillons trouvée à l'étape 5, touche-la et choisis la propriété :
+  ["Rechercher des échantillons de santé (une action par type)", <>
+    Limite désactivée pour chacune. Renomme chaque résultat (touche la variable › Renommer) pour t'y retrouver à l'étape 6.
     <Champs lignes={[
-      ["token", "ton token"],
-      ["fc_repos_valeurs", "FC au repos › Valeur"],
-      ["fc_repos_dates", "FC au repos › Date de début (ISO 8601)"],
-      ["vfc_valeurs", "Variabilité › Valeur"],
-      ["vfc_dates", "Variabilité › Date de début (ISO 8601)"],
-      ["vo2max_valeurs", "VO2 max › Valeur"],
-      ["vo2max_dates", "VO2 max › Date de début (ISO 8601)"],
+      ["7 derniers jours", "Fréquence cardiaque au repos · Variabilité de la fréquence cardiaque · VO2 max"],
+      ["3 derniers jours", "Fréquence cardiaque · Puissance de course · Vitesse de course · Longueur de foulée · Oscillation verticale · Temps de contact au sol · Nombre de pas"],
+      ["3 derniers jours, si proposé", "Effort de l'entraînement (noté) · Effort estimé de l'entraînement"],
     ]} />
   </>],
-  ["Afficher une notification (facultatif)", "Contenu : « Contenu de l'URL » — le carnet répond par exemple « 5 mesure(s) de forme »."],
+  ["Obtenir le contenu de l'URL", <>
+    Même URL, POST, JSON en Texte. Pour chaque type, deux champs : <code>&lt;type&gt;_valeurs</code> = la liste trouvée › Valeur,
+    et <code>&lt;type&gt;_dates</code> = la liste › Date de début (ISO 8601). Un type absent est simplement ignoré.
+    <Champs lignes={[
+      ["token", "ton token"],
+      ["fc_repos_…", "FC au repos"],
+      ["vfc_…", "Variabilité"],
+      ["vo2max_…", "VO2 max"],
+      ["fc_…", "Fréquence cardiaque"],
+      ["puissance_…", "Puissance de course"],
+      ["vitesse_…", "Vitesse de course"],
+      ["foulee_…", "Longueur de foulée"],
+      ["oscillation_…", "Oscillation verticale"],
+      ["contact_sol_…", "Temps de contact au sol"],
+      ["pas_…", "Nombre de pas"],
+      ["effort_…", "Effort noté sur la montre"],
+      ["effort_estime_…", "Effort estimé par la montre"],
+    ]} />
+    Le carnet rattache chaque échantillon à la séance pendant laquelle il a été mesuré : FC moyenne / max / min, zones FC
+    (calculées depuis ton profil), puissance, allure, foulée, oscillation, temps de contact, pas, et RPE depuis le score d'effort
+    (la charge s'en déduit). Les valeurs déjà connues (export Santé, saisie manuelle) ne sont pas écrasées.
+  </>],
+  ["Afficher une notification (facultatif)", "Contenu : « Contenu de l'URL » — le carnet répond par exemple « 5 mesure(s) de forme · 2 séance(s) complétée(s) »."],
 ];
 
 function BlocRaccourci() {
@@ -160,6 +177,9 @@ function BlocRaccourci() {
     type: "Course à pied", debut: "2026-10-05T07:30:00+02:00", fin: "2026-10-05T08:22:00+02:00",
     duree: "50 min", distance: "10,2 km", calories: "690 kcal",
     vfc_valeurs: "56\n47,9", vfc_dates: "2026-10-04T06:10:00+02:00\n2026-10-05T05:58:00+02:00",
+    fc_valeurs: "128\n141\n…", fc_dates: "2026-10-05T07:30:05+02:00\n2026-10-05T07:30:10+02:00\n…",
+    puissance_valeurs: "251 W\n…", puissance_dates: "2026-10-05T07:31:00+02:00\n…",
+    effort_estime_valeurs: "6,4", effort_estime_dates: "2026-10-05T08:22:00+02:00",
   }, null, 2);
 
   return (
@@ -167,7 +187,7 @@ function BlocRaccourci() {
       <div className="space-y-3 text-sm text-gray-600 dark:text-gray-300">
         <p>
           Apple ne permet pas aux sites web de lire Santé directement : un raccourci iOS envoie tes entraînements
-          (Apple Watch ou autres apps synchronisées avec Santé) et tes mesures de forme (FC au repos, VFC, VO2max) vers ton carnet. Lance-le à la main ou via une
+          (Apple Watch ou autres apps synchronisées avec Santé) tes mesures de forme (FC au repos, VFC, VO2max) et le détail de chaque séance (FC, zones, puissance, foulée, effort…) vers ton carnet. Lance-le à la main ou via une
           automatisation quotidienne. Renvoyer plusieurs fois la même séance ne crée pas de doublon, et les doublons avec Strava sont fusionnés automatiquement.
         </p>
         <button className={btnSecondaire} onClick={ouvrir}>{ouvert ? "Masquer le guide" : "Configurer le raccourci"}</button>

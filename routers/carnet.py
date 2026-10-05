@@ -403,22 +403,60 @@ def _liste(v: Any) -> list:
     return [l for l in str(v).splitlines() if l.strip()]
 
 
-def _mesures_a_plat(extra: dict, tz: ZoneInfo) -> list[tuple[str, date, float]]:
-    """Listes parallèles `<type>_valeurs` / `<type>_dates`, moyennées par jour."""
-    par_jour: dict[tuple[str, date], list[float]] = {}
-    for cle in extra:
-        if not cle.endswith("_valeurs"):
+def _serie(extra: dict, t: str, tz: ZoneInfo) -> list[tuple[datetime, float, str]]:
+    """Listes parallèles `<t>_valeurs` / `<t>_dates` → [(date, valeur, unité)]."""
+    points = []
+    for v, d in zip(_liste(extra.get(f"{t}_valeurs")), _liste(extra.get(f"{t}_dates"))):
+        n, unite = _nombre_unite(v)
+        try:
+            quand = _date_import(d, tz)
+        except HTTPException:
             continue
-        t = cle[: -len("_valeurs")]
-        for v, d in zip(_liste(extra[cle]), _liste(extra.get(f"{t}_dates"))):
-            n = _nombre_unite(v)[0]
-            try:
-                jour = _date_import(d, tz).date()
-            except HTTPException:
-                continue
-            if n is not None:
-                par_jour.setdefault((t, jour), []).append(n)
-    return [(t, j, sum(vs) / len(vs)) for (t, j), vs in sorted(par_jour.items(), key=lambda x: x[0][1])]
+        if n is not None:
+            points.append((quand, n, unite))
+    return points
+
+
+def _mesures_a_plat(extra: dict, tz: ZoneInfo) -> list[tuple[str, date, float]]:
+    """Séries quotidiennes (FC repos, VFC, VO2max) : moyenne du jour, dernière valeur pour la VO2max."""
+    par_jour: dict[tuple[str, date], list[tuple[datetime, float]]] = {}
+    for t in cs.MESURES:
+        for quand, n, _ in _serie(extra, t, tz):
+            par_jour.setdefault((t, quand.date()), []).append((quand, n))
+    res = []
+    for (t, j), pts in sorted(par_jour.items(), key=lambda x: x[0][1]):
+        vs = [v for _, v in sorted(pts)]
+        res.append((t, j, vs[-1] if t == "vo2max" else sum(vs) / len(vs)))
+    return res
+
+
+def _unite_echantillon(t: str, n: float, unite: str) -> Optional[float]:
+    """Ramène un échantillon à l'unité du carnet (km/h, m, cm, ms)."""
+    u = unite.lower().replace(" ", "")
+    if t == "vitesse":
+        if u in ("m/s", "ms") or (not u and n < 8):
+            return n * 3.6
+        if u in ("mi/h", "mph"):
+            return n * 1.609344
+        return n
+    if t == "foulee":
+        return n / 100 if u == "cm" or (not u and n > 3) else n
+    if t == "oscillation":
+        return n * 100 if u == "m" or (not u and n < 0.5) else (n / 10 if u == "mm" else n)
+    if t == "contact_sol":
+        return n * 1000 if u == "s" or (not u and n < 3) else n
+    if t == "puissance" and u == "kw":
+        return n * 1000
+    return n
+
+
+def _echantillons(extra: dict, tz: ZoneInfo) -> dict[str, list[tuple[datetime, float]]]:
+    ech = {}
+    for t in cs.ECHANTILLONS:
+        pts = [(q, _unite_echantillon(t, n, u)) for q, n, u in _serie(extra, t, tz)]
+        if pts:
+            ech[t] = pts
+    return ech
 
 
 @router.post("/api/activites/import", summary="Import d'activités (raccourci iOS / script) — auth par token d'import")
@@ -433,15 +471,21 @@ def importer_activites(payload: ImportActivitesSchema, db: Session = Depends(obt
         lot.append(ActiviteImportee(**extra))
     items_mesures = [(m.type, _date_import(m.date, tz).date(), _nombre_unite(m.valeur)[0])
                      for m in payload.mesures or []] + _mesures_a_plat(extra, tz)
-    if not lot and not items_mesures:
+    ech = _echantillons(extra, tz)
+    if not lot and not items_mesures and not ech:
         raise HTTPException(400, "Aucune activité ni mesure fournie")
     source = payload.source if payload.source in ("apple_sante", "fichier", "strava") else "apple_sante"
     bilan = {"cree": 0, "maj": 0, "fusion": 0, "inchange": 0}
     for x in lot:
         id_ext, donnees = _convertir_import(x, tz)
-        _, statut = cs.importer_activite(db, user.id, source, donnees, id_externe=id_ext)
+        act, statut = cs.importer_activite(db, user.id, source, donnees, id_externe=id_ext)
         bilan[statut] += 1
+        if act is not None and not _vide(x.fin):
+            # La fin réelle (pauses comprises) sert à rattacher les échantillons à la séance
+            cs.fusionner_details(act, {"fin": _date_import(x.fin, tz).isoformat(timespec="seconds")})
+    db.flush()
     mesures = cs.importer_mesures(db, user.id, items_mesures)
+    completees = cs.enrichir_activites(db, user, ech) if ech else 0
     db.commit()
     morceaux = []
     if lot:
@@ -449,7 +493,10 @@ def importer_activites(payload: ImportActivitesSchema, db: Session = Depends(obt
     if items_mesures:
         morceaux.append(f"{mesures['cree'] + mesures['maj']} mesure(s) de forme"
                         + (f", {mesures['ignore']} ignorée(s)" if mesures["ignore"] else ""))
-    return {"ok": True, **bilan, "mesures": mesures, "message": " · ".join(morceaux)}
+    if ech:
+        morceaux.append(f"{completees} séance(s) complétée(s) (FC, puissance, effort…)")
+    return {"ok": True, **bilan, "mesures": mesures, "seances_completees": completees,
+            "message": " · ".join(morceaux)}
 
 
 @router.post("/api/activites/import-fichier", summary="Import CSV (export Strava activities.csv ou CSV du carnet)")
