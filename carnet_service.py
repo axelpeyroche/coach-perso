@@ -891,7 +891,7 @@ def importer_mesures(db: Session, user_id: int, items: Iterable[tuple[str, date,
 # Échantillons Apple Santé rattachés aux séances (raccourci iOS)
 # ---------------------------------------------------------------------------
 
-# type → (clé dans les détails ou colonne, agrégation) ; unités déjà converties
+# type d'échantillon → unité attendue (conversions faites par le routeur)
 ECHANTILLONS = {
     "fc":          "bpm",
     "puissance":   "W",
