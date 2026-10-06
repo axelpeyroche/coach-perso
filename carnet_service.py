@@ -1017,6 +1017,7 @@ ECHANTILLONS = {
 }
 TITRE_A_PRECISER = "Séance à préciser"
 SEANCE_MIN = 15          # minutes d'exercice consécutives pour former une séance
+SEANCE_MIN_COURTE = 6    # suffisent si la course ou le vélo est avéré (vélotaf)
 PAUSE_MAX = 5            # minutes sans exercice tolérées dans une séance
 
 
@@ -1212,7 +1213,8 @@ def stocker_echantillons(db: Session, user_id: int,
                             EchantillonSante.horodatage >= min(dates) - timedelta(days=1),
                             EchantillonSante.horodatage <= max(dates) + timedelta(days=1))
                     .order_by(EchantillonSante.horodatage)):
-        connus[t].append((d, v))
+        if t != "fc" or v <= 250:  # FC additionnée par un envoi « groupé par minute »
+            connus[t].append((d, v))
     return dict(connus)
 
 
@@ -1240,7 +1242,7 @@ def _blocs_exercice(points: list[tuple[datetime, float]]) -> list[tuple[datetime
             blocs[-1] = (deb, max(f, fin), m + minutes)
         else:
             blocs.append((d, fin, minutes))
-    return [b for b in blocs if b[2] >= SEANCE_MIN]
+    return [b for b in blocs if b[2] >= SEANCE_MIN_COURTE]
 
 
 def detecter_seances(db: Session, user: Utilisateur, ech: dict[str, list[tuple[datetime, float]]]) -> int:
@@ -1270,7 +1272,7 @@ def detecter_seances(db: Session, user: Utilisateur, ech: dict[str, list[tuple[d
     sans_distance = not ech.get("distance") and not ech.get("distance_velo")
 
     n = 0
-    for deb, fin, _ in blocs:
+    for deb, fin, minutes in blocs:
         deb, fin = deb.replace(second=0, microsecond=0), fin.replace(second=0, microsecond=0)
         if deb.isoformat() in ignorees or any(d <= fin and f >= deb for d, f in existantes):
             continue
@@ -1287,6 +1289,9 @@ def detecter_seances(db: Session, user: Utilisateur, ech: dict[str, list[tuple[d
             continue  # marche rapide : pas une séance d'entraînement
         else:
             sport, dist = "autre", None
+        # Un bloc court n'est gardé que si le sport est avéré (métriques de course, distance à vélo)
+        if minutes < SEANCE_MIN and not (course >= 3 or dist_velo >= 1):
+            continue
         cal = somme("energie", deb, fin)
         donnees = {
             "sport": sport, "titre": TITRE_A_PRECISER if sport == "autre" else None,

@@ -478,6 +478,9 @@ def _echantillons(extra: dict, tz: ZoneInfo) -> dict[str, list[tuple[datetime, f
         pts = [(q, _unite_echantillon(t, n, u)) for q, n, u in _serie(extra, t, tz)]
         # « Grouper par minute » renvoie aussi les minutes vides, à 0 : ce ne sont pas des mesures
         pts = [(q, v) for q, v in pts if v and v > 0]
+        if t == "fc":
+            # Une FC « groupée par minute » est additionnée par Raccourcis (1 300 « bpm ») : invalide
+            pts = [(q, v) for q, v in pts if 25 <= v <= 250]
         if pts:
             ech[t] = pts
     return ech
