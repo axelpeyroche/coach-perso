@@ -476,6 +476,8 @@ def _echantillons(extra: dict, tz: ZoneInfo) -> dict[str, list[tuple[datetime, f
     ech = {}
     for t in cs.ECHANTILLONS:
         pts = [(q, _unite_echantillon(t, n, u)) for q, n, u in _serie(extra, t, tz)]
+        # « Grouper par minute » renvoie aussi les minutes vides, à 0 : ce ne sont pas des mesures
+        pts = [(q, v) for q, v in pts if v and v > 0]
         if pts:
             ech[t] = pts
     return ech

@@ -1208,7 +1208,7 @@ def stocker_echantillons(db: Session, user_id: int,
     db.flush()
     connus: dict[str, list[tuple[datetime, float]]] = defaultdict(list)
     for t, d, v in (db.query(EchantillonSante.type, EchantillonSante.horodatage, EchantillonSante.valeur)
-                    .filter(EchantillonSante.utilisateur_id == user_id,
+                    .filter(EchantillonSante.utilisateur_id == user_id, EchantillonSante.valeur > 0,
                             EchantillonSante.horodatage >= min(dates) - timedelta(days=1),
                             EchantillonSante.horodatage <= max(dates) + timedelta(days=1))
                     .order_by(EchantillonSante.horodatage)):
