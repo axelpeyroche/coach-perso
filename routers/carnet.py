@@ -473,8 +473,9 @@ def _echantillons(extra: dict, tz: ZoneInfo) -> dict[str, list[tuple[datetime, f
 def importer_activites(payload: ImportActivitesSchema, db: Session = Depends(obtenir_session)):
     try:
         return _importer_activites(payload, db)
-    except HTTPException:
-        raise
+    except HTTPException as e:
+        # Même chose pour un token invalide ou un envoi vide : le raccourci doit afficher la raison
+        return {"ok": False, "message": str(e.detail)}
     except Exception as e:
         # Le raccourci iOS n'affiche qu'un « problème est survenu » sur une erreur 500 :
         # on renvoie la cause en clair pour qu'elle apparaisse dans la notification.
@@ -496,7 +497,10 @@ def _importer_activites(payload: ImportActivitesSchema, db: Session):
                      for m in payload.mesures or []] + _mesures_a_plat(extra, tz)
     ech = _echantillons(extra, tz)
     if not lot and not items_mesures and not ech:
-        raise HTTPException(400, "Aucune activité ni mesure fournie")
+        recus = ", ".join(f"{k} ({len(_liste(v))})" for k, v in extra.items()) or "aucun"
+        exemple = next((str(_liste(v)[0])[:40] for k, v in extra.items() if k.endswith("_dates") and _liste(v)), None)
+        raise HTTPException(400, "Aucune activité ni mesure exploitable. Champs reçus : " + recus
+                            + (f". Exemple de date reçue : « {exemple} »" if exemple else ""))
     source = payload.source if payload.source in ("apple_sante", "fichier", "strava") else "apple_sante"
     bilan = {"cree": 0, "maj": 0, "fusion": 0, "inchange": 0}
     for x in lot:
