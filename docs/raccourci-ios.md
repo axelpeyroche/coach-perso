@@ -1,137 +1,156 @@
-# Raccourci iOS « Carnet » — construction pas à pas
+# Raccourcis iOS « Carnet » — construction pas à pas
 
-Le raccourci envoie au carnet, chaque jour :
-- les minutes d'exercice, distances et calories des 3 derniers jours, à partir desquelles le carnet reconstitue tes séances ;
-- les mesures de forme des 7 derniers jours (FC au repos, VFC, VO2max) ;
-- les échantillons des 3 derniers jours (FC, puissance, vitesse, foulée, oscillation, temps de contact, pas, effort), que le carnet rattache à chaque séance.
+Le carnet reçoit chaque jour les données Santé de l'iPhone et de la montre :
+- les mesures de forme (FC au repos, VFC, VO2max) ;
+- les minutes d'exercice, à partir desquelles il reconstitue les séances ;
+- la FC, l'énergie, les distances et les métriques de course, qu'il rattache à chaque séance.
 
-Renvoyer plusieurs fois les mêmes données ne crée aucun doublon.
+**Pourquoi cinq raccourcis.** Un raccourci unique plante (« Un problème est survenu ») dès que le volume total d'échantillons devient trop grand. Chaque raccourci envoie donc une partie des données, et un raccourci **Master** les lance à la suite. Le carnet garde les échantillons reçus pendant 21 jours : une séance est détectée puis complétée avec l'ensemble, quel que soit l'ordre d'arrivée. Renvoyer les mêmes données ne crée aucun doublon.
 
-Compte environ 15 minutes. Sur l'iPhone : app **Raccourcis** → onglet **Raccourcis** → **+**. Nomme-le **Carnet**.
+| Raccourci | Contenu | Période | Groupage |
+|---|---|---|---|
+| **Carnet – FC** | Fréquence cardiaque | 1 jour | **aucun** |
+| **Carnet – Énergie** | Énergie active | 1 jour | par minute |
+| **Carnet – Distances** | Distance (marche et course), Distance à vélo | 1 jour | par minute |
+| **Carnet – Base** | Minutes d'exercice, métriques de course ; FC au repos, VFC, VO2max | 1 jour ; 7 jours pour les mesures | aucun |
+| **Carnet – Master** | Lance les quatre autres, Base en dernier | — | — |
 
 > **Ajouter une action** : touche la barre « Rechercher des actions » en bas et tape son nom.
 > **Insérer une variable** : touche un champ, puis choisis la variable dans la barre au-dessus du clavier (ou « Sélectionner une variable »).
 > **Choisir une propriété** : touche la variable insérée (bulle bleue) et choisis la propriété dans la liste (Valeur, Date de début…).
 
----
-
-## Partie A — le token
-
-**1. Texte**
-Colle ton token d'import. Il se trouve sur le carnet, page **Sources** → « Configurer le raccourci » → Copier.
-
-**2. Définir la variable**
-Nom : `Token` · Entrée : *Texte*.
+Avant de commencer : **Réglages → Raccourcis → Avancé → Autoriser le partage de grandes quantités de données** doit être activé.
 
 ---
 
-## Partie B — les séances (rien à construire)
+## Structure commune aux quatre raccourcis d'envoi
 
-Raccourcis ne donne pas accès aux entraînements sur ton iPhone : le carnet **reconstitue les séances** à partir des minutes d'exercice de la montre (au moins 15 minutes d'affilée, pauses de 5 min tolérées).
+Chaque raccourci d'envoi suit le même modèle :
 
-- Métriques de course pendant le créneau (vitesse, puissance, foulée) → **Course**.
-- Distance à vélo → **Vélo**.
-- Marche rapide → ignorée.
-- Sinon → **Séance à préciser** : ouvre-la dans le carnet et choisis le type (muscu, yoga…). Si ce n'était pas une séance, supprime-la : elle ne sera pas recréée.
+**1. Texte** — ton token d'import, seul, sans « CARNET_TOKEN= » ni espace. Il se trouve sur le carnet, page **Sources** → « Configurer le raccourci » → Copier.
 
-Si tu fais un jour un export Santé complet, ses séances remplacent celles reconstituées (type exact, D+, météo) en gardant ce que tu as corrigé à la main.
+**2. Définir la variable** — nom `Token`, entrée *Texte*.
 
----
-
-## Partie C — forme et détail des séances
-
-Pour **chaque ligne** du tableau ci-dessous, ajoute deux actions à la suite de la Partie A :
-
-1. **Rechercher des échantillons de santé** : type indiqué, filtre **Date de début est dans les derniers N jours**, limite **désactivée** ;
+**3. Pour chaque type de données** du raccourci, deux actions :
+1. **Rechercher des échantillons de santé** : type indiqué ; filtre **Date de début est dans le dernier jour** (ou les 7 derniers jours pour les mesures de forme) ; **Grouper par** selon le tableau ; limite **désactivée** ;
 2. **Définir la variable** : nom indiqué, entrée *Échantillons de santé*.
 
-> Astuce : construis la première paire, puis appuie longuement dessus → **Dupliquer**, et change seulement le type et le nom.
-
-| # | Type (dans la liste iOS) | Jours | Nom de la variable |
-|---|---|---|---|
-| 3 | Fréquence cardiaque au repos | 7 | `FCRepos` |
-| 4 | Variabilité de la fréquence cardiaque | 7 | `VFC` |
-| 5 | VO2 max | 7 | `VO2` |
-| 6 | Minutes d'exercice | 3 | `Exercice` |
-| 7 | Distance (marche et course) | 3 | `Distance` |
-| 8 | Distance à vélo | 3 | `DistanceVelo` |
-| 9 | Énergie active | 3 | `Energie` |
-| 10 | Fréquence cardiaque | 3 | `FC` |
-| 11 | Puissance de course | 3 | `Puissance` |
-| 12 | Vitesse de course | 3 | `Vitesse` |
-| 13 | Longueur de foulée de course | 3 | `Foulee` |
-| 14 | Oscillation verticale de course | 3 | `Oscillation` |
-| 15 | Temps de contact au sol de course | 3 | `Contact` |
-| 16 | Nombre de pas | 3 | `Pas` |
-| 17 | Effort de l'entraînement *(si proposé)* | 3 | `Effort` |
-| 18 | Effort estimé de l'entraînement *(si proposé)* | 3 | `EffortEstime` |
-
-Si un type n'existe pas dans la liste de ton iPhone, saute-le : le carnet fonctionne sans. Seule exception : **Minutes d'exercice** est indispensable, c'est elle qui permet de reconstituer les séances.
-
-**19. Obtenir le contenu de l'URL**
+**4. Obtenir le contenu de l'URL**
 - URL : `https://coach-perso.onrender.com/api/activites/import`
-- Touche **Afficher plus** → Méthode : **POST** · Corps de la requête : **JSON**
+- **Afficher plus** → Méthode : **POST** · Corps de la requête : **JSON**
+- Champ `token` (Texte) : variable *Token*.
+- Pour chaque variable, deux champs **Texte** :
+  - `…_valeurs` : la variable → propriété **Valeur** ;
+  - `…_dates` : la variable → propriété **Date de début** → format **ISO 8601** si proposé (sinon laisse tel quel, le carnet comprend aussi les dates en français).
 
-Pour chaque variable de la partie C, ajoute **deux** champs de type **Texte** :
-- `…_valeurs` : la variable → propriété **Valeur** ;
-- `…_dates` : la variable → propriété **Date de début** → Format **ISO 8601** (si l'option de format n'apparaît pas, laisse tel quel : le carnet comprend aussi les dates écrites en français).
+Les clés s'écrivent **exactement** comme ci-dessous : minuscules, sans accent, avec les tirets bas.
 
-| Clé `_valeurs` | Clé `_dates` | Variable |
-|---|---|---|
-| `token` | — | *Token* (un seul champ) |
-| `fc_repos_valeurs` | `fc_repos_dates` | FCRepos |
-| `vfc_valeurs` | `vfc_dates` | VFC |
-| `vo2max_valeurs` | `vo2max_dates` | VO2 |
-| `exercice_valeurs` | `exercice_dates` | Exercice |
-| `distance_valeurs` | `distance_dates` | Distance |
-| `distance_velo_valeurs` | `distance_velo_dates` | DistanceVelo |
-| `energie_valeurs` | `energie_dates` | Energie |
-| `fc_valeurs` | `fc_dates` | FC |
-| `puissance_valeurs` | `puissance_dates` | Puissance |
-| `vitesse_valeurs` | `vitesse_dates` | Vitesse |
-| `foulee_valeurs` | `foulee_dates` | Foulee |
-| `oscillation_valeurs` | `oscillation_dates` | Oscillation |
-| `contact_sol_valeurs` | `contact_sol_dates` | Contact |
-| `pas_valeurs` | `pas_dates` | Pas |
-| `effort_valeurs` | `effort_dates` | Effort |
-| `effort_estime_valeurs` | `effort_estime_dates` | EffortEstime |
+**5. Afficher une notification** — corps : variable *Contenu de l'URL*. Le carnet répond par exemple
+`2610 échantillon(s) reçu(s) · 1 séance(s) complétée(s) (FC, puissance, effort…)`.
 
-Les clés doivent être écrites **exactement** ainsi : minuscules, sans accent, avec les tirets bas.
-
-**20. Afficher une notification** (facultatif)
-Corps : variable *Contenu de l'URL*. Le carnet répond par exemple :
-`5 mesure(s) de forme · 1 séance(s) détectée(s) · 1 séance(s) complétée(s) (FC, puissance, effort…)`
+> Astuce : construis **Carnet – FC** en entier, puis appuie longuement dessus → **Dupliquer** pour créer les autres, et change seulement les types, noms et clés.
 
 ---
 
-## Partie D — premier lancement
+## Carnet – FC
 
-1. Touche ▶︎ en bas du raccourci.
-2. iOS demande l'accès à Santé : **Tout activer** puis **Autoriser**. Il peut aussi demander l'autorisation d'envoyer des données à `coach-perso.onrender.com` : choisis **Toujours autoriser**.
-3. Le premier appel peut prendre jusqu'à une minute : le serveur gratuit Render se met en veille et doit se réveiller.
-4. Envoie-moi le message affiché par la notification, je vérifierai les données reçues.
+| Type (liste iOS) | Grouper par | Variable | Clés |
+|---|---|---|---|
+| Fréquence cardiaque | **aucun** | `FC` | `fc_valeurs`, `fc_dates` |
+
+⚠️ **Ne groupe pas la FC.** Raccourcis additionne les mesures de chaque minute au lieu d'en faire la moyenne (on obtient 1 300 « bpm »). Le carnet ignore toute FC au-dessus de 250.
+
+## Carnet – Énergie
+
+| Type (liste iOS) | Grouper par | Variable | Clés |
+|---|---|---|---|
+| Énergie active | Minute | `Energie` | `energie_valeurs`, `energie_dates` |
+
+## Carnet – Distances
+
+| Type (liste iOS) | Grouper par | Variable | Clés |
+|---|---|---|---|
+| Distance (marche et course) | Minute | `Distance` | `distance_valeurs`, `distance_dates` |
+| Distance à vélo | Minute | `DistanceVelo` | `distance_velo_valeurs`, `distance_velo_dates` |
+
+Pour l'énergie et les distances, l'addition par minute est justement correcte. Les minutes vides (valeur 0) sont ignorées par le carnet.
+
+## Carnet – Base
+
+| Type (liste iOS) | Période | Variable | Clés |
+|---|---|---|---|
+| Minutes d'exercice | 1 jour | `Exercice` | `exercice_valeurs`, `exercice_dates` |
+| Longueur de foulée de course | 1 jour | `Foulee` | `foulee_valeurs`, `foulee_dates` |
+| Oscillation verticale de course | 1 jour | `Oscillation` | `oscillation_valeurs`, `oscillation_dates` |
+| Temps de contact au sol de course | 1 jour | `Contact` | `contact_sol_valeurs`, `contact_sol_dates` |
+| Fréquence cardiaque au repos | 7 jours | `FCRepos` | `fc_repos_valeurs`, `fc_repos_dates` |
+| Variabilité de la fréquence cardiaque | 7 jours | `VFC` | `vfc_valeurs`, `vfc_dates` |
+| VO2 max | 7 jours | `VO2` | `vo2max_valeurs`, `vo2max_dates` |
+
+Facultatifs, à ajouter un par un en vérifiant que le raccourci passe toujours : Puissance de course (`puissance`), Vitesse de course (`vitesse`), Nombre de pas (`pas`), Effort de l'entraînement (`effort`), Effort estimé (`effort_estime`).
+
+**Minutes d'exercice** est indispensable : c'est elle qui permet de reconstituer les séances.
 
 ---
 
-## Partie E — automatisation quotidienne
+## Carnet – Master
 
-Onglet **Automatisation** → **+** :
+1. Nouveau raccourci, nommé **Carnet – Master**.
+2. Quatre actions **Exécuter le raccourci**, dans cet ordre :
+   ```
+   Exécuter Carnet – FC
+   Exécuter Carnet – Énergie
+   Exécuter Carnet – Distances
+   Exécuter Carnet – Base
+   ```
+   Pour chacune : flèche **›** → désactiver **Afficher pendant l'exécution**, entrée vide.
 
-- **Après chaque séance** : **App** → choisir **Forme** → cocher **Est fermée** uniquement → **Exécuter immédiatement** → raccourci **Carnet**.
-- **Filet de sécurité chaque matin** : **Heure de la journée** → 7:30, Quotidien → **Exécuter immédiatement** → raccourci **Carnet**.
+**Base en dernier** : c'est lui qui détecte les séances, une fois la FC, l'énergie et les distances arrivées. Sinon, une marche rapide serait prise pour du vélo au lieu d'être ignorée.
 
-iOS bloque l'accès à Santé quand l'iPhone est verrouillé : si l'automatisation du matin se lance écran verrouillé, elle peut ne rien envoyer. Pas grave : celle de la fermeture de Forme, ou celle du lendemain, rattrapera, puisque le raccourci renvoie 3 jours à chaque fois.
+---
+
+## Comment les séances sont reconstituées
+
+Raccourcis ne donne pas accès aux entraînements : le carnet part des **minutes d'exercice** de la montre (pauses de 5 min tolérées).
+
+- Foulée, oscillation, temps de contact, puissance ou vitesse pendant le créneau → **Course** (dès 6 min).
+- Au moins 1 km de distance à vélo → **Vélo** (dès 6 min, pour les vélotafs).
+- Marche rapide (distance à pied, ≥ 3 km/h) → ignorée.
+- Sinon, à partir de 15 min → **Séance à préciser** : ouvre-la dans le carnet et choisis le type. Si ce n'était pas une séance, supprime-la : elle ne sera pas recréée.
+- Si aucune distance n'a été reçue, un bloc sans métrique de course devient **Vélo** (corrigeable dans le carnet).
+
+La séance est ensuite complétée : FC moyenne / max / min, zones, calories, distance, métriques de course. Une séance déjà présente (import de fichier, saisie) n'est jamais dupliquée, et ce que tu as saisi à la main n'est pas écrasé.
+
+---
+
+## Premier lancement
+
+1. Lance **chaque** raccourci d'envoi une fois à la main (▶︎).
+2. iOS demande l'accès à Santé : **Tout activer** puis **Autoriser**.
+3. iOS demande l'autorisation d'envoyer N échantillons à `coach-perso.onrender.com` : choisis **Toujours autoriser**. Cette autorisation se donne raccourci par raccourci ; la refuser fait échouer le raccourci avec un message générique.
+4. Le premier appel peut prendre jusqu'à une minute : le serveur gratuit Render se réveille.
+5. Lance ensuite **Carnet – Master** : les 4 notifications doivent s'afficher.
+
+---
+
+## Automatisation quotidienne
+
+Onglet **Automatisation** → **+** → **Heure de la journée** → 22:00, Quotidiennement → **Exécuter immédiatement** → action **Exécuter le raccourci** → **Carnet – Master**.
+
+iOS bloque l'accès à Santé quand l'iPhone est verrouillé : si l'automatisation échoue, lance le Master à la main. Une soirée manquée n'est pas grave, la période « dernier jour » remonte jusqu'à la veille à 0 h. Pour plus de marge, passe les filtres à 2 jours, si les raccourcis passent toujours.
 
 ---
 
 ## En cas de problème
 
-| Message | Cause probable |
+| Symptôme | Cause probable |
 |---|---|
-| `Token invalide` | Token mal collé à l'étape 1, ou régénéré depuis sur la page Sources. |
-| `Aucune activité ni mesure fournie` | Aucune séance ni mesure sur la période, ou clés mal orthographiées. |
-| Aucune séance détectée | Vérifie les champs `exercice_valeurs` / `exercice_dates` et le filtre « 3 jours » de « Minutes d'exercice ». |
-| `0 séance(s) complétée(s)` | Aucun échantillon de FC ne tombe pendant une séance : vérifie le filtre « 3 jours » des étapes 6 à 18. |
-| Rien ne se passe à l'automatisation | Ouvre Raccourcis → Automatisation et vérifie « Exécuter immédiatement ». |
+| « Un problème est survenu lors de l'exécution du raccourci » | Trop d'échantillons dans un même raccourci (réduis la période ou sépare les types), ou autorisation d'envoi refusée (relance et choisis « Toujours autoriser »). |
+| `Token invalide (reçu N caractères…)` | Token mal collé : il doit être seul, sans préfixe ni espace. Recopie-le depuis la page Sources. |
+| `Requête refusée : …` | Champ mal construit : le message indique lequel. |
+| `Aucune activité ni mesure exploitable. Champs reçus : …` | Aucune donnée sur la période, clés mal orthographiées, ou FC groupée par minute (rejetée). |
+| Aucune séance détectée | Vérifie `exercice_valeurs` / `exercice_dates` dans **Carnet – Base**, et que Base passe bien en dernier. |
+| FC absente d'une séance | Vérifie que **Carnet – FC** n'a pas de « Grouper par ». |
+| Rien ne se passe à l'automatisation | Raccourcis → Automatisation : vérifie « Exécuter immédiatement ». |
 
-⚠️ Le raccourci contient ton token : ne le partage pas par lien iCloud tel quel. Si tu veux le partager, vide d'abord l'étape 1.
+⚠️ Les raccourcis contiennent ton token : ne les partage pas par lien iCloud tels quels. Vide d'abord l'action Texte du token.
