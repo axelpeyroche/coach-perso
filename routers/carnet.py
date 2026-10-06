@@ -485,9 +485,11 @@ def importer_activites(payload: ImportActivitesSchema, db: Session = Depends(obt
 
 
 def _importer_activites(payload: ImportActivitesSchema, db: Session):
-    user = db.query(Utilisateur).filter(Utilisateur.import_token == payload.token).first()
+    token = (payload.token or "").strip()
+    user = db.query(Utilisateur).filter(Utilisateur.import_token == token).first() if token else None
     if not user:
-        raise HTTPException(401, "Token invalide")
+        raise HTTPException(401, f"Token invalide (reçu {len(token)} caractères, commençant par « {token[:3]} ») : "
+                                 "recopie-le depuis la page Sources du carnet")
     tz = _fuseau(user)
     extra = payload.model_extra or {}
     lot = list(payload.activites or []) + ([payload.activite] if payload.activite else [])
