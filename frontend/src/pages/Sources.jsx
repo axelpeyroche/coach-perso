@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Card from "../components/Card";
+import Page from "../components/Page";
 import ConfirmDialog from "../components/ConfirmDialog";
 import {
   importerFichierActivites, getImportToken, regenererImportToken,
   getAnalyseToken, regenererAnalyseToken, exporterCarnet, urlApiAbsolue,
   getClaudeToken, regenererClaudeToken,
 } from "../api";
-import { btnPrimaire, btnSecondaire } from "../carnet";
 
 function useCopie() {
   const [copie, setCopie] = useState(null);
@@ -18,7 +18,7 @@ function useCopie() {
 
 function Code({ children }) {
   return (
-    <code className="block flex-1 min-w-0 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg px-3 py-2 text-xs font-mono text-gray-800 dark:text-gray-200 break-all">
+    <code className="block flex-1 min-w-0 tuile px-3 py-2 text-[12px] font-mono text-label break-all">
       {children}
     </code>
   );
@@ -37,26 +37,59 @@ function telecharger(contenu, nom, type) {
   URL.revokeObjectURL(url);
 }
 
+// En-tête de bloc façon Réglages : pictogramme carré coloré + titre
+function Bloc({ id, icone, couleur, titre, sousTitre, children }) {
+  return (
+    <div id={id} className="scroll-mt-4">
+      <Card pad={false}>
+        <div className="flex items-center gap-3 px-4 pt-4 pb-3">
+          <span className="w-[30px] h-[30px] rounded-[8px] flex items-center justify-center text-[16px] shrink-0"
+            style={{ backgroundColor: couleur }}>{icone}</span>
+          <div className="min-w-0">
+            <h3 className="text-[17px] font-semibold leading-5">{titre}</h3>
+            {sousTitre && <p className="text-[13px] text-label-2">{sousTitre}</p>}
+          </div>
+        </div>
+        <div className="px-4 pb-4 space-y-3 text-[15px] text-label">{children}</div>
+      </Card>
+    </div>
+  );
+}
+
+// Sous-bloc gris (option, encadré)
+function Option({ titre, children }) {
+  return (
+    <div className="tuile p-3.5 space-y-2">
+      {titre && <p className="text-[15px] font-semibold">{titre}</p>}
+      {children}
+    </div>
+  );
+}
+
+const btn = "btn-gris btn-sm";
+const btnP = "btn-primaire btn-sm";
+const lienDanger = "text-[13px] text-ios-red active:opacity-50";
+
 // ── Strava (export gratuit) ─────────────────────────────────────────────────
 // La connexion API Strava est réservée aux abonnés : on passe par l'archive
 // « Télécharger vos données », gratuite pour tous les comptes.
 function BlocStrava() {
   return (
-    <Card title="🟧 Strava (export gratuit)">
-      <div className="space-y-3 text-sm text-gray-600 dark:text-gray-300">
+    <Bloc icone="🏃" couleur="#FC4C0226" titre="Strava" sousTitre="Export gratuit de l'archive">
+      <div className="space-y-3">
         <p>Strava permet à tous les comptes (même gratuits) de télécharger l'archive complète de leurs activités :</p>
-        <ol className="list-decimal list-inside text-xs space-y-1 text-gray-500 dark:text-gray-400">
+        <ol className="list-decimal pl-5 text-[13px] space-y-1 text-label-2">
           <li>Sur <strong>strava.com</strong> (navigateur, pas l'app) : avatar → <em>Paramètres</em> → <em>Mon compte</em>.</li>
           <li>« Télécharger ou supprimer votre compte » → <em>Commencer</em> → <em>Demander une archive</em>.</li>
           <li>Tu reçois un mail avec un zip (quelques minutes à quelques heures).</li>
-          <li>Dézippe-le et importe le fichier <code>activities.csv</code> dans le bloc « Fichier CSV » ci-contre.</li>
+          <li>Dézippe-le et importe le fichier <code>activities.csv</code> dans le bloc « Fichier CSV ».</li>
         </ol>
-        <p className="text-xs text-gray-400">
+        <p className="text-[13px] text-label-2">
           Tu peux refaire l'opération quand tu veux : les activités déjà importées sont reconnues (identifiant Strava)
           et les doublons avec Apple Santé sont fusionnés.
         </p>
       </div>
-    </Card>
+    </Bloc>
   );
 }
 
@@ -72,28 +105,28 @@ function BlocFichier() {
   });
 
   return (
-    <Card title="📄 Fichier CSV">
-      <div className="space-y-3 text-sm text-gray-600 dark:text-gray-300">
+    <Bloc icone="📄" couleur="#8E8E9333" titre="Fichier CSV" sousTitre="Strava, export du carnet ou CSV générique">
+      <div className="space-y-3">
         <p>Formats reconnus :</p>
-        <ul className="list-disc list-inside text-xs space-y-1 text-gray-500 dark:text-gray-400">
+        <ul className="list-disc pl-5 text-[13px] space-y-1 text-label-2">
           <li><strong>Export Strava</strong> : strava.com → Paramètres → Mon compte → « Télécharger ou supprimer votre compte » → <em>Demander une archive</em>. Dans le zip reçu par mail, prends <code>activities.csv</code>.</li>
           <li><strong>CSV générique</strong> (séparateur <code>;</code> ou <code>,</code>) avec au moins une colonne <code>date</code>/<code>debut</code>, et idéalement <code>sport</code>, <code>titre</code>, <code>duree_min</code> ou <code>duree_sec</code>, <code>distance_km</code>, <code>dplus_m</code>, <code>fc_moyenne_bpm</code>, <code>rpe</code>, <code>notes</code>, <code>id_externe</code> (identifiant unique : évite les doublons si tu réimportes). L'export CSV du carnet est réimportable.</li>
         </ul>
-        <p className="text-xs text-gray-400">Réimporter un fichier ne crée pas de doublons : les activités déjà présentes sont mises à jour ou fusionnées.</p>
+        <p className="text-[13px] text-label-2">Réimporter un fichier ne crée pas de doublons : les activités déjà présentes sont mises à jour ou fusionnées.</p>
         <input ref={input} type="file" accept=".csv,text/csv" className="hidden"
           onChange={(e) => { const f = e.target.files?.[0]; if (f) { setRes(null); imp.mutate(f); } e.target.value = ""; }} />
-        <button className={btnPrimaire} disabled={imp.isPending} onClick={() => input.current?.click()}>
+        <button className="btn-primaire w-full" disabled={imp.isPending} onClick={() => input.current?.click()}>
           {imp.isPending ? "Import en cours…" : "Choisir un fichier"}
         </button>
         {res && (res.ok ? (
-          <p className="text-xs text-green-600 dark:text-green-400">
+          <p className="text-[13px] text-ios-green">
             {res.source === "mesures"
               ? `✓ ${res.lignes} mesure(s) de forme lue(s) : ${res.cree} ajoutée(s), ${res.maj} mise(s) à jour, ${res.ignore} ignorée(s)`
               : `✓ ${res.lignes} ligne(s) lue(s) (${res.source}) : ${res.cree} ajoutée(s), ${res.maj + res.fusion} mise(s) à jour, ${res.inchange} inchangée(s)`}
           </p>
-        ) : <p className="text-xs text-red-500">{String(res.msg)}</p>)}
+        ) : <p className="text-[13px] text-ios-red">{String(res.msg)}</p>)}
       </div>
-    </Card>
+    </Bloc>
   );
 }
 
@@ -103,7 +136,7 @@ const Champs = ({ lignes }) => (
   <span className="mt-1 grid grid-cols-[auto,1fr] gap-x-2 gap-y-0.5">
     {lignes.map(([k, v]) => (
       <span key={k} className="contents">
-        <code className="text-gray-800 dark:text-gray-200">{k}</code>
+        <code className="text-label">{k}</code>
         <span>{v}</span>
       </span>
     ))}
@@ -174,59 +207,59 @@ function BlocRaccourci() {
   }, null, 2);
 
   return (
-    <Card title="🍎 Apple Santé (raccourci iOS)">
-      <div className="space-y-3 text-sm text-gray-600 dark:text-gray-300">
-        <p>
+    <Bloc icone="❤️" couleur="#FF2D5526" titre="Apple Santé" sousTitre="Raccourci iOS automatique">
+      <div className="space-y-3">
+        <p className="text-[13px] text-label-2">
           Apple ne permet pas aux sites web de lire Santé directement : un raccourci iOS envoie tes entraînements
           (Apple Watch ou autres apps synchronisées avec Santé) tes mesures de forme (FC au repos, VFC, VO2max) et le détail de chaque séance (FC, zones, puissance, foulée, effort…) vers ton carnet. Lance-le à la main ou via une
           automatisation quotidienne. Renvoyer plusieurs fois la même séance ne crée pas de doublon, et les doublons avec Strava sont fusionnés automatiquement.
         </p>
-        <button className={btnSecondaire} onClick={ouvrir}>{ouvert ? "Masquer le guide" : "Configurer le raccourci"}</button>
+        <button className="btn-teinte w-full" onClick={ouvrir}>{ouvert ? "Masquer le guide" : "Configurer le raccourci"}</button>
         {ouvert && token && (
           <div className="space-y-3">
             <div>
-              <p className="text-xs font-semibold text-gray-500 mb-1">Ton token d'import (à garder secret)</p>
+              <p className="libelle">Ton token d'import (à garder secret)</p>
               <div className="flex gap-2 items-start">
                 <Code>{token}</Code>
-                <button className={btnSecondaire} onClick={() => copier(token, "tok")}>{copie === "tok" ? "✓" : "Copier"}</button>
+                <button className={btn} onClick={() => copier(token, "tok")}>{copie === "tok" ? "✓" : "Copier"}</button>
               </div>
-              <button className="text-xs text-gray-400 hover:text-red-500 underline mt-1" onClick={() => setConfirmRegen(true)}>Régénérer</button>
+              <button className={`${lienDanger} mt-1.5 px-1`} onClick={() => setConfirmRegen(true)}>Régénérer le token</button>
             </div>
             <div>
-              <p className="text-xs font-semibold text-gray-500 mb-1">Adresse d'envoi</p>
+              <p className="libelle">Adresse d'envoi</p>
               <div className="flex gap-2 items-start">
                 <Code>{url}/activites/import</Code>
-                <button className={btnSecondaire} onClick={() => copier(`${url}/activites/import`, "url")}>{copie === "url" ? "✓" : "Copier"}</button>
+                <button className={btn} onClick={() => copier(`${url}/activites/import`, "url")}>{copie === "url" ? "✓" : "Copier"}</button>
               </div>
             </div>
             <ol className="space-y-2">
               {ETAPES_RACCOURCI(url).map(([titre, corps], i) => (
-                <li key={i} className="flex gap-3 rounded-xl bg-gray-50 dark:bg-gray-800 p-3">
-                  <span className="shrink-0 w-6 h-6 rounded-lg bg-brand text-white flex items-center justify-center text-xs font-bold">{i + 1}</span>
+                <li key={i} className="flex gap-3 tuile p-3">
+                  <span className="shrink-0 w-6 h-6 rounded-full bg-brand text-white flex items-center justify-center text-[12px] font-bold">{i + 1}</span>
                   <span className="min-w-0">
-                    <span className="block text-xs font-semibold text-brand">{titre}</span>
-                    <span className="block text-xs text-gray-600 dark:text-gray-400 break-words">{corps}</span>
+                    <span className="block text-[15px] font-semibold">{titre}</span>
+                    <span className="block text-[13px] text-label-2 break-words">{corps}</span>
                   </span>
                 </li>
               ))}
             </ol>
-            <details className="text-xs">
-              <summary className="cursor-pointer text-gray-500">Format JSON accepté (pour un script ou un autre outil)</summary>
-              <pre className="mt-2 bg-gray-900 text-gray-100 rounded-lg p-3 overflow-x-auto">{exemple}</pre>
-              <p className="mt-1 text-gray-400">
+            <details className="text-[13px]">
+              <summary className="cursor-pointer text-brand">Format JSON accepté (pour un script ou un autre outil)</summary>
+              <pre className="mt-2 tuile p-3 text-[11px] overflow-x-auto">{exemple}</pre>
+              <p className="mt-1.5 text-label-2">
                 Les unités écrites par iOS (« km », « m », « kcal », « min ») et les dates localisées sont comprises.
                 Aussi accepté : <code>activites</code> (liste), <code>mesures</code> (liste de {"{type, date, valeur}"}),
                 <code> dplus_m</code>, <code>fc_moyenne_bpm</code>, <code>fc_max_bpm</code>, <code>rpe</code>, <code>notes</code>,
                 <code> id</code> (identifiant unique pour éviter les doublons).
               </p>
             </details>
-            <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-3 text-xs space-y-1">
-              <p className="font-semibold text-gray-700 dark:text-gray-200">Pour que ça tourne tout seul</p>
-              <p>
+            <div className="tuile p-3.5 text-[13px] space-y-1.5">
+              <p className="text-[15px] font-semibold">Pour que ça tourne tout seul</p>
+              <p className="text-label-2">
                 Raccourcis → Automatisation → <b>+</b> → « App » → Forme → « Est fermée » → « Exécuter immédiatement »
                 → ce raccourci. Ajoute une 2ᵉ automatisation « Heure de la journée » (ex. 7 h 30, tous les jours) en filet de sécurité.
               </p>
-              <p className="text-gray-400">
+              <p className="text-label-3">
                 iOS bloque l'accès à Santé quand l'iPhone est verrouillé : une exécution peut alors échouer, la suivante
                 rattrape (le raccourci regarde 3 jours en arrière, sans créer de doublon).
               </p>
@@ -238,7 +271,7 @@ function BlocRaccourci() {
         message="L'ancien token ne fonctionnera plus : il faudra mettre à jour le raccourci."
         onConfirm={async () => { setToken((await regenererImportToken()).import_token); setConfirmRegen(false); }}
         onCancel={() => setConfirmRegen(false)} />
-    </Card>
+    </Bloc>
   );
 }
 
@@ -279,63 +312,60 @@ function BlocClaude() {
   }
 
   return (
-    <div id="claude">
-      <Card title="🤖 Analyse approfondie avec Claude">
-        <div className="space-y-4 text-sm text-gray-600 dark:text-gray-300">
-          <p>
+    <>
+      <Bloc id="claude" icone="✳️" couleur="#FF950026" titre="Analyse avec Claude" sousTitre="Avec ton abonnement claude.ai">
+        <div className="space-y-3">
+          <p className="text-[13px] text-label-2">
             Utilise ton abonnement claude.ai (aucun coût d'API) : donne à Claude l'accès à <strong>tout</strong> ton carnet
             de l'une de ces façons.
           </p>
 
-          <div className="rounded-xl bg-gray-50 dark:bg-gray-800 p-3 space-y-2">
-            <p className="text-xs font-semibold text-gray-700 dark:text-gray-200">Option 1 — Lien secret en lecture seule</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">
+          <Option titre="Lien secret en lecture seule">
+            <p className="text-[13px] text-label-2">
               Colle ce lien dans une conversation claude.ai : Claude lit la version à jour du carnet à chaque fois.
               Ajoute <code>?format=json</code> ou <code>?format=csv</code> pour d'autres formats.
             </p>
             <div className="flex gap-2 items-start">
               <Code>{lien || "…"}</Code>
-              <button className={btnSecondaire} disabled={!lien} onClick={() => copier(lien, "lien")}>{copie === "lien" ? "✓" : "Copier"}</button>
+              <button className={btn} disabled={!lien} onClick={() => copier(lien, "lien")}>{copie === "lien" ? "✓" : "Copier"}</button>
             </div>
             <div className="flex flex-wrap gap-2">
-              <button className={btnPrimaire} disabled={!lien} onClick={() => copier(PROMPT_CLAUDE(lien), "prompt")}>
+              <button className={btnP} disabled={!lien} onClick={() => copier(PROMPT_CLAUDE(lien), "prompt")}>
                 {copie === "prompt" ? "✓ Copié" : "Copier lien + consigne d'analyse"}
               </button>
-              <a href="https://claude.ai/new" target="_blank" rel="noreferrer" className={btnSecondaire}>Ouvrir claude.ai ↗</a>
+              <a href="https://claude.ai/new" target="_blank" rel="noreferrer" className={btn}>Ouvrir claude.ai ↗</a>
             </div>
-            <button className="text-xs text-gray-400 hover:text-red-500 underline" onClick={() => setConfirmRegen(true)}>
+            <button className={lienDanger} onClick={() => setConfirmRegen(true)}>
               Régénérer le lien (invalide l'ancien)
             </button>
-          </div>
+          </Option>
 
-          <div className="rounded-xl bg-gray-50 dark:bg-gray-800 p-3 space-y-2">
-            <p className="text-xs font-semibold text-gray-700 dark:text-gray-200">Option 2 — Copier tout le contenu</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">
+          <Option titre="Copier tout le contenu">
+            <p className="text-[13px] text-label-2">
               Si Claude n'arrive pas à ouvrir le lien : copie l'export complet (consigne incluse) et colle-le directement.
             </p>
-            <button className={btnSecondaire} disabled={chargement === "copie"} onClick={copierTout}>
+            <button className={btn} disabled={chargement === "copie"} onClick={copierTout}>
               {copie === "tout" ? "✓ Copié" : chargement === "copie" ? "…" : "Copier tout le carnet"}
             </button>
-          </div>
+          </Option>
 
-          <div className="rounded-xl bg-gray-50 dark:bg-gray-800 p-3 space-y-2">
-            <p className="text-xs font-semibold text-gray-700 dark:text-gray-200">Option 3 — Fichier à joindre</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400">Télécharge un fichier et glisse-le dans la conversation (ou dans un Projet claude.ai pour l'avoir en contexte permanent).</p>
+          <Option titre="Fichier à joindre">
+            <p className="text-[13px] text-label-2">Télécharge un fichier et glisse-le dans la conversation (ou dans un Projet claude.ai pour l'avoir en contexte permanent).</p>
             <div className="flex flex-wrap gap-2">
               {[["md", "Markdown"], ["csv", "CSV (tableur)"], ["json", "JSON"]].map(([f, l]) => (
-                <button key={f} className={btnSecondaire} disabled={chargement === f} onClick={() => exporter(f)}>
+                <button key={f} className={btn} disabled={chargement === f} onClick={() => exporter(f)}>
                   {chargement === f ? "…" : l}
                 </button>
               ))}
             </div>
-          </div>
+          </Option>
         </div>
-      </Card>
+      </Bloc>
       <ConfirmDialog open={confirmRegen} title="Régénérer le lien d'analyse ?" danger
         message="L'ancien lien ne fonctionnera plus (utile si tu l'as partagé par erreur)."
         onConfirm={async () => { await regenererAnalyseToken(); qc.invalidateQueries({ queryKey: ["analyse-token"] }); setConfirmRegen(false); }}
         onCancel={() => setConfirmRegen(false)} />
-    </div>
+    </>
   );
 }
 
@@ -350,31 +380,31 @@ function BlocPlanClaude() {
   const ligneEnv = `CARNET_TOKEN=${token}`;
 
   return (
-    <div id="plan">
-      <Card title="🗓️ Plan avec Claude Code">
-        <div className="space-y-3 text-sm text-gray-600 dark:text-gray-300">
-          <p>
+    <>
+      <Bloc id="plan" icone="🗓️" couleur="#007AFF26" titre="Plan avec Claude Code" sousTitre="Séances prévues envoyées par Claude">
+        <div className="space-y-3">
+          <p className="text-[13px] text-label-2">
             Claude Code lit ton carnet et t'envoie tes séances prévues (onglet <strong>Plan</strong>) avec ce token,
             via le script <code>outils/carnet.py</code>. Ajoute la ligne ci-dessous dans le fichier <code>.env</code> du projet.
           </p>
           <div className="flex gap-2 items-start">
             <Code>{token ? (visible ? ligneEnv : "CARNET_TOKEN=••••••••••••••••") : "…"}</Code>
-            <button className={btnSecondaire} disabled={!token} onClick={() => setVisible(!visible)}>{visible ? "Masquer" : "Afficher"}</button>
-            <button className={btnSecondaire} disabled={!token} onClick={() => copier(ligneEnv, "env")}>{copie === "env" ? "✓" : "Copier"}</button>
+            <button className={btn} disabled={!token} onClick={() => setVisible(!visible)}>{visible ? "Masquer" : "Afficher"}</button>
+            <button className={btn} disabled={!token} onClick={() => copier(ligneEnv, "env")}>{copie === "env" ? "✓" : "Copier"}</button>
           </div>
-          <p className="text-xs text-gray-500 dark:text-gray-400">
+          <p className="text-[13px] text-label-2">
             Ce token donne la lecture de tout le carnet et l'écriture du plan : ne le partage pas.
           </p>
-          <button className="text-xs text-gray-400 hover:text-red-500 underline" onClick={() => setConfirmRegen(true)}>
+          <button className={lienDanger} onClick={() => setConfirmRegen(true)}>
             Régénérer le token (invalide l'ancien)
           </button>
         </div>
-      </Card>
+      </Bloc>
       <ConfirmDialog open={confirmRegen} title="Régénérer le token Claude ?" danger
         message="L'ancien token ne fonctionnera plus : il faudra mettre à jour le fichier .env."
         onConfirm={async () => { await regenererClaudeToken(); qc.invalidateQueries({ queryKey: ["claude-token"] }); setConfirmRegen(false); }}
         onCancel={() => setConfirmRegen(false)} />
-    </div>
+    </>
   );
 }
 
@@ -387,18 +417,24 @@ export default function Sources() {
   }, []);
 
   return (
-    <div className="p-4 md:p-8 w-full space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Sources & export</h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Importe tes séances de partout, puis fais-les analyser par Claude</p>
+    <Page titre="Sources" sousTitre="Import et export">
+      <div className="space-y-1.5">
+        <h2 className="entete-liste">Importer</h2>
+        <div className="grid gap-3 lg:grid-cols-2 items-start">
+          <BlocRaccourci />
+          <div className="space-y-3">
+            <BlocStrava />
+            <BlocFichier />
+          </div>
+        </div>
       </div>
-      <div className="grid gap-4 lg:grid-cols-2">
-        <BlocStrava />
-        <BlocRaccourci />
-        <BlocFichier />
+      <div className="space-y-1.5">
+        <h2 className="entete-liste">Claude</h2>
+        <div className="space-y-3">
+          <BlocClaude />
+          <BlocPlanClaude />
+        </div>
       </div>
-      <BlocClaude />
-      <BlocPlanClaude />
-    </div>
+    </Page>
   );
 }

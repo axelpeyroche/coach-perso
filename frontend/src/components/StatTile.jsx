@@ -1,21 +1,26 @@
 import clsx from "clsx";
 
+// Couleur du libellé (façon tuiles de l'app Santé)
 const COULEURS = {
-  green:  "bg-green-400/20  dark:bg-green-500/12  text-green-800  dark:text-green-300  border border-green-300/50  dark:border-green-400/15",
-  blue:   "bg-blue-400/20   dark:bg-blue-500/12   text-blue-800   dark:text-blue-300   border border-blue-300/50   dark:border-blue-400/15",
-  orange: "bg-orange-400/20 dark:bg-orange-500/12 text-orange-800 dark:text-orange-300 border border-orange-300/50 dark:border-orange-400/15",
-  red:    "bg-red-400/20    dark:bg-red-500/12    text-red-800    dark:text-red-300    border border-red-300/50    dark:border-red-400/15",
-  purple: "bg-purple-400/20 dark:bg-purple-500/12 text-purple-800 dark:text-purple-300 border border-purple-300/50 dark:border-purple-400/15",
+  green: "text-ios-green",
+  blue: "text-ios-blue",
+  orange: "text-ios-orange",
+  red: "text-ios-red",
+  purple: "text-ios-purple",
+  indigo: "text-ios-indigo",
+  pink: "text-ios-pink",
+  teal: "text-ios-teal",
+  gray: "text-label-2",
 };
 
 export default function StatTile({ label, value, sub, color = "blue", children }) {
   return (
-    <div className={clsx("rounded-2xl p-4 flex flex-col gap-1 backdrop-blur-xl", COULEURS[color])}>
-      <p className="text-xs font-medium opacity-70">{label}</p>
+    <div className="card p-4 flex flex-col gap-1 min-w-0">
+      <p className={clsx("text-[13px] font-semibold truncate", COULEURS[color])}>{label}</p>
       {children ?? (
         <>
-          <p className="text-xl font-bold leading-tight">{value}</p>
-          {sub && <p className="text-xs opacity-60">{sub}</p>}
+          <p className="font-rounded text-[22px] md:text-[26px] leading-8 font-bold tracking-[-0.02em] chiffres truncate">{value}</p>
+          {sub && <p className="text-[12px] text-label-2 truncate">{sub}</p>}
         </>
       )}
     </div>

@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { creerActivite, modifierActivite, supprimerActivite } from "../api";
-import { SPORTS, sportInfo, parseDuree, dureeVersTexte, inputCls, btnPrimaire, btnSecondaire, SOURCES } from "../carnet";
+import { SPORTS, sportInfo, parseDuree, dureeVersTexte, inputCls, SOURCES } from "../carnet";
+import Feuille from "./Feuille";
 
 function maintenantLocal() {
   const d = new Date();
@@ -11,8 +12,8 @@ function maintenantLocal() {
 
 function Champ({ label, children, className = "" }) {
   return (
-    <label className={`block space-y-1 ${className}`}>
-      <span className="text-xs font-medium text-gray-500 dark:text-gray-400">{label}</span>
+    <label className={`block ${className}`}>
+      <span className="libelle">{label}</span>
       {children}
     </label>
   );
@@ -83,103 +84,102 @@ export default function ModalActivite({ activite, onClose }) {
   const avecDistance = sportInfo(f.sport).distance;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4" onClick={onClose}>
-      <form onSubmit={soumettre} onClick={(e) => e.stopPropagation()}
-        className="bg-white dark:bg-gray-900 rounded-t-2xl sm:rounded-2xl p-5 w-full sm:max-w-lg max-h-[92vh] overflow-y-auto space-y-4"
-        style={{ paddingBottom: "calc(1.25rem + env(safe-area-inset-bottom))" }}>
-        <div className="flex items-center justify-between">
-          <h3 className="text-base font-bold text-gray-900 dark:text-white">
-            {activite ? "Modifier l'activité" : "Nouvelle activité"}
-          </h3>
-          {activite && (
-            <span className="text-xs text-gray-400">Source : {SOURCES[activite.source] ?? activite.source}</span>
+    <Feuille as="form" onSubmit={soumettre} onClose={onClose}
+      titre={activite ? "Activité" : "Nouvelle activité"}
+      action={<button type="submit" className="btn-texte font-semibold" disabled={enregistrer.isPending}>
+        {enregistrer.isPending ? "…" : activite ? "OK" : "Ajouter"}
+      </button>}>
+      {activite && (
+        <p className="text-[13px] text-label-2 text-center -mt-2">Source : {SOURCES[activite.source] ?? activite.source}</p>
+      )}
+
+      <div className="flex gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4">
+        {Object.entries(SPORTS).map(([k, s]) => (
+          <button type="button" key={k} onClick={() => setF((p) => ({ ...p, sport: k }))}
+            className={`puce ${f.sport === k ? "puce-active" : ""}`}>
+            <span>{s.emoji}</span>{s.label}
+          </button>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-2 gap-x-3 gap-y-4">
+        <Champ label="Titre" className="col-span-2">
+          <input className={inputCls} value={f.titre} onChange={set("titre")} placeholder="Sortie longue, fractionné…" />
+        </Champ>
+        <Champ label="Début">
+          <input type="datetime-local" required className={inputCls} value={f.debut} onChange={set("debut")} />
+        </Champ>
+        <Champ label="Durée">
+          <input className={inputCls} value={f.duree} onChange={set("duree")} placeholder="45 ou 1:05:30" />
+        </Champ>
+        {avecDistance && (
+          <>
+            <Champ label="Distance (km)">
+              <input inputMode="decimal" className={inputCls} value={f.distance_km} onChange={set("distance_km")} />
+            </Champ>
+            <Champ label="D+ (m)">
+              <input inputMode="numeric" className={inputCls} value={f.dplus_m} onChange={set("dplus_m")} />
+            </Champ>
+          </>
+        )}
+        <Champ label="FC moyenne">
+          <input inputMode="numeric" className={inputCls} value={f.fc_moyenne_bpm} onChange={set("fc_moyenne_bpm")} />
+        </Champ>
+        <Champ label="FC max">
+          <input inputMode="numeric" className={inputCls} value={f.fc_max_bpm} onChange={set("fc_max_bpm")} />
+        </Champ>
+        <Champ label="Effort (RPE /10)" className="col-span-2">
+          <div className="flex gap-1">
+            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
+              <button type="button" key={n} onClick={() => setF((p) => ({ ...p, rpe: String(n) }))}
+                className={`flex-1 h-10 rounded-[10px] text-[15px] font-semibold chiffres transition ${
+                  String(f.rpe) === String(n) ? "bg-brand text-white" : "bg-remplissage text-label"
+                }`}>
+                {n}
+              </button>
+            ))}
+          </div>
+          {f.rpe === "" && <p className="text-[12px] text-ios-orange mt-1.5 px-1">À noter avant d'enregistrer</p>}
+          {activite?.rpe_estime && (
+            <p className="text-[12px] text-label-2 mt-1.5 px-1">Pré-rempli avec l'effort estimé par l'Apple Watch : enregistre pour le confirmer.</p>
           )}
-        </div>
-
-        <div className="flex flex-wrap gap-1.5">
-          {Object.entries(SPORTS).map(([k, s]) => (
-            <button type="button" key={k} onClick={() => setF((p) => ({ ...p, sport: k }))}
-              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition ${
-                f.sport === k ? "bg-brand text-white shadow-sm" : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300"
-              }`}>
-              {s.emoji} {s.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <Champ label="Titre" className="col-span-2">
-            <input className={inputCls} value={f.titre} onChange={set("titre")} placeholder="Sortie longue, fractionné…" />
-          </Champ>
-          <Champ label="Début">
-            <input type="datetime-local" required className={inputCls} value={f.debut} onChange={set("debut")} />
-          </Champ>
-          <Champ label="Durée (min ou h:mm:ss)">
-            <input className={inputCls} value={f.duree} onChange={set("duree")} placeholder="45 ou 1:05:30" />
-          </Champ>
-          {avecDistance && (
-            <>
-              <Champ label="Distance (km)">
-                <input inputMode="decimal" className={inputCls} value={f.distance_km} onChange={set("distance_km")} />
-              </Champ>
-              <Champ label="D+ (m)">
-                <input inputMode="numeric" className={inputCls} value={f.dplus_m} onChange={set("dplus_m")} />
-              </Champ>
-            </>
-          )}
-          <Champ label="FC moyenne">
-            <input inputMode="numeric" className={inputCls} value={f.fc_moyenne_bpm} onChange={set("fc_moyenne_bpm")} />
-          </Champ>
-          <Champ label="FC max">
-            <input inputMode="numeric" className={inputCls} value={f.fc_max_bpm} onChange={set("fc_max_bpm")} />
-          </Champ>
-          <Champ label="RPE (1-10) *">
-            <select required className={`${inputCls} ${f.rpe === "" ? "ring-1 ring-orange-400" : ""}`} value={f.rpe} onChange={set("rpe")}>
-              <option value="">À noter</option>
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => <option key={n} value={n}>{n}</option>)}
-            </select>
-            {activite?.rpe_estime && (
-              <p className="text-[11px] text-gray-400 mt-1">Pré-rempli avec l'effort estimé par l'Apple Watch : enregistre pour le confirmer.</p>
-            )}
-          </Champ>
-          <Champ label="Ressenti">
-            <select className={inputCls} value={f.ressenti} onChange={set("ressenti")}>
-              <option value="">—</option>
-              <option value="1">😫 Très dur</option>
-              <option value="2">😕 Difficile</option>
-              <option value="3">😐 Correct</option>
-              <option value="4">🙂 Bien</option>
-              <option value="5">🤩 Excellent</option>
-            </select>
-          </Champ>
-          <Champ label="Calories">
-            <input inputMode="numeric" className={inputCls} value={f.calories} onChange={set("calories")} />
-          </Champ>
-          <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300 self-end pb-2">
-            <input type="checkbox" checked={f.est_competition} onChange={set("est_competition")} className="accent-violet-600" />
-            Compétition
-          </label>
-          <Champ label="Notes" className="col-span-2">
-            <textarea rows={3} className={inputCls} value={f.notes} onChange={set("notes")} />
-          </Champ>
-        </div>
-
-        {erreur && <p className="text-sm text-red-500">{erreur}</p>}
-
-        <div className="flex gap-2">
-          {activite && (
-            <button type="button" className={`${btnSecondaire} !text-red-500`} disabled={supprimer.isPending}
-              onClick={() => window.confirm("Supprimer cette activité ?") && supprimer.mutate()}>
-              Supprimer
-            </button>
-          )}
-          <div className="flex-1" />
-          <button type="button" className={btnSecondaire} onClick={onClose}>Annuler</button>
-          <button type="submit" className={btnPrimaire} disabled={enregistrer.isPending}>
-            {enregistrer.isPending ? "…" : "Enregistrer"}
+        </Champ>
+        <Champ label="Ressenti">
+          <select className={inputCls} value={f.ressenti} onChange={set("ressenti")}>
+            <option value="">—</option>
+            <option value="1">😫 Très dur</option>
+            <option value="2">😕 Difficile</option>
+            <option value="3">😐 Correct</option>
+            <option value="4">🙂 Bien</option>
+            <option value="5">🤩 Excellent</option>
+          </select>
+        </Champ>
+        <Champ label="Calories">
+          <input inputMode="numeric" className={inputCls} value={f.calories} onChange={set("calories")} />
+        </Champ>
+        <div className="col-span-2 card flex items-center justify-between px-4 h-12">
+          <span className="text-[15px]">Compétition</span>
+          <button type="button" role="switch" aria-checked={f.est_competition} className="interrupteur"
+            onClick={() => setF((p) => ({ ...p, est_competition: !p.est_competition }))}>
+            <span />
           </button>
         </div>
-      </form>
-    </div>
+        <Champ label="Notes" className="col-span-2">
+          <textarea rows={3} className={inputCls} value={f.notes} onChange={set("notes")} />
+        </Champ>
+      </div>
+
+      {erreur && <p className="text-[13px] text-ios-red text-center">{erreur}</p>}
+
+      <button type="submit" className="btn-primaire w-full" disabled={enregistrer.isPending}>
+        {enregistrer.isPending ? "…" : "Enregistrer"}
+      </button>
+      {activite && (
+        <button type="button" className="btn-danger w-full" disabled={supprimer.isPending}
+          onClick={() => window.confirm("Supprimer cette activité ?") && supprimer.mutate()}>
+          Supprimer l'activité
+        </button>
+      )}
+    </Feuille>
   );
 }

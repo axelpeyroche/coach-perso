@@ -5,9 +5,9 @@ export const RPE_LABELS = [
 ];
 
 export const RPE_COLORS = [
-  "", "text-blue-400", "text-blue-500", "text-green-400", "text-green-500",
-  "text-yellow-400", "text-yellow-500", "text-orange-400", "text-orange-500",
-  "text-red-400", "text-red-500",
+  "", "text-ios-teal", "text-ios-blue", "text-ios-mint", "text-ios-green",
+  "text-ios-yellow", "text-ios-yellow", "text-ios-orange", "text-ios-orange",
+  "text-ios-red", "text-ios-red",
 ];
 
 export function getRpeLabel(rpe) {

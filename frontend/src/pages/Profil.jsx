@@ -1,13 +1,19 @@
 import { useAuth } from "../AuthContext";
 import { useState, useEffect, useRef } from "react";
+import { Link } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "../api";
 import { exporterDonnees, supprimerCompte } from "../api";
 import { getErrorMessage } from "../utils/errors";
 import ConfirmDialog from "../components/ConfirmDialog";
+import Page from "../components/Page";
+import Feuille from "../components/Feuille";
+import { Chevron, Interrupteur } from "../components/ui";
 
 // ── Avatar ─────────────────────────────────────────────────────────────────
 const MAX_PHOTO_FILE_BYTES = 1_500_000; // ~2 Mo une fois encodée en base64, cf. limite backend
+
+const svg = { fill: "none", viewBox: "0 0 24 24", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" };
 
 function Avatar({ initials, photoUrl, onPhotoChange }) {
   const [photo, setPhoto] = useState(photoUrl || null);
@@ -52,51 +58,39 @@ function Avatar({ initials, photoUrl, onPhotoChange }) {
   }
 
   const errMsg = sizeErr || (mutation.isError ? getErrorMessage(mutation.error, "Erreur lors de l'enregistrement de la photo") : "");
+  const item = "w-full flex items-center justify-between gap-6 px-4 h-11 text-[17px] active:bg-remplissage";
 
   return (
-    <div className="relative">
-      <button onClick={() => setMenuOpen(v => !v)}
-        className="relative w-20 h-20 rounded-full overflow-hidden focus:outline-none group">
+    <div className="relative flex flex-col items-center">
+      <button onClick={() => setMenuOpen(v => !v)} className="relative w-24 h-24 rounded-full overflow-hidden active:opacity-80 transition">
         {photo
           ? <img src={photo} alt="avatar" className="w-full h-full object-cover" />
-          : <div className="w-full h-full bg-brand/10 dark:bg-brand/20 flex items-center justify-center">
-              <span className="text-3xl font-bold text-brand">{initials}</span>
+          : <div className="w-full h-full bg-gradient-to-b from-[#A1A1A6] to-[#8E8E93] flex items-center justify-center">
+              <span className="font-rounded text-[38px] font-semibold text-white">{initials}</span>
             </div>
         }
-        <div className="absolute inset-0 bg-black/30 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-          <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
-        </div>
+      </button>
+      <button onClick={() => setMenuOpen(v => !v)} className="btn-texte text-[15px] mt-2">
+        {photo ? "Modifier la photo" : "Ajouter une photo"}
       </button>
 
       {menuOpen && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
-          <div className="absolute left-1/2 -translate-x-1/2 top-[88px] z-50 bg-white dark:bg-gray-900 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden min-w-[200px]">
-            <button onClick={() => { setMenuOpen(false); setTimeout(() => galleryRef.current?.click(), 50); }}
-              className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800">
-              <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
-              Importer depuis l'appareil
+          <div className="absolute left-1/2 -translate-x-1/2 top-[132px] z-50 glass rounded-[14px] overflow-hidden min-w-[250px] divide-y-[0.5px] divide-separateur"
+            style={{ animation: "zoom 0.18s ease-out" }}>
+            <button onClick={() => { setMenuOpen(false); setTimeout(() => galleryRef.current?.click(), 50); }} className={item}>
+              Choisir une photo
+              <svg className="w-5 h-5" {...svg}><rect x="3" y="4" width="18" height="16" rx="3" /><path d="M3 16l5-5 4 4 3-3 6 6" /><circle cx="15.5" cy="8.5" r="1.5" /></svg>
             </button>
-            <button onClick={() => { setMenuOpen(false); setTimeout(() => cameraRef.current?.click(), 50); }}
-              className="w-full flex items-center gap-3 px-4 py-3 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-800">
-              <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
+            <button onClick={() => { setMenuOpen(false); setTimeout(() => cameraRef.current?.click(), 50); }} className={item}>
               Prendre une photo
+              <svg className="w-5 h-5" {...svg}><path d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><circle cx="12" cy="13" r="3" /></svg>
             </button>
             {photo && (
-              <button onClick={removePhoto}
-                className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 border-t border-gray-100 dark:border-gray-800">
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
+              <button onClick={removePhoto} className={`${item} text-ios-red`}>
                 Supprimer la photo
+                <svg className="w-5 h-5" {...svg}><path d="M4 7h16M10 11v6M14 11v6M5 7l1 12a2 2 0 002 2h8a2 2 0 002-2l1-12M9 7V4h6v3" /></svg>
               </button>
             )}
           </div>
@@ -106,39 +100,51 @@ function Avatar({ initials, photoUrl, onPhotoChange }) {
       <input ref={galleryRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
       <input ref={cameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={handleFile} />
 
-      {errMsg && <p className="absolute top-full mt-1 left-1/2 -translate-x-1/2 w-40 text-[11px] text-red-400 text-center leading-tight">{errMsg}</p>}
+      {errMsg && <p className="mt-1 text-[13px] text-ios-red text-center">{errMsg}</p>}
     </div>
   );
 }
 
-// ── Shared ─────────────────────────────────────────────────────────────────
-function Modal({ title, onClose, children }) {
+// ── Listes groupées façon Réglages ─────────────────────────────────────────
+function Groupe({ titre, pied, children }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative w-full max-w-lg bg-white dark:bg-gray-900 rounded-t-3xl sm:rounded-2xl shadow-xl max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between px-5 pt-5 pb-3 border-b border-gray-100 dark:border-gray-800">
-          <h2 className="text-base font-bold text-gray-900 dark:text-white">{title}</h2>
-          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400 text-xl font-bold leading-none">×</button>
-        </div>
-        <div className="px-5 py-4">{children}</div>
-      </div>
+    <div>
+      {titre && <h2 className="entete-liste">{titre}</h2>}
+      <div className="card py-0.5 overflow-hidden">{children}</div>
+      {pied && <p className="px-4 pt-1.5 text-[13px] text-label-2">{pied}</p>}
     </div>
   );
 }
 
-const inputCls = "w-full px-3 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-brand";
+// Pictogramme carré coloré (comme dans Réglages)
+function Picto({ couleur, children }) {
+  return (
+    <span className="w-[29px] h-[29px] rounded-[7px] flex items-center justify-center text-white shrink-0" style={{ backgroundColor: couleur }}>
+      <svg className="w-[18px] h-[18px]" {...svg}>{children}</svg>
+    </span>
+  );
+}
+
+function Row({ label, value }) {
+  if (!value && value !== 0) return null;
+  return (
+    <div className="ligne">
+      <span className="flex-1 text-[17px]">{label}</span>
+      <span className="text-[17px] text-label-2 truncate max-w-[60%]">{value}</span>
+    </div>
+  );
+}
 
 function Field({ label, children }) {
   return (
-    <div className="mb-4">
-      <label className="block text-xs font-semibold text-gray-500 dark:text-gray-400 mb-1.5 uppercase tracking-wide">{label}</label>
+    <label className="block">
+      <span className="libelle">{label}</span>
       {children}
-    </div>
+    </label>
   );
 }
 
-// ── Edit infos modal ───────────────────────────────────────────────────────
+// ── Edit infos ─────────────────────────────────────────────────────────────
 function EditInfosModal({ user, onClose, onSaved }) {
   const [form, setForm] = useState({
     prenom: user?.prenom || "",
@@ -173,39 +179,39 @@ function EditInfosModal({ user, onClose, onSaved }) {
   }
 
   return (
-    <Modal title="Modifier mes informations" onClose={onClose}>
-      <Field label="Prénom">
-        <input className={inputCls} value={form.prenom} onChange={set("prenom")} />
-      </Field>
-      <Field label="Nom">
-        <input className={inputCls} value={form.nom} onChange={set("nom")} />
-      </Field>
-      <Field label="Email">
-        <input type="email" className={inputCls} value={form.email} onChange={set("email")} />
-      </Field>
-      <Field label="Sexe">
-        <select className={inputCls} value={form.sexe} onChange={set("sexe")}>
-          <option value="">—</option>
-          <option value="M">Homme</option>
-          <option value="F">Femme</option>
-        </select>
-      </Field>
-      <Field label="Date de naissance">
-        <input type="date" className={inputCls} value={form.date_naissance || ""} onChange={set("date_naissance")} />
-      </Field>
-      <Field label="Poids (kg)">
-        <input type="number" step="0.1" min="20" max="300" className={inputCls} value={form.poids_kg} onChange={set("poids_kg")} />
-      </Field>
-      {mutation.isError && <p className="text-xs text-red-500 mb-3">{getErrorMessage(mutation.error, "Erreur — réessaie")}</p>}
-      <button onClick={save} disabled={mutation.isPending}
-        className="w-full py-3 rounded-xl bg-brand text-white font-semibold text-sm disabled:opacity-50 hover:bg-brand-dark transition-colors">
+    <Feuille titre="Informations" onClose={onClose}
+      action={<button onClick={save} disabled={mutation.isPending} className="btn-texte font-semibold">{mutation.isPending ? "…" : "OK"}</button>}>
+      <div className="grid grid-cols-2 gap-x-3 gap-y-4">
+        <Field label="Prénom"><input className="champ" value={form.prenom} onChange={set("prenom")} /></Field>
+        <Field label="Nom"><input className="champ" value={form.nom} onChange={set("nom")} /></Field>
+        <div className="col-span-2">
+          <Field label="Email"><input type="email" className="champ" value={form.email} onChange={set("email")} /></Field>
+        </div>
+        <Field label="Sexe">
+          <select className="champ" value={form.sexe} onChange={set("sexe")}>
+            <option value="">—</option>
+            <option value="M">Homme</option>
+            <option value="F">Femme</option>
+          </select>
+        </Field>
+        <Field label="Poids (kg)">
+          <input type="number" step="0.1" min="20" max="300" inputMode="decimal" className="champ" value={form.poids_kg} onChange={set("poids_kg")} />
+        </Field>
+        <div className="col-span-2">
+          <Field label="Date de naissance">
+            <input type="date" className="champ" value={form.date_naissance || ""} onChange={set("date_naissance")} />
+          </Field>
+        </div>
+      </div>
+      {mutation.isError && <p className="text-[13px] text-ios-red text-center">{getErrorMessage(mutation.error, "Erreur — réessaie")}</p>}
+      <button onClick={save} disabled={mutation.isPending} className="btn-primaire w-full">
         {mutation.isPending ? "Enregistrement…" : "Enregistrer"}
       </button>
-    </Modal>
+    </Feuille>
   );
 }
 
-// ── Edit password modal ────────────────────────────────────────────────────
+// ── Edit password ──────────────────────────────────────────────────────────
 function EditPasswordModal({ onClose }) {
   const [form, setForm] = useState({ ancien: "", nouveau: "", confirmer: "" });
   const [validationErr, setValidationErr] = useState("");
@@ -229,68 +235,45 @@ function EditPasswordModal({ onClose }) {
   const err = validationErr || (mutation.isError ? getErrorMessage(mutation.error, "Erreur — réessaie") : "");
 
   return (
-    <Modal title="Modifier le mot de passe" onClose={onClose}>
+    <Feuille titre="Mot de passe" onClose={onClose}>
       {mutation.isSuccess ? (
-        <div className="text-center py-6">
-          <div className="text-4xl mb-3">✓</div>
-          <p className="text-brand font-semibold mb-4">Mot de passe modifié</p>
-          <button onClick={onClose} className="px-6 py-2 rounded-xl bg-brand text-white text-sm font-medium">Fermer</button>
+        <div className="text-center py-8 space-y-3">
+          <div className="mx-auto w-14 h-14 rounded-full bg-ios-green/15 text-ios-green flex items-center justify-center">
+            <svg className="w-7 h-7" {...svg} strokeWidth={2.6}><path d="M5 12l5 5 9-10" /></svg>
+          </div>
+          <p className="text-[17px] font-semibold">Mot de passe modifié</p>
+          <button onClick={onClose} className="btn-teinte">Fermer</button>
         </div>
       ) : (
         <>
           <Field label="Mot de passe actuel">
-            <input type="password" className={inputCls} value={form.ancien} onChange={set("ancien")} autoComplete="current-password" />
+            <input type="password" className="champ" value={form.ancien} onChange={set("ancien")} autoComplete="current-password" />
           </Field>
           <Field label="Nouveau mot de passe">
-            <input type="password" className={inputCls} value={form.nouveau} onChange={set("nouveau")} autoComplete="new-password" />
+            <input type="password" className="champ" value={form.nouveau} onChange={set("nouveau")} autoComplete="new-password" />
           </Field>
           <Field label="Confirmer le nouveau mot de passe">
-            <input type="password" className={inputCls} value={form.confirmer} onChange={set("confirmer")} autoComplete="new-password" />
+            <input type="password" className="champ" value={form.confirmer} onChange={set("confirmer")} autoComplete="new-password" />
           </Field>
-          {err && <p className="text-xs text-red-500 mb-3">{err}</p>}
-          <button onClick={save} disabled={mutation.isPending}
-            className="w-full py-3 rounded-xl bg-brand text-white font-semibold text-sm disabled:opacity-50 hover:bg-brand-dark transition-colors">
+          {err && <p className="text-[13px] text-ios-red text-center">{err}</p>}
+          <button onClick={save} disabled={mutation.isPending} className="btn-primaire w-full">
             {mutation.isPending ? "Enregistrement…" : "Modifier le mot de passe"}
           </button>
         </>
       )}
-    </Modal>
+    </Feuille>
   );
 }
 
-// ── Layout components ──────────────────────────────────────────────────────
-function Row({ label, value }) {
-  if (!value && value !== 0) return null;
+// ── Physiologie ────────────────────────────────────────────────────────────
+function BioStat({ label, value, unit, couleur }) {
   return (
-    <div className="flex items-center justify-between py-3 border-b border-gray-100 dark:border-gray-800 last:border-0">
-      <span className="text-sm text-gray-500 dark:text-gray-400">{label}</span>
-      <span className="text-sm font-medium text-gray-900 dark:text-white">{value}</span>
-    </div>
-  );
-}
-
-function Section({ title, action, children }) {
-  return (
-    <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 px-4 py-1 mb-4">
-      {title && (
-        <div className="flex items-center justify-between pt-3 pb-1">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-widest">{title}</p>
-          {action}
-        </div>
-      )}
-      {children}
-    </div>
-  );
-}
-
-function BioStat({ label, value, unit }) {
-  return (
-    <div className="flex-1 flex flex-col items-center py-3">
-      <span className="text-lg font-bold text-gray-900 dark:text-white">
-        {value != null ? value : <span className="text-gray-300 dark:text-gray-600">—</span>}
-        {value != null && unit && <span className="text-xs font-normal text-gray-400 ml-0.5">{unit}</span>}
-      </span>
-      <span className="text-xs text-gray-400 mt-0.5">{label}</span>
+    <div className="flex-1 px-3 py-3 text-center">
+      <p className="text-[12px] font-semibold" style={{ color: couleur }}>{label}</p>
+      <p className="font-rounded text-[22px] font-bold chiffres">
+        {value != null ? value : <span className="text-label-3">—</span>}
+        {value != null && unit && <span className="text-[13px] font-semibold text-label-2 ml-0.5">{unit}</span>}
+      </p>
     </div>
   );
 }
@@ -324,28 +307,27 @@ function DonneesCompte({ onDeleted }) {
     : "";
 
   return (
-    <div>
-      <button onClick={() => exportMutation.mutate()} disabled={exportMutation.isPending}
-        className="w-full flex items-center justify-between py-3 border-b border-gray-100 dark:border-gray-800 text-sm text-gray-700 dark:text-gray-300 disabled:opacity-50">
-        <span>Exporter mes données</span>
-        <span className="text-xs text-gray-400">{exportMutation.isPending ? "…" : "JSON"}</span>
-      </button>
-      <button onClick={() => setConfirmSuppr(true)}
-        className="w-full flex items-center justify-between py-3 text-sm text-red-500 dark:text-red-400">
-        <span>Supprimer mon compte</span>
-        <span className="text-xs">→</span>
-      </button>
-      {errMsg && <p className="text-xs text-red-400 pt-1">{errMsg}</p>}
+    <>
+      <Groupe titre="Données du compte" pied={errMsg || null}>
+        <button onClick={() => exportMutation.mutate()} disabled={exportMutation.isPending} className="ligne disabled:opacity-50">
+          <span className="flex-1 text-[17px] text-brand">Exporter mes données</span>
+          <span className="text-[15px] text-label-2">{exportMutation.isPending ? "…" : "JSON"}</span>
+        </button>
+        <button onClick={() => setConfirmSuppr(true)} className="ligne">
+          <span className="flex-1 text-[17px] text-ios-red">Supprimer mon compte</span>
+        </button>
+      </Groupe>
       <ConfirmDialog
         open={confirmSuppr}
         title="Supprimer définitivement ton compte ?"
         message="Toutes tes données (séances, objectifs, historique) seront supprimées sans possibilité de récupération."
         danger
+        confirmLabel="Supprimer"
         pending={deleteMutation.isPending}
         onConfirm={() => deleteMutation.mutate()}
         onCancel={() => setConfirmSuppr(false)}
       />
-    </div>
+    </>
   );
 }
 
@@ -363,81 +345,81 @@ export default function Profil({ dark, setDark }) {
     qc.invalidateQueries();
   }
 
+  const inset = { "--inset": "3.75rem" };
+
   return (
-    <div className="w-full px-4 md:px-8 py-6">
+    <Page titre="Profil">
+      <div className="max-w-xl mx-auto w-full space-y-7">
 
-      {/* Avatar + nom */}
-      <div className="flex flex-col items-center mb-6">
-        <Avatar
-          initials={initials}
-          photoUrl={user?.photo_url}
-          onPhotoChange={(url) => setUser(u => u ? { ...u, photo_url: url } : u)}
-        />
-        <h1 className="text-xl font-bold text-gray-900 dark:text-white mt-3">{user?.prenom} {user?.nom}</h1>
-        <p className="text-sm text-gray-400 mt-0.5">{user?.email}</p>
-      </div>
-
-      {/* Infos personnelles */}
-      <Section title="Informations personnelles" action={
-        <button onClick={() => setEditInfos(true)}
-          className="p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
-          title="Modifier">
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-          </svg>
-        </button>
-      }>
-        <Row label="Prénom" value={user?.prenom} />
-        <Row label="Nom" value={user?.nom} />
-        <Row label="Email" value={user?.email} />
-        <Row label="Âge" value={user?.age ? `${user.age} ans` : null} />
-        <Row label="Sexe" value={user?.sexe === "M" ? "Homme" : user?.sexe === "F" ? "Femme" : null} />
-        <Row label="Poids" value={user?.poids_kg ? `${user.poids_kg} kg` : null} />
-        <button onClick={() => setEditPwd(true)}
-          className="flex items-center gap-2 py-3 text-sm text-brand font-medium hover:opacity-75 transition-opacity">
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-          </svg>
-          Modifier le mot de passe
-        </button>
-      </Section>
-
-      {/* Physiologie */}
-      <Section title="Physiologie">
-        <div className="flex divide-x divide-gray-100 dark:divide-gray-800">
-          <BioStat label="FC max"   value={user?.fc_max}   unit="bpm" />
-          <BioStat label="FC repos" value={user?.fc_repos} unit="bpm" />
-          <BioStat label="Poids"    value={user?.poids_kg} unit="kg" />
+        <div className="text-center">
+          <Avatar
+            initials={initials}
+            photoUrl={user?.photo_url}
+            onPhotoChange={(url) => setUser(u => u ? { ...u, photo_url: url } : u)}
+          />
+          <h2 className="text-[22px] font-bold mt-2">{user?.prenom} {user?.nom}</h2>
+          <p className="text-[15px] text-label-2">{user?.email}</p>
         </div>
-      </Section>
 
-      {/* Apparence */}
-      <Section title="Apparence">
-        <div className="flex items-center justify-between py-3">
-          <span className="text-sm text-gray-700 dark:text-gray-300">Mode sombre</span>
-          <button onClick={() => setDark(d => !d)}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${dark ? "bg-brand" : "bg-gray-200 dark:bg-gray-700"}`}>
-            <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${dark ? "translate-x-6" : "translate-x-1"}`} />
+        <Groupe titre="Informations personnelles">
+          <Row label="Prénom" value={user?.prenom} />
+          <Row label="Nom" value={user?.nom} />
+          <Row label="Âge" value={user?.age ? `${user.age} ans` : null} />
+          <Row label="Sexe" value={user?.sexe === "M" ? "Homme" : user?.sexe === "F" ? "Femme" : null} />
+          <Row label="Poids" value={user?.poids_kg ? `${user.poids_kg} kg` : null} />
+          <button onClick={() => setEditInfos(true)} className="ligne">
+            <span className="flex-1 text-[17px] text-brand">Modifier mes informations</span>
           </button>
-        </div>
-      </Section>
+          <button onClick={() => setEditPwd(true)} className="ligne">
+            <span className="flex-1 text-[17px] text-brand">Modifier le mot de passe</span>
+          </button>
+        </Groupe>
 
-      {/* Données du compte */}
-      <Section title="Données du compte">
+        <Groupe titre="Physiologie" pied="Mises à jour par l'import Apple Santé.">
+          <div className="flex divide-x-[0.5px] divide-separateur">
+            <BioStat label="FC max" value={user?.fc_max} unit="bpm" couleur="#FF3B30" />
+            <BioStat label="FC repos" value={user?.fc_repos} unit="bpm" couleur="#FF2D55" />
+            <BioStat label="Poids" value={user?.poids_kg} unit="kg" couleur="#AF52DE" />
+          </div>
+        </Groupe>
+
+        <Groupe>
+          <Link to="/objectifs" className="ligne" style={inset}>
+            <Picto couleur="#34C759"><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="4" /><circle cx="12" cy="12" r="0.5" fill="currentColor" /></Picto>
+            <span className="flex-1 text-[17px]">Objectifs</span>
+            <Chevron />
+          </Link>
+          <Link to="/sources" className="ligne" style={inset}>
+            <Picto couleur="#007AFF"><path d="M12 4v11M7 10l5 5 5-5M5 20h14" /></Picto>
+            <span className="flex-1 text-[17px]">Sources et import</span>
+            <Chevron />
+          </Link>
+          <Link to="/sources#claude" className="ligne" style={inset}>
+            <Picto couleur="#FF9500"><path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6L5.6 18.4" /></Picto>
+            <span className="flex-1 text-[17px]">Analyse avec Claude</span>
+            <Chevron />
+          </Link>
+        </Groupe>
+
+        <Groupe titre="Apparence">
+          <div className="ligne" style={inset}>
+            <Picto couleur="#5856D6"><path d="M20 14.5A8 8 0 019.5 4a8 8 0 1010.5 10.5z" /></Picto>
+            <span className="flex-1 text-[17px]">Mode sombre</span>
+            <Interrupteur actif={dark} onChange={() => setDark(d => !d)} label="Mode sombre" />
+          </div>
+        </Groupe>
+
         <DonneesCompte onDeleted={logout} />
-      </Section>
 
-      {/* Déconnexion */}
-      <button onClick={logout}
-        className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl border border-red-200 dark:border-red-900 text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors text-sm font-medium">
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h6a2 2 0 012 2v1" />
-        </svg>
-        Se déconnecter
-      </button>
+        <Groupe>
+          <button onClick={logout} className="ligne justify-center">
+            <span className="text-[17px] text-ios-red">Se déconnecter</span>
+          </button>
+        </Groupe>
+      </div>
 
       {editInfos && <EditInfosModal user={user} onClose={() => setEditInfos(false)} onSaved={refreshUser} />}
       {editPwd && <EditPasswordModal onClose={() => setEditPwd(false)} />}
-    </div>
+    </Page>
   );
 }

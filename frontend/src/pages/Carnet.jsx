@@ -2,10 +2,12 @@ import { useState, useMemo } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import Card from "../components/Card";
+import Page from "../components/Page";
+import { BoutonAjout } from "../components/ui";
 import ActiviteLigne from "../components/ActiviteLigne";
 import ModalActivite from "../components/ModalActivite";
 import { getActivites } from "../api";
-import { SPORTS, inputCls, btnPrimaire, btnSecondaire, nombre, fmtDuree } from "../carnet";
+import { SPORTS, nombre, fmtDuree } from "../carnet";
 
 const PAGE = 50;
 
@@ -40,26 +42,22 @@ export default function Carnet() {
   }, [activites]);
 
   return (
-    <div className="p-4 md:p-8 w-full space-y-6">
-      <div className="flex items-end justify-between gap-3">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Carnet</h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            {data ? `${data.total} activité${data.total > 1 ? "s" : ""}` : "Toutes tes séances, toutes sources confondues"}
-          </p>
-        </div>
-        <button className={btnPrimaire} onClick={() => setModal(null)}>+ Ajouter</button>
-      </div>
+    <Page titre="Carnet"
+      sousTitre={data ? `${data.total} activité${data.total > 1 ? "s" : ""}` : "Toutes tes séances"}
+      action={<BoutonAjout onClick={() => setModal(null)} label="Ajouter une activité" />}>
 
-      <div className="flex flex-col sm:flex-row gap-3">
-        <input className={`${inputCls} sm:max-w-xs`} placeholder="Rechercher (titre, notes)…"
-          value={q} onChange={(e) => { setQ(e.target.value); setLimite(PAGE); }} />
-        <div className="flex gap-1 rounded-xl bg-gray-100 dark:bg-gray-800 p-1 overflow-x-auto">
+      <div className="space-y-3">
+        <label className="relative block md:max-w-sm">
+          <svg viewBox="0 0 24 24" className="absolute left-3 top-1/2 -translate-y-1/2 w-[18px] h-[18px] text-label-2" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round">
+            <circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" />
+          </svg>
+          <input type="search" className="champ !pl-10 !py-2 !rounded-[10px]" placeholder="Rechercher"
+            value={q} onChange={(e) => { setQ(e.target.value); setLimite(PAGE); }} />
+        </label>
+        <div className="flex gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4 md:mx-0 md:px-0">
           {[["", "Tout"], ...Object.entries(SPORTS).map(([k, s]) => [k, `${s.emoji} ${s.label}`])].map(([k, l]) => (
             <button key={k} onClick={() => { setSport(k); setLimite(PAGE); }}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap ${
-                sport === k ? "bg-white dark:bg-gray-700 text-brand shadow-sm" : "text-gray-500 dark:text-gray-400"
-              }`}>
+              className={`puce ${sport === k ? "puce-active" : ""}`}>
               {l}
             </button>
           ))}
@@ -67,41 +65,43 @@ export default function Carnet() {
       </div>
 
       {isLoading ? (
-        <p className="text-sm text-gray-400">Chargement…</p>
+        <p className="text-[15px] text-label-2">Chargement…</p>
       ) : activites.length === 0 ? (
         <Card>
           <div className="text-center py-8 space-y-3">
-            <p className="text-3xl">📒</p>
-            <p className="text-sm text-gray-600 dark:text-gray-300">
+            <p className="text-4xl">📒</p>
+            <p className="text-[15px] text-label-2">
               {q || sport ? "Aucune activité ne correspond." : "Ton carnet est vide pour l'instant."}
             </p>
             {!q && !sport && (
-              <div className="flex justify-center gap-2">
-                <button className={btnPrimaire} onClick={() => setModal(null)}>Saisir une séance</button>
-                <Link to="/sources" className={btnSecondaire}>Importer (Strava, Apple Santé, CSV)</Link>
+              <div className="flex flex-wrap justify-center gap-2 pt-1">
+                <button className="btn-primaire" onClick={() => setModal(null)}>Saisir une séance</button>
+                <Link to="/sources" className="btn-teinte">Importer</Link>
               </div>
             )}
           </div>
         </Card>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-6">
           {groupes.map((g) => (
-            <Card key={g.cle}
-              title={new Date(`${g.cle}-15`).toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}
-              action={
-                <span className="text-xs text-gray-500 dark:text-gray-400">
+            <section key={g.cle} className="space-y-1.5">
+              <div className="flex items-baseline justify-between px-4">
+                <h2 className="text-[13px] uppercase tracking-[0.02em] text-label-2 font-medium">
+                  {new Date(`${g.cle}-15`).toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}
+                </h2>
+                <span className="text-[13px] text-label-2 chiffres">
                   {g.items.length} · {fmtDuree(g.sec)}{g.km ? ` · ${nombre(g.km)} km` : ""}
                 </span>
-              }>
-              <div className="-mx-2 divide-y divide-gray-100 dark:divide-gray-800">
-                {g.items.map((a) => <ActiviteLigne key={a.id} a={a} onClick={() => setModal(a)} />)}
               </div>
-            </Card>
+              <Card pad={false} className="py-1">
+                {g.items.map((a) => <ActiviteLigne key={a.id} a={a} onClick={() => setModal(a)} />)}
+              </Card>
+            </section>
           ))}
           {data.total > activites.length && (
             <div className="text-center">
-              <button className={btnSecondaire} disabled={isFetching} onClick={() => setLimite((l) => l + PAGE)}>
-                {isFetching ? "…" : `Afficher plus (${data.total - activites.length} restantes)`}
+              <button className="btn-teinte" disabled={isFetching} onClick={() => setLimite((l) => l + PAGE)}>
+                {isFetching ? "…" : `Afficher plus (${data.total - activites.length})`}
               </button>
             </div>
           )}
@@ -109,6 +109,6 @@ export default function Carnet() {
       )}
 
       {modal !== undefined && <ModalActivite activite={modal} onClose={() => setModal(undefined)} />}
-    </div>
+    </Page>
   );
 }

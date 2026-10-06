@@ -1,16 +1,16 @@
 // Constantes et formateurs partagés par les pages du carnet.
 
 export const SPORTS = {
-  course:    { label: "Course",          emoji: "🏃", couleur: "#8b5cf6", distance: true },
-  trail:     { label: "Trail",           emoji: "⛰️", couleur: "#a16207", distance: true },
-  velo:      { label: "Vélo",            emoji: "🚴", couleur: "#0ea5e9", distance: true },
-  marche:    { label: "Marche",          emoji: "🚶", couleur: "#22c55e", distance: true },
-  randonnee: { label: "Randonnée",       emoji: "🥾", couleur: "#15803d", distance: true },
-  natation:  { label: "Natation",        emoji: "🏊", couleur: "#06b6d4", distance: true },
-  muscu:     { label: "Renfo / Muscu",   emoji: "💪", couleur: "#f97316", distance: false },
-  hiit:      { label: "HIIT / Cross",    emoji: "🔥", couleur: "#ef4444", distance: false },
-  yoga:      { label: "Yoga / Mobilité", emoji: "🧘", couleur: "#ec4899", distance: false },
-  autre:     { label: "Autre",           emoji: "⚡", couleur: "#9ca3af", distance: false },
+  course:    { label: "Course",          emoji: "🏃", couleur: "#FF9500", distance: true },
+  trail:     { label: "Trail",           emoji: "⛰️", couleur: "#A2845E", distance: true },
+  velo:      { label: "Vélo",            emoji: "🚴", couleur: "#32ADE6", distance: true },
+  marche:    { label: "Marche",          emoji: "🚶", couleur: "#34C759", distance: true },
+  randonnee: { label: "Randonnée",       emoji: "🥾", couleur: "#00C7BE", distance: true },
+  natation:  { label: "Natation",        emoji: "🏊", couleur: "#007AFF", distance: true },
+  muscu:     { label: "Renfo / Muscu",   emoji: "💪", couleur: "#AF52DE", distance: false },
+  hiit:      { label: "HIIT / Cross",    emoji: "🔥", couleur: "#FF3B30", distance: false },
+  yoga:      { label: "Yoga / Mobilité", emoji: "🧘", couleur: "#FF2D55", distance: false },
+  autre:     { label: "Autre",           emoji: "⚡", couleur: "#8E8E93", distance: false },
 };
 
 export const sportInfo = (s) => SPORTS[s] ?? SPORTS.autre;
@@ -73,11 +73,7 @@ export function nombre(v, dec = 1) {
   return Number(v).toLocaleString("fr-FR", { maximumFractionDigits: dec });
 }
 
-export const inputCls =
-  "w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-white/70 dark:bg-gray-800/70 px-3 py-2 text-sm text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-violet-400";
-
-export const btnPrimaire =
-  "rounded-xl bg-gradient-to-r from-violet-600 to-indigo-500 px-4 py-2 text-sm font-semibold text-white shadow hover:opacity-90 disabled:opacity-50 transition";
-
-export const btnSecondaire =
-  "rounded-xl border border-gray-200 dark:border-gray-700 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-white/50 dark:hover:bg-white/5 disabled:opacity-50 transition";
+// Classes de style partagées (composants définis dans index.css)
+export const inputCls = "champ";
+export const btnPrimaire = "btn-primaire";
+export const btnSecondaire = "btn-gris";

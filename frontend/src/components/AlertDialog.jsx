@@ -1,12 +1,15 @@
+// Alerte iOS : verre, texte centré, bouton pleine largeur
 export default function AlertDialog({ open, title, message, closeLabel = "OK", onClose }) {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={onClose}>
-      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl w-full max-w-sm p-6 space-y-4" onClick={e => e.stopPropagation()}>
-        {title && <h3 className="text-base font-bold text-gray-900 dark:text-white">{title}</h3>}
-        {message && <p className="text-sm text-gray-600 dark:text-gray-400 whitespace-pre-line">{message}</p>}
+    <div className="voile !items-center p-6" onClick={onClose}>
+      <div className="alerte" onClick={e => e.stopPropagation()}>
+        <div className="px-5 pt-5 pb-4 space-y-1">
+          {title && <h3 className="text-[17px] font-semibold">{title}</h3>}
+          {message && <p className="text-[13px] text-label whitespace-pre-line">{message}</p>}
+        </div>
         <button onClick={onClose}
-          className="w-full py-2.5 rounded-xl bg-brand text-white text-sm font-semibold hover:bg-brand-dark transition-colors">
+          className="w-full h-11 border-t-[0.5px] border-separateur text-[17px] font-semibold text-brand active:bg-remplissage">
           {closeLabel}
         </button>
       </div>

@@ -14,27 +14,26 @@ export default function ActiviteLigne({ a, onClick }) {
   ].filter(Boolean);
 
   return (
-    <button onClick={onClick}
-      className="w-full text-left flex items-center gap-3 rounded-xl px-3 py-2.5 hover:bg-white/50 dark:hover:bg-white/5 transition">
-      <span className="w-10 h-10 shrink-0 rounded-xl flex items-center justify-center text-lg"
-        style={{ backgroundColor: `${s.couleur}22` }}>
+    <button onClick={onClick} className="ligne" style={{ "--inset": "4.25rem" }}>
+      <span className="w-10 h-10 shrink-0 rounded-full flex items-center justify-center text-[19px]"
+        style={{ backgroundColor: `${s.couleur}26` }}>
         {a.emoji ?? s.emoji}
       </span>
       <span className="flex-1 min-w-0">
-        <span className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+        <span className="flex items-center gap-1.5 min-w-0">
+          <span className="text-[15px] font-semibold text-label truncate">
             {a.titre || a.sport_label || s.label}
           </span>
-          {a.rpe == null && <span className="shrink-0 text-[10px] font-bold uppercase text-orange-600 dark:text-orange-400">RPE à remplir</span>}
-          {a.est_competition &&<span className="text-[10px] font-bold uppercase text-amber-600 dark:text-amber-400">🏅 course</span>}
+          {a.est_competition && <span className="shrink-0 text-[13px]">🏅</span>}
         </span>
-        <span className="block text-xs text-gray-500 dark:text-gray-400 truncate">
+        <span className="block text-[13px] text-label-2 truncate chiffres">
           {metriques.join(" · ") || "—"}
         </span>
+        {a.rpe == null && <span className="badge mt-1 bg-ios-orange/15 text-ios-orange">RPE à remplir</span>}
       </span>
-      <span className="text-right shrink-0">
-        <span className="block text-xs text-gray-500 dark:text-gray-400">{fmtDateHeure(a.debut)}</span>
-        <span className="block text-[10px] text-gray-400 dark:text-gray-500">{SOURCES[a.source] ?? a.source}</span>
+      <span className="text-right shrink-0 self-start pt-0.5">
+        <span className="block text-[12px] text-label-2">{fmtDateHeure(a.debut)}</span>
+        <span className="block text-[11px] text-label-3">{SOURCES[a.source] ?? a.source}</span>
       </span>
     </button>
   );

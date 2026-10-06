@@ -3,365 +3,280 @@
 @tailwind utilities;
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   LIQUID GLASS DESIGN SYSTEM — inspiré d'Apple iOS 26 / macOS Tahoe
-   ═══════════════════════════════════════════════════════════════════════════
+   Design system inspiré d'iOS : fonds groupés, cartes pleines, couleurs
+   système, et Liquid Glass réservé aux éléments flottants (barre d'onglets,
+   feuilles, menus) comme chez Apple.
+   ═══════════════════════════════════════════════════════════════════════════ */
 
-   Principe : un fond dégradé fixe (background-attachment: fixed) sert
-   d'arrière-plan coloré. Les surfaces vitrées laissent voir ce fond grâce
-   à backdrop-filter, et un radial-gradient simulant la réfraction (loupe)
-   est superposé en premier plan du background multi-couche.             */
-
-/* ─── Reset & base ──────────────────────────────────────────────────────── */
+/* ─── Tokens (valeurs RGB, utilisées par tailwind.config.js) ────────────── */
 
 @layer base {
-  *, *::before, *::after {
-    box-sizing: border-box;
+  :root {
+    --blue: 0 122 255;
+    --green: 52 199 89;
+    --red: 255 59 48;
+    --orange: 255 149 0;
+    --yellow: 255 204 0;
+    --indigo: 88 86 214;
+    --purple: 175 82 222;
+    --pink: 255 45 85;
+    --teal: 48 176 199;
+    --cyan: 50 173 230;
+    --mint: 0 199 190;
+    --brown: 162 132 94;
+    --gray: 142 142 147;
+
+    --bg: 242 242 247;
+    --surface: 255 255 255;
+    --surface-2: 242 242 247;
+    --label: 0 0 0;
+    --label-2: 60 60 67;
+    --label-3: 60 60 67;
+    --fill: 118 118 128;
+    --fill-a: 0.12;
+    --sep: 60 60 67;
+    --sep-a: 0.18;
+
+    --glass-bg: rgba(255, 255, 255, 0.62);
+    --glass-edge: rgba(255, 255, 255, 0.85);
+    --glass-ring: rgba(0, 0, 0, 0.06);
+    --glass-shadow: 0 10px 40px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.05);
+
+    color-scheme: light;
+  }
+
+  .dark {
+    --blue: 10 132 255;
+    --green: 48 209 88;
+    --red: 255 69 58;
+    --orange: 255 159 10;
+    --yellow: 255 214 10;
+    --indigo: 94 92 230;
+    --purple: 191 90 242;
+    --pink: 255 55 95;
+    --teal: 64 200 224;
+    --cyan: 100 210 255;
+    --mint: 99 230 226;
+    --brown: 172 142 104;
+    --gray: 142 142 147;
+
+    --bg: 0 0 0;
+    --surface: 28 28 30;
+    --surface-2: 44 44 46;
+    --label: 255 255 255;
+    --label-2: 235 235 245;
+    --label-3: 235 235 245;
+    --fill: 118 118 128;
+    --fill-a: 0.24;
+    --sep: 84 84 88;
+    --sep-a: 0.6;
+
+    --glass-bg: rgba(40, 40, 44, 0.58);
+    --glass-edge: rgba(255, 255, 255, 0.16);
+    --glass-ring: rgba(255, 255, 255, 0.08);
+    --glass-shadow: 0 10px 40px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.3);
+
+    color-scheme: dark;
   }
 
   html {
     overflow-x: hidden;
-    max-width: 100vw;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
   }
 
   body {
     margin: 0;
+    min-height: 100vh;
+    overflow-x: hidden;
+    background: rgb(var(--bg));
+    color: rgb(var(--label));
+    font-size: 15px;
+    letter-spacing: -0.01em;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    overflow-x: hidden;
-    max-width: 100vw;
-    background: #e8ecf5;
-    min-height: 100vh;
   }
 
-  .dark body {
-    background: #000;
-  }
-
-  /* ── Focus outline : retire le contour blanc au clic souris ──────────────
-     :focus-visible s'active uniquement à la navigation clavier → accessibilité
-     préservée. :focus sans :focus-visible = clic souris → on supprime.     */
-  *:focus:not(:focus-visible) {
-    outline: none !important;
-  }
-  /* Remplace l'outline système par un anneau de marque pour le clavier */
+  *:focus:not(:focus-visible) { outline: none; }
   *:focus-visible {
-    outline: 2px solid rgba(139, 92, 246, 0.75);
+    outline: 2px solid rgb(var(--blue) / 0.6);
     outline-offset: 2px;
   }
+
+  input::placeholder, textarea::placeholder { color: rgb(var(--label-3) / 0.3); }
+
+  /* Champs date/heure natifs : gardent la police du système */
+  input[type="date"], input[type="time"], input[type="datetime-local"] {
+    -webkit-appearance: none;
+    appearance: none;
+    min-height: 2.75rem;
+  }
+
+  button { -webkit-user-select: none; user-select: none; }
 }
 
-/* ─── Blobs liquides colorés (fond animé, inspiré Apple) ────────────────── */
-
-:root {
-  --blob-color-1: #38bdf8; /* Cyan */
-  --blob-color-2: #818cf8; /* Indigo */
-  --blob-color-3: #f472b6; /* Rose */
-}
-
-.liquid-bg {
-  position: fixed;
-  inset: 0;
-  overflow: hidden;
-  z-index: -1; /* derrière tout le contenu, devant le fond du body */
-  pointer-events: none;
-}
-
-.liquid-blob {
-  position: absolute;
-  width: 55vmax;
-  height: 55vmax;
-  border-radius: 50%;
-  filter: blur(60px);
-  opacity: 0.55;
-  animation: liquidMovement 15s ease-in-out infinite alternate;
-  will-change: transform, border-radius;
-  transform: translateZ(0);
-}
-.dark .liquid-blob { opacity: 0.38; }
-
-.blob-1 { top: -18%; left: -18%; background: var(--blob-color-1); animation-delay: 0s; }
-.blob-2 { top: 42%; left: 45%; background: var(--blob-color-2); animation-delay: -5s; }
-.blob-3 { bottom: -18%; right: -18%; background: var(--blob-color-3); animation-delay: -10s; }
-
-@keyframes liquidMovement {
-  0%   { border-radius: 60% 40% 30% 70% / 60% 30% 70% 40%; }
-  50%  { border-radius: 30% 60% 70% 40% / 50% 60% 30% 60%; }
-  100% { border-radius: 60% 40% 70% 30% / 30% 60% 40% 70%; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .liquid-blob { animation: none; }
-}
-
-/* ─── Surfaces Liquid Glass ─────────────────────────────────────────────── */
+/* ─── Composants ────────────────────────────────────────────────────────── */
 
 @layer components {
 
-  /* ── .glass — surface principale (cartes, panneaux) ──────────────────────
-     Technique "loupe" Apple :
-     • backdrop-filter: blur + saturate + brightness → le fond est agrandi
-       et saturé, comme vu à travers une lentille convexe
-     • Le premier layer du background est un radial-gradient simulant la
-       réfraction : dôme lumineux en haut (là où la lentille réfléchit le
-       plus), s'estompant vers le bas
-     • Two-tone border : bord supérieur très lumineux (arête de verre),
-       côtés et bas plus discrets
-     • box-shadow en 4 couches : ombre colorée externe, ombre fine,
-       reflet spéculaire interne haut, anneau interne de bord de verre   */
-  /* ── .glass — matériau verre dépoli (valeurs Apple) ──────────────────────
-     brightness/saturate dans le backdrop-filter = effet loupe : le fond vu
-     à travers est amplifié. Les inset latéraux = reflets d'arête de verre. */
+  /* Titres de page façon « Large Title » d'iOS */
+  .large-title {
+    @apply text-[34px] leading-[41px] font-bold tracking-[0.01em];
+  }
+  .titre-section {
+    @apply text-[22px] leading-7 font-bold tracking-[-0.01em];
+  }
+  /* Intitulé de liste groupée (petites capitales grises) */
+  .entete-liste {
+    @apply px-4 pb-1.5 text-[13px] uppercase tracking-[0.02em] text-label-2;
+  }
+
+  /* Carte pleine (liste groupée en encart) */
+  .card {
+    @apply rounded-carte bg-surface;
+  }
+  /* Bloc imbriqué dans une carte */
+  .tuile {
+    @apply rounded-2xl bg-surface-2;
+  }
+  .dark .tuile { background: rgb(var(--fill) / 0.18); }
+
+  /* Ligne de liste groupée avec séparateur inset */
+  .ligne {
+    @apply relative flex items-center gap-3 px-4 min-h-[44px] py-2.5;
+  }
+  .ligne + .ligne::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: var(--inset, 1rem);
+    height: 0.5px;
+    background: rgb(var(--sep) / var(--sep-a));
+  }
+  button.ligne, a.ligne { @apply w-full text-left transition-colors active:bg-remplissage; }
+
+  /* ── Liquid Glass : éléments flottants ──────────────────────────────── */
   .glass {
-    /* Dôme de lentille : radial-gradient blanc en haut = reflet spéculaire convexe */
-    background:
-      radial-gradient(ellipse 80% 55% at 50% 0%, rgba(255,255,255,0.55) 0%, transparent 70%),
-      rgba(255, 255, 255, 0.38);
-    backdrop-filter: blur(24px) saturate(220%) brightness(1.12);
-    -webkit-backdrop-filter: blur(24px) saturate(220%) brightness(1.12);
-    /* Bord supérieur = arête de verre très lumineuse, côtés plus discrets */
-    border-top: 1px solid rgba(255, 255, 255, 0.90);
-    border-left: 1px solid rgba(255, 255, 255, 0.60);
-    border-right: 1px solid rgba(255, 255, 255, 0.45);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.25);
+    background: var(--glass-bg);
+    backdrop-filter: blur(24px) saturate(190%);
+    -webkit-backdrop-filter: blur(24px) saturate(190%);
     box-shadow:
-      0 20px 48px rgba(0, 0, 0, 0.14),
-      /* Reflet spéculaire interne haut */
-      inset 0 1px 0 rgba(255, 255, 255, 0.95),
-      /* Reflets d'arête latéraux (effet épaisseur de verre) */
-      inset 2px 0 0 rgba(255, 255, 255, 0.55),
-      inset -2px 0 0 rgba(255, 255, 255, 0.30),
-      inset 0 -1px 0 rgba(255, 255, 255, 0.20);
+      var(--glass-shadow),
+      inset 0 0.5px 0 var(--glass-edge),
+      inset 0 0 0 0.5px var(--glass-ring);
   }
-
-  .dark .glass {
-    background:
-      radial-gradient(ellipse 80% 55% at 50% 0%, rgba(255,255,255,0.18) 0%, transparent 70%),
-      rgba(255, 255, 255, 0.08);
-    backdrop-filter: blur(24px) saturate(200%) brightness(1.20);
-    -webkit-backdrop-filter: blur(24px) saturate(200%) brightness(1.20);
-    border-top: 1px solid rgba(255, 255, 255, 0.55);
-    border-left: 1px solid rgba(255, 255, 255, 0.28);
-    border-right: 1px solid rgba(255, 255, 255, 0.18);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.10);
-    box-shadow:
-      0 20px 48px rgba(0, 0, 0, 0.30),
-      inset 0 1px 0 rgba(255, 255, 255, 0.45),
-      inset 2px 0 0 rgba(255, 255, 255, 0.28),
-      inset -2px 0 0 rgba(255, 255, 255, 0.14),
-      inset 0 -1px 0 rgba(255, 255, 255, 0.08);
-  }
-
-  /* ── .glass-lens — lentille de la nav (indicateur qui glisse) ────────────
-     Loupe pure : blur faible + brightness fort, le contenu derrière reste
-     identifiable mais amplifié, comme sous une goutte de verre.          */
-  .glass-lens {
-    /* Lentille : dôme lumineux prononcé + loupe forte sur le contenu derrière */
-    background:
-      radial-gradient(ellipse 80% 60% at 50% 0%, rgba(255,255,255,0.70) 0%, transparent 75%),
-      rgba(255, 255, 255, 0.32);
-    backdrop-filter: blur(2px) saturate(240%) brightness(1.22);
-    -webkit-backdrop-filter: blur(2px) saturate(240%) brightness(1.22);
-    border-top: 1px solid rgba(255, 255, 255, 1.00);
-    border-left: 1px solid rgba(255, 255, 255, 0.65);
-    border-right: 1px solid rgba(255, 255, 255, 0.45);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.28);
-    box-shadow:
-      0 6px 20px rgba(0, 0, 0, 0.22),
-      inset 0 1px 0 rgba(255, 255, 255, 1.00),
-      inset 2px 0 0 rgba(255, 255, 255, 0.55),
-      inset -2px 0 0 rgba(255, 255, 255, 0.35);
-  }
-  .dark .glass-lens {
-    background:
-      radial-gradient(ellipse 80% 60% at 50% 0%, rgba(255,255,255,0.28) 0%, transparent 75%),
-      rgba(255, 255, 255, 0.16);
-    backdrop-filter: blur(2px) saturate(220%) brightness(1.40);
-    -webkit-backdrop-filter: blur(2px) saturate(220%) brightness(1.40);
-    border-top: 1px solid rgba(255, 255, 255, 0.70);
-    border-left: 1px solid rgba(255, 255, 255, 0.32);
-    border-right: 1px solid rgba(255, 255, 255, 0.22);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
-    box-shadow:
-      0 6px 20px rgba(0, 0, 0, 0.45),
-      inset 0 1px 0 rgba(255, 255, 255, 0.55),
-      inset 2px 0 0 rgba(255, 255, 255, 0.28),
-      inset -2px 0 0 rgba(255, 255, 255, 0.16);
-  }
-
-  /* ── .glass-nav — navigation (header, sidebar, bottom nav) ───────────────
-     Plus opaque que .glass (contenu de l'app doit rester lisible derrière),
-     blur plus intense pour couvrir plus de contenu scrollé.              */
-  /* ── .glass-nav — navigation (plus opaque pour la lisibilité) ──────────── */
-  .glass-nav {
-    background:
-      radial-gradient(ellipse 90% 50% at 50% 0%, rgba(255,255,255,0.50) 0%, transparent 70%),
-      rgba(255, 255, 255, 0.50) !important;
-    backdrop-filter: blur(24px) saturate(180%) !important;
-    -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
-    border-top-color: rgba(255, 255, 255, 0.90) !important;
-    border-left-color: rgba(255, 255, 255, 0.55) !important;
-    border-right-color: rgba(255, 255, 255, 0.40) !important;
-    border-bottom-color: rgba(255, 255, 255, 0.25) !important;
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.95),
-      inset 2px 0 0 rgba(255, 255, 255, 0.45),
-      inset -2px 0 0 rgba(255, 255, 255, 0.25) !important;
-  }
-
-  .dark .glass-nav {
-    background:
-      radial-gradient(ellipse 90% 50% at 50% 0%, rgba(255,255,255,0.12) 0%, transparent 70%),
-      rgba(18, 18, 28, 0.60) !important;
-    backdrop-filter: blur(24px) saturate(180%) !important;
-    -webkit-backdrop-filter: blur(24px) saturate(180%) !important;
-    border-top-color: rgba(255, 255, 255, 0.45) !important;
-    border-left-color: rgba(255, 255, 255, 0.22) !important;
-    border-right-color: rgba(255, 255, 255, 0.15) !important;
-    border-bottom-color: rgba(255, 255, 255, 0.08) !important;
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.40),
-      inset 2px 0 0 rgba(255, 255, 255, 0.18),
-      inset -2px 0 0 rgba(255, 255, 255, 0.10) !important;
-  }
-
-  /* ── .glass-sm — surface secondaire ────────────────────────────────────── */
-  .glass-sm {
-    background: rgba(255, 255, 255, 0.35);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.45);
-    box-shadow: inset 0 6px 12px rgba(255, 255, 255, 0.20);
-  }
-
-  .dark .glass-sm {
-    background: rgba(255, 255, 255, 0.08);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.30);
-    box-shadow: inset 0 6px 12px rgba(255, 255, 255, 0.08);
-  }
-}
-
-/* ─── Overrides globaux inline ──────────────────────────────────────────── */
-
-@layer utilities {
-
-  /* Panneaux blancs (modales, drawers) — héritage glass automatique */
-  :is(main, aside, header, nav, .fixed) [class*="bg-white"] {
-    background: rgba(255, 255, 255, 0.50) !important;
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.50) !important;
-  }
-
-  .dark :is(main, aside, header, nav, .fixed) [class*="bg-white"] {
-    background: rgba(25, 25, 38, 0.60) !important;
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.30) !important;
-  }
-
-  /* Panneaux gris-900 dark */
-  .dark :is(main, aside) [class*="bg-gray-900"] {
-    background: rgba(25, 25, 38, 0.55) !important;
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-  }
-
-  /* Zones secondaires (bg-gray-100 / bg-gray-50) */
-  :is(main, aside) :is([class*="bg-gray-100"], [class*="bg-gray-50"]) {
-    background: rgba(255, 255, 255, 0.35) !important;
-    border: 1px solid rgba(255, 255, 255, 0.55) !important;
-    backdrop-filter: blur(12px) saturate(160%);
-    -webkit-backdrop-filter: blur(12px) saturate(160%);
-  }
-  .dark :is(main, aside) :is([class*="bg-gray-800"], [class*="bg-gray-700"]) {
-    background: rgba(255, 255, 255, 0.05) !important;
-    border: 1px solid rgba(255, 255, 255, 0.09) !important;
+  /* Bandeau supérieur discret (zone de la barre d'état) */
+  .glass-bord-haut {
+    background: linear-gradient(to bottom, rgb(var(--bg) / 0.92), rgb(var(--bg) / 0.6) 70%, rgb(var(--bg) / 0));
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
+    -webkit-mask-image: linear-gradient(to bottom, #000 60%, transparent);
+    mask-image: linear-gradient(to bottom, #000 60%, transparent);
   }
 
-  /* Inputs, selects, textareas */
-  :is(input, textarea, select)[class*="rounded"] {
-    background: rgba(255, 255, 255, 0.58) !important;
-    border-top-color:    rgba(255, 255, 255, 0.90) !important;
-    border-left-color:   rgba(255, 255, 255, 0.72) !important;
-    border-right-color:  rgba(255, 255, 255, 0.50) !important;
-    border-bottom-color: rgba(255, 255, 255, 0.38) !important;
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    color: #111827 !important;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  /* ── Boutons ────────────────────────────────────────────────────────── */
+  .btn {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-full px-5 h-11 text-[15px] font-semibold
+      transition active:scale-[0.97] active:opacity-80 disabled:opacity-40 disabled:pointer-events-none whitespace-nowrap;
   }
-  .dark :is(input, textarea, select)[class*="rounded"] {
-    background: rgba(255, 255, 255, 0.07) !important;
-    border-top-color:    rgba(255, 255, 255, 0.18) !important;
-    border-left-color:   rgba(255, 255, 255, 0.11) !important;
-    border-right-color:  rgba(255, 255, 255, 0.07) !important;
-    border-bottom-color: rgba(255, 255, 255, 0.05) !important;
-    color: #f9fafb !important;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  .btn-sm { @apply h-8 px-3.5 text-[13px]; }
+  .btn-primaire { @apply btn bg-brand text-white; }
+  .btn-teinte { @apply btn bg-brand/[0.12] text-brand; }
+  .btn-gris { @apply btn bg-remplissage text-label; }
+  .btn-danger { @apply btn bg-ios-red/[0.12] text-ios-red; }
+  .btn-texte {
+    @apply inline-flex items-center gap-1 text-[15px] text-brand font-normal transition active:opacity-50 disabled:opacity-40;
+  }
+  /* Bouton rond (icône seule) */
+  .btn-rond {
+    @apply inline-flex items-center justify-center w-9 h-9 rounded-full bg-remplissage text-label transition active:scale-95;
   }
 
-  /* Placeholders */
-  input::placeholder, textarea::placeholder {
-    color: rgba(107, 114, 128, 0.65) !important;
+  /* ── Champs ─────────────────────────────────────────────────────────── */
+  .champ {
+    @apply w-full rounded-xl bg-remplissage px-3.5 py-2.5 text-[16px] text-label border-0 outline-none
+      transition focus:ring-2 focus:ring-brand/40;
   }
-  .dark input::placeholder, .dark textarea::placeholder {
-    color: rgba(156, 163, 175, 0.45) !important;
-  }
-
-  /* Reflets d'arête de verre sur les boutons */
-  :is(main, aside, .fixed) button[class*="rounded"]:not([class*="glass"]) {
-    box-shadow:
-      /* Arête supérieure très lumineuse */
-      inset 0 1px 0 rgba(255, 255, 255, 0.85),
-      /* Reflets latéraux (épaisseur de verre) */
-      inset 2px 0 0 rgba(255, 255, 255, 0.45),
-      inset -2px 0 0 rgba(255, 255, 255, 0.22),
-      /* Ombre portée douce */
-      0 2px 10px rgba(0, 0, 0, 0.14);
-  }
-  .dark :is(main, aside, .fixed) button[class*="rounded"]:not([class*="glass"]) {
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.45),
-      inset 2px 0 0 rgba(255, 255, 255, 0.22),
-      inset -2px 0 0 rgba(255, 255, 255, 0.12),
-      0 2px 10px rgba(0, 0, 0, 0.35);
+  .libelle {
+    @apply block text-[13px] text-label-2 mb-1.5 px-1;
   }
 
-  /* ── Desktop : glass plus opaque pour contrer les blobs ────────────────────
-     Sur PC le backdrop-filter est plus efficace (GPU dédié), on peut
-     augmenter l'opacité du fond blanc pour assurer la lisibilité du texte    */
-  @media (min-width: 768px) {
-    .glass {
-      background:
-        radial-gradient(ellipse 80% 55% at 50% 0%, rgba(255,255,255,0.65) 0%, transparent 70%),
-        rgba(255, 255, 255, 0.55) !important;
-    }
-    .dark .glass {
-      background:
-        radial-gradient(ellipse 80% 55% at 50% 0%, rgba(255,255,255,0.20) 0%, transparent 70%),
-        rgba(15, 15, 25, 0.65) !important;
-    }
-    /* StatTiles et cartes colorées : fond foncé semi-opaque en fallback */
-    .glass [class*="text-white"], .glass [class*="text-gray-100"] {
-      text-shadow: 0 1px 3px rgba(0,0,0,0.35);
-    }
+  /* ── Contrôle segmenté ──────────────────────────────────────────────── */
+  .segmente {
+    @apply flex p-[2px] rounded-[10px] bg-remplissage;
+  }
+  .segment {
+    @apply flex-1 min-w-0 px-3 py-[6px] text-[13px] font-medium rounded-[8px] text-label transition whitespace-nowrap;
+  }
+  .segment-actif {
+    @apply bg-white text-label font-semibold shadow-[0_3px_8px_rgba(0,0,0,0.12),0_3px_1px_rgba(0,0,0,0.04)];
+  }
+  .dark .segment-actif { background: #636366; }
+
+  /* Pastille de filtre (chips) */
+  .puce {
+    @apply inline-flex items-center gap-1.5 h-8 px-3.5 rounded-full text-[14px] font-medium bg-remplissage text-label transition whitespace-nowrap active:scale-95;
+  }
+  .puce-active { @apply bg-label text-surface; }
+
+  /* Badge */
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-full px-2 py-[1px] text-[11px] font-semibold whitespace-nowrap;
   }
 
-  /* Offset du header mobile — uniquement sur mobile */
-  .mobile-header-offset {
-    padding-top: calc(3.25rem + env(safe-area-inset-top));
+  /* ── Feuilles modales ───────────────────────────────────────────────── */
+  .voile {
+    @apply fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40;
+    animation: fondu 0.2s ease-out;
   }
-  @media (min-width: 768px) {
-    .mobile-header-offset {
-      padding-top: 0;
-    }
+  .feuille {
+    @apply relative w-full md:max-w-lg max-h-[92vh] overflow-y-auto bg-fond md:rounded-carte rounded-t-[28px]
+      shadow-[0_-10px_40px_rgba(0,0,0,0.15)];
+    padding-bottom: env(safe-area-inset-bottom);
+    animation: monte 0.32s cubic-bezier(0.2, 0.9, 0.3, 1);
+  }
+  .dark .feuille { background: rgb(28 28 30); }
+  .dark .feuille .card { background: rgb(44 44 46); }
+  /* Dans une feuille (fond gris), les champs passent en blanc comme les listes iOS */
+  .feuille .champ { background: rgb(var(--surface)); }
+  .dark .feuille .champ { background: rgb(44 44 46); }
+  .poignee {
+    @apply md:hidden mx-auto mt-2 mb-1 h-[5px] w-9 rounded-full bg-label-3;
+  }
+  /* Alerte centrée (dialogue de confirmation) */
+  .alerte {
+    @apply w-full max-w-[290px] rounded-[20px] overflow-hidden text-center glass;
+    animation: zoom 0.2s ease-out;
   }
 
-  /* Scrollbar */
+  /* Interrupteur iOS */
+  .interrupteur {
+    @apply relative inline-flex h-[31px] w-[51px] shrink-0 rounded-full transition-colors duration-200 bg-remplissage;
+  }
+  .interrupteur[aria-checked="true"] { @apply bg-ios-green; }
+  .interrupteur > span {
+    @apply absolute top-[2px] left-[2px] h-[27px] w-[27px] rounded-full bg-white transition-transform duration-200
+      shadow-[0_3px_8px_rgba(0,0,0,0.15),0_3px_1px_rgba(0,0,0,0.06)];
+  }
+  .interrupteur[aria-checked="true"] > span { transform: translateX(20px); }
+
+  /* Chiffres alignés (stats) */
+  .chiffres { font-variant-numeric: tabular-nums; }
+}
+
+@layer utilities {
   .scrollbar-hide::-webkit-scrollbar { display: none; }
   .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+  .pt-safe { padding-top: env(safe-area-inset-top); }
+}
+
+@keyframes fondu { from { opacity: 0; } to { opacity: 1; } }
+@keyframes monte { from { transform: translateY(100%); } to { transform: translateY(0); } }
+@keyframes zoom { from { opacity: 0; transform: scale(1.08); } to { opacity: 1; transform: scale(1); } }
+@media (min-width: 768px) {
+  @keyframes monte { from { opacity: 0; transform: translateY(16px) scale(0.98); } to { opacity: 1; transform: none; } }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }

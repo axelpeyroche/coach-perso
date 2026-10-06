@@ -1,36 +1,22 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import clsx from "clsx";
 import { useAuth } from "../AuthContext";
 import api from "../api";
 import { getErrorMessage } from "../utils/errors";
+import { Segmente } from "../components/ui";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-function Input({ label, type = "text", value, onChange, placeholder, required }) {
+function Input({ label, type = "text", value, onChange, placeholder, required, autoComplete }) {
   return (
-    <div>
-      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{label}</label>
+    <label className="block">
+      <span className="libelle">{label}</span>
       <input
         type={type} value={value} onChange={e => onChange(e.target.value)}
-        placeholder={placeholder} required={required}
-        className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-brand"
+        placeholder={placeholder} required={required} autoComplete={autoComplete}
+        className="champ"
       />
-    </div>
-  );
-}
-
-function Select({ label, value, onChange, options }) {
-  return (
-    <div>
-      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">{label}</label>
-      <select
-        value={value} onChange={e => onChange(e.target.value)}
-        className="w-full px-4 py-2.5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm focus:outline-none focus:ring-2 focus:ring-brand"
-      >
-        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
-    </div>
+    </label>
   );
 }
 
@@ -61,16 +47,15 @@ function FormLogin({ onSwitch }) {
 
   return (
     <form onSubmit={submit} className="space-y-4">
-      <Input label="Email" type="email" value={email} onChange={setEmail} placeholder="toi@exemple.fr" required />
-      <Input label="Mot de passe" type="password" value={password} onChange={setPassword} placeholder="••••••••" required />
-      {err && <p className="text-sm text-red-500">{err}</p>}
-      <button type="submit" disabled={loading}
-        className="w-full py-3 rounded-xl bg-brand text-white font-semibold hover:bg-brand-dark transition-colors disabled:opacity-50">
+      <Input label="Email" type="email" value={email} onChange={setEmail} placeholder="toi@exemple.fr" autoComplete="email" required />
+      <Input label="Mot de passe" type="password" value={password} onChange={setPassword} placeholder="••••••••" autoComplete="current-password" required />
+      {err && <p className="text-[13px] text-ios-red text-center">{err}</p>}
+      <button type="submit" disabled={loading} className="btn-primaire w-full">
         {loading ? "Connexion…" : "Se connecter"}
       </button>
-      <p className="text-center text-sm text-gray-500 dark:text-gray-400">
+      <p className="text-center text-[15px] text-label-2">
         Pas encore de compte ?{" "}
-        <button type="button" onClick={onSwitch} className="text-brand font-semibold hover:underline">
+        <button type="button" onClick={onSwitch} className="text-brand font-semibold">
           Créer un compte
         </button>
       </p>
@@ -111,39 +96,26 @@ function FormRegister({ onSwitch, onSuccess }) {
   return (
     <form onSubmit={submit} className="space-y-4">
       <div className="grid grid-cols-2 gap-3">
-        <Input label="Prénom" value={prenom} onChange={setPrenom} required />
-        <Input label="Nom" value={nom} onChange={setNom} required />
+        <Input label="Prénom" value={prenom} onChange={setPrenom} autoComplete="given-name" required />
+        <Input label="Nom" value={nom} onChange={setNom} autoComplete="family-name" required />
       </div>
-      <Input label="Email" type="email" value={email} onChange={setEmail} placeholder="toi@exemple.fr" required />
-      <Input label="Mot de passe" type="password" value={password} onChange={setPassword} placeholder="••••••••" required />
+      <Input label="Email" type="email" value={email} onChange={setEmail} placeholder="toi@exemple.fr" autoComplete="email" required />
+      <Input label="Mot de passe" type="password" value={password} onChange={setPassword} placeholder="••••••••" autoComplete="new-password" required />
       <Input label="Date de naissance" type="date" value={dateNaissance} onChange={setDN} />
       <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Sexe</label>
-        <div className="grid grid-cols-3 gap-2">
-          {[
-            { val: "M", label: "Homme" },
-            { val: "F", label: "Femme" },
-            { val: "",  label: "Non précisé" },
-          ].map(({ val, label }) => (
-            <button key={label} type="button" onClick={() => setSexe(val)}
-              className={`py-2 rounded-xl text-sm font-medium border-2 transition-colors ${
-                sexe === val
-                  ? "border-brand bg-brand/5 dark:bg-brand/10 text-brand"
-                  : "border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300 hover:border-gray-300"
-              }`}>
-              {label}
-            </button>
-          ))}
-        </div>
+        <span className="libelle">Sexe</span>
+        <Segmente
+          options={[["M", "Homme"], ["F", "Femme"], ["", "Non précisé"]]}
+          valeur={sexe} onChange={setSexe}
+        />
       </div>
-      {err && <p className="text-sm text-red-500">{err}</p>}
-      <button type="submit" disabled={loading}
-        className="w-full py-3 rounded-xl bg-brand text-white font-semibold hover:bg-brand-dark transition-colors disabled:opacity-50">
+      {err && <p className="text-[13px] text-ios-red text-center">{err}</p>}
+      <button type="submit" disabled={loading} className="btn-primaire w-full">
         {loading ? "Création…" : "Créer mon compte"}
       </button>
-      <p className="text-center text-sm text-gray-500 dark:text-gray-400">
+      <p className="text-center text-[15px] text-label-2">
         Déjà un compte ?{" "}
-        <button type="button" onClick={onSwitch} className="text-brand font-semibold hover:underline">
+        <button type="button" onClick={onSwitch} className="text-brand font-semibold">
           Se connecter
         </button>
       </p>
@@ -165,30 +137,22 @@ export default function Auth() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-950 px-4">
-      <div className="w-full max-w-md">
-        {/* Logo */}
+    <div className="min-h-screen flex items-center justify-center bg-fond px-4 py-10 pt-safe">
+      <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <div className="text-5xl mb-3">⚡</div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Mon carnet</h1>
-          <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">Toutes tes séances, tous tes sports</p>
+          <div className="mx-auto w-[76px] h-[76px] rounded-[18px] bg-gradient-to-b from-[#3A9BFF] to-[#007AFF] shadow-lg shadow-ios-blue/30 flex items-center justify-center mb-4">
+            <svg className="w-10 h-10 text-white" fill="currentColor" viewBox="0 0 24 24"><path d="M13 2L4.5 13.5H11L10 22l8.5-11.5H12L13 2z" /></svg>
+          </div>
+          <h1 className="text-[28px] font-bold tracking-tight">Mon carnet</h1>
+          <p className="text-[15px] text-label-2 mt-1">Toutes tes séances, tous tes sports</p>
         </div>
 
-        <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 p-8 shadow-sm">
-          {/* Onglets */}
-          <div className="flex rounded-xl bg-gray-100 dark:bg-gray-800 p-1 mb-6">
-            {[["login","Connexion"],["register","Inscription"]].map(([m, label]) => (
-              <button key={m} onClick={() => setMode(m)}
-                className={clsx("flex-1 py-2 text-sm font-semibold rounded-lg transition-colors",
-                  mode === m
-                    ? "bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm"
-                    : "text-gray-500 dark:text-gray-400"
-                )}>
-                {label}
-              </button>
-            ))}
-          </div>
-
+        <div className="card p-5">
+          <Segmente
+            className="mb-5"
+            options={[["login", "Connexion"], ["register", "Inscription"]]}
+            valeur={mode} onChange={setMode}
+          />
           {mode === "login"
             ? <FormLogin onSwitch={() => setMode("register")} />
             : <FormRegister onSwitch={() => setMode("login")} onSuccess={handleRegisterSuccess} />
