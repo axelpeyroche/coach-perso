@@ -1018,6 +1018,7 @@ ECHANTILLONS = {
 TITRE_A_PRECISER = "Séance à préciser"
 SEANCE_MIN = 15          # minutes d'exercice consécutives pour former une séance
 SEANCE_MIN_COURTE = 6    # suffisent si la course ou le vélo est avéré (vélotaf)
+MARGE_CUMULS = timedelta(minutes=3)  # distance et énergie comptées encore un peu après la fin de l'exercice
 PAUSE_MAX = 5            # minutes sans exercice tolérées dans une séance
 
 
@@ -1120,9 +1121,9 @@ def enrichir_activites(db: Session, user: Utilisateur, ech: dict[str, list[tuple
 
         nb = dict(det.get("nb_echantillons") or {})
 
-        def dans(t):
+        def dans(t, marge=timedelta(0)):
             # Un envoi plus pauvre que le précédent (fenêtre tronquée) ne recalcule rien
-            pts = sorted((d, v) for d, v in ech.get(t, []) if debut <= d <= fin)
+            pts = sorted((d, v) for d, v in ech.get(t, []) if debut <= d <= fin + marge)
             if not pts or len(pts) < nb.get(t, 0):
                 return []
             nb[t] = len(pts)
@@ -1145,13 +1146,16 @@ def enrichir_activites(db: Session, user: Utilisateur, ech: dict[str, list[tuple
                     detail(cle_max, round(max(v for _, v in pts), 2))
         if det.get("detection_auto"):
             # Séance reconstituée : distance et calories peuvent arriver par un autre raccourci
-            cal = sum(v for _, v in dans("energie"))
-            if cal:
-                colonne("calories", round(cal))
+            # Un cumul ne fait que grandir avec plus de données : une valeur plus grande remplace
+            cal = sum(v for _, v in dans("energie", MARGE_CUMULS))
+            if cal and (a.calories is None or round(cal) > a.calories):
+                a.calories = round(cal)
+                calc.add("calories")
             t_dist = {"course": "distance", "velo": "distance_velo"}.get(a.sport)
-            dist = sum(v for _, v in dans(t_dist)) if t_dist else 0
-            if dist >= 0.1:
-                colonne("distance_km", round(dist, 3))
+            dist = sum(v for _, v in dans(t_dist, MARGE_CUMULS)) if t_dist else 0
+            if dist >= 0.1 and (a.distance_km is None or round(dist, 3) > a.distance_km):
+                a.distance_km = round(dist, 3)
+                calc.add("distance_km")
         pas = dans("pas")
         if pas:
             detail("pas", round(sum(v for _, v in pas)))
@@ -1277,7 +1281,8 @@ def detecter_seances(db: Session, user: Utilisateur, ech: dict[str, list[tuple[d
         if deb.isoformat() in ignorees or any(d <= fin and f >= deb for d, f in existantes):
             continue
         heures = (fin - deb).total_seconds() / 3600
-        dist_pied, dist_velo = somme("distance", deb, fin), somme("distance_velo", deb, fin)
+        fin_cumuls = fin + MARGE_CUMULS
+        dist_pied, dist_velo = somme("distance", deb, fin_cumuls), somme("distance_velo", deb, fin_cumuls)
         course = sum(compte(t, deb, fin) for t in ("vitesse", "puissance", "foulee", "oscillation", "contact_sol"))
         if course >= 3 or (dist_pied >= 1 and dist_pied / heures >= 7.5):
             sport, dist = "course", dist_pied
@@ -1292,7 +1297,7 @@ def detecter_seances(db: Session, user: Utilisateur, ech: dict[str, list[tuple[d
         # Un bloc court n'est gardé que si le sport est avéré (métriques de course, distance à vélo)
         if minutes < SEANCE_MIN and not (course >= 3 or dist_velo >= 1):
             continue
-        cal = somme("energie", deb, fin)
+        cal = somme("energie", deb, fin_cumuls)
         donnees = {
             "sport": sport, "titre": TITRE_A_PRECISER if sport == "autre" else None,
             "debut": deb, "duree_sec": int((fin - deb).total_seconds()),
