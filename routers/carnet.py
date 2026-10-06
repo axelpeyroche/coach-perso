@@ -526,6 +526,8 @@ def _importer_activites(payload: ImportActivitesSchema, db: Session):
             cs.fusionner_details(act, {"fin": _date_import(x.fin, tz).isoformat(timespec="seconds")})
     db.flush()
     mesures = cs.importer_mesures(db, user.id, items_mesures)
+    recus = sum(len(p) for p in ech.values())
+    ech = cs.stocker_echantillons(db, user.id, ech)  # + ceux envoyés par les autres raccourcis
     detectees = cs.detecter_seances(db, user, ech) if ech else 0
     completees = cs.enrichir_activites(db, user, ech) if ech else 0
     db.commit()
@@ -538,6 +540,7 @@ def _importer_activites(payload: ImportActivitesSchema, db: Session):
     if detectees:
         morceaux.append(f"{detectees} séance(s) détectée(s)")
     if ech:
+        morceaux.append(f"{recus} échantillon(s) reçu(s)")
         morceaux.append(f"{completees} séance(s) complétée(s) (FC, puissance, effort…)")
     return {"ok": True, **bilan, "mesures": mesures, "seances_detectees": detectees,
             "seances_completees": completees,

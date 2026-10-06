@@ -129,6 +129,24 @@ class MesureSante(Base):
     valeur: Mapped[float] = mapped_column(Float, nullable=False)
 
 
+class EchantillonSante(Base):
+    """
+    Échantillon brut reçu du raccourci iOS (FC, énergie, distance, minutes d'exercice…),
+    gardé quelques semaines pour que plusieurs raccourcis puissent envoyer chacun
+    une partie des données, dans n'importe quel ordre.
+    """
+    __tablename__ = "echantillons_sante"
+    __table_args__ = (
+        UniqueConstraint("utilisateur_id", "type", "horodatage", name="uq_echantillon_sante"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    utilisateur_id: Mapped[int] = mapped_column(ForeignKey("utilisateurs.id"), nullable=False, index=True)
+    type: Mapped[str] = mapped_column(String(20), nullable=False)
+    horodatage: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    valeur: Mapped[float] = mapped_column(Float, nullable=False)
+
+
 # ---------------------------------------------------------------------------
 # Ancien objectif course (migré vers Objectif au besoin)
 # ---------------------------------------------------------------------------

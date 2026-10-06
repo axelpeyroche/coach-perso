@@ -18,7 +18,7 @@ from typing import Iterable, Optional
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from models import Activite, MesureSante, Objectif, SeancePrevue, Utilisateur
+from models import Activite, EchantillonSante, MesureSante, Objectif, SeancePrevue, Utilisateur
 
 # ---------------------------------------------------------------------------
 # Sports
@@ -1105,7 +1105,7 @@ def enrichir_activites(db: Session, user: Utilisateur, ech: dict[str, list[tuple
         debut, fin = fenetres[a.id]
         det = _details_dict(a)
         calc = set(det.get("champs_raccourci", []))
-        avant = (a.fc_moyenne_bpm, a.fc_max_bpm, a.rpe, a.details)
+        avant = (a.fc_moyenne_bpm, a.fc_max_bpm, a.rpe, a.calories, a.distance_km, a.details)
 
         def colonne(champ, v):
             if v is not None and (getattr(a, champ) is None or champ in calc):
@@ -1142,6 +1142,15 @@ def enrichir_activites(db: Session, user: Utilisateur, ech: dict[str, list[tuple
                 detail(cle_moy, round(_moyenne_ponderee(pts, fin)[0], 2))
                 if cle_max:
                     detail(cle_max, round(max(v for _, v in pts), 2))
+        if det.get("detection_auto"):
+            # Séance reconstituée : distance et calories peuvent arriver par un autre raccourci
+            cal = sum(v for _, v in dans("energie"))
+            if cal:
+                colonne("calories", round(cal))
+            t_dist = {"course": "distance", "velo": "distance_velo"}.get(a.sport)
+            dist = sum(v for _, v in dans(t_dist)) if t_dist else 0
+            if dist >= 0.1:
+                colonne("distance_km", round(dist, 3))
         pas = dans("pas")
         if pas:
             detail("pas", round(sum(v for _, v in pas)))
@@ -1162,10 +1171,49 @@ def enrichir_activites(db: Session, user: Utilisateur, ech: dict[str, list[tuple
         if nb:
             det["nb_echantillons"] = nb
         a.details = json.dumps(det, ensure_ascii=False) if det else None
-        if (a.fc_moyenne_bpm, a.fc_max_bpm, a.rpe, a.details) != avant:
+        if (a.fc_moyenne_bpm, a.fc_max_bpm, a.rpe, a.calories, a.distance_km, a.details) != avant:
             n += 1
     db.flush()
     return n
+
+
+CONSERVATION_ECHANTILLONS = 21  # jours
+
+
+def stocker_echantillons(db: Session, user_id: int,
+                         ech: dict[str, list[tuple[datetime, float]]]) -> dict[str, list[tuple[datetime, float]]]:
+    """
+    Enregistre les échantillons reçus (chaque type remplace ce qui était stocké sur sa
+    période) et renvoie tous ceux connus autour de cette période, tous types confondus.
+    Plusieurs raccourcis peuvent ainsi envoyer chacun une partie des données (FC d'un
+    côté, minutes d'exercice de l'autre) : la séance est détectée et complétée avec
+    l'ensemble, quel que soit l'ordre des envois.
+    """
+    dates = [d for pts in ech.values() for d, _ in pts]
+    if not dates:
+        return {}
+    for t, pts in ech.items():
+        uniques = dict(sorted(pts))  # une valeur par horodatage, la dernière reçue
+        (db.query(EchantillonSante)
+           .filter(EchantillonSante.utilisateur_id == user_id, EchantillonSante.type == t,
+                   EchantillonSante.horodatage >= min(uniques), EchantillonSante.horodatage <= max(uniques))
+           .delete(synchronize_session=False))
+        db.execute(EchantillonSante.__table__.insert(), [
+            {"utilisateur_id": user_id, "type": t, "horodatage": d, "valeur": v} for d, v in uniques.items()
+        ])
+    (db.query(EchantillonSante)
+       .filter(EchantillonSante.utilisateur_id == user_id,
+               EchantillonSante.horodatage < datetime.now() - timedelta(days=CONSERVATION_ECHANTILLONS))
+       .delete(synchronize_session=False))
+    db.flush()
+    connus: dict[str, list[tuple[datetime, float]]] = defaultdict(list)
+    for t, d, v in (db.query(EchantillonSante.type, EchantillonSante.horodatage, EchantillonSante.valeur)
+                    .filter(EchantillonSante.utilisateur_id == user_id,
+                            EchantillonSante.horodatage >= min(dates) - timedelta(days=1),
+                            EchantillonSante.horodatage <= max(dates) + timedelta(days=1))
+                    .order_by(EchantillonSante.horodatage)):
+        connus[t].append((d, v))
+    return dict(connus)
 
 
 def _ignorees(user: Utilisateur) -> list[str]:
