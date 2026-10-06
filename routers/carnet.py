@@ -120,6 +120,18 @@ def lister_sports():
     return [{"code": k, **v} for k, v in cs.SPORTS.items()]
 
 
+@router.get("/api/carnet/sports-presents", summary="Sports ayant au moins une activité (nombre par sport)")
+def sports_presents(
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(obtenir_session),
+):
+    from sqlalchemy import func
+    lignes = (db.query(Activite.sport, func.count(Activite.id))
+              .filter(Activite.utilisateur_id == current_user.id)
+              .group_by(Activite.sport).all())
+    return {s: n for s, n in lignes if s}
+
+
 @router.get("/api/activites", summary="Liste des activités (filtres sport/dates, pagination)")
 def lister_activites(
     sport: Optional[str] = None,
@@ -634,7 +646,8 @@ def modifier_objectif(
     db: Session = Depends(obtenir_session),
 ):
     o = _objectif_utilisateur(db, current_user, objectif_id)
-    for k, v in payload.model_dump().items():
+    # Le type (course officielle / objectif perso) se choisit à la création et ne change plus
+    for k, v in payload.model_dump(exclude={"type"}).items():
         setattr(o, k, v)
     db.commit()
     db.refresh(o)

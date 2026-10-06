@@ -8,7 +8,7 @@ import ConfirmDialog from "../components/ConfirmDialog";
 import { BoutonAjout, Segmente } from "../components/ui";
 import { getObjectifs, creerObjectif, modifierObjectif, supprimerObjectif } from "../api";
 import {
-  SPORTS, sportInfo, fmtDate, fmtDuree, parseDuree, dureeVersTexte, nombre, inputCls,
+  SPORTS, sportInfo, fmtDate, parseDuree, dureeVersTexte, nombre, inputCls,
 } from "../carnet";
 
 const METRIQUES = {
@@ -18,6 +18,29 @@ const METRIQUES = {
   nb_seances: "Nombre de séances",
   valeur_libre: "Valeur libre (saisie manuelle)",
 };
+
+const TYPES = { course: "Course officielle", perso: "Objectif perso" };
+
+// Écart signé en minutes/secondes : « +4 min 01 », « −1 min 12 »
+function fmtEcart(sec) {
+  if (sec == null) return "—";
+  const a = Math.round(Math.abs(sec));
+  const signe = sec > 0 ? "+" : sec < 0 ? "−" : "";
+  const h = Math.floor(a / 3600);
+  const m = Math.floor((a % 3600) / 60);
+  const s = String(a % 60).padStart(2, "0");
+  return h ? `${signe}${h} h ${String(m).padStart(2, "0")} min ${s}` : `${signe}${m} min ${s}`;
+}
+
+// Écart d'allure : « +11 s/km »
+function fmtEcartAllure(sec) {
+  if (sec == null) return null;
+  const a = Math.round(Math.abs(sec));
+  const signe = sec > 0 ? "+" : sec < 0 ? "−" : "";
+  return a >= 60 ? `${signe}${Math.floor(a / 60)}:${String(a % 60).padStart(2, "0")} /km` : `${signe}${a} s/km`;
+}
+
+const ORIGINE_REALISE = { saisi: "saisi à la main", liee: "séance liée", jour: "séance du jour" };
 
 const DISTANCES = [["5 km", 5], ["10 km", 10], ["Semi", 21.0975], ["Marathon", 42.195]];
 
@@ -57,7 +80,7 @@ export function ObjectifCarte({ o, onEdit, compact = false }) {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className={clsx("text-[13px] font-semibold", o.type === "course" ? "text-ios-orange" : "text-ios-green")}>
-            {o.type === "course" ? "Course" : "Défi"}
+            {o.type === "course" ? "Course" : "Objectif perso"}
             <span className="font-normal text-label-2">
               {o.sport ? ` · ${sportInfo(o.sport).label}` : ""}
               {o.date_cible ? ` · ${fmtDate(o.date_cible)}` : ""}
@@ -79,18 +102,30 @@ export function ObjectifCarte({ o, onEdit, compact = false }) {
         <div className={clsx("grid gap-2", compact ? "grid-cols-2" : "grid-cols-2 sm:grid-cols-4")}>
           <Tuile label="Distance" value={o.distance_km ? `${nombre(o.distance_km, 2)} km` : "—"} sub={o.dplus_m ? `${o.dplus_m} m D+` : null} />
           <Tuile label="Objectif" value={o.temps_cible_sec ? o.temps_cible_str : "—"} sub={o.allure_cible_str} />
-          <Tuile label="Prédiction"
-            value={o.prediction?.temps_str ?? "—"}
-            sub={o.prediction ? `base : ${o.prediction.base}` : "Pas assez de sorties ≥ 3 km"}
-            ton={o.ecart_sec == null ? null : o.ecart_sec <= 0 ? "bon" : "mauvais"} />
-          <Tuile label="Écart"
-            value={o.ecart_sec == null ? "—" : `${o.ecart_sec <= 0 ? "−" : "+"}${fmtDuree(Math.abs(o.ecart_sec))}`}
-            ton={o.ecart_sec == null ? null : o.ecart_sec <= 0 ? "bon" : "mauvais"} />
-          {!compact && (
+          {o.realise ? (
+            <>
+              {/* Course courue : écart sur le temps final (réalisé − visé) */}
+              <Tuile label="Réalisé" value={o.realise.temps_str}
+                sub={o.realise.titre ? `${o.realise.titre}` : ORIGINE_REALISE[o.realise.origine]} />
+              <Tuile label="Écart" value={fmtEcart(o.ecart_sec)}
+                sub={fmtEcartAllure(o.ecart_allure_sec_km)}
+                ton={o.ecart_sec == null ? null : o.ecart_sec <= 0 ? "bon" : "mauvais"} />
+            </>
+          ) : (
+            <>
+              <Tuile label="Prédiction"
+                value={o.prediction?.temps_str ?? "—"}
+                sub={o.prediction ? `base : ${o.prediction.base}` : "Pas assez de sorties ≥ 3 km"}
+                ton={o.ecart_prediction_sec == null ? null : o.ecart_prediction_sec <= 0 ? "bon" : "mauvais"} />
+              <Tuile label="Écart prévu" value={fmtEcart(o.ecart_prediction_sec)}
+                sub={o.ecart_prediction_sec == null ? null : "prédiction − objectif"}
+                ton={o.ecart_prediction_sec == null ? null : o.ecart_prediction_sec <= 0 ? "bon" : "mauvais"} />
+            </>
+          )}
+          {!compact && !o.realise && (
             <>
               <Tuile label="Volume à pied (4 sem.)" value={`${nombre(o.km_hebdo_4sem)} km/sem`} />
               <Tuile label="Plus longue sortie" value={o.plus_longue_4sem_km ? `${nombre(o.plus_longue_4sem_km)} km` : "—"} sub="4 dernières semaines" />
-              {o.resultat_temps_sec && <Tuile label="Résultat" value={o.resultat_temps_str} ton="bon" />}
             </>
           )}
         </div>
@@ -197,13 +232,16 @@ function ModalObjectif({ objectif, onClose }) {
   }
 
   return (
-    <Feuille as="form" onSubmit={soumettre} onClose={onClose} titre={objectif ? "Objectif" : "Nouvel objectif"}
+    <Feuille as="form" onSubmit={soumettre} onClose={onClose} titre={objectif ? TYPES[f.type] : "Nouvel objectif"}
       action={<button type="submit" className="btn-texte font-semibold" disabled={enregistrer.isPending}>
         {enregistrer.isPending ? "…" : objectif ? "OK" : "Ajouter"}
       </button>}>
 
-      <Segmente options={[["course", "Course officielle"], ["perso", "Défi perso"]]} valeur={f.type}
-        onChange={(v) => setF((p) => ({ ...p, type: v }))} />
+      {/* Le type se choisit uniquement à la création ; en modification on reste dans son type */}
+      {!objectif && (
+        <Segmente options={Object.entries(TYPES)} valeur={f.type}
+          onChange={(v) => setF((p) => ({ ...p, type: v }))} />
+      )}
 
       <div className="grid grid-cols-2 gap-x-3 gap-y-4">
         <L label="Titre" className="col-span-2">
@@ -263,7 +301,10 @@ function ModalObjectif({ objectif, onClose }) {
           </L>
         )}
         {objectif && f.type === "course" && (
-          <L label="Temps réalisé"><input className={inputCls} value={f.resultat} onChange={set("resultat")} placeholder="3:27:41" /></L>
+          <L label="Temps réalisé">
+            <input className={inputCls} value={f.resultat} onChange={set("resultat")}
+              placeholder={objectif.realise && objectif.realise.origine !== "saisi" ? `${dureeVersTexte(objectif.realise.temps_sec)} (séance)` : "3:27:41"} />
+          </L>
         )}
         <L label="Notes" className="col-span-2">
           <textarea rows={2} className={inputCls} value={f.notes} onChange={set("notes")} />
@@ -293,7 +334,7 @@ export default function Objectifs() {
   const passes = objectifs.filter((o) => o.statut !== "actif");
 
   return (
-    <Page titre="Objectifs" sousTitre="Courses et défis"
+    <Page titre="Objectifs" sousTitre="Courses officielles et objectifs perso"
       action={<BoutonAjout onClick={() => setModal(null)} label="Nouvel objectif" />}>
 
       {isLoading ? (
@@ -304,7 +345,7 @@ export default function Objectifs() {
             <p className="text-4xl">🎯</p>
             <p className="text-[17px] font-semibold">Aucun objectif</p>
             <p className="text-[15px] text-label-2 max-w-sm mx-auto">
-              Ajoute une course (ex. marathon) ou un défi perso (ex. 1 000 km dans l'année) : la progression se calcule toute seule.
+              Ajoute une course officielle (ex. marathon) ou un objectif perso (ex. 1 000 km dans l'année) : la progression se calcule toute seule.
             </p>
             <button className="btn-primaire" onClick={() => setModal(null)}>Créer un objectif</button>
           </div>

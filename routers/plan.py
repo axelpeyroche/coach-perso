@@ -31,7 +31,9 @@ router = APIRouter()
 # ---------------------------------------------------------------------------
 
 class SeancePrevueSchema(BaseModel):
-    jour: date
+    # Rattache la séance à sa semaine (n'importe quel jour de la semaine) ; l'athlète
+    # choisit lui-même le jour. Absent : semaine en cours.
+    jour: Optional[date] = None
     sport: str
     titre: str = Field(..., min_length=1, max_length=200)
     description: Optional[str] = None
@@ -116,6 +118,9 @@ def creer_prevue(
 ):
     item = _items(db, current_user, [payload])[0]
     item["id_externe"] = item["id_externe"] or f"manuel-{_secrets.token_hex(6)}"
+    if not item["jour"]:
+        auj = date.today()
+        item["jour"] = auj - timedelta(days=auj.weekday())
     cs.enregistrer_plan(db, current_user.id, [item])
     db.commit()
     p = db.query(SeancePrevue).filter(SeancePrevue.utilisateur_id == current_user.id,
@@ -152,20 +157,21 @@ def modifier_prevue(
     return _une(db, p)
 
 
-@router.get("/api/plan/{prevue_id}/activites", summary="Activités proches (± 3 jours) pour un rattachement manuel")
+@router.get("/api/plan/{prevue_id}/activites", summary="Activités de la semaine de la séance, pour un rattachement manuel")
 def activites_proches(
     prevue_id: int,
     current_user: Utilisateur = Depends(get_current_user),
     db: Session = Depends(obtenir_session),
 ):
     p = _prevue(db, current_user, prevue_id)
-    debut = datetime.combine(p.jour - timedelta(days=3), datetime.min.time())
-    fin = datetime.combine(p.jour + timedelta(days=4), datetime.min.time())
+    lundi = p.jour - timedelta(days=p.jour.weekday())
+    debut = datetime.combine(lundi, datetime.min.time())
+    fin = datetime.combine(lundi + timedelta(days=7), datetime.min.time())
     acts = (db.query(Activite)
             .filter(Activite.utilisateur_id == current_user.id, Activite.debut >= debut, Activite.debut < fin)
             .order_by(Activite.debut).all())
     fam = cs.famille_sport(p.sport)
-    acts.sort(key=lambda a: (cs.famille_sport(a.sport) != fam, abs((a.debut.date() - p.jour).days)))
+    acts.sort(key=lambda a: (cs.famille_sport(a.sport) != fam, a.debut))
     return [cs.serialiser_activite(a) for a in acts]
 
 

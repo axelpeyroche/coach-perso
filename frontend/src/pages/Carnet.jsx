@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import Card from "../components/Card";
@@ -6,7 +6,7 @@ import Page from "../components/Page";
 import { BoutonAjout } from "../components/ui";
 import ActiviteLigne from "../components/ActiviteLigne";
 import ModalActivite from "../components/ModalActivite";
-import { getActivites } from "../api";
+import api, { getActivites } from "../api";
 import { SPORTS, nombre, fmtDuree } from "../carnet";
 
 const PAGE = 50;
@@ -26,6 +26,18 @@ export default function Carnet() {
     queryFn: () => getActivites({ sport: sport || undefined, q: q || undefined, limit: limite }),
     placeholderData: keepPreviousData,
   });
+
+  // Sports ayant au moins une activité : seuls ceux-là apparaissent dans les filtres
+  // (clé sous « activites » pour suivre les invalidations après ajout/suppression)
+  const { data: presents } = useQuery({
+    queryKey: ["activites", "sports-presents"],
+    queryFn: () => api.get("/carnet/sports-presents").then((r) => r.data),
+  });
+  const sportsFiltre = presents ? Object.keys(SPORTS).filter((k) => presents[k] > 0) : [];
+  useEffect(() => {
+    // Filtre actif devenu sans activité → retour à « Tout »
+    if (presents && sport && !(presents[sport] > 0)) { setSport(""); setLimite(PAGE); }
+  }, [presents, sport]);
 
   const activites = data?.activites ?? [];
   const groupes = useMemo(() => {
@@ -54,14 +66,16 @@ export default function Carnet() {
           <input type="search" className="champ !pl-10 !py-2 !rounded-[10px]" placeholder="Rechercher"
             value={q} onChange={(e) => { setQ(e.target.value); setLimite(PAGE); }} />
         </label>
+        {sportsFiltre.length > 1 && (
         <div className="flex gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4 md:mx-0 md:px-0">
-          {[["", "Tout"], ...Object.entries(SPORTS).map(([k, s]) => [k, `${s.emoji} ${s.label}`])].map(([k, l]) => (
+          {[["", "Tout"], ...sportsFiltre.map((k) => [k, `${SPORTS[k].emoji} ${SPORTS[k].label}`])].map(([k, l]) => (
             <button key={k} onClick={() => { setSport(k); setLimite(PAGE); }}
               className={`puce ${sport === k ? "puce-active" : ""}`}>
               {l}
             </button>
           ))}
         </div>
+        )}
       </div>
 
       {isLoading ? (

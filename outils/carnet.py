@@ -16,8 +16,12 @@ Exemples :
     python outils/carnet.py supprimer 2026-10-07-seuil
 
 Format de plan.json : une liste de séances, ou {"seances": [...], "remplacer": {"depuis", "jusqu_a"}}.
-Séance : jour (AAAA-MM-JJ), sport, titre, et au choix description, duree_min,
+Séance : sport, titre, et au choix jour (AAAA-MM-JJ), description, duree_min,
 distance_km, dplus_m, rpe_cible (1-10), ordre, id_externe, objectif_id.
+`jour` ne fixe que la semaine de la séance (n'importe quel jour de cette semaine ;
+absent = semaine en cours) : l'athlète choisit lui-même ses jours. `ordre` donne
+l'ordre conseillé dans la semaine. Une séance est validée par une activité de la
+même semaine et de la même famille de sport (durée >= 40 % de la durée prévue).
 """
 
 from __future__ import annotations
@@ -78,7 +82,7 @@ def cmd_export(a):
         print(texte)
 
 
-STATUTS = {"realisee": "✓ faite", "sautee": "✗ sautée", "a_venir": "à venir",
+STATUTS = {"realisee": "✓ faite", "sautee": "✗ sautée", "a_venir": "à faire",
            "aujourdhui": "aujourd'hui", "manquee": "non faite"}
 
 
@@ -94,7 +98,7 @@ def cmd_plan(a):
             f"{s['distance_km']:g} km" if s["distance_km"] else "",
             f"RPE {s['rpe_cible']:g}" if s["rpe_cible"] else "",
         ] if x)
-        ligne = f"{s['jour']}  {s['sport_label']:<14} {s['titre']:<38} {prevu:<26} {STATUTS.get(s['statut'], s['statut'])}"
+        ligne = f"sem. {s.get('semaine', s['jour'])}  {s['sport_label']:<14} {s['titre']:<38} {prevu:<26} {STATUTS.get(s['statut'], s['statut'])}"
         act = s.get("activite")
         if act:
             ligne += f"  → {act['duree_str'] or ''} {str(act['distance_km']) + ' km' if act['distance_km'] else ''}" \

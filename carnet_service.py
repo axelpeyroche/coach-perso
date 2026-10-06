@@ -531,6 +531,36 @@ METRIQUES = {
 }
 
 
+def course_realisee(o: Objectif, acts: list[Activite]) -> Optional[dict]:
+    """
+    Temps final d'une course officielle déjà courue, par ordre de priorité :
+    1. temps réalisé saisi à la main sur l'objectif ;
+    2. séance rattachée explicitement à l'objectif (activites.objectif_id) ;
+    3. séance à pied du jour de la course dont la distance est proche (±20 %).
+    La durée retenue est celle de l'activité (duree_sec), sur le temps total.
+    """
+    def _seance(a: Activite, origine: str) -> dict:
+        return {"temps_sec": int(a.duree_sec), "temps_str": fmt_duree(a.duree_sec), "origine": origine,
+                "activite_id": a.id, "titre": a.titre, "date": a.debut.date().isoformat(),
+                "distance_km": a.distance_km}
+
+    if o.resultat_temps_sec:
+        return {"temps_sec": int(o.resultat_temps_sec), "temps_str": fmt_duree(o.resultat_temps_sec),
+                "origine": "saisi", "activite_id": None, "titre": None, "date": None, "distance_km": None}
+    liees = [a for a in acts if a.objectif_id == o.id and a.duree_sec]
+    if liees:
+        # Plusieurs séances rattachées (préparation) : la plus longue est la course
+        a = max(liees, key=lambda x: (x.distance_km or 0, x.duree_sec))
+        return _seance(a, "liee")
+    if o.date_cible and o.distance_km:
+        jour = [a for a in acts if a.debut.date() == o.date_cible and a.sport in SPORTS_PIED
+                and a.duree_sec and a.distance_km and abs(a.distance_km - o.distance_km) <= 0.2 * o.distance_km]
+        if jour:
+            a = min(jour, key=lambda x: abs(x.distance_km - o.distance_km))
+            return _seance(a, "jour")
+    return None
+
+
 def progression_objectif(o: Objectif, acts: list[Activite], aujourd_hui: Optional[date] = None) -> dict:
     aujourd_hui = aujourd_hui or date.today()
     res = {
@@ -550,12 +580,22 @@ def progression_objectif(o: Objectif, acts: list[Activite], aujourd_hui: Optiona
     if o.type == "course":
         if o.distance_km and o.temps_cible_sec:
             res["allure_cible_str"] = fmt_allure(o.temps_cible_sec / o.distance_km)
-        if o.distance_km:
+
+        # Course réalisée : temps final = résultat saisi, sinon durée de la séance liée
+        realise = course_realisee(o, acts)
+        res["realise"] = realise
+        if realise and o.temps_cible_sec:
+            # Écart sur le TEMPS FINAL (réalisé − visé), pas sur une prédiction
+            res["ecart_sec"] = realise["temps_sec"] - o.temps_cible_sec
+            if o.distance_km:
+                res["ecart_allure_sec_km"] = round(res["ecart_sec"] / o.distance_km, 1)
+
+        if o.distance_km and not realise:
             pred = predire_temps(acts, o.distance_km, o.dplus_m or 0,
                                  depuis=datetime.combine(aujourd_hui - timedelta(days=120), datetime.min.time()))
             res["prediction"] = pred
             if pred and o.temps_cible_sec:
-                res["ecart_sec"] = pred["temps_sec"] - o.temps_cible_sec
+                res["ecart_prediction_sec"] = pred["temps_sec"] - o.temps_cible_sec
         # Volume à pied des 4 dernières semaines (repère de préparation)
         lim = datetime.combine(aujourd_hui - timedelta(days=27), datetime.min.time())
         km4 = sum(a.distance_km or 0 for a in acts if a.sport in SPORTS_PIED and a.debut >= lim)
@@ -670,8 +710,11 @@ def export_markdown(data: dict) -> str:
                 ligne += f", objectif {o['temps_cible_str']} ({o.get('allure_cible_str') or ''})"
             if o.get("prediction"):
                 ligne += f" · prédiction actuelle {o['prediction']['temps_str']} (base : {o['prediction']['base']})"
-            if o.get("resultat_temps_str"):
-                ligne += f" · résultat {o['resultat_temps_str']}"
+            if o.get("realise"):
+                ligne += f" · réalisé {o['realise']['temps_str']}"
+                if o.get("ecart_sec") is not None:
+                    e = o["ecart_sec"]
+                    ligne += f" (écart {'+' if e > 0 else '−'}{abs(e) // 60} min {abs(e) % 60:02d})"
         else:
             ligne = (f"- **{o['titre']}** (perso, {o['statut']}) — {o.get('valeur_actuelle')} / {o.get('valeur_cible')} "
                      f"{o.get('unite') or ''} ({o.get('pourcentage', '?')} %), période {o.get('date_debut') or '?'} → {o.get('date_cible') or '?'}")
@@ -1257,30 +1300,37 @@ CHAMPS_PREVUE = ("jour", "ordre", "sport", "titre", "description", "duree_min", 
                  "dplus_m", "rpe_cible", "objectif_id")
 
 
-def _candidates(prevue: SeancePrevue, acts: list[Activite], prises: set[int]) -> list[Activite]:
-    """Activités du même jour et de la même famille de sport, pas déjà rattachées.
-    Une activité de moins de 40 % de la durée prévue (ex. vélotaf pour une sortie
-    longue) n'est pas retenue."""
-    res = []
-    for a in acts:
-        if a.id in prises or a.debut.date() != prevue.jour:
-            continue
-        if famille_sport(a.sport) != famille_sport(prevue.sport):
-            continue
-        if prevue.duree_min and a.duree_sec and a.duree_sec < prevue.duree_min * 60 * 0.4:
-            continue
-        res.append(a)
-    return res
+def _score(prevue: SeancePrevue, a: Activite) -> Optional[tuple]:
+    """Compatibilité séance prévue ↔ activité réalisée (None si incompatible).
+    Le jour indiqué n'est qu'un rattachement à la semaine : l'athlète place ses
+    séances où il veut. Critères : même semaine (lundi → dimanche), même famille
+    de sport, durée d'au moins 40 % de la durée prévue (ex. un vélotaf ne valide
+    pas une sortie longue). Plus le score est petit, meilleure est la correspondance."""
+    if _lundi(a.debut.date()) != _lundi(prevue.jour):
+        return None
+    if famille_sport(a.sport) != famille_sport(prevue.sport):
+        return None
+    cible = (prevue.duree_min or 0) * 60
+    duree = a.duree_sec or 0
+    if cible and duree and duree < cible * 0.4:
+        return None
+    return (
+        0 if a.sport == prevue.sport else 1,                   # même sport exact d'abord
+        abs(duree - cible) / cible if cible else -duree / 3600,  # durée la plus proche (ou la plus longue)
+        abs((a.debut.date() - prevue.jour).days),              # départage : date la plus proche
+    )
 
 
 def rapprocher_plan(db: Session, user_id: int, aujourd_hui: Optional[date] = None, jours: int = 60) -> int:
-    """Relie automatiquement les séances prévues passées à l'activité réalisée.
-    Retourne le nombre de nouveaux rapprochements."""
+    """Relie automatiquement les séances prévues aux activités réalisées de la même
+    semaine (affectation gloutonne des meilleures correspondances, une activité
+    par séance). Retourne le nombre de nouveaux rapprochements."""
     auj = aujourd_hui or date.today()
-    debut = auj - timedelta(days=jours)
+    debut = _lundi(auj - timedelta(days=jours))
+    fin_semaine = _lundi(auj) + timedelta(days=6)
     prevues = (
         db.query(SeancePrevue)
-        .filter(SeancePrevue.utilisateur_id == user_id, SeancePrevue.jour >= debut, SeancePrevue.jour <= auj)
+        .filter(SeancePrevue.utilisateur_id == user_id, SeancePrevue.jour >= debut, SeancePrevue.jour <= fin_semaine)
         .order_by(SeancePrevue.jour, SeancePrevue.ordre, SeancePrevue.id).all()
     )
     a_relier = [p for p in prevues if p.activite_id is None and not p.lien_manuel and p.statut != "sautee"]
@@ -1290,40 +1340,50 @@ def rapprocher_plan(db: Session, user_id: int, aujourd_hui: Optional[date] = Non
         db.query(Activite)
         .filter(Activite.utilisateur_id == user_id,
                 Activite.debut >= datetime.combine(debut, datetime.min.time()),
-                Activite.debut < datetime.combine(auj + timedelta(days=1), datetime.min.time()))
+                Activite.debut < datetime.combine(fin_semaine + timedelta(days=1), datetime.min.time()))
         .all()
     )
-    prises = {p.activite_id for p in prevues if p.activite_id}
+    # une activité déjà reliée (même hors période chargée) n'est pas réutilisée
+    prises = {i for (i,) in db.query(SeancePrevue.activite_id)
+              .filter(SeancePrevue.utilisateur_id == user_id, SeancePrevue.activite_id.isnot(None)).all()}
+    paires = []
+    for rang, p in enumerate(a_relier):
+        for a in acts:
+            if a.id in prises:
+                continue
+            sc = _score(p, a)
+            if sc is not None:
+                paires.append((sc, rang, a.id, p, a))
+    paires.sort(key=lambda x: x[:3])
+    faites: set[int] = set()
     n = 0
-    for p in a_relier:
-        cand = _candidates(p, acts, prises)
-        if not cand:
+    for _, _, _, p, a in paires:
+        if p.id in faites or a.id in prises:
             continue
-        cible = (p.duree_min or 0) * 60
-        a = min(cand, key=lambda a: abs((a.duree_sec or 0) - cible)) if cible else max(cand, key=lambda a: a.duree_sec or 0)
         p.activite_id = a.id
         prises.add(a.id)
+        faites.add(p.id)
         n += 1
     db.flush()
     return n
 
 
 def statut_prevue(p: SeancePrevue, aujourd_hui: Optional[date] = None) -> str:
+    """realisee | sautee | a_venir (à faire, semaine en cours ou future) | manquee (semaine terminée)."""
     auj = aujourd_hui or date.today()
     if p.activite_id:
         return "realisee"
     if p.statut == "sautee":
         return "sautee"
-    if p.jour > auj:
-        return "a_venir"
-    return "aujourdhui" if p.jour == auj else "manquee"
+    return "a_venir" if _lundi(p.jour) >= _lundi(auj) else "manquee"
 
 
 def serialiser_prevue(p: SeancePrevue, activite: Optional[Activite] = None,
                       aujourd_hui: Optional[date] = None) -> dict:
     info = SPORTS.get(p.sport, SPORTS["autre"])
     d = {
-        "id": p.id, "id_externe": p.id_externe, "jour": p.jour.isoformat(), "ordre": p.ordre,
+        "id": p.id, "id_externe": p.id_externe, "jour": p.jour.isoformat(),
+        "semaine": _lundi(p.jour).isoformat(), "ordre": p.ordre,
         "sport": p.sport, "sport_label": info["label"], "emoji": info["emoji"],
         "titre": p.titre, "description": p.description, "duree_min": p.duree_min,
         "distance_km": p.distance_km, "dplus_m": p.dplus_m, "rpe_cible": p.rpe_cible,
@@ -1354,20 +1414,23 @@ def enregistrer_plan(db: Session, user_id: int, items: list[dict],
     """
     Crée ou met à jour des séances prévues (clé : id_externe).
     Le statut, le rapprochement et le commentaire de l'athlète sont conservés.
+    `jour` ne sert qu'à rattacher la séance à sa semaine (absent : semaine en cours).
     `remplacer=(depuis, jusqu_a)` supprime les séances de la période absentes de
-    l'envoi, sauf celles déjà passées, réalisées ou sautées (l'historique reste).
+    l'envoi, sauf celles des semaines passées, réalisées ou sautées (l'historique reste).
     """
     auj = aujourd_hui or date.today()
     bilan = {"cree": 0, "maj": 0, "supprime": 0}
     envoyes: set[str] = set()
     for x in items:
+        if not x.get("jour"):
+            x["jour"] = _lundi(auj)
         id_ext = x.get("id_externe") or f"{x['jour'].isoformat()}-{x['sport']}-{x.get('ordre') or 0}"
         envoyes.add(id_ext)
         p = (db.query(SeancePrevue)
              .filter(SeancePrevue.utilisateur_id == user_id, SeancePrevue.id_externe == id_ext).first())
         if p:
-            if p.jour != x["jour"] and not p.lien_manuel:
-                p.activite_id = None  # séance déplacée : le rapprochement sera recalculé
+            if _lundi(p.jour) != _lundi(x["jour"]) and not p.lien_manuel:
+                p.activite_id = None  # séance changée de semaine : le rapprochement sera recalculé
             bilan["maj"] += 1
         else:
             p = SeancePrevue(utilisateur_id=user_id, id_externe=id_ext, statut="prevue")
@@ -1382,9 +1445,72 @@ def enregistrer_plan(db: Session, user_id: int, items: list[dict],
         depuis, jusqu_a = remplacer
         for p in (db.query(SeancePrevue)
                   .filter(SeancePrevue.utilisateur_id == user_id,
-                          SeancePrevue.jour >= max(depuis, auj), SeancePrevue.jour <= jusqu_a).all()):
+                          SeancePrevue.jour >= max(depuis, _lundi(auj)), SeancePrevue.jour <= jusqu_a).all()):
             if p.id_externe not in envoyes and p.activite_id is None and p.statut != "sautee":
                 db.delete(p)
                 bilan["supprime"] += 1
     db.flush()
     return bilan
+
+
+# ---------------------------------------------------------------------------
+# Physiologie automatique (FC max / FC repos)
+# ---------------------------------------------------------------------------
+
+FC_MAX_PLAUSIBLE = (120, 220)   # bornes d'une FC max de séance crédible
+FC_MAX_ECART_ISOLE = 8          # pic dépassant le suivant de plus de 8 bpm = artefact
+FC_REPOS_NB_JOURS = 7           # moyenne des 7 dernières mesures…
+FC_REPOS_FENETRE_JOURS = 30     # …prises dans les 30 derniers jours
+
+
+def physiologie_auto(db: Session, user: Utilisateur) -> dict:
+    """FC max et FC repos déduites des données importées (None si aucune donnée).
+
+    - FC max : plus haute FC max de séance des 12 derniers mois (tout l'historique
+      à défaut), valeurs hors [120, 220] écartées ; un pic isolé (plus de 8 bpm
+      au-dessus de la valeur suivante) est considéré comme un artefact capteur.
+    - FC repos : moyenne des 7 dernières mesures quotidiennes des 30 derniers jours
+      (lisse le bruit jour à jour, ce qu'on veut pour des zones de FC) ; à défaut,
+      dernière valeur connue.
+    """
+    base = db.query(Activite.fc_max_bpm).filter(
+        Activite.utilisateur_id == user.id,
+        Activite.fc_max_bpm >= FC_MAX_PLAUSIBLE[0], Activite.fc_max_bpm <= FC_MAX_PLAUSIBLE[1])
+    vals = [v for (v,) in base.filter(Activite.debut >= datetime.now() - timedelta(days=365))]
+    if not vals:
+        vals = [v for (v,) in base]
+    vals.sort(reverse=True)
+    while len(vals) >= 2 and vals[0] - vals[1] > FC_MAX_ECART_ISOLE:
+        vals.pop(0)
+    fc_max = vals[0] if vals else None
+
+    mesures = (
+        db.query(MesureSante.jour, MesureSante.valeur)
+        .filter(MesureSante.utilisateur_id == user.id, MesureSante.type == "fc_repos")
+        .order_by(MesureSante.jour.desc())
+        .limit(FC_REPOS_NB_JOURS).all()
+    )
+    fc_repos, nb_repos = None, 0
+    if mesures:
+        recentes = [v for j, v in mesures if j >= date.today() - timedelta(days=FC_REPOS_FENETRE_JOURS)]
+        echantillon = recentes or [mesures[0][1]]
+        fc_repos, nb_repos = round(sum(echantillon) / len(echantillon)), len(echantillon)
+
+    return {"fc_max": fc_max, "fc_repos": fc_repos, "nb_jours_fc_repos": nb_repos}
+
+
+def synchroniser_physiologie(db: Session, user: Utilisateur) -> dict:
+    """Recopie les valeurs automatiques dans le profil (utilisées pour les zones de FC).
+
+    Une valeur sans donnée source laisse la valeur existante intacte. Commit si changement.
+    """
+    auto = physiologie_auto(db, user)
+    change = False
+    for champ in ("fc_max", "fc_repos"):
+        v = auto[champ]
+        if v is not None and getattr(user, champ) != v:
+            setattr(user, champ, v)
+            change = True
+    if change:
+        db.commit()
+    return auto

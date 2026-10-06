@@ -21,7 +21,7 @@ const lundiDe = (d) => { const r = new Date(d.getFullYear(), d.getMonth(), d.get
 export const STATUTS = {
   realisee:   { label: "Réalisée",     cls: "bg-ios-green/15 text-ios-green" },
   sautee:     { label: "Sautée",       cls: "bg-remplissage text-label-2" },
-  a_venir:    { label: "À venir",      cls: "bg-brand/[0.12] text-brand" },
+  a_venir:    { label: "À faire",      cls: "bg-brand/[0.12] text-brand" },
   aujourdhui: { label: "Aujourd'hui",  cls: "bg-ios-indigo/15 text-ios-indigo" },
   manquee:    { label: "Non réalisée", cls: "bg-ios-orange/15 text-ios-orange" },
 };
@@ -49,17 +49,17 @@ function ChoixActivite({ prevue, onChoix, onClose }) {
   return (
     <div className="tuile py-1">
       <div className="flex items-center justify-between px-4 py-2">
-        <p className="text-[13px] font-semibold text-label-2">Activités à ± 3 jours</p>
+        <p className="text-[13px] font-semibold text-label-2">Activités de la semaine</p>
         <button className="btn-texte text-[13px]" onClick={onClose}>Fermer</button>
       </div>
       {isLoading ? <p className="text-[13px] text-label-2 px-4 pb-2">Chargement…</p>
-        : !data?.length ? <p className="text-[13px] text-label-2 px-4 pb-2">Aucune activité autour de cette date.</p>
+        : !data?.length ? <p className="text-[13px] text-label-2 px-4 pb-2">Aucune activité cette semaine.</p>
         : data.map((a) => <ActiviteLigne key={a.id} a={a} onClick={() => onChoix(a.id)} />)}
     </div>
   );
 }
 
-// ── Séance prévue (ligne de la carte du jour) ──────────────────────────────
+// ── Séance prévue (ligne de la liste de la semaine) ────────────────────────
 function CarteSeance({ s, onOuvrirActivite }) {
   const qc = useQueryClient();
   const [ouvert, setOuvert] = useState(false);
@@ -156,9 +156,33 @@ function CarteSeance({ s, onOuvrirActivite }) {
       </div>
 
       <ConfirmDialog open={confirmSuppr} title="Supprimer cette séance prévue ?" danger pending={suppr.isPending}
-        message={`« ${s.titre} » du ${fmtDate(s.jour, { weekday: "long", day: "numeric", month: "long" })} sera retirée du plan.`}
+        message={`« ${s.titre} » sera retirée du plan de la semaine.`}
         confirmLabel="Supprimer" onConfirm={() => suppr.mutate()} onCancel={() => setConfirmSuppr(false)} />
     </div>
+  );
+}
+
+// ── Séance réalisée hors plan (vélotaf, import Santé…) : simplement « faite » ──
+function LigneFaite({ a, onClick }) {
+  const info = sportInfo(a.sport);
+  const metriques = [
+    a.duree_str,
+    a.distance_km != null && `${nombre(a.distance_km, 2)} km`,
+    a.dplus_m ? `${a.dplus_m} m D+` : null,
+    a.rpe ? `RPE ${a.rpe}${a.rpe_estime ? " (estimé)" : ""}` : null,
+  ].filter(Boolean);
+  return (
+    <button onClick={onClick} className="ligne !py-3.5 text-left" style={{ "--inset": "4.25rem" }}>
+      <span className="w-10 h-10 shrink-0 rounded-full flex items-center justify-center text-[19px]"
+        style={{ backgroundColor: `${info.couleur}26` }}>{a.emoji ?? info.emoji}</span>
+      <span className="flex-1 min-w-0">
+        <span className="flex items-start justify-between gap-2">
+          <span className="text-[15px] font-semibold leading-5 truncate">{a.titre || a.sport_label || info.label}</span>
+          <span className={`badge shrink-0 ${STATUTS.realisee.cls}`}>Faite</span>
+        </span>
+        <span className="block text-[13px] text-label-2 truncate chiffres">{metriques.join(" · ") || "—"}</span>
+      </span>
+    </button>
   );
 }
 
@@ -167,9 +191,9 @@ function L({ label, className = "", children }) {
   return <label className={`block ${className}`}><span className="libelle">{label}</span>{children}</label>;
 }
 
-function ModalPrevue({ jour, onClose }) {
+function ModalPrevue({ semaine, onClose }) {
   const qc = useQueryClient();
-  const [f, setF] = useState({ jour, sport: "course", titre: "", duree_min: "", distance_km: "", rpe_cible: "", description: "" });
+  const [f, setF] = useState({ sport: "course", titre: "", duree_min: "", distance_km: "", rpe_cible: "", description: "" });
   const [erreur, setErreur] = useState(null);
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
   const num = (v) => (v === "" ? null : Number(String(v).replace(",", ".")));
@@ -183,7 +207,7 @@ function ModalPrevue({ jour, onClose }) {
   function soumettre(e) {
     e.preventDefault();
     creer.mutate({
-      jour: f.jour, sport: f.sport, titre: f.titre, description: f.description || null,
+      jour: semaine, sport: f.sport, titre: f.titre, description: f.description || null,
       duree_min: num(f.duree_min), distance_km: num(f.distance_km), rpe_cible: num(f.rpe_cible),
     });
   }
@@ -192,10 +216,7 @@ function ModalPrevue({ jour, onClose }) {
     <Feuille as="form" onSubmit={soumettre} onClose={onClose} titre="Séance prévue"
       action={<button type="submit" className="btn-texte font-semibold" disabled={creer.isPending}>{creer.isPending ? "…" : "Ajouter"}</button>}>
       <div className="grid grid-cols-2 gap-x-3 gap-y-4">
-        <L label="Jour">
-          <input type="date" required className={inputCls} value={f.jour} onChange={set("jour")} />
-        </L>
-        <L label="Sport">
+        <L label="Sport" className="col-span-2">
           <select className={inputCls} value={f.sport} onChange={set("sport")}>
             {Object.entries(SPORTS).map(([k, s]) => <option key={k} value={k}>{s.emoji} {s.label}</option>)}
           </select>
@@ -225,47 +246,24 @@ function ModalPrevue({ jour, onClose }) {
   );
 }
 
-// ── Bandeau de la semaine (façon app Calendrier) ───────────────────────────
-function BandeauSemaine({ jours, aujourdhui, seances, activites, onPrec, onSuiv, onAujourdhui }) {
-  const titre = `${fmtDate(jours[0], { day: "numeric", month: "short" })} – ${fmtDate(jours[6], { day: "numeric", month: "short", year: "numeric" })}`;
-  const aller = (j) => document.getElementById(`jour-${j}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+// ── Navigation de semaine ──────────────────────────────────────────────────
+function BandeauSemaine({ lundi, dimanche, courante, onPrec, onSuiv, onAujourdhui }) {
+  const titre = `${fmtDate(lundi, { day: "numeric", month: "short" })} – ${fmtDate(dimanche, { day: "numeric", month: "short", year: "numeric" })}`;
   const fleche = (d) => (
     <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
       <path d={d} />
     </svg>
   );
   return (
-    <div className="card p-3 space-y-2">
+    <div className="card p-3">
       <div className="flex items-center gap-1">
         <button className="btn-rond !bg-transparent text-brand" aria-label="Semaine précédente" onClick={onPrec}>{fleche("M15 5l-7 7 7 7")}</button>
-        <p className="flex-1 text-center text-[15px] font-semibold chiffres">{titre}</p>
+        <div className="flex-1 text-center">
+          <p className="text-[15px] font-semibold chiffres">{titre}</p>
+          {courante ? <p className="text-[12px] font-medium text-ios-red">Cette semaine</p>
+            : <button className="btn-texte text-[12px]" onClick={onAujourdhui}>Revenir à cette semaine</button>}
+        </div>
         <button className="btn-rond !bg-transparent text-brand" aria-label="Semaine suivante" onClick={onSuiv}>{fleche("M9 5l7 7-7 7")}</button>
-      </div>
-      <div className="grid grid-cols-7 text-center">
-        {jours.map((j) => {
-          const d = new Date(`${j}T12:00`);
-          const estAuj = j === aujourdhui;
-          const prevues = seances.filter((s) => s.jour === j && s.statut !== "sautee");
-          const faites = activites.filter((a) => a.debut.slice(0, 10) === j).length;
-          return (
-            <button key={j} onClick={() => aller(j)} className="flex flex-col items-center gap-1 py-1 rounded-xl active:bg-remplissage">
-              <span className="text-[11px] font-medium uppercase text-label-2">
-                {d.toLocaleDateString("fr-FR", { weekday: "narrow" })}
-              </span>
-              <span className={`w-8 h-8 rounded-full flex items-center justify-center text-[17px] chiffres ${
-                estAuj ? "bg-ios-red text-white font-semibold" : "text-label"}`}>
-                {d.getDate()}
-              </span>
-              <span className="flex gap-0.5 h-1.5">
-                {faites > 0 && <span className="w-1.5 h-1.5 rounded-full bg-ios-green" />}
-                {prevues.length > faites && <span className="w-1.5 h-1.5 rounded-full bg-label-3" />}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-      <div className="text-center">
-        <button className="btn-texte text-[13px]" onClick={onAujourdhui}>Aujourd'hui</button>
       </div>
     </div>
   );
@@ -275,10 +273,10 @@ function BandeauSemaine({ jours, aujourdhui, seances, activites, onPrec, onSuiv,
 export default function Plan() {
   const [lundi, setLundi] = useState(() => lundiDe(new Date()));
   const [modalActivite, setModalActivite] = useState(undefined);
-  const [ajout, setAjout] = useState(null);
+  const [ajout, setAjout] = useState(false);
   const depuis = iso(lundi);
   const jusqu = iso(ajouter(lundi, 6));
-  const aujourdhui = iso(new Date());
+  const courante = depuis === iso(lundiDe(new Date()));
 
   const { data: plan, isLoading } = useQuery({ queryKey: ["plan", depuis, jusqu], queryFn: () => getPlan(depuis, jusqu) });
   const { data: acts } = useQuery({
@@ -295,13 +293,27 @@ export default function Plan() {
   const minPrevues = comptees.reduce((t, s) => t + (s.duree_min ?? 0), 0);
   const minRealisees = activites.reduce((t, a) => t + (a.duree_sec ?? 0), 0) / 60;
 
-  const jours = Array.from({ length: 7 }, (_, i) => iso(ajouter(lundi, i)));
+  // À faire dans l'ordre du plan, puis ce qui est fait (prévu ou non), puis les séances sautées.
+  // Aucun jour affiché : c'est l'athlète qui place ses séances dans la semaine.
+  const aFaire = seances.filter((s) => s.statut !== "realisee" && s.statut !== "sautee");
+  const sautees = seances.filter((s) => s.statut === "sautee");
+  const faites = [
+    ...realisees.map((s) => ({ cle: `p${s.id}`, debut: s.activite?.debut ?? "", prevue: s })),
+    ...horsPlan.map((a) => ({ cle: `a${a.id}`, debut: a.debut ?? "", activite: a })),
+  ].sort((x, y) => x.debut.localeCompare(y.debut));
+
+  const groupe = (titre, contenu) => (
+    <section className="space-y-1.5">
+      <h2 className="px-4 text-[13px] uppercase tracking-[0.02em] font-medium text-label-2">{titre}</h2>
+      <Card pad={false} className="py-0.5">{contenu}</Card>
+    </section>
+  );
 
   return (
     <Page titre="Plan" sousTitre="Préparé par Claude"
-      action={<BoutonAjout onClick={() => setAjout(aujourdhui)} label="Ajouter une séance prévue" />}>
+      action={<BoutonAjout onClick={() => setAjout(true)} label="Ajouter une séance prévue" />}>
 
-      <BandeauSemaine jours={jours} aujourdhui={aujourdhui} seances={seances} activites={activites}
+      <BandeauSemaine lundi={depuis} dimanche={jusqu} courante={courante}
         onPrec={() => setLundi(ajouter(lundi, -7))} onSuiv={() => setLundi(ajouter(lundi, 7))}
         onAujourdhui={() => setLundi(lundiDe(new Date()))} />
 
@@ -322,31 +334,14 @@ export default function Plan() {
         <p className="text-[15px] text-label-2">Chargement…</p>
       ) : (
         <div className="space-y-5">
-          {jours.map((j) => {
-            const duJour = seances.filter((s) => s.jour === j);
-            const libres = horsPlan.filter((a) => a.debut.slice(0, 10) === j);
-            const estAuj = j === aujourdhui;
-            return (
-              <section key={j} id={`jour-${j}`} className="space-y-1.5 scroll-mt-4">
-                <div className="flex items-baseline justify-between px-4">
-                  <h2 className={`text-[13px] uppercase tracking-[0.02em] font-medium ${estAuj ? "text-ios-red" : "text-label-2"}`}>
-                    {fmtDate(j, { weekday: "long", day: "numeric", month: "short" })}{estAuj ? " · Aujourd'hui" : ""}
-                  </h2>
-                  <button className="btn-texte text-[13px]" onClick={() => setAjout(j)}>Prévoir</button>
-                </div>
-                <Card pad={false} className="py-0.5">
-                  {duJour.length === 0 && libres.length === 0 && (
-                    <p className="ligne text-[15px] text-label-3">Repos</p>
-                  )}
-                  {duJour.map((s) => <CarteSeance key={s.id} s={s} onOuvrirActivite={setModalActivite} />)}
-                  {libres.length > 0 && duJour.length > 0 && (
-                    <p className="ligne !min-h-0 !py-2 text-[12px] font-semibold uppercase text-label-2">Hors plan</p>
-                  )}
-                  {libres.map((a) => <ActiviteLigne key={a.id} a={a} onClick={() => setModalActivite(a)} />)}
-                </Card>
-              </section>
-            );
-          })}
+          {seances.length > 0 && groupe(`À faire · ${aFaire.length}`,
+            aFaire.length ? aFaire.map((s) => <CarteSeance key={s.id} s={s} onOuvrirActivite={setModalActivite} />)
+              : <p className="ligne text-[15px] text-label-2">Tout est fait 🎉</p>)}
+          {faites.length > 0 && groupe(`Faites · ${faites.length}`, faites.map((f) => (f.prevue
+            ? <CarteSeance key={f.cle} s={f.prevue} onOuvrirActivite={setModalActivite} />
+            : <LigneFaite key={f.cle} a={f.activite} onClick={() => setModalActivite(f.activite)} />)))}
+          {sautees.length > 0 && groupe(`Sautées · ${sautees.length}`,
+            sautees.map((s) => <CarteSeance key={s.id} s={s} onOuvrirActivite={setModalActivite} />))}
         </div>
       )}
 
@@ -358,30 +353,29 @@ export default function Plan() {
       )}
 
       {modalActivite !== undefined && <ModalActivite activite={modalActivite} onClose={() => setModalActivite(undefined)} />}
-      {ajout && <ModalPrevue jour={ajout} onClose={() => setAjout(null)} />}
+      {ajout && <ModalPrevue semaine={depuis} onClose={() => setAjout(false)} />}
     </Page>
   );
 }
 
 // ── « Prochaines séances » de l'accueil ────────────────────────────────────
 export function ProchainesSeances() {
-  const debut = new Date();
-  const depuis = iso(debut);
-  const jusqu = iso(ajouter(debut, 7));
+  const lundi = lundiDe(new Date());
+  const depuis = iso(lundi);
+  const jusqu = iso(ajouter(lundi, 6));
   const { data } = useQuery({ queryKey: ["plan", depuis, jusqu], queryFn: () => getPlan(depuis, jusqu) });
   const prochaines = (data?.seances ?? []).filter((s) => s.statut === "a_venir" || s.statut === "aujourdhui").slice(0, 4);
 
   return (
-    <Section titre="À venir" lien="/plan" libelleLien="Plan">
+    <Section titre="À faire cette semaine" lien="/plan" libelleLien="Plan">
       <Card pad={false} className="py-1">
         {!data ? (
           <p className="ligne text-[15px] text-label-2">Chargement…</p>
         ) : prochaines.length === 0 ? (
-          <p className="ligne text-[15px] text-label-2">Rien de prévu sur les 7 prochains jours.</p>
+          <p className="ligne text-[15px] text-label-2">Plus rien à faire cette semaine.</p>
         ) : (
           prochaines.map((s) => {
             const info = sportInfo(s.sport);
-            const auj = s.statut === "aujourdhui";
             return (
               <Link key={s.id} to="/plan" className="ligne" style={{ "--inset": "4.25rem" }}>
                 <span className="w-10 h-10 shrink-0 rounded-full flex items-center justify-center text-[19px]"
@@ -389,9 +383,6 @@ export function ProchainesSeances() {
                 <span className="flex-1 min-w-0">
                   <span className="block text-[15px] font-semibold truncate">{s.titre}</span>
                   <Pastilles s={s} />
-                </span>
-                <span className={`shrink-0 text-[13px] capitalize ${auj ? "text-ios-red font-semibold" : "text-label-2"}`}>
-                  {auj ? "Aujourd'hui" : fmtDate(s.jour, { weekday: "short", day: "numeric" })}
                 </span>
               </Link>
             );

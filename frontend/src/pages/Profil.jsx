@@ -8,6 +8,7 @@ import { getErrorMessage } from "../utils/errors";
 import ConfirmDialog from "../components/ConfirmDialog";
 import Page from "../components/Page";
 import Feuille from "../components/Feuille";
+import ModalPoids from "../components/ModalPoids";
 import { Chevron, Interrupteur } from "../components/ui";
 
 // ── Avatar ─────────────────────────────────────────────────────────────────
@@ -266,15 +267,18 @@ function EditPasswordModal({ onClose }) {
 }
 
 // ── Physiologie ────────────────────────────────────────────────────────────
-function BioStat({ label, value, unit, couleur }) {
+// auto : valeur calculée (lecture seule) ; onClick : tuile éditable (poids)
+function BioStat({ label, value, unit, couleur, auto, onClick }) {
+  const Tag = onClick ? "button" : "div";
   return (
-    <div className="flex-1 px-3 py-3 text-center">
+    <Tag onClick={onClick} className={`flex-1 px-3 py-3 text-center${onClick ? " active:bg-remplissage" : ""}`}>
       <p className="text-[12px] font-semibold" style={{ color: couleur }}>{label}</p>
       <p className="font-rounded text-[22px] font-bold chiffres">
         {value != null ? value : <span className="text-label-3">—</span>}
         {value != null && unit && <span className="text-[13px] font-semibold text-label-2 ml-0.5">{unit}</span>}
       </p>
-    </div>
+      <p className={`text-[11px] ${onClick ? "text-brand" : "text-label-3"}`}>{onClick ? "Modifier" : auto ? "auto" : value != null ? "manuelle" : "aucune donnée"}</p>
+    </Tag>
   );
 }
 
@@ -336,6 +340,7 @@ export default function Profil({ dark, setDark }) {
   const qc = useQueryClient();
   const [editInfos, setEditInfos] = useState(false);
   const [editPwd, setEditPwd] = useState(false);
+  const [editPoids, setEditPoids] = useState(false);
 
   const initials = [user?.prenom?.[0], user?.nom?.[0]].filter(Boolean).join("").toUpperCase() || "?";
 
@@ -375,11 +380,12 @@ export default function Profil({ dark, setDark }) {
           </button>
         </Groupe>
 
-        <Groupe titre="Physiologie" pied="Mises à jour par l'import Apple Santé.">
+        <Groupe titre="Physiologie"
+          pied="FC max : plus haute FC de séance des 12 derniers mois (pics isolés écartés). FC repos : moyenne des 7 dernières mesures Apple Santé. Calculées automatiquement pour les zones de FC ; touche le poids pour le modifier.">
           <div className="flex divide-x-[0.5px] divide-separateur">
-            <BioStat label="FC max" value={user?.fc_max} unit="bpm" couleur="#FF3B30" />
-            <BioStat label="FC repos" value={user?.fc_repos} unit="bpm" couleur="#FF2D55" />
-            <BioStat label="Poids" value={user?.poids_kg} unit="kg" couleur="#AF52DE" />
+            <BioStat label="FC max" value={user?.fc_max} unit="bpm" couleur="#FF3B30" auto={user?.fc_max_auto} />
+            <BioStat label="FC repos" value={user?.fc_repos} unit="bpm" couleur="#FF2D55" auto={user?.fc_repos_auto} />
+            <BioStat label="Poids" value={user?.poids_kg} unit="kg" couleur="#AF52DE" onClick={() => setEditPoids(true)} />
           </div>
         </Groupe>
 
@@ -418,6 +424,7 @@ export default function Profil({ dark, setDark }) {
         </Groupe>
       </div>
 
+      {editPoids && <ModalPoids initialValue={user?.poids_kg} onClose={() => setEditPoids(false)} />}
       {editInfos && <EditInfosModal user={user} onClose={() => setEditInfos(false)} onSaved={refreshUser} />}
       {editPwd && <EditPasswordModal onClose={() => setEditPwd(false)} />}
     </Page>

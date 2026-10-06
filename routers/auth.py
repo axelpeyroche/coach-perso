@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from database import obtenir_session
+from carnet_service import synchroniser_physiologie
 from models import Utilisateur
 from deps import (
     get_current_user,
@@ -88,6 +89,8 @@ def login(payload: LoginSchema, db: Session = Depends(obtenir_session)):
 
 @router.get("/api/auth/me", summary="Retourne le profil de l'utilisateur connecté")
 def me(current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
+    # FC max / FC repos déduites des séances et mesures santé importées
+    auto = synchroniser_physiologie(db, current_user)
     dn = current_user.date_naissance
     age = None
     if dn:
@@ -106,6 +109,10 @@ def me(current_user: Utilisateur = Depends(get_current_user), db: Session = Depe
         "fuseau_horaire": current_user.fuseau_horaire,
         "fc_max": current_user.fc_max,
         "fc_repos": current_user.fc_repos,
+        # Valeurs effectivement calculées (None = pas de donnée, valeur du profil conservée)
+        "fc_max_auto": auto["fc_max"] is not None,
+        "fc_repos_auto": auto["fc_repos"] is not None,
+        "fc_repos_nb_jours": auto["nb_jours_fc_repos"],
     }
 
 

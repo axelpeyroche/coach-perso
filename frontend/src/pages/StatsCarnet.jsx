@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -10,7 +10,7 @@ import StatTile from "../components/StatTile";
 import { FormeGraphiques } from "../components/Forme";
 import { Section, Segmente } from "../components/ui";
 import { axeX, axeY, grille, curseur, InfoBulle, Legende } from "../components/graphiques";
-import { getStatsCarnet } from "../api";
+import api, { getStatsCarnet } from "../api";
 import { SPORTS, sportInfo, fmtAllureSec, fmtDate, nombre } from "../carnet";
 
 const BLEU = "#007AFF";
@@ -104,6 +104,17 @@ export default function StatsCarnet() {
     queryFn: () => getStatsCarnet(sport || undefined),
   });
 
+  // Sports ayant au moins une activité (tout l'historique) : seuls ceux-là sont proposés en filtre
+  const { data: presents } = useQuery({
+    queryKey: ["activites", "sports-presents"],
+    queryFn: () => api.get("/carnet/sports-presents").then((r) => r.data),
+  });
+  const sportsFiltre = presents ? Object.keys(SPORTS).filter((k) => presents[k] > 0) : [];
+  useEffect(() => {
+    // Filtre actif devenu sans activité → retour à « Tous »
+    if (presents && sport && !(presents[sport] > 0)) setSport("");
+  }, [presents, sport]);
+
   const sportsPresents = useMemo(() => {
     if (!s) return [];
     return Object.keys(SPORTS).filter((k) => s.semaines.some((w) => w[`h_${k}`] > 0));
@@ -125,9 +136,10 @@ export default function StatsCarnet() {
     });
   }, [s]);
 
-  const filtres = (
+  // Un seul sport (ou aucun) : le filtre n'apporte rien, on le masque
+  const filtres = sportsFiltre.length > 1 && (
     <div className="flex gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4">
-      {[["", "Tous"], ...Object.entries(SPORTS).map(([k, v]) => [k, `${v.emoji} ${v.label}`])].map(([k, l]) => (
+      {[["", "Tous"], ...sportsFiltre.map((k) => [k, `${SPORTS[k].emoji} ${SPORTS[k].label}`])].map(([k, l]) => (
         <button key={k} onClick={() => setSport(k)} className={clsx("puce", sport === k && "puce-active")}>{l}</button>
       ))}
     </div>

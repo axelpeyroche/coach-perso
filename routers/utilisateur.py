@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from carnet_service import synchroniser_physiologie
 from database import obtenir_session
 from deps import _hash_password, _verify_password, get_current_user
 from models import Activite, MesureSante, Objectif, ObjectifCourse, PoidsUtilisateur, SeancePrevue, Utilisateur
@@ -24,7 +25,8 @@ class ProfilFCSchema(BaseModel):
     poids_kg: Optional[float] = Field(None, gt=0, lt=300)
 
 @router.get("/api/utilisateur/profil-fc", summary="Récupère fc_max, fc_repos et poids_kg de l'utilisateur")
-def get_profil_fc(current_user: Utilisateur = Depends(get_current_user)):
+def get_profil_fc(current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
+    synchroniser_physiologie(db, current_user)  # FC max / FC repos calculées depuis les données importées
     return {"fc_max": current_user.fc_max, "fc_repos": current_user.fc_repos, "poids_kg": current_user.poids_kg}
 
 @router.patch("/api/utilisateur/profil-fc", summary="Met à jour fc_max, fc_repos et/ou poids_kg")
