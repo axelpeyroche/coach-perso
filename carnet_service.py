@@ -281,10 +281,14 @@ def importer_activite(db: Session, user_id: int, source: str, donnees: dict,
                 # la remplace, en gardant ce qui a été calculé ou saisi entre-temps
                 _remplacer_detectee(p, donnees)
                 return p, "fusion"
-            # « autre » (ex. « Entraînement » Strava) est compatible avec tout sport
-            if famille_sport(p.sport) != fam and "autre" not in (p.sport, donnees.get("sport", "autre")):
-                continue
             sans_heure = _sans_heure(debut) or _sans_heure(p.debut)
+            # « autre » (ex. « Entraînement » Strava) est compatible avec tout sport, mais
+            # seulement à heure précise : sinon il absorberait une séance du jour (ex. Kiné)
+            autre = "autre" in (p.sport, donnees.get("sport", "autre"))
+            if sans_heure and autre:
+                continue
+            if famille_sport(p.sport) != fam and not autre:
+                continue
             if sans_heure:
                 if p.debut.date() != debut.date():
                     continue
