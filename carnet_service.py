@@ -85,7 +85,9 @@ def normaliser_sport(valeur: Optional[str]) -> str:
 
 
 def famille_sport(sport: str) -> str:
-    return "pied" if sport in SPORTS_PIED else sport
+    if sport in SPORTS_PIED:
+        return "pied"
+    return "marche" if sport == "randonnee" else sport
 
 
 # ---------------------------------------------------------------------------
@@ -272,13 +274,15 @@ def importer_activite(db: Session, user_id: int, source: str, donnees: dict,
                     Activite.debut <= max(jour + timedelta(days=1), debut + timedelta(minutes=15)))
             .all()
         )
+        candidates.sort(key=lambda p: (famille_sport(p.sport) != fam, abs((p.debut - debut).total_seconds())))
         for p in candidates:
             if _detectee_auto(p) and not _sans_heure(debut) and abs((p.debut - debut).total_seconds()) <= 15 * 60:
                 # Séance reconstituée par le raccourci : la vraie séance (export Santé…)
                 # la remplace, en gardant ce qui a été calculé ou saisi entre-temps
                 _remplacer_detectee(p, donnees)
                 return p, "fusion"
-            if famille_sport(p.sport) != fam:
+            # « autre » (ex. « Entraînement » Strava) est compatible avec tout sport
+            if famille_sport(p.sport) != fam and "autre" not in (p.sport, donnees.get("sport", "autre")):
                 continue
             sans_heure = _sans_heure(debut) or _sans_heure(p.debut)
             if sans_heure:
@@ -288,8 +292,22 @@ def importer_activite(db: Session, user_id: int, source: str, donnees: dict,
                 continue
             heure_precise = _sans_heure(p.debut) and not _sans_heure(debut)
             for k, v in donnees.items():
+                if k == "titre" and source == "strava" and v:
+                    continue  # traité ci-dessous
                 if v is not None and (getattr(p, k) in (None, "") or (k == "debut" and heure_precise)):
                     setattr(p, k, v)
+            if source == "strava" and donnees.get("titre") and id_externe:
+                # Titre Strava prioritaire. Une séance Santé découpée en plusieurs
+                # activités Strava (échauffement + séance) cumule leurs titres.
+                det = _details_dict(p)
+                titres = det.get("titres_strava") or {}
+                titres[str(id_externe)] = donnees["titre"]
+                det["titres_strava"] = titres
+                p.details = json.dumps(det, ensure_ascii=False)
+                ordre = sorted(titres, key=lambda i: (len(i), i))  # id Strava croissant = chronologique
+                p.titre = " + ".join(titres[i] for i in ordre)
+            if p.sport == "autre" and donnees.get("sport") not in (None, "autre"):
+                p.sport = donnees["sport"]
             return p, "fusion"
 
     a = Activite(utilisateur_id=user_id, source=source,
@@ -779,8 +797,17 @@ def _num(v) -> Optional[float]:
         return None
 
 
+_MOIS_FR = {"janv": 1, "fevr": 2, "mars": 3, "avr": 4, "mai": 5, "juin": 6, "juil": 7,
+            "aout": 8, "sept": 9, "oct": 10, "nov": 11, "dec": 12}
+
+
 def _date_souple(v: str) -> Optional[datetime]:
     v = (v or "").strip()
+    # Export Strava en français : « 4 oct. 2026, 07:08:42 »
+    m = re.match(r"(\d{1,2}) ([^\W\d]+)\.? (\d{4}),? (\d{1,2}):(\d{2})(?::(\d{2}))?$", v)
+    if m and _sans_accents(m.group(2)).lower()[:4] in _MOIS_FR:
+        j, mois, a, h, mi, s = m.groups()
+        return datetime(int(a), _MOIS_FR[_sans_accents(mois).lower()[:4]], int(j), int(h), int(mi), int(s or 0))
     for f in ("%b %d, %Y, %I:%M:%S %p", "%d %b %Y, %H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S",
               "%Y-%m-%d %H:%M", "%d/%m/%Y %H:%M:%S", "%d/%m/%Y %H:%M", "%d/%m/%Y", "%Y-%m-%d"):
         try:
