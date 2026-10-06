@@ -1200,7 +1200,10 @@ def detecter_seances(db: Session, user: Utilisateur, ech: dict[str, list[tuple[d
     Reconstitue les séances à partir des minutes d'exercice de l'Apple Watch,
     quand Raccourcis ne donne pas accès aux entraînements. Le type est déduit des
     autres échantillons : métriques de course → course, distance à vélo → vélo,
-    marche rapide → ignorée, sinon « Séance à préciser ». Un créneau déjà couvert
+    marche rapide → ignorée, sinon « Séance à préciser ». Sur iPhone, Raccourcis
+    plante en lisant les distances : sans aucune distance reçue, un bloc sans
+    métrique de course est compté comme du vélo (corrigeable dans le carnet).
+    Un créneau déjà couvert
     par une séance (importée, saisie ou détectée) n'est pas recréé.
     Retourne le nombre de séances créées.
     """
@@ -1216,6 +1219,7 @@ def detecter_seances(db: Session, user: Utilisateur, ech: dict[str, list[tuple[d
     ignorees = set(_ignorees(user))
     somme = lambda t, deb, fin: sum(v for d, v in ech.get(t, []) if deb <= d < fin)
     compte = lambda t, deb, fin: sum(1 for d, _ in ech.get(t, []) if deb <= d < fin)
+    sans_distance = not ech.get("distance") and not ech.get("distance_velo")
 
     n = 0
     for deb, fin, _ in blocs:
@@ -1224,11 +1228,13 @@ def detecter_seances(db: Session, user: Utilisateur, ech: dict[str, list[tuple[d
             continue
         heures = (fin - deb).total_seconds() / 3600
         dist_pied, dist_velo = somme("distance", deb, fin), somme("distance_velo", deb, fin)
-        course = compte("vitesse", deb, fin) + compte("puissance", deb, fin) + compte("foulee", deb, fin)
+        course = sum(compte(t, deb, fin) for t in ("vitesse", "puissance", "foulee", "oscillation", "contact_sol"))
         if course >= 3 or (dist_pied >= 1 and dist_pied / heures >= 7.5):
             sport, dist = "course", dist_pied
         elif dist_velo >= 1:
             sport, dist = "velo", dist_velo
+        elif sans_distance:
+            sport, dist = "velo", None
         elif dist_pied >= 1 and dist_pied / heures >= 3:
             continue  # marche rapide : pas une séance d'entraînement
         else:
