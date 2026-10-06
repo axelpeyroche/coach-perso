@@ -5,6 +5,7 @@ statistiques et export complet pour analyse par Claude.
 
 from __future__ import annotations
 
+import logging
 import re
 import secrets as _secrets
 from datetime import date, datetime, timedelta, timezone
@@ -20,6 +21,8 @@ import carnet_service as cs
 from database import obtenir_session
 from deps import get_current_user
 from models import Activite, Objectif, ObjectifCourse, Utilisateur
+
+_log = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -468,6 +471,19 @@ def _echantillons(extra: dict, tz: ZoneInfo) -> dict[str, list[tuple[datetime, f
 
 @router.post("/api/activites/import", summary="Import d'activités (raccourci iOS / script) — auth par token d'import")
 def importer_activites(payload: ImportActivitesSchema, db: Session = Depends(obtenir_session)):
+    try:
+        return _importer_activites(payload, db)
+    except HTTPException:
+        raise
+    except Exception as e:
+        # Le raccourci iOS n'affiche qu'un « problème est survenu » sur une erreur 500 :
+        # on renvoie la cause en clair pour qu'elle apparaisse dans la notification.
+        db.rollback()
+        _log.exception("Import raccourci en échec")
+        return {"ok": False, "message": f"Erreur serveur ({type(e).__name__}) : {str(e)[:300]}"}
+
+
+def _importer_activites(payload: ImportActivitesSchema, db: Session):
     user = db.query(Utilisateur).filter(Utilisateur.import_token == payload.token).first()
     if not user:
         raise HTTPException(401, "Token invalide")
