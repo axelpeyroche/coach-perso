@@ -23,7 +23,7 @@ export default function CartePassages() {
   const carte = useRef(null);
   const [visible, setVisible] = useState(false);
   const [prete, setPrete] = useState(false);
-  const [fond, setFond] = useState("plan");
+  const [fond, setFond] = useState("satellite");
   const [sports, setSports] = useState(PAR_DEFAUT);
   // Tous les tracés sont chargés une fois ; changer de filtre ne fait que recalculer ici.
   const { data: brut, isLoading, isError } = useQuery({
