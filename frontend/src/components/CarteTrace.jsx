@@ -65,6 +65,13 @@ function cap(a, b) {
   const x = Math.cos(a[1] * RAD) * Math.sin(b[1] * RAD) - Math.sin(a[1] * RAD) * Math.cos(b[1] * RAD) * Math.cos((b[0] - a[0]) * RAD);
   return Math.atan2(y, x) / RAD;
 }
+// La caméra MapLibre est d'autant plus proche du sol que la carte est petite : on dézoome
+// en proportion pour garder la même hauteur de vue qu'en plein écran (sinon elle traverse le relief).
+function cameraSurvol(m, km) {
+  const h = m.getContainer().clientHeight || 700;
+  const zoom = (km < 25 ? 15.3 : 14.4) + Math.log2(Math.min(1, h / 700));
+  return { zoom, pitch: h < 450 ? 55 : 62 };
+}
 const chrono = (s) => {
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = Math.floor(s % 60);
   return `${h ? `${h}:` : ""}${String(m).padStart(h ? 2 : 1, "0")}:${String(sec).padStart(2, "0")}`;
@@ -191,7 +198,6 @@ export default function CarteTrace({ activiteId }) {
     if (!m || !g || g.total < 50) return;
     const km = g.total / 1000;
     const duree = Math.min(75000, Math.max(20000, km * 3500)); // durée du survol (ms)
-    const zoom = km < 25 ? 15.3 : 14.4;
     const avance = Math.max(120, g.total * 0.015);              // la caméra vise ce point devant
     s.actif = true;
     setLecture(true);
@@ -207,13 +213,13 @@ export default function CarteTrace({ activiteId }) {
       const p = afficher(s.d);
       const c = cap(p.pos, pointA(g, s.d + avance).pos);
       s.cap += (((((c - s.cap) % 360) + 540) % 360) - 180) * Math.min(1, dt / 700); // virages lissés
-      m.jumpTo({ center: p.pos, bearing: s.cap, pitch: 62, zoom });
+      m.jumpTo({ center: p.pos, bearing: s.cap, ...cameraSurvol(m, km) });
       if (ts - s.maj > 120 || s.d >= g.total) { s.maj = ts; setProgres({ f: s.d / g.total, km: s.d / 1000, t: p.t }); }
       if (s.d >= g.total) { terminer(); return; }
       s.raf = requestAnimationFrame(boucle);
     };
     // Approche de la caméra, puis départ
-    m.flyTo({ center: depart.pos, zoom, pitch: 62, bearing: s.cap, duration: s.d === 0 ? 2000 : 600, essential: true });
+    m.flyTo({ center: depart.pos, ...cameraSurvol(m, km), bearing: s.cap, duration: s.d === 0 ? 2000 : 600, essential: true });
     m.once("moveend", () => { if (s.actif) { s.dernier = 0; s.raf = requestAnimationFrame(boucle); } });
   }
 
@@ -236,7 +242,7 @@ export default function CarteTrace({ activiteId }) {
       <div ref={cadre} className="relative h-64 rounded-[14px] overflow-hidden bg-remplissage">
         <div ref={conteneur} className="w-full h-full" />
         {isLoading && <p className="absolute inset-0 grid place-items-center text-[13px] text-label-2">Chargement du tracé…</p>}
-        <div className="absolute top-2 left-2 flex flex-col gap-1.5 items-start">
+        <div className={`absolute top-2 left-2 flex flex-col gap-1.5 items-start transition-opacity ${lecture ? "opacity-0 pointer-events-none" : ""}`}>
           <Bascule options={[["plan", "Plan"], ["satellite", "Satellite"]]} valeur={fond} onChange={setFond} />
           <Bascule options={[["2d", "2D"], ["3d", "3D"]]} valeur={vue} onChange={setVue} />
         </div>
