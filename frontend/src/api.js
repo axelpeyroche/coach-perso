@@ -73,6 +73,13 @@ export const importerTraces = (traces) =>
 export const getTrace = (id) => api.get(`/activites/${id}/trace`).then((r) => r.data);
 export const getCarteTraces = () => api.get("/traces/carte", { timeout: 90000 }).then((r) => r.data);
 
+// --- Intervals.icu (séances de la montre avec tracé GPS) ---
+export const getIntervals = () => api.get("/intervals").then((r) => r.data);
+export const connecterIntervals = (cle, athlete_id) => api.put("/intervals", { cle, athlete_id }).then((r) => r.data);
+export const deconnecterIntervals = () => api.delete("/intervals").then((r) => r.data);
+export const synchroIntervals = (force = false) =>
+  api.post("/intervals/synchro", null, { params: { force }, timeout: 180000 }).then((r) => r.data);
+
 // --- Carnet : objectifs ---
 export const getObjectifs = () => api.get("/objectifs").then((r) => r.data);
 export const creerObjectif = (payload) => api.post("/objectifs", payload).then((r) => r.data);

@@ -84,6 +84,12 @@ class Utilisateur(Base):
     strava_expires_at: Mapped[Optional[int]] = mapped_column(Integer, comment="Epoch (s) d'expiration de l'access token")
     strava_derniere_synchro: Mapped[Optional[datetime]] = mapped_column(DateTime)
 
+    # Intervals.icu : séances de l'Apple Watch (envoyées par l'app Intervals.icu Companion),
+    # récupérées avec leur tracé GPS grâce à la clé API personnelle de l'utilisateur
+    intervals_athlete_id: Mapped[Optional[str]] = mapped_column(String(30))
+    intervals_cle: Mapped[Optional[str]] = mapped_column(String(100))
+    intervals_derniere_synchro: Mapped[Optional[datetime]] = mapped_column(DateTime)
+
     # Physiologie
     fc_max: Mapped[Optional[int]] = mapped_column(Integer, comment="FC max mesurée (bpm)")
     fc_repos: Mapped[Optional[int]] = mapped_column(Integer, comment="FC de repos (bpm)")

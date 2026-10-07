@@ -1,0 +1,180 @@
+"""
+Synchro Intervals.icu : les séances de l'Apple Watch y arrivent toutes seules (app gratuite
+« Intervals.icu Companion ») ; on les récupère avec leur tracé GPS, l'altitude et la FC
+grâce à la clé API personnelle de l'utilisateur (gratuite).
+
+Chaque séance est fusionnée avec celle du carnet qui commence au même moment (ou créée),
+puis son tracé est enregistré et rattaché comme un GPX de l'export Santé.
+"""
+from __future__ import annotations
+
+import base64
+import json
+import logging
+import urllib.error
+import urllib.parse
+import urllib.request
+from datetime import datetime, timedelta
+from typing import Optional
+from zoneinfo import ZoneInfo
+
+from sqlalchemy.orm import Session
+
+import carnet_service as cs
+from models import Activite, TraceGPS, Utilisateur
+
+_log = logging.getLogger(__name__)
+
+API = "https://intervals.icu/api/v1"
+FENETRE_JOURS = 14          # séances relues à chaque synchro (l'iPhone peut envoyer en retard)
+PREMIERE_FENETRE_JOURS = 60
+INTERVALLE_MIN = timedelta(minutes=15)  # pas plus d'une synchro automatique par quart d'heure
+PAS_TRACE_M = 10            # comme les GPX importés : un point tous les 10 m
+
+
+class IntervalsErreur(Exception):
+    """Erreur affichable telle quelle à l'utilisateur."""
+
+
+def _appel(cle: str, chemin: str, params: Optional[dict] = None):
+    url = API + chemin + ("?" + urllib.parse.urlencode(params) if params else "")
+    auth = base64.b64encode(f"API_KEY:{cle}".encode()).decode()
+    req = urllib.request.Request(url, headers={"Authorization": f"Basic {auth}", "Accept": "application/json",
+                                               "User-Agent": "coach-perso"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return json.loads(r.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        if e.code in (401, 403):
+            raise IntervalsErreur("Clé API Intervals.icu refusée : vérifie-la dans Intervals.icu → Settings → Developer Settings") from e
+        if e.code == 404:
+            raise IntervalsErreur("Athlète introuvable sur Intervals.icu : vérifie l'identifiant (ex. i123456)") from e
+        raise IntervalsErreur(f"Intervals.icu a répondu {e.code}") from e
+    except (urllib.error.URLError, TimeoutError) as e:
+        raise IntervalsErreur("Intervals.icu ne répond pas, réessaie plus tard") from e
+
+
+def verifier(cle: str, athlete_id: Optional[str]) -> dict:
+    """Vérifie la clé ; retourne {id, nom} de l'athlète (« 0 » = celui de la clé)."""
+    a = _appel(cle, f"/athlete/{urllib.parse.quote(athlete_id or '0')}")
+    return {"id": str(a.get("id") or athlete_id or "0"), "nom": a.get("name") or a.get("firstname")}
+
+
+def _heure_locale(iso: Optional[str], tz: ZoneInfo) -> Optional[datetime]:
+    if not iso:
+        return None
+    d = datetime.fromisoformat(iso.replace("Z", "+00:00"))
+    return d.astimezone(tz).replace(tzinfo=None) if d.tzinfo else d
+
+
+def _points(streams: list, debut_seance: datetime) -> tuple[Optional[datetime], list[list]]:
+    """Flux Intervals (latlng : data = latitudes, data2 = longitudes ; altitude ; time en s)
+    → (heure du premier point, [[lat, lon, altitude|null, secondes depuis le premier point], …])."""
+    par_type = {s.get("type"): s for s in streams or []}
+    ll = par_type.get("latlng") or {}
+    lats, lons = ll.get("data") or [], ll.get("data2") or []
+    alts = (par_type.get("altitude") or {}).get("data") or []
+    temps = (par_type.get("time") or {}).get("data") or []
+    bruts = []
+    for i, (la, lo) in enumerate(zip(lats, lons)):
+        if la is None or lo is None or not (-90 <= la <= 90 and -180 <= lo <= 180) or (la == 0 and lo == 0):
+            continue
+        t = temps[i] if i < len(temps) and temps[i] is not None else i
+        alt = alts[i] if i < len(alts) else None
+        bruts.append([la, lo, alt, t])
+    if len(bruts) < 2:
+        return None, []
+    t0 = bruts[0][3]
+    garde = [bruts[0]]
+    for i, p in enumerate(bruts[1:], 1):
+        if i == len(bruts) - 1 or cs._distance_m(garde[-1], p) >= PAS_TRACE_M:
+            garde.append(p)
+    pts = [[round(la, 6), round(lo, 6), None if alt is None else round(alt, 1), int(round(t - t0))]
+           for la, lo, alt, t in garde]
+    return debut_seance + timedelta(seconds=t0), pts
+
+
+def _donnees(a: dict, tz: ZoneInfo) -> Optional[dict]:
+    debut = _heure_locale(a.get("start_date"), tz) or _heure_locale(a.get("start_date_local"), tz)
+    if not debut:
+        return None
+    duree = a.get("elapsed_time") or a.get("moving_time")
+    dist = a.get("distance") or a.get("icu_distance")
+    d = {
+        "sport": cs.normaliser_sport(a.get("type")),
+        "debut": debut,
+        "duree_sec": int(duree) if duree else None,
+        "distance_km": round(dist / 1000, 3) if dist else None,
+        "dplus_m": int(round(a["total_elevation_gain"])) if a.get("total_elevation_gain") is not None else None,
+        "fc_moyenne_bpm": a.get("average_heartrate") or None,
+        "fc_max_bpm": a.get("max_heartrate") or None,
+        "calories": a.get("calories") or None,
+        "details": {"intervals_id": str(a["id"])},
+    }
+    if duree:
+        d["details"]["fin"] = (debut + timedelta(seconds=int(duree))).isoformat(timespec="seconds")
+    return d
+
+
+def synchroniser(db: Session, user: Utilisateur, force: bool = False) -> dict:
+    """Récupère les séances récentes d'Intervals.icu et leurs tracés. Idempotent.
+    Retourne un bilan {ignore, nouvelles, completees, traces} (ignore=True si synchro trop récente)."""
+    if not user.intervals_cle:
+        raise IntervalsErreur("Intervals.icu n'est pas connecté")
+    maintenant = datetime.utcnow()
+    if not force and user.intervals_derniere_synchro and maintenant - user.intervals_derniere_synchro < INTERVALLE_MIN:
+        return {"ignore": True, "nouvelles": 0, "completees": 0, "traces": 0}
+    tz = ZoneInfo(user.fuseau_horaire or "Europe/Paris")
+    jours = FENETRE_JOURS if user.intervals_derniere_synchro else PREMIERE_FENETRE_JOURS
+    depuis = (datetime.now(tz) - timedelta(days=jours)).date()
+    athlete = user.intervals_athlete_id or "0"
+    liste = _appel(user.intervals_cle, f"/athlete/{urllib.parse.quote(athlete)}/activities",
+                   {"oldest": depuis.isoformat()}) or []
+
+    # Séances déjà reçues d'Intervals (repérées par leur id, même fusionnées avec une séance Santé)
+    connues: dict[str, Activite] = {}
+    for act in (db.query(Activite).filter(Activite.utilisateur_id == user.id,
+                                          Activite.debut >= datetime.combine(depuis, datetime.min.time()) - timedelta(days=2))):
+        iid = cs._details_dict(act).get("intervals_id")
+        if iid:
+            connues[str(iid)] = act
+    ignorees = [datetime.fromisoformat(x) for x in cs._ignorees(user)]
+    avec_trace = {i for (i,) in db.query(TraceGPS.activite_id)
+                  .filter(TraceGPS.utilisateur_id == user.id, TraceGPS.activite_id.isnot(None))}
+
+    bilan = {"ignore": False, "nouvelles": 0, "completees": 0, "traces": 0}
+    for a in sorted(liste, key=lambda x: x.get("start_date") or ""):
+        if not a.get("id") or a.get("deleted"):
+            continue
+        iid = str(a["id"])
+        act = connues.get(iid)
+        if act is None:
+            donnees = _donnees(a, tz)
+            if donnees is None or any(abs((donnees["debut"] - d).total_seconds()) <= 120 for d in ignorees):
+                continue  # séance supprimée du carnet : on ne la recrée pas
+            fin = donnees["details"].pop("fin", None)
+            act, statut = cs.importer_activite(db, user.id, "intervals", donnees, id_externe=iid)
+            cs.fusionner_details(act, {"intervals_id": iid, **({"fin": fin} if fin else {})})
+            connues[iid] = act
+            bilan["nouvelles" if statut == "cree" else "completees"] += 1
+        if act.id in avec_trace or "latlng" not in (a.get("stream_types") or ["latlng"]) or a.get("trainer"):
+            continue
+        streams = _appel(user.intervals_cle, f"/activity/{urllib.parse.quote(iid)}/streams.json",
+                         {"types": "latlng,altitude,time"})
+        debut_trace, pts = _points(streams, _heure_locale(a.get("start_date"), tz) or act.debut)
+        if len(pts) < 2 or len(pts) > 20_000:
+            continue
+        t, _ = cs.enregistrer_trace(db, user.id, debut_trace, pts)
+        db.flush()
+        if t.activite_id is None:
+            t.activite_id = act.id  # rattachement direct : on sait à quelle séance il appartient
+            if not act.distance_km and t.distance_km:
+                act.distance_km = t.distance_km
+            if act.dplus_m is None and t.dplus_m is not None:
+                act.dplus_m = t.dplus_m
+            cs.fusionner_details(act, {"trace": True})
+        avec_trace.add(act.id)
+        bilan["traces"] += 1
+    user.intervals_derniere_synchro = maintenant
+    db.flush()
+    return bilan

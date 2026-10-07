@@ -7,6 +7,7 @@ import {
   importerFichierActivites, getImportToken, regenererImportToken,
   getAnalyseToken, regenererAnalyseToken, exporterCarnet, urlApiAbsolue,
   getClaudeToken, regenererClaudeToken, importerTraces,
+  getIntervals, connecterIntervals, deconnecterIntervals, synchroIntervals,
 } from "../api";
 
 function useCopie() {
@@ -25,7 +26,7 @@ function Code({ children }) {
 }
 
 function invaliderCarnet(qc) {
-  ["activites", "stats-carnet", "objectifs", "mesures", "plan"].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+  ["activites", "stats-carnet", "objectifs", "mesures", "plan", "carte-traces"].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
 }
 
 function telecharger(contenu, nom, type) {
@@ -223,6 +224,83 @@ function BlocTraces() {
         )}
         {etat?.erreur && <p className="text-[13px] text-ios-red">{etat.erreur}</p>}
       </div>
+    </Bloc>
+  );
+}
+
+// ── Intervals.icu (séances de la montre avec tracé GPS) ─────────────────────
+// L'app gratuite « Intervals.icu Companion » y envoie chaque entraînement de l'Apple Watch ;
+// le carnet les récupère avec la clé API personnelle (gratuite).
+const dateHeure = (iso) => new Date(iso).toLocaleString("fr-FR", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+
+function BlocIntervals() {
+  const qc = useQueryClient();
+  const { data: statut } = useQuery({ queryKey: ["intervals"], queryFn: getIntervals });
+  const [cle, setCle] = useState("");
+  const [athlete, setAthlete] = useState("");
+  const [res, setRes] = useState(null);
+  const [confirmDeco, setConfirmDeco] = useState(false);
+  const erreur = (e) => setRes({ erreur: e?.response?.data?.detail?.toString?.() ?? "Intervals.icu ne répond pas, réessaie plus tard." });
+
+  const synchro = useMutation({
+    mutationFn: () => synchroIntervals(true),
+    onSuccess: (r) => { setRes(r); qc.setQueryData(["intervals"], r); invaliderCarnet(qc); },
+    onError: erreur,
+  });
+  const connexion = useMutation({
+    mutationFn: () => connecterIntervals(cle.trim(), athlete.trim() || null),
+    onSuccess: (r) => { qc.setQueryData(["intervals"], r); setCle(""); setAthlete(""); setRes(null); synchro.mutate(); },
+    onError: erreur,
+  });
+  const deco = useMutation({
+    mutationFn: deconnecterIntervals,
+    onSuccess: (r) => { qc.setQueryData(["intervals"], r); setRes(null); },
+  });
+
+  return (
+    <Bloc icone="⌚" couleur="#5E5CE626" titre="Intervals.icu" sousTitre="Séances de la montre avec tracé GPS et dénivelé">
+      {statut?.connecte ? (
+        <div className="space-y-3">
+          <p>✓ Connecté{statut.athlete_id ? <> (athlète <code>{statut.athlete_id}</code>)</> : null}.
+            {statut.derniere_synchro && <span className="text-label-2"> Dernière synchro : {dateHeure(statut.derniere_synchro)}.</span>}</p>
+          <p className="text-[13px] text-label-2">Les séances arrivent toutes seules : à chaque envoi du raccourci Apple Santé et
+            à l'ouverture du carnet (au plus une fois par quart d'heure). Chacune est fusionnée avec la séance du carnet qui
+            commence au même moment, sans toucher à son titre, et son tracé apparaît sur la carte.</p>
+          <div className="flex items-center gap-3">
+            <button className={btnP} disabled={synchro.isPending} onClick={() => synchro.mutate()}>
+              {synchro.isPending ? "Synchro en cours…" : "Synchroniser maintenant"}
+            </button>
+            <button className={lienDanger} onClick={() => setConfirmDeco(true)}>Déconnecter</button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <Option titre="1. Sur l'iPhone">
+            <p className="text-[13px] text-label-2">Installe l'app gratuite <strong>Intervals.icu Companion</strong>, connecte-la à
+              ton compte et autorise l'accès à Santé : chaque entraînement de la montre part sur Intervals.icu avec son tracé.</p>
+          </Option>
+          <Option titre="2. Clé API">
+            <p className="text-[13px] text-label-2">Sur intervals.icu : <em>Settings</em> → <em>Developer Settings</em> → <em>API Key</em>.
+              L'identifiant d'athlète (« i » suivi de chiffres) est affiché juste au-dessus. La clé reste sur le serveur du carnet.</p>
+            <input className="champ" type="password" autoComplete="off" placeholder="Clé API" value={cle} onChange={(e) => setCle(e.target.value)} />
+            <input className="champ" autoComplete="off" placeholder="Identifiant d'athlète (ex. i123456)" value={athlete} onChange={(e) => setAthlete(e.target.value)} />
+            <button className={btnP} disabled={cle.trim().length < 10 || connexion.isPending} onClick={() => connexion.mutate()}>
+              {connexion.isPending ? "Vérification…" : "Connecter"}
+            </button>
+          </Option>
+        </div>
+      )}
+      {res && !res.erreur && !res.ignore && (
+        <p className="text-[13px] text-label-2 chiffres">✓ {res.nouvelles} nouvelle(s) séance(s), {res.completees} complétée(s),
+          {" "}{res.traces} tracé(s) ajouté(s).</p>
+      )}
+      {synchro.isPending && !statut?.derniere_synchro && (
+        <p className="text-[13px] text-label-2">Première synchro : récupération des 60 derniers jours, cela peut prendre une minute.</p>
+      )}
+      {res?.erreur && <p className="text-[13px] text-ios-red">{res.erreur}</p>}
+      <ConfirmDialog open={confirmDeco} title="Déconnecter Intervals.icu ?" danger confirmLabel="Déconnecter"
+        message="Les séances et tracés déjà récupérés restent dans le carnet."
+        onConfirm={() => { setConfirmDeco(false); deco.mutate(); }} onCancel={() => setConfirmDeco(false)} />
     </Bloc>
   );
 }
@@ -520,6 +598,7 @@ export default function Sources() {
         <div className="grid gap-3 lg:grid-cols-2 items-start">
           <BlocRaccourci />
           <div className="space-y-3">
+            <BlocIntervals />
             <BlocStrava />
             <BlocFichier />
             <BlocTraces />

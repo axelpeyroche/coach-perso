@@ -71,6 +71,10 @@ def creer_tables() -> None:
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS claude_token VARCHAR(64)",
         # Séances détectées par le raccourci puis supprimées
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS seances_ignorees TEXT",
+        # Synchro Intervals.icu (séances + tracés GPS)
+        "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS intervals_athlete_id VARCHAR(30)",
+        "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS intervals_cle VARCHAR(100)",
+        "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS intervals_derniere_synchro TIMESTAMP",
         # Index sur les clés étrangères, absents des tables déjà existantes en
         # production (Base.metadata.create_all ne les crée que sur les tables neuves).
         "CREATE INDEX IF NOT EXISTS idx_poids_utilisateurs_utilisateur_id ON poids_utilisateurs (utilisateur_id)",

@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, lazy, Suspense } from "react";
 import { Routes, Route, NavLink, Navigate, useLocation, useNavigate } from "react-router-dom";
 import clsx from "clsx";
 import { useAuth } from "./AuthContext";
+import { useQueryClient } from "@tanstack/react-query";
+import { synchroIntervals } from "./api";
 import Auth from "./pages/Auth";
 
 // Pages chargées à la demande : chaque page (et recharts) dans son propre chunk
@@ -196,6 +198,26 @@ function RequireAuth({ children }) {
   return children;
 }
 
+// Séances de la montre (Intervals.icu) : récupérées à l'ouverture et au retour sur l'app.
+// Le serveur ignore l'appel si la dernière synchro date de moins d'un quart d'heure.
+function SynchroIntervals() {
+  const qc = useQueryClient();
+  useEffect(() => {
+    const lancer = () => {
+      if (document.visibilityState !== "visible") return;
+      synchroIntervals().then((r) => {
+        if (r.nouvelles || r.completees || r.traces) {
+          ["activites", "stats-carnet", "objectifs", "plan", "carte-traces", "intervals"].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+        }
+      }).catch(() => {});
+    };
+    lancer();
+    document.addEventListener("visibilitychange", lancer);
+    return () => document.removeEventListener("visibilitychange", lancer);
+  }, [qc]);
+  return null;
+}
+
 export default function App() {
   const { user } = useAuth();
 
@@ -217,6 +239,7 @@ export default function App() {
 
       <Route path="/*" element={
         <RequireAuth>
+            <SynchroIntervals />
             <div className="min-h-screen flex" style={{ overflowX: "clip" }}>
 
               {/* ── Sidebar desktop ── */}

@@ -185,7 +185,7 @@ def exporter_donnees(current_user: Utilisateur = Depends(get_current_user), db: 
     objectifs_carnet = db.query(Objectif).filter_by(utilisateur_id=current_user.id).all()
 
     profil = _dump(current_user)
-    for secret in ("password_hash", "strava_access_token", "strava_refresh_token"):
+    for secret in ("password_hash", "strava_access_token", "strava_refresh_token", "intervals_cle"):
         profil.pop(secret, None)
 
     return {

@@ -13,7 +13,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional, Union
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import PlainTextResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
@@ -578,9 +578,10 @@ def _echantillons(extra: dict, tz: ZoneInfo) -> dict[str, list[tuple[datetime, f
 
 
 @router.post("/api/activites/import", summary="Import d'activités (raccourci iOS / script) — auth par token d'import")
-def importer_activites(payload: ImportActivitesSchema, db: Session = Depends(obtenir_session)):
+def importer_activites(payload: ImportActivitesSchema, taches: BackgroundTasks,
+                       db: Session = Depends(obtenir_session)):
     try:
-        return _importer_activites(payload, db)
+        return _importer_activites(payload, db, taches)
     except HTTPException as e:
         # Même chose pour un token invalide ou un envoi vide : le raccourci doit afficher la raison
         return {"ok": False, "message": str(e.detail)}
@@ -592,7 +593,7 @@ def importer_activites(payload: ImportActivitesSchema, db: Session = Depends(obt
         return {"ok": False, "message": f"Erreur serveur ({type(e).__name__}) : {str(e)[:300]}"}
 
 
-def _importer_activites(payload: ImportActivitesSchema, db: Session):
+def _importer_activites(payload: ImportActivitesSchema, db: Session, taches: Optional[BackgroundTasks] = None):
     token = (payload.token or "").strip()
     user = db.query(Utilisateur).filter(Utilisateur.import_token == token).first() if token else None
     if not user:
@@ -630,6 +631,9 @@ def _importer_activites(payload: ImportActivitesSchema, db: Session):
     completees = cs.enrichir_activites(db, user, ech) if ech else 0  # FC, zones… des séances reçues aussi
     cs.rattacher_traces(db, user.id)  # tracés importés avant que la séance n'existe
     db.commit()
+    if taches is not None and user.intervals_cle:
+        from routers.intervals import synchro_en_arriere_plan
+        taches.add_task(synchro_en_arriere_plan, user.id)  # séances de la montre avec leur tracé GPS
     morceaux = []
     if lot:
         morceaux.append(f"{len(lot)} séance(s) : {bilan['cree']} nouvelle(s), {bilan['maj'] + bilan['fusion']} déjà connue(s)")

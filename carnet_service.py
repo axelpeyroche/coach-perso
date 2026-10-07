@@ -1334,8 +1334,9 @@ def _ignorees(user: Utilisateur) -> list[str]:
 
 
 def memoriser_seance_ignoree(user: Utilisateur, a: Activite) -> None:
-    """Une séance reconstituée qu'on supprime ne doit pas réapparaître au prochain envoi."""
-    if _detectee_auto(a) and a.debut:
+    """Une séance reconstituée (ou reçue d'Intervals.icu) qu'on supprime ne doit pas réapparaître
+    au prochain envoi."""
+    if (_detectee_auto(a) or _details_dict(a).get("intervals_id")) and a.debut:
         user.seances_ignorees = json.dumps((_ignorees(user) + [a.debut.isoformat()])[-60:])
 
 
