@@ -209,6 +209,27 @@ class Activite(Base):
     cree_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
+class TraceGPS(Base):
+    """
+    Tracé GPS d'une séance (GPX de l'export Santé), allégé côté navigateur :
+    `points` = JSON [[lat, lon, altitude|null, secondes depuis le début], …].
+    `activite_id` est vide tant qu'aucune séance ne correspond (rattaché plus tard).
+    """
+    __tablename__ = "traces_gps"
+    __table_args__ = (
+        UniqueConstraint("utilisateur_id", "debut", name="uq_trace_debut"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    utilisateur_id: Mapped[int] = mapped_column(ForeignKey("utilisateurs.id"), nullable=False, index=True)
+    activite_id: Mapped[Optional[int]] = mapped_column(ForeignKey("activites.id", ondelete="SET NULL"), index=True)
+    debut: Mapped[datetime] = mapped_column(DateTime, nullable=False)  # heure locale du premier point
+    fin: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    distance_km: Mapped[Optional[float]] = mapped_column(Float)
+    dplus_m: Mapped[Optional[int]] = mapped_column(Integer)
+    points: Mapped[str] = mapped_column(Text, nullable=False)
+
+
 class SeancePrevue(Base):
     """
     Séance planifiée (envoyée par Claude via le token Claude, ou saisie).

@@ -6,7 +6,7 @@ import ConfirmDialog from "../components/ConfirmDialog";
 import {
   importerFichierActivites, getImportToken, regenererImportToken,
   getAnalyseToken, regenererAnalyseToken, exporterCarnet, urlApiAbsolue,
-  getClaudeToken, regenererClaudeToken,
+  getClaudeToken, regenererClaudeToken, importerTraces,
 } from "../api";
 
 function useCopie() {
@@ -125,6 +125,103 @@ function BlocFichier() {
               : `✓ ${res.lignes} ligne(s) lue(s) (${res.source}) : ${res.cree} ajoutée(s), ${res.maj + res.fusion} mise(s) à jour, ${res.inchange} inchangée(s)`}
           </p>
         ) : <p className="text-[13px] text-ios-red">{String(res.msg)}</p>)}
+      </div>
+    </Bloc>
+  );
+}
+
+// ── Tracés GPS (export Santé) ──────────────────────────────────────────────
+const RE_POINT = /<trkpt\s+([^>]*)>([\s\S]*?)<\/trkpt>/g;
+const attr = (txt, nom) => { const m = txt.match(new RegExp(`${nom}="([^"]+)"`)); return m ? Number(m[1]) : NaN; };
+
+// Lit un GPX et l'allège : un point tous les 10 m (le dernier est toujours gardé).
+function lireGpx(texte) {
+  const bruts = [];
+  for (const [, attrs, corps] of texte.matchAll(RE_POINT)) {
+    const lat = attr(attrs, "lat"), lon = attr(attrs, "lon");
+    const t = Date.parse(corps.match(/<time>([^<]+)<\/time>/)?.[1]);
+    const ele = Number(corps.match(/<ele>([^<]+)<\/ele>/)?.[1]);
+    if (Number.isFinite(lat) && Number.isFinite(lon) && Number.isFinite(t)) bruts.push([lat, lon, Number.isFinite(ele) ? ele : null, t]);
+  }
+  if (bruts.length < 2) return null;
+  const t0 = bruts[0][3];
+  const points = [];
+  let dernier = null;
+  bruts.forEach((p, i) => {
+    if (dernier && i < bruts.length - 1) {
+      const dx = (p[1] - dernier[1]) * Math.cos((p[0] * Math.PI) / 180) * 111320;
+      const dy = (p[0] - dernier[0]) * 111320;
+      if (Math.hypot(dx, dy) < 10) return;
+    }
+    points.push([+p[0].toFixed(6), +p[1].toFixed(6), p[2] == null ? null : +p[2].toFixed(1), Math.round((p[3] - t0) / 1000)]);
+    dernier = p;
+  });
+  return { debut: new Date(t0).toISOString(), points };
+}
+
+function BlocTraces() {
+  const qc = useQueryClient();
+  const fichiers = useRef(null);
+  const dossier = useRef(null);
+  const [etat, setEtat] = useState(null); // { fait, total, cree, maj, rattache, erreur, fini }
+
+  async function importer(liste) {
+    const gpx = [...liste].filter((f) => f.name.toLowerCase().endsWith(".gpx"));
+    if (!gpx.length) { setEtat({ erreur: "Aucun fichier .gpx dans la sélection." }); return; }
+    const bilan = { fait: 0, total: gpx.length, cree: 0, maj: 0, rattache: 0 };
+    setEtat({ ...bilan });
+    let lot = [], taille = 0;
+    const envoyer = async () => {
+      if (!lot.length) return;
+      const r = await importerTraces(lot);
+      bilan.cree += r.cree; bilan.maj += r.maj; bilan.rattache += r.rattache;
+      lot = []; taille = 0;
+    };
+    try {
+      for (const f of gpx) {
+        const t = lireGpx(await f.text());
+        if (t) { lot.push(t); taille += t.points.length; }
+        bilan.fait += 1;
+        if (lot.length >= 25 || taille > 60000) await envoyer();
+        setEtat({ ...bilan });
+      }
+      await envoyer();
+      setEtat({ ...bilan, fini: true });
+      invaliderCarnet(qc);
+    } catch (e) {
+      setEtat({ ...bilan, erreur: e?.response?.data?.detail?.toString?.() ?? "Envoi interrompu : relance l'import, les tracés déjà reçus ne seront pas dupliqués." });
+    }
+  }
+
+  const enCours = etat && !etat.fini && !etat.erreur;
+  const choisir = (ref) => (e) => { const l = e.target.files; if (l?.length) importer(l); e.target.value = ""; };
+
+  return (
+    <Bloc icone="🗺️" couleur="#34C75933" titre="Tracés GPS" sousTitre="Fichiers GPX de l'export Apple Santé">
+      <div className="space-y-3">
+        <p>Sur l'iPhone : app <strong>Santé</strong> → ta photo → <em>Exporter toutes les données de santé</em>. Dans le zip,
+          le dossier <code>apple_health_export/workout-routes</code> contient un GPX par entraînement en extérieur.</p>
+        <p className="text-[13px] text-label-2">Chaque tracé est rattaché à la séance du carnet qui commence au même moment
+          (à 5 min près) et s'affiche sur une carte quand tu l'ouvres. Les fichiers sont allégés dans le navigateur avant
+          l'envoi. Réimporter le dossier ne crée pas de doublons ; un tracé sans séance sera rattaché plus tard, quand la séance arrivera.</p>
+        <input ref={dossier} type="file" webkitdirectory="" className="hidden" onChange={choisir(dossier)} />
+        <input ref={fichiers} type="file" multiple accept=".gpx,application/gpx+xml" className="hidden" onChange={choisir(fichiers)} />
+        <div className="grid grid-cols-2 gap-2">
+          <button className="btn-primaire" disabled={enCours} onClick={() => dossier.current?.click()}>Choisir le dossier</button>
+          <button className="btn-teinte" disabled={enCours} onClick={() => fichiers.current?.click()}>Choisir des fichiers</button>
+        </div>
+        {etat?.total > 0 && (
+          <div className="space-y-1">
+            <div className="h-1.5 rounded-full bg-remplissage overflow-hidden">
+              <div className="h-full bg-ios-green transition-all" style={{ width: `${(100 * etat.fait) / etat.total}%` }} />
+            </div>
+            <p className="text-[13px] text-label-2 chiffres">
+              {etat.fini ? "✓ " : ""}{etat.fait} / {etat.total} fichier(s) · {etat.cree} nouveau(x) tracé(s),
+              {" "}{etat.maj} mis à jour · {etat.rattache} rattaché(s) à une séance
+            </p>
+          </div>
+        )}
+        {etat?.erreur && <p className="text-[13px] text-ios-red">{etat.erreur}</p>}
       </div>
     </Bloc>
   );
@@ -425,6 +522,7 @@ export default function Sources() {
           <div className="space-y-3">
             <BlocStrava />
             <BlocFichier />
+            <BlocTraces />
           </div>
         </div>
       </div>

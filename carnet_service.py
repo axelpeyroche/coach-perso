@@ -18,7 +18,7 @@ from typing import Iterable, Optional
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from models import Activite, EchantillonSante, MesureSante, Objectif, SeancePrevue, Utilisateur
+from models import Activite, EchantillonSante, MesureSante, Objectif, SeancePrevue, TraceGPS, Utilisateur
 
 # ---------------------------------------------------------------------------
 # Sports
@@ -1225,6 +1225,87 @@ def stocker_echantillons(db: Session, user_id: int,
         if t != "fc" or v <= 250:  # FC additionnée par un envoi « groupé par minute »
             connus[t].append((d, v))
     return dict(connus)
+
+
+# ---------------------------------------------------------------------------
+# Tracés GPS
+# ---------------------------------------------------------------------------
+
+def _distance_m(a: list, b: list) -> float:
+    """Distance entre deux points [lat, lon, …] (approximation équirectangulaire, suffisante à quelques mètres)."""
+    from math import cos, radians, sqrt
+    x = radians(b[1] - a[1]) * cos(radians((a[0] + b[0]) / 2))
+    y = radians(b[0] - a[0])
+    return 6_371_000 * sqrt(x * x + y * y)
+
+
+def denivele_positif(altitudes: list[float], seuil: float = 3.0) -> Optional[int]:
+    """D+ avec hystérésis : une montée n'est comptée qu'au-delà de `seuil` mètres, pour ignorer le bruit.
+    None si l'altitude n'est pas mesurée (Apple écrit souvent 0 partout)."""
+    alts = [a for a in altitudes if a is not None]
+    if len(alts) < 2 or max(alts) - min(alts) < 1:
+        return None
+    total, ref = 0.0, alts[0]
+    for a in alts[1:]:
+        if a > ref + seuil:
+            total += a - ref
+            ref = a
+        elif a < ref:
+            ref = a
+    return round(total)
+
+
+def enregistrer_trace(db: Session, user_id: int, debut: datetime, points: list[list]) -> tuple[TraceGPS, bool]:
+    """Crée ou remplace le tracé qui commence à `debut`. Retourne (tracé, créé ?)."""
+    dist = sum(_distance_m(a, b) for a, b in zip(points, points[1:])) / 1000
+    alts = [p[2] if len(p) > 2 else None for p in points]
+    if any(a for a in alts):  # altitudes à 0 en attendant le baromètre : non mesurées
+        for p in points:
+            if len(p) > 2 and p[2] == 0:
+                p[2] = None
+        alts = [p[2] if len(p) > 2 else None for p in points]
+    fin = debut + timedelta(seconds=points[-1][3] if len(points[-1]) > 3 and points[-1][3] else 0)
+    t = db.query(TraceGPS).filter(TraceGPS.utilisateur_id == user_id, TraceGPS.debut == debut).first()
+    cree = t is None
+    if cree:
+        t = TraceGPS(utilisateur_id=user_id, debut=debut)
+        db.add(t)
+    t.fin, t.distance_km, t.dplus_m = fin, round(dist, 3), denivele_positif(alts)
+    t.points = json.dumps(points, separators=(",", ":"))
+    return t, cree
+
+
+def rattacher_traces(db: Session, user_id: int) -> int:
+    """Rattache chaque tracé sans séance à celle qui le contient (début −5 min → fin), la plus proche.
+    Complète la distance et le D+ de la séance s'ils manquent. Retourne le nombre de rattachements."""
+    libres = (db.query(TraceGPS).filter(TraceGPS.utilisateur_id == user_id, TraceGPS.activite_id.is_(None))
+              .order_by(TraceGPS.debut).all())
+    if not libres:
+        return 0
+    prises = {i for (i,) in db.query(TraceGPS.activite_id)
+              .filter(TraceGPS.utilisateur_id == user_id, TraceGPS.activite_id.isnot(None))}
+    acts = (db.query(Activite)
+            .filter(Activite.utilisateur_id == user_id,
+                    Activite.debut >= libres[0].debut - timedelta(days=1),
+                    Activite.debut <= libres[-1].debut + timedelta(minutes=5))
+            .order_by(Activite.debut).all())
+    n = 0
+    for t in libres:
+        cands = [a for a in acts if a.id not in prises
+                 and a.debut - timedelta(minutes=5) <= t.debut <= max(fin_activite(a), a.debut + timedelta(minutes=5))]
+        if not cands:
+            continue
+        a = min(cands, key=lambda a: abs((a.debut - t.debut).total_seconds()))
+        t.activite_id = a.id
+        prises.add(a.id)
+        if not a.distance_km and t.distance_km:
+            a.distance_km = t.distance_km
+        if a.dplus_m is None and t.dplus_m is not None:
+            a.dplus_m = t.dplus_m
+        fusionner_details(a, {"trace": True})
+        n += 1
+    db.flush()
+    return n
 
 
 def _ignorees(user: Utilisateur) -> list[str]:

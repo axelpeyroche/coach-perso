@@ -5,6 +5,7 @@ statistiques et export complet pour analyse par Claude.
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 import secrets as _secrets
@@ -20,7 +21,7 @@ from sqlalchemy.orm import Session
 import carnet_service as cs
 from database import obtenir_session
 from deps import get_current_user
-from models import Activite, Objectif, ObjectifCourse, Utilisateur
+from models import Activite, Objectif, ObjectifCourse, TraceGPS, Utilisateur
 
 _log = logging.getLogger(__name__)
 
@@ -203,6 +204,7 @@ def supprimer_activite(
 ):
     a = _activite_utilisateur(db, current_user, activite_id)
     cs.memoriser_seance_ignoree(current_user, a)
+    db.query(TraceGPS).filter(TraceGPS.activite_id == a.id).update({"activite_id": None})
     db.delete(a)
     db.commit()
     return {"ok": True}
@@ -211,6 +213,51 @@ def supprimer_activite(
 # ---------------------------------------------------------------------------
 # Imports
 # ---------------------------------------------------------------------------
+
+class TraceImportee(BaseModel):
+    debut: str                           # ISO 8601 (heure du premier point, avec fuseau)
+    points: list[list[Optional[float]]]  # [[lat, lon, altitude|null, secondes depuis le début], …]
+
+
+class ImportTracesSchema(BaseModel):
+    traces: list[TraceImportee] = Field(..., max_length=200)
+
+
+@router.post("/api/activites/traces", summary="Import de tracés GPS (GPX lus et allégés par le navigateur)")
+def importer_traces(
+    payload: ImportTracesSchema,
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(obtenir_session),
+):
+    tz = _fuseau(current_user)
+    bilan = {"cree": 0, "maj": 0, "ignore": 0}
+    for t in payload.traces:
+        pts = [p[:4] for p in t.points if len(p) >= 4 and p[0] is not None and p[1] is not None
+               and -90 <= p[0] <= 90 and -180 <= p[1] <= 180]
+        if len(pts) < 2 or len(pts) > 20_000:
+            bilan["ignore"] += 1
+            continue
+        _, cree = cs.enregistrer_trace(db, current_user.id, _date_import(t.debut, tz), pts)
+        bilan["cree" if cree else "maj"] += 1
+    db.flush()
+    bilan["rattache"] = cs.rattacher_traces(db, current_user.id)
+    db.commit()
+    return {"ok": True, **bilan}
+
+
+@router.get("/api/activites/{activite_id}/trace", summary="Tracé GPS d'une activité")
+def trace_activite(
+    activite_id: int,
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(obtenir_session),
+):
+    a = _activite_utilisateur(db, current_user, activite_id)
+    t = db.query(TraceGPS).filter(TraceGPS.activite_id == a.id).first()
+    if not t:
+        raise HTTPException(404, "Pas de tracé pour cette activité")
+    return {"debut": t.debut.isoformat(), "distance_km": t.distance_km, "dplus_m": t.dplus_m,
+            "points": json.loads(t.points)}
+
 
 class ActiviteImportee(BaseModel):
     """Format souple accepté depuis un raccourci iOS (Apple Santé) ou un script.
@@ -554,6 +601,7 @@ def _importer_activites(payload: ImportActivitesSchema, db: Session):
     ech = cs.stocker_echantillons(db, user.id, ech, autour=debuts)  # + ceux envoyés par les autres raccourcis
     detectees = cs.detecter_seances(db, user, ech) if ech else 0
     completees = cs.enrichir_activites(db, user, ech) if ech else 0  # FC, zones… des séances reçues aussi
+    cs.rattacher_traces(db, user.id)  # tracés importés avant que la séance n'existe
     db.commit()
     morceaux = []
     if lot:

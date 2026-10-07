@@ -67,6 +67,11 @@ export const importerFichierActivites = (fichier) => {
   }).then((r) => r.data);
 };
 
+// Tracés GPS : [{ debut, points: [[lat, lon, altitude|null, secondes depuis le début], …] }]
+export const importerTraces = (traces) =>
+  api.post("/activites/traces", { traces }, { timeout: 120000 }).then((r) => r.data);
+export const getTrace = (id) => api.get(`/activites/${id}/trace`).then((r) => r.data);
+
 // --- Carnet : objectifs ---
 export const getObjectifs = () => api.get("/objectifs").then((r) => r.data);
 export const creerObjectif = (payload) => api.post("/objectifs", payload).then((r) => r.data);

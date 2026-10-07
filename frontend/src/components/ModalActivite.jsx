@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { creerActivite, modifierActivite, supprimerActivite } from "../api";
 import { SPORTS, sportInfo, parseDuree, dureeVersTexte, inputCls, SOURCES } from "../carnet";
 import Feuille from "./Feuille";
+import CarteTrace from "./CarteTrace";
 
 function maintenantLocal() {
   const d = new Date();
@@ -92,6 +93,7 @@ export default function ModalActivite({ activite, onClose }) {
       {activite && (
         <p className="text-[13px] text-label-2 text-center -mt-2">Source : {SOURCES[activite.source] ?? activite.source}</p>
       )}
+      {activite?.details?.trace && <CarteTrace activiteId={activite.id} />}
 
       <div className="flex gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4">
         {Object.entries(SPORTS).map(([k, s]) => (
