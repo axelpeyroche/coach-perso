@@ -83,7 +83,7 @@ export default function CarteTrace({ activiteId }) {
   const cadre = useRef(null);
   const carte = useRef(null);
   const geo = useRef(null);
-  const survol = useRef({ d: 0, cap: null, raf: 0, dernier: 0, actif: false, maj: 0 });
+  const survol = useRef({ d: 0, cap: null, alt: null, raf: 0, dernier: 0, actif: false, maj: 0 });
   const [lecture, setLecture] = useState(false);
   const [progres, setProgres] = useState(null); // { f, km, t } pendant un survol
   const [prete, setPrete] = useState(false);
@@ -163,6 +163,11 @@ export default function CarteTrace({ activiteId }) {
     return p;
   }
 
+  // Altitude du relief sous le point (la caméra doit la viser, sinon le curseur est décentré).
+  function altitude(pos) {
+    return carte.current?.queryTerrainElevation(pos) ?? 0;
+  }
+
   function attenuer(oui) {
     const m = carte.current;
     m.setPaintProperty("trace", "line-opacity", oui ? 0.35 : 1);
@@ -205,6 +210,7 @@ export default function CarteTrace({ activiteId }) {
     attenuer(true);
     const depart = afficher(s.d);
     if (s.cap == null || s.d === 0) s.cap = cap(depart.pos, pointA(g, s.d + avance).pos);
+    s.alt = null;
     const boucle = (ts) => {
       if (!s.actif) return;
       const dt = Math.min(100, ts - (s.dernier || ts));
@@ -213,13 +219,15 @@ export default function CarteTrace({ activiteId }) {
       const p = afficher(s.d);
       const c = cap(p.pos, pointA(g, s.d + avance).pos);
       s.cap += (((((c - s.cap) % 360) + 540) % 360) - 180) * Math.min(1, dt / 700); // virages lissés
-      m.jumpTo({ center: p.pos, bearing: s.cap, ...cameraSurvol(m, km) });
+      const z = altitude(p.pos);
+      s.alt = s.alt == null ? z : s.alt + (z - s.alt) * Math.min(1, dt / 250); // lissé
+      m.jumpTo({ center: p.pos, elevation: s.alt, bearing: s.cap, ...cameraSurvol(m, km) });
       if (ts - s.maj > 120 || s.d >= g.total) { s.maj = ts; setProgres({ f: s.d / g.total, km: s.d / 1000, t: p.t }); }
       if (s.d >= g.total) { terminer(); return; }
       s.raf = requestAnimationFrame(boucle);
     };
     // Approche de la caméra, puis départ
-    m.flyTo({ center: depart.pos, ...cameraSurvol(m, km), bearing: s.cap, duration: s.d === 0 ? 2000 : 600, essential: true });
+    m.flyTo({ center: depart.pos, elevation: altitude(depart.pos), ...cameraSurvol(m, km), bearing: s.cap, duration: s.d === 0 ? 2000 : 600, essential: true });
     m.once("moveend", () => { if (s.actif) { s.dernier = 0; s.raf = requestAnimationFrame(boucle); } });
   }
 
@@ -233,7 +241,7 @@ export default function CarteTrace({ activiteId }) {
     attenuer(true);
     const p = afficher(s.d);
     setProgres({ f, km: s.d / 1000, t: p.t });
-    if (!s.actif) carte.current.easeTo({ center: p.pos, duration: 400 });
+    if (!s.actif) carte.current.easeTo({ center: p.pos, elevation: altitude(p.pos), duration: 400 });
   }
 
   if (isError) return null;
