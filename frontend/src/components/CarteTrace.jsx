@@ -87,7 +87,7 @@ export default function CarteTrace({ activiteId }) {
   const [lecture, setLecture] = useState(false);
   const [progres, setProgres] = useState(null); // { f, km, t } pendant un survol
   const [prete, setPrete] = useState(false);
-  const [fond, setFond] = useState("plan");
+  const [fond, setFond] = useState("satellite");
   const [vue, setVue] = useState("2d");
   const { data, isLoading, isError } = useQuery({
     queryKey: ["trace", activiteId], queryFn: () => getTrace(activiteId), staleTime: Infinity,

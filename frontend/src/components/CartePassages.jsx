@@ -16,6 +16,81 @@ const LARGEUR = ["interpolate", ["linear"], ["zoom"], 9, 1.2, 13, 2.2, 16, 4];
 const LARGEUR_BORD = ["interpolate", ["linear"], ["zoom"], 9, 2.4, 13, 3.6, 16, 5.5];
 const LYON = [[4.77, 45.70], [4.92, 45.81]]; // Lyon et Villeurbanne
 
+// Recherche d'une ville ou d'un lieu (Photon / OpenStreetMap : gratuit, sans clé).
+function RechercheLieu({ onChoix, centre }) {
+  const [q, setQ] = useState("");
+  const [res, setRes] = useState([]);
+  const [ouvert, setOuvert] = useState(false);
+  const [sel, setSel] = useState(0);
+  const [cherche, setCherche] = useState(false);
+  useEffect(() => {
+    const t = q.trim();
+    if (t.length < 2) { setRes([]); setCherche(false); return; }
+    const ctrl = new AbortController();
+    const id = setTimeout(async () => {
+      setCherche(true);
+      try {
+        const c = centre?.();
+        const proche = c ? `&lat=${c.lat.toFixed(3)}&lon=${c.lng.toFixed(3)}&zoom=8` : "";
+        const r = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(t)}&lang=fr&limit=10${proche}`, { signal: ctrl.signal });
+        const j = await r.json();
+        const vus = new Set();
+        setRes((j.features ?? []).map((f) => {
+          const p = f.properties;
+          const lieu = [p.city !== p.name && p.city, p.county !== p.name && p.state !== p.county && p.county, p.state !== p.name && p.state, p.country]
+            .filter(Boolean).join(", ");
+          return { id: `${p.osm_type}${p.osm_id}`, nom: p.name ?? t, lieu, centre: f.geometry.coordinates,
+            cadre: p.extent && [[p.extent[0], p.extent[3]], [p.extent[2], p.extent[1]]] };
+        }).filter((r) => {   // une même ville revient souvent en plusieurs exemplaires (commune, arrondissement…)
+          const k = `${r.nom}|${r.lieu}`;
+          return !vus.has(k) && vus.add(k);
+        }).slice(0, 6));
+        setSel(0); setOuvert(true); setCherche(false);
+      } catch (e) { if (e.name !== "AbortError") setCherche(false); }
+    }, 300);
+    return () => { clearTimeout(id); ctrl.abort(); };
+  }, [q]);
+  const choisir = (r) => { onChoix(r); setQ(r.nom); setOuvert(false); };
+  const clavier = (e) => {
+    if (!ouvert || !res.length) return;
+    if (e.key === "ArrowDown") { e.preventDefault(); setSel((s) => (s + 1) % res.length); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setSel((s) => (s - 1 + res.length) % res.length); }
+    else if (e.key === "Enter") { e.preventDefault(); choisir(res[sel]); }
+    else if (e.key === "Escape") setOuvert(false);
+  };
+  return (
+    <div className="relative w-full sm:w-64">
+      <div className="flex items-center gap-1.5 rounded-[9px] bg-black/55 backdrop-blur px-2.5 py-1">
+        <svg viewBox="0 0 24 24" className="w-3.5 h-3.5 shrink-0 text-white/70" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round">
+          <circle cx="11" cy="11" r="6.5" /><path d="m20 20-4.2-4.2" />
+        </svg>
+        <input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={clavier} onFocus={() => res.length && setOuvert(true)}
+          onBlur={() => setTimeout(() => setOuvert(false), 150)} placeholder="Aller à une ville…" type="search"
+          className="w-full min-w-0 bg-transparent text-[13px] font-semibold text-white placeholder:text-white/60 outline-none" />
+      </div>
+      {cherche && (
+        <p className="absolute z-10 mt-1 w-full rounded-[10px] bg-black/80 backdrop-blur px-2.5 py-1.5 text-[12px] text-white/70">Recherche…</p>
+      )}
+      {!cherche && ouvert && q.trim().length >= 2 && !res.length && (
+        <p className="absolute z-10 mt-1 w-full rounded-[10px] bg-black/80 backdrop-blur px-2.5 py-1.5 text-[12px] text-white/70">Aucun lieu trouvé</p>
+      )}
+      {!cherche && ouvert && res.length > 0 && (
+        <ul className="absolute z-10 mt-1 w-full rounded-[10px] bg-black/80 backdrop-blur py-1 shadow-lg">
+          {res.map((r, i) => (
+            <li key={r.id}>
+              <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => choisir(r)}
+                className={`w-full text-left px-2.5 py-1.5 ${i === sel ? "bg-white/15" : ""}`}>
+                <span className="block text-[13px] font-semibold text-white truncate">{r.nom}</span>
+                {r.lieu && <span className="block text-[11px] text-white/60 truncate">{r.lieu}</span>}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 // Tous les tracés sur une carte, colorés selon le nombre de passages au même endroit.
 export default function CartePassages() {
   const cadre = useRef(null);
@@ -117,7 +192,7 @@ export default function CartePassages() {
             <span className="rounded-[8px] bg-black/60 backdrop-blur px-2.5 py-1 text-[13px] font-semibold text-white">Chargement des tracés…</span>
           </div>
         )}
-        <div className="absolute top-2 left-2 flex gap-1.5">
+        <div className="absolute top-2 left-2 right-12 flex flex-wrap items-start gap-1.5">
           <Bascule options={[["plan", "Plan"], ["satellite", "Satellite"]]} valeur={fond} onChange={setFond} />
           <button type="button" onClick={() => carte.current?.fitBounds(LYON, { padding: 10, duration: 800 })}
             className="flex items-center gap-1 rounded-[9px] bg-black/55 backdrop-blur px-2.5 py-1 text-[12px] font-semibold text-white">
@@ -127,6 +202,12 @@ export default function CartePassages() {
             </svg>
             Lyon
           </button>
+          <RechercheLieu centre={() => carte.current?.getCenter()} onChoix={(r) => {
+            const m = carte.current;
+            if (!m) return;
+            if (r.cadre) m.fitBounds(r.cadre, { padding: 10, duration: 800, maxZoom: 15 });
+            else m.flyTo({ center: r.centre, zoom: 14, duration: 800 });
+          }} />
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-[12px] text-label-2 chiffres">
