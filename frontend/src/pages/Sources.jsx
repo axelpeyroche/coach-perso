@@ -71,29 +71,6 @@ const btn = "btn-gris btn-sm";
 const btnP = "btn-primaire btn-sm";
 const lienDanger = "text-[13px] text-ios-red active:opacity-50";
 
-// ── Strava (export gratuit) ─────────────────────────────────────────────────
-// La connexion API Strava est réservée aux abonnés : on passe par l'archive
-// « Télécharger vos données », gratuite pour tous les comptes.
-function BlocStrava() {
-  return (
-    <Bloc icone="🏃" couleur="#FC4C0226" titre="Strava" sousTitre="Export gratuit de l'archive">
-      <div className="space-y-3">
-        <p>Strava permet à tous les comptes (même gratuits) de télécharger l'archive complète de leurs activités :</p>
-        <ol className="list-decimal pl-5 text-[13px] space-y-1 text-label-2">
-          <li>Sur <strong>strava.com</strong> (navigateur, pas l'app) : avatar → <em>Paramètres</em> → <em>Mon compte</em>.</li>
-          <li>« Télécharger ou supprimer votre compte » → <em>Commencer</em> → <em>Demander une archive</em>.</li>
-          <li>Tu reçois un mail avec un zip (quelques minutes à quelques heures).</li>
-          <li>Dézippe-le et importe le fichier <code>activities.csv</code> dans le bloc « Fichier CSV ».</li>
-        </ol>
-        <p className="text-[13px] text-label-2">
-          Tu peux refaire l'opération quand tu veux : les activités déjà importées sont reconnues (identifiant Strava)
-          et les doublons avec Apple Santé sont fusionnés.
-        </p>
-      </div>
-    </Bloc>
-  );
-}
-
 // ── Import fichier ──────────────────────────────────────────────────────────
 function BlocFichier() {
   const qc = useQueryClient();
@@ -600,7 +577,6 @@ export default function Sources() {
           <BlocRaccourci />
           <div className="space-y-3">
             <BlocIntervals />
-            <BlocStrava />
             <BlocFichier />
             <BlocTraces />
           </div>
