@@ -18,6 +18,7 @@ from fastapi.responses import PlainTextResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
+import analyses_service as an
 import carnet_service as cs
 from database import obtenir_session
 from deps import get_current_user
@@ -510,7 +511,7 @@ def _serie(extra: dict, t: str, tz: ZoneInfo) -> list[tuple[datetime, float, str
 def _mesures_a_plat(extra: dict, tz: ZoneInfo) -> list[tuple[str, date, float]]:
     """Séries quotidiennes (FC repos, VFC, VO2max) : moyenne du jour, dernière valeur pour la VO2max."""
     par_jour: dict[tuple[str, date], list[tuple[datetime, float]]] = {}
-    for t in cs.MESURES:
+    for t in ("fc_repos", "vfc", "vo2max"):  # le sommeil arrive par Intervals.icu (durée par nuit, pas une moyenne)
         for quand, n, _ in _serie(extra, t, tz):
             par_jour.setdefault((t, quand.date()), []).append((quand, n))
     res = []
@@ -794,6 +795,16 @@ def mesures(
     db: Session = Depends(obtenir_session),
 ):
     return cs.series_mesures(db, current_user.id, jours=jours)
+
+
+@router.get("/api/analyses", summary="Analyses avancées : forme/fatigue, zones, récupération, course, plan, années, corrélations")
+def analyses(
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(obtenir_session),
+):
+    res = an.calculer_analyses(db, current_user)
+    db.commit()  # meilleurs efforts mémorisés, rapprochements du plan
+    return res
 
 
 # ---------------------------------------------------------------------------

@@ -668,6 +668,7 @@ def construire_export(db: Session, user: Utilisateur) -> dict:
         .order_by(Objectif.date_cible.is_(None), Objectif.date_cible).all()
     )
     stats = calculer_stats(acts)
+    import analyses_service  # import local : le module d'analyses s'appuie sur celui-ci
     return {
         "genere_le": datetime.utcnow().isoformat(timespec="seconds") + "Z",
         "profil": _profil(db, user),
@@ -675,6 +676,7 @@ def construire_export(db: Session, user: Utilisateur) -> dict:
         "stats": {k: v for k, v in stats.items() if k not in ("allures",)},
         "forme": series_mesures(db, user.id),
         "plan": lister_plan(db, user.id, date.today() - timedelta(days=28), date.today() + timedelta(days=42)),
+        "analyses": analyses_service.resume(analyses_service.calculer_analyses(db, user)),
         "activites":[serialiser_activite(a) for a in acts],
     }
 
@@ -683,6 +685,48 @@ def _cell(v) -> str:
     if v is None or v == "":
         return ""
     return re.sub(r"[\r\n|]+", " ", str(v)).strip()
+
+
+def _markdown_analyses(r: Optional[dict]) -> list[str]:
+    if not r:
+        return []
+    l = ["## Analyses (forme, récupération, intensité, plan)", ""]
+    f = r.get("forme")
+    if f:
+        l.append(f"- Forme de fond CTL (42 j) : {f['ctl']} · fatigue ATL (7 j) : {f['atl']} · fraîcheur TSB : {f['tsb']}"
+                 f" → {f['etat']}" + (f" · CTL {f['rampe_pct']:+d} % sur 7 j" if f.get("rampe_pct") is not None else ""))
+    rec = r.get("recuperation")
+    if rec:
+        l.append(f"- Récupération du {rec['jour']} : {rec['statut']} (score {rec['score']}) — VFC {rec['vfc']} ms "
+                 f"(réf. 60 j {rec['vfc_ref']}), FC repos {rec['fc_repos']} (réf. {rec['fc_ref']})")
+    som = r.get("sommeil") or {}
+    if som.get("moy_7j"):
+        l.append(f"- Sommeil : {som['moy_7j']} h/nuit sur 7 j ({som['moy_28j']} h sur 28 j), "
+                 f"{som['nuits_courtes_7j']} nuit(s) < 7 h cette semaine")
+    for k, lab in (("zones_4s", "4 dernières semaines"), ("zones_12s", "12 dernières semaines")):
+        z = r.get(k) or {}
+        if z.get("couvert_min"):
+            l.append(f"- Intensité ({lab}, {z['couvert_min']} min avec FC) : {z['bas_pct']} % zones 1-2, "
+                     f"{z['modere_pct']} % zone 3, {z['haut_pct']} % zones 4-5")
+    for k, lab in (("plan_4s", "4 dernières semaines"), ("plan_12s", "12 dernières semaines")):
+        p = r.get(k) or {}
+        if p.get("prevues"):
+            ligne = (f"- Respect du plan ({lab}) : {p['realisees']}/{p['prevues']} séances réalisées"
+                     f" ({p['taux']} %), {p['sautees']} sautée(s), {p['manquees']} non faite(s)")
+            if p.get("ecart_duree_pct") is not None:
+                ligne += f", durée réelle {p['ecart_duree_pct']:+d} % vs prévu"
+            if p.get("nb_rpe"):
+                ligne += f", RPE réel {p['rpe_reel_moy']} pour {p['rpe_cible_moy']} visé"
+            l.append(ligne)
+    eff = r.get("meilleurs_efforts") or {}
+    if eff:
+        l.append("- Meilleurs efforts (tracés GPS) : " + ", ".join(f"{k} {v['temps']} ({v['date']})" for k, v in eff.items()))
+    der = r.get("derives_recentes") or []
+    if der:
+        l.append("- Dérive cardiaque des dernières sorties longues : "
+                 + ", ".join(f"{d['date']} {d['derive_pct']:+.1f} %" for d in der) + " (> 5 % = endurance à consolider)")
+    l.append("")
+    return l
 
 
 def export_markdown(data: dict) -> str:
@@ -739,6 +783,8 @@ def export_markdown(data: dict) -> str:
     l += ["", f"- Ratio charge aiguë/chronique (ACWR) : {c['acwr']} ({c['zone']})",
           f"- Semaines consécutives actives : {s['regularite']['serie_semaines']}",
           f"- Jours actifs sur 28 j : {s['regularite']['jours_actifs_28j']}", ""]
+
+    l += _markdown_analyses(data.get("analyses"))
 
     if s["records"]["distances"] or s["records"]["autres"]:
         l += ["### Records", ""]
@@ -951,18 +997,20 @@ def parser_csv(contenu: str) -> tuple[str, list[tuple[Optional[str], dict]]]:
 
 
 # ---------------------------------------------------------------------------
-# Mesures de forme (FC au repos, VFC, VO2max) — une valeur par jour
+# Mesures de forme (FC au repos, VFC, VO2max, sommeil) — une valeur par jour
 # ---------------------------------------------------------------------------
 
 MESURES = {
     "fc_repos": {"label": "FC au repos", "unite": "bpm", "min": 25, "max": 120},
     "vfc":      {"label": "VFC (SDNN)",  "unite": "ms",  "min": 5,  "max": 300},
     "vo2max":   {"label": "VO2max",      "unite": "ml/kg/min", "min": 15, "max": 95},
+    "sommeil":  {"label": "Sommeil",     "unite": "h",   "min": 1,  "max": 16},
 }
 _ALIAS_MESURES = {
     "fc_repos": "fc_repos", "fcrepos": "fc_repos", "restingheartrate": "fc_repos", "fc_au_repos": "fc_repos",
     "vfc": "vfc", "hrv": "vfc", "heartratevariabilitysdnn": "vfc", "variabilite": "vfc",
     "vo2max": "vo2max", "vo2": "vo2max",
+    "sommeil": "sommeil", "sleep": "sommeil", "sommeil_h": "sommeil", "sleephours": "sommeil",
 }
 
 

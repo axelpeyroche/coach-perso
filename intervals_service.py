@@ -4,7 +4,9 @@ Synchro Intervals.icu : les séances de l'Apple Watch y arrivent toutes seules (
 grâce à la clé API personnelle de l'utilisateur (gratuite).
 
 Chaque séance est fusionnée avec celle du carnet qui commence au même moment (ou créée),
-puis son tracé est enregistré et rattaché comme un GPX de l'export Santé.
+puis son tracé est enregistré et rattaché comme un GPX de l'export Santé. Le flux de FC sert
+à calculer les zones et la dérive cardiaque ; le suivi « wellness » apporte la durée du sommeil
+(et comble les jours sans FC repos / VFC envoyées par le raccourci).
 """
 from __future__ import annotations
 
@@ -20,8 +22,9 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
 
+import analyses_service as an
 import carnet_service as cs
-from models import Activite, TraceGPS, Utilisateur
+from models import Activite, MesureSante, TraceGPS, Utilisateur
 
 _log = logging.getLogger(__name__)
 
@@ -30,6 +33,7 @@ FENETRE_JOURS = 14          # séances relues à chaque synchro (l'iPhone peut e
 PREMIERE_FENETRE_JOURS = 60
 INTERVALLE_MIN = timedelta(minutes=15)  # pas plus d'une synchro automatique par quart d'heure
 PAS_TRACE_M = 10            # comme les GPX importés : un point tous les 10 m
+VERSION_ANALYSE = 1         # zones de FC + dérive cardiaque tirées du flux de FC
 
 
 class IntervalsErreur(Exception):
@@ -116,16 +120,60 @@ def _donnees(a: dict, tz: ZoneInfo) -> Optional[dict]:
     return d
 
 
+def analyse_fc(streams: list, user: Utilisateur, sport: str, duree_sec: Optional[int]) -> dict:
+    """Zones de FC (Karvonen) et dérive cardiaque tirées des flux heartrate / time / distance."""
+    par_type = {s.get("type"): (s.get("data") or []) for s in streams or []}
+    fc, temps, dist = par_type.get("heartrate") or [], par_type.get("time") or [], par_type.get("distance") or []
+    res: dict = {}
+    pts = [(temps[i], v) for i, v in enumerate(fc) if v and i < len(temps) and temps[i] is not None and 30 <= v <= 240]
+    if len(pts) >= 10:
+        poids = [max(1.0, min(30.0, pts[i + 1][0] - t)) if i + 1 < len(pts) else 1.0 for i, (t, _) in enumerate(pts)]
+        res["zones_fc"] = cs._zones_fc(pts, poids, user.fc_max, user.fc_repos)
+    if sport in cs.SPORTS_PIED and dist and (duree_sec or 0) >= an.DERIVE_MIN_MIN * 60:
+        res["derive_fc"] = an.derive_cardiaque(temps, fc, dist)
+    return res
+
+
+def synchroniser_wellness(db: Session, user: Utilisateur, depuis, jusqu_a) -> int:
+    """Sommeil de chaque nuit ; FC repos et VFC (SDNN) seulement pour les jours où le
+    raccourci n'a rien envoyé (ses valeurs restent la référence)."""
+    athlete = user.intervals_athlete_id or "0"
+    lignes = _appel(user.intervals_cle, f"/athlete/{urllib.parse.quote(athlete)}/wellness",
+                    {"oldest": depuis.isoformat(), "newest": jusqu_a.isoformat()}) or []
+    deja = {(m.type, m.jour) for m in db.query(MesureSante).filter(
+        MesureSante.utilisateur_id == user.id, MesureSante.jour >= depuis, MesureSante.type.in_(("fc_repos", "vfc")))}
+    items = []
+    for w in lignes if isinstance(lignes, list) else []:
+        try:
+            jour = datetime.fromisoformat(str(w.get("id"))[:10]).date()
+        except ValueError:
+            continue
+        if w.get("sleepSecs"):
+            items.append(("sommeil", jour, w["sleepSecs"] / 3600))
+        for cle, t in (("restingHR", "fc_repos"), ("hrvSDNN", "vfc")):
+            if w.get(cle) and (t, jour) not in deja:
+                items.append((t, jour, float(w[cle])))
+    if not items:
+        return 0
+    b = cs.importer_mesures(db, user.id, items)
+    return b["cree"] + b["maj"]
+
+
 def synchroniser(db: Session, user: Utilisateur, force: bool = False) -> dict:
-    """Récupère les séances récentes d'Intervals.icu et leurs tracés. Idempotent.
-    Retourne un bilan {ignore, nouvelles, completees, traces} (ignore=True si synchro trop récente)."""
+    """Récupère les séances récentes d'Intervals.icu, leurs tracés, l'analyse de leur FC
+    et le sommeil. Idempotent.
+    Retourne un bilan {ignore, nouvelles, completees, traces, analyses, mesures}
+    (ignore=True si synchro trop récente)."""
     if not user.intervals_cle:
         raise IntervalsErreur("Intervals.icu n'est pas connecté")
     maintenant = datetime.utcnow()
     if not force and user.intervals_derniere_synchro and maintenant - user.intervals_derniere_synchro < INTERVALLE_MIN:
-        return {"ignore": True, "nouvelles": 0, "completees": 0, "traces": 0}
+        return {"ignore": True, "nouvelles": 0, "completees": 0, "traces": 0, "analyses": 0, "mesures": 0}
     tz = ZoneInfo(user.fuseau_horaire or "Europe/Paris")
-    jours = FENETRE_JOURS if user.intervals_derniere_synchro else PREMIERE_FENETRE_JOURS
+    deja_analyse = db.query(Activite.id).filter(Activite.utilisateur_id == user.id,
+                                                Activite.details.like('%"analyse_iv"%')).first()
+    # 1re synchro, ou 1re analyse de la FC : on remonte plus loin
+    jours = FENETRE_JOURS if user.intervals_derniere_synchro and deja_analyse else PREMIERE_FENETRE_JOURS
     depuis = (datetime.now(tz) - timedelta(days=jours)).date()
     athlete = user.intervals_athlete_id or "0"
     liste = _appel(user.intervals_cle, f"/athlete/{urllib.parse.quote(athlete)}/activities",
@@ -142,7 +190,7 @@ def synchroniser(db: Session, user: Utilisateur, force: bool = False) -> dict:
     avec_trace = {i for (i,) in db.query(TraceGPS.activite_id)
                   .filter(TraceGPS.utilisateur_id == user.id, TraceGPS.activite_id.isnot(None))}
 
-    bilan = {"ignore": False, "nouvelles": 0, "completees": 0, "traces": 0}
+    bilan = {"ignore": False, "nouvelles": 0, "completees": 0, "traces": 0, "analyses": 0, "mesures": 0}
     for a in sorted(liste, key=lambda x: x.get("start_date") or ""):
         if not a.get("id") or a.get("deleted"):
             continue
@@ -157,10 +205,22 @@ def synchroniser(db: Session, user: Utilisateur, force: bool = False) -> dict:
             cs.fusionner_details(act, {"intervals_id": iid, **({"fin": fin} if fin else {})})
             connues[iid] = act
             bilan["nouvelles" if statut == "cree" else "completees"] += 1
-        if act.id in avec_trace or "latlng" not in (a.get("stream_types") or ["latlng"]) or a.get("trainer"):
+        dispo = a.get("stream_types")
+        besoin_trace = act.id not in avec_trace and "latlng" in (dispo or ["latlng"]) and not a.get("trainer")
+        besoin_fc = (cs._details_dict(act).get("analyse_iv") != VERSION_ANALYSE
+                     and "heartrate" in (dispo or ["heartrate"]))
+        if not besoin_trace and not besoin_fc:
             continue
+        types = (["latlng", "altitude"] if besoin_trace else []) + (["heartrate", "distance"] if besoin_fc else []) + ["time"]
         streams = _appel(user.intervals_cle, f"/activity/{urllib.parse.quote(iid)}/streams.json",
-                         {"types": "latlng,altitude,time"})
+                         {"types": ",".join(types)})
+        if besoin_fc:
+            analyse = analyse_fc(streams, user, act.sport, act.duree_sec)
+            cs.fusionner_details(act, {"zones_fc": analyse.get("zones_fc")})  # celles du raccourci restent
+            cs.fusionner_details(act, {"derive_fc": analyse.get("derive_fc"), "analyse_iv": VERSION_ANALYSE}, ecraser=True)
+            bilan["analyses"] += 1
+        if not besoin_trace:
+            continue
         debut_trace, pts = _points(streams, _heure_locale(a.get("start_date"), tz) or act.debut)
         if len(pts) < 2 or len(pts) > 20_000:
             continue
@@ -175,6 +235,10 @@ def synchroniser(db: Session, user: Utilisateur, force: bool = False) -> dict:
             cs.fusionner_details(act, {"trace": True})
         avec_trace.add(act.id)
         bilan["traces"] += 1
+    try:
+        bilan["mesures"] = synchroniser_wellness(db, user, depuis, datetime.now(tz).date())
+    except IntervalsErreur:
+        _log.warning("Suivi wellness Intervals.icu indisponible", exc_info=True)
     user.intervals_derniere_synchro = maintenant
     db.flush()
     return bilan

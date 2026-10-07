@@ -4,6 +4,7 @@ import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
 import clsx from "clsx";
+import { Link } from "react-router-dom";
 import Card from "../components/Card";
 import Page from "../components/Page";
 import StatTile from "../components/StatTile";
@@ -156,7 +157,8 @@ export default function StatsCarnet() {
 
   return (
     <Page titre="Statistiques" large
-      sousTitre={s.premiere_activite ? `Depuis le ${fmtDate(s.premiere_activite)}` : null}>
+      sousTitre={s.premiere_activite ? `Depuis le ${fmtDate(s.premiere_activite)}` : null}
+      action={<Link to="/analyses" className="btn-texte">Analyses</Link>}>
       {filtres}
 
       {aucune ? (

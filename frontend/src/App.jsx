@@ -12,6 +12,7 @@ const Plan = lazy(() => import("./pages/Plan"));
 const Carnet = lazy(() => import("./pages/Carnet"));
 const Objectifs = lazy(() => import("./pages/Objectifs"));
 const StatsCarnet = lazy(() => import("./pages/StatsCarnet"));
+const Analyses = lazy(() => import("./pages/Analyses"));
 const Sources = lazy(() => import("./pages/Sources"));
 const Profil = lazy(() => import("./pages/Profil"));
 
@@ -50,6 +51,12 @@ const Icon = {
       <path d="M3 20h18M7 20V10M12 20V4M17 20v-7" />
     </svg>
   ),
+  Analyses: ({ c = "w-5 h-5", f = "none" }) => (
+    <svg viewBox="0 0 24 24" fillOpacity={0.16} stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className={c} fill={f}>
+      <path d="M3 17l5-5 4 3 8-9" />
+      <path d="M15 6h5v5" />
+    </svg>
+  ),
   Profil: ({ c = "w-5 h-5", f = "none" }) => (
     <svg viewBox="0 0 24 24" fillOpacity={0.16} stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className={c} fill={f}>
       <circle cx="12" cy="8" r="4" />
@@ -67,6 +74,7 @@ const NAV = [
   { to: "/carnet",    label: "Carnet",    IconC: Icon.Carnet },
   { to: "/objectifs", label: "Objectifs", IconC: Icon.Objectifs, mobileHide: true },
   { to: "/stats",     label: "Stats",     IconC: Icon.Stats },
+  { to: "/analyses",  label: "Analyses",  IconC: Icon.Analyses, mobileHide: true },
   { to: "/sources",   label: "Sources",   IconC: Icon.Sources, mobileHide: true },
   { to: "/profil",    label: "Profil",    IconC: Icon.Profil },
 ];
@@ -207,7 +215,7 @@ function SynchroIntervals() {
       if (document.visibilityState !== "visible") return;
       synchroIntervals().then((r) => {
         if (r.nouvelles || r.completees || r.traces) {
-          ["activites", "stats-carnet", "objectifs", "plan", "carte-traces", "intervals"].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+          ["activites", "stats-carnet", "objectifs", "plan", "carte-traces", "intervals", "analyses"].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
         }
       }).catch(() => {});
     };
@@ -272,6 +280,7 @@ export default function App() {
                   <Route path="/carnet"     element={<Carnet />} />
                   <Route path="/objectifs"  element={<Objectifs />} />
                   <Route path="/stats"      element={<StatsCarnet />} />
+                  <Route path="/analyses"   element={<Analyses />} />
                   <Route path="/sources"    element={<Sources />} />
                   <Route path="/profil"     element={<Profil dark={dark} setDark={setDark} />} />
                   <Route path="*"           element={<Navigate to="/" replace />} />

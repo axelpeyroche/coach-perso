@@ -92,6 +92,8 @@ export const getStatsCarnet = (sport) =>
 
 export const getMesures = (jours = 365) => api.get("/mesures", { params: { jours } }).then((r) => r.data);
 
+export const getAnalyses = () => api.get("/analyses", { timeout: 90000 }).then((r) => r.data);
+
 // --- Plan (séances prévues) ---
 export const getPlan = (depuis, jusqu_a) => api.get("/plan", { params: { depuis, jusqu_a } }).then((r) => r.data);
 export const creerPrevue = (payload) => api.post("/plan", payload).then((r) => r.data);
