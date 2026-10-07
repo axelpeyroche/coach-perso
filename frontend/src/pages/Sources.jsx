@@ -263,9 +263,10 @@ function BlocIntervals() {
         <div className="space-y-3">
           <p>✓ Connecté{statut.athlete_id ? <> (athlète <code>{statut.athlete_id}</code>)</> : null}.
             {statut.derniere_synchro && <span className="text-label-2"> Dernière synchro : {dateHeure(statut.derniere_synchro)}.</span>}</p>
-          <p className="text-[13px] text-label-2">Les séances arrivent toutes seules : à chaque envoi du raccourci Apple Santé et
-            à l'ouverture du carnet (au plus une fois par quart d'heure). Chacune est fusionnée avec la séance du carnet qui
-            commence au même moment, sans toucher à son titre, et son tracé apparaît sur la carte.</p>
+          <p className="text-[13px] text-label-2">L'app Intervals.icu Companion envoie chaque entraînement de la montre
+            sur Intervals.icu ; le carnet va ensuite les chercher via l'API d'Intervals.icu à chaque ouverture (au plus une fois
+            par quart d'heure). Chaque séance est fusionnée avec celle du carnet qui commence au même moment, sans toucher à
+            son titre, et son tracé apparaît sur la carte.</p>
           <div className="flex items-center gap-3">
             <button className={btnP} disabled={synchro.isPending} onClick={() => synchro.mutate()}>
               {synchro.isPending ? "Synchro en cours…" : "Synchroniser maintenant"}
