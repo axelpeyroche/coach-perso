@@ -269,17 +269,20 @@ def importer_activite(db: Session, user_id: int, source: str, donnees: dict,
         candidates = (
             db.query(Activite)
             .filter(Activite.utilisateur_id == user_id,
-                    Activite.source != source,
                     Activite.debut >= min(jour, debut - timedelta(minutes=15)),
                     Activite.debut <= max(jour + timedelta(days=1), debut + timedelta(minutes=15)))
             .all()
         )
         candidates.sort(key=lambda p: (famille_sport(p.sport) != fam, abs((p.debut - debut).total_seconds())))
         for p in candidates:
+            if p.source == source and not _detectee_auto(p):
+                continue  # même source : seul l'id_externe identifie la séance
             if _detectee_auto(p) and not _sans_heure(debut) and abs((p.debut - debut).total_seconds()) <= 15 * 60:
                 # Séance reconstituée par le raccourci : la vraie séance (export Santé…)
                 # la remplace, en gardant ce qui a été calculé ou saisi entre-temps
                 _remplacer_detectee(p, donnees)
+                if id_externe and p.source == source:
+                    p.id_externe = str(id_externe)  # le prochain envoi la retrouve par son id
                 return p, "fusion"
             sans_heure = _sans_heure(debut) or _sans_heure(p.debut)
             # « autre » (ex. « Entraînement » Strava) est compatible avec tout sport, mais
@@ -1186,15 +1189,17 @@ CONSERVATION_ECHANTILLONS = 21  # jours
 
 
 def stocker_echantillons(db: Session, user_id: int,
-                         ech: dict[str, list[tuple[datetime, float]]]) -> dict[str, list[tuple[datetime, float]]]:
+                         ech: dict[str, list[tuple[datetime, float]]],
+                         autour: Iterable[datetime] = ()) -> dict[str, list[tuple[datetime, float]]]:
     """
     Enregistre les échantillons reçus (chaque type remplace ce qui était stocké sur sa
     période) et renvoie tous ceux connus autour de cette période, tous types confondus.
     Plusieurs raccourcis peuvent ainsi envoyer chacun une partie des données (FC d'un
     côté, minutes d'exercice de l'autre) : la séance est détectée et complétée avec
-    l'ensemble, quel que soit l'ordre des envois.
+    l'ensemble, quel que soit l'ordre des envois. `autour` : dates à couvrir en plus
+    (entraînements reçus sans échantillon dans le même envoi).
     """
-    dates = [d for pts in ech.values() for d, _ in pts]
+    dates = [d for pts in ech.values() for d, _ in pts] + list(autour)
     if not dates:
         return {}
     for t, pts in ech.items():

@@ -91,6 +91,24 @@ Facultatifs, à ajouter un par un en vérifiant que le raccourci passe toujours 
 
 **Minutes d'exercice** est indispensable : c'est elle qui permet de reconstituer les séances.
 
+### Entraînements de la montre (facultatif, recommandé)
+
+Si l'action **Obtenir l'activité physique** renvoie les entraînements, ajoute-les à Carnet – Base, avant « Obtenir le contenu de l'URL » :
+1. **Obtenir l'activité physique** : période des 2 derniers jours si l'action le propose ;
+2. **Définir la variable** `Entrainements` ;
+3. dans la requête, une ligne Texte par propriété disponible :
+
+| Clé | Propriété | Obligatoire |
+|---|---|---|
+| `entrainement_debuts` | Date de début (ISO 8601 si proposé) | oui |
+| `entrainement_types` | Type d'entraînement | conseillé |
+| `entrainement_fins` | Date de fin | conseillé |
+| `entrainement_durees` | Durée | non |
+| `entrainement_distances` | Distance | non |
+| `entrainement_energies` | Énergie active | non |
+
+Un entraînement reçu prend la place de la séance reconstituée au même moment : le vrai sport (muscu, yoga…) remplace « Séance à préciser ». Il est ensuite complété avec la FC, les zones et les métriques de course. Une liste qui n'a pas une ligne par entraînement (distance absente pour la muscu, par exemple) est ignorée.
+
 ---
 
 ## Carnet – Master

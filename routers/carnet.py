@@ -446,6 +446,23 @@ def _mesures_a_plat(extra: dict, tz: ZoneInfo) -> list[tuple[str, date, float]]:
     return res
 
 
+def _entrainements_a_plat(extra: dict) -> list[ActiviteImportee]:
+    """Entraînements de la montre envoyés en listes parallèles (une ligne par entraînement) :
+    `entrainement_debuts` obligatoire, `entrainement_types` / `_fins` / `_durees` /
+    `_distances` / `_energies` facultatifs. Raccourcis saute les lignes vides : une liste
+    facultative qui n'a pas autant de lignes que les débuts est ignorée plutôt que décalée."""
+    debuts = _liste(extra.get("entrainement_debuts"))
+    if not debuts:
+        return []
+    colonnes = {}
+    for cle, champ in (("types", "type"), ("fins", "fin"), ("durees", "duree"),
+                       ("distances", "distance"), ("energies", "energie")):
+        valeurs = _liste(extra.get(f"entrainement_{cle}"))
+        if len(valeurs) == len(debuts):
+            colonnes[champ] = valeurs
+    return [ActiviteImportee(debut=d, **{c: v[i] for c, v in colonnes.items()}) for i, d in enumerate(debuts)]
+
+
 def _unite_echantillon(t: str, n: float, unite: str) -> Optional[float]:
     """Ramène un échantillon à l'unité du carnet (km/h, m, cm, ms)."""
     u = unite.lower().replace(" ", "")
@@ -512,6 +529,7 @@ def _importer_activites(payload: ImportActivitesSchema, db: Session):
     lot = list(payload.activites or []) + ([payload.activite] if payload.activite else [])
     if not _vide(extra.get("debut")):
         lot.append(ActiviteImportee(**extra))
+    lot += _entrainements_a_plat(extra)  # importés avant la détection : leur créneau n'est pas redétecté
     items_mesures = [(m.type, _date_import(m.date, tz).date(), _nombre_unite(m.valeur)[0])
                      for m in payload.mesures or []] + _mesures_a_plat(extra, tz)
     ech = _echantillons(extra, tz)
@@ -532,9 +550,10 @@ def _importer_activites(payload: ImportActivitesSchema, db: Session):
     db.flush()
     mesures = cs.importer_mesures(db, user.id, items_mesures)
     recus = sum(len(p) for p in ech.values())
-    ech = cs.stocker_echantillons(db, user.id, ech)  # + ceux envoyés par les autres raccourcis
+    debuts = [_date_import(x.debut, tz) for x in lot]
+    ech = cs.stocker_echantillons(db, user.id, ech, autour=debuts)  # + ceux envoyés par les autres raccourcis
     detectees = cs.detecter_seances(db, user, ech) if ech else 0
-    completees = cs.enrichir_activites(db, user, ech) if ech else 0
+    completees = cs.enrichir_activites(db, user, ech) if ech else 0  # FC, zones… des séances reçues aussi
     db.commit()
     morceaux = []
     if lot:
@@ -544,8 +563,9 @@ def _importer_activites(payload: ImportActivitesSchema, db: Session):
                         + (f", {mesures['ignore']} ignorée(s)" if mesures["ignore"] else ""))
     if detectees:
         morceaux.append(f"{detectees} séance(s) détectée(s)")
-    if ech:
+    if recus:
         morceaux.append(f"{recus} échantillon(s) reçu(s)")
+    if recus or completees:
         morceaux.append(f"{completees} séance(s) complétée(s) (FC, puissance, effort…)")
     return {"ok": True, **bilan, "mesures": mesures, "seances_detectees": detectees,
             "seances_completees": completees,
