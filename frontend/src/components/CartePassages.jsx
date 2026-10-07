@@ -3,7 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { getCarteTraces } from "../api";
 import { STYLE, Bascule } from "./CarteTrace";
 
-const SPORTS = [["course", "Course"], ["trail", "Trail"], ["velo", "Vélo"]];
+const SPORTS = [["course", "Course"], ["trail", "Trail"], ["velo", "Vélo"], ["marche", "Marche"], ["randonnee", "Rando"]];
+const PAR_DEFAUT = ["course", "trail", "velo"];
 // Paliers de passages (bornes basses renvoyées par l'API) → couleur du trait
 const PALIERS = [
   [1, "1", "#64D2FF"], [2, "2", "#30D158"], [3, "3–4", "#FFD60A"], [5, "5–9", "#FF9F0A"],
@@ -21,7 +22,7 @@ export default function CartePassages() {
   const [visible, setVisible] = useState(false);
   const [prete, setPrete] = useState(false);
   const [fond, setFond] = useState("plan");
-  const [sports, setSports] = useState(SPORTS.map(([k]) => k));
+  const [sports, setSports] = useState(PAR_DEFAUT);
   const { data, isLoading, isError, isFetching } = useQuery({
     queryKey: ["carte-traces", sports], queryFn: () => getCarteTraces(sports),
     enabled: visible, staleTime: 10 * 60 * 1000, placeholderData: (prec) => prec,
