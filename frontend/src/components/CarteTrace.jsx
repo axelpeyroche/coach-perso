@@ -107,7 +107,7 @@ export default function CarteTrace({ activiteId }) {
   return (
     <div className="space-y-1.5">
       <div className="relative h-64 rounded-[14px] overflow-hidden bg-remplissage">
-        <div ref={conteneur} className="absolute inset-0" />
+        <div ref={conteneur} className="w-full h-full" />
         {isLoading && <p className="absolute inset-0 grid place-items-center text-[13px] text-label-2">Chargement du tracé…</p>}
         <div className="absolute top-2 left-2 flex flex-col gap-1.5 items-start">
           <Bascule options={[["plan", "Plan"], ["satellite", "Satellite"]]} valeur={fond} onChange={setFond} />
