@@ -264,24 +264,24 @@ def carte_traces(
     current_user: Utilisateur = Depends(get_current_user),
     db: Session = Depends(obtenir_session),
 ):
-    """`meta[i]` = [sport, km] du tracé `traces[i]` (sport déduit de la vitesse sans séance).
+    """`meta[i]` = [sport, km] du tracé `traces[i]` ; seuls les tracés liés à une séance du carnet sont servis.
     Les tracés encodés sont gardés en base et regénérés seulement quand les tracés changent."""
-    lignes = (db.query(TraceGPS.id, TraceGPS.debut, TraceGPS.fin, TraceGPS.distance_km, TraceGPS.dplus_m, Activite.sport)
-              .outerjoin(Activite, Activite.id == TraceGPS.activite_id)
+    lignes = (db.query(TraceGPS.id, TraceGPS.distance_km, Activite.sport)
+              .join(Activite, Activite.id == TraceGPS.activite_id)
               .filter(TraceGPS.utilisateur_id == current_user.id).order_by(TraceGPS.id).all())
-    signature = f"{len(lignes)}:{lignes[-1].id if lignes else 0}:{round(sum(l.distance_km or 0 for l in lignes), 3)}"
+    signature = f"seances:{len(lignes)}:{sum(l.id for l in lignes)}:{round(sum(l.distance_km or 0 for l in lignes), 3)}"
     cache = db.get(CacheCarte, current_user.id)
     if cache is None or cache.signature != signature:
         encodes = [json.dumps(cs.encoder_trace(json.loads(p)), separators=(",", ":"))
-                   for (p,) in db.query(TraceGPS.points).filter(TraceGPS.utilisateur_id == current_user.id)
+                   for (p,) in db.query(TraceGPS.points).join(Activite, Activite.id == TraceGPS.activite_id)
+                   .filter(TraceGPS.utilisateur_id == current_user.id)
                    .order_by(TraceGPS.id)]
         if cache is None:
             cache = CacheCarte(utilisateur_id=current_user.id)
             db.add(cache)
         cache.signature, cache.donnees = signature, "[" + ",".join(encodes) + "]"
         db.commit()
-    meta = [[cs.sport_trace(l.sport, l.distance_km, (l.fin - l.debut).total_seconds(), l.dplus_m),
-             round(l.distance_km or 0, 2)] for l in lignes]
+    meta = [[l.sport, round(l.distance_km or 0, 2)] for l in lignes]
     return Response('{"meta":' + json.dumps(meta, separators=(",", ":")) + ',"traces":' + cache.donnees + "}",
                     media_type="application/json")
 

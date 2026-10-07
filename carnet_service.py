@@ -1308,23 +1308,6 @@ def rattacher_traces(db: Session, user_id: int) -> int:
     return n
 
 
-def sport_trace(sport_seance: Optional[str], distance_km: Optional[float], secondes: float,
-                dplus_m: Optional[int]) -> Optional[str]:
-    """Sport d'un tracé : celui de sa séance, sinon déduit de la vitesse moyenne
-    (tes séances : course 8–11 km/h, vélo 12–20 km/h, marche sous 5 km/h, rando plus lente et pentue)."""
-    if sport_seance:
-        return sport_seance
-    if not distance_km or secondes <= 0:
-        return None
-    v = distance_km / (secondes / 3600)
-    pente = (dplus_m or 0) / max(distance_km, 0.1)
-    if v < 5 or (v < 6.5 and pente < 40):
-        return "randonnee" if pente >= 25 else "marche"
-    if v < 11.5:
-        return "trail" if pente >= 30 else "course"
-    return "velo" if v < 35 else None  # au-delà : voiture, train…
-
-
 def encoder_trace(points: list[list], pas: float = 12.0) -> list[int]:
     """Tracé allégé (un point tous les `pas` mètres) en entiers delta-encodés au 1e-5 degré :
     [lat0, lon0, dlat1, dlon1, …]. La carte des passages est calculée dans le navigateur."""

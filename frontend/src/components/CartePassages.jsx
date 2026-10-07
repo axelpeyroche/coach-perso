@@ -14,6 +14,7 @@ const PALIERS = [
 const COULEUR = ["match", ["get", "n"], ...PALIERS.flatMap(([n, , c]) => [n, c]), "#64D2FF"];
 const LARGEUR = ["interpolate", ["linear"], ["zoom"], 9, 1.2, 13, 2.2, 16, 4];
 const LARGEUR_BORD = ["interpolate", ["linear"], ["zoom"], 9, 2.4, 13, 3.6, 16, 5.5];
+const LYON = [[4.77, 45.70], [4.92, 45.81]]; // Lyon et Villeurbanne
 
 // Tous les tracés sur une carte, colorés selon le nombre de passages au même endroit.
 export default function CartePassages() {
@@ -116,8 +117,16 @@ export default function CartePassages() {
             <span className="rounded-[8px] bg-black/60 backdrop-blur px-2.5 py-1 text-[13px] font-semibold text-white">Chargement des tracés…</span>
           </div>
         )}
-        <div className="absolute top-2 left-2">
+        <div className="absolute top-2 left-2 flex gap-1.5">
           <Bascule options={[["plan", "Plan"], ["satellite", "Satellite"]]} valeur={fond} onChange={setFond} />
+          <button type="button" onClick={() => carte.current?.fitBounds(LYON, { padding: 10, duration: 800 })}
+            className="flex items-center gap-1 rounded-[9px] bg-black/55 backdrop-blur px-2.5 py-1 text-[12px] font-semibold text-white">
+            <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+              <circle cx="12" cy="12" r="7" /><circle cx="12" cy="12" r="2" fill="currentColor" />
+              <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+            </svg>
+            Lyon
+          </button>
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-[12px] text-label-2 chiffres">
