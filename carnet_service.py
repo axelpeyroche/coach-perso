@@ -721,6 +721,11 @@ def _markdown_analyses(r: Optional[dict]) -> list[str]:
     eff = r.get("meilleurs_efforts") or {}
     if eff:
         l.append("- Meilleurs efforts (tracés GPS) : " + ", ".join(f"{k} {v['temps']} ({v['date']})" for k, v in eff.items()))
+    vma = r.get("vma")
+    if vma:
+        t = vma.get("dernier_test")
+        l.append(f"- VMA estimée (meilleurs efforts + FC, calées sur les tests demi-Cooper) : {vma['estimee']} km/h"
+                 + (f" · dernier test {t['vma']} km/h le {t['date']}" if t else ""))
     der = r.get("derives_recentes") or []
     if der:
         l.append("- Dérive cardiaque des dernières sorties longues : "

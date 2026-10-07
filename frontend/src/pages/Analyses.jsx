@@ -261,6 +261,46 @@ function Recuperation({ r }) {
 }
 
 // ── Course ────────────────────────────────────────────────────────────────
+// ── VMA ────────────────────────────────────────────────────────────────────
+const allureVma = (vma, pct) => (vma ? fmtAllureSec(3600 / (vma * pct)) : "—");
+
+function Vma({ v }) {
+  const [semaines, setSemaines] = useState(52);
+  const data = useMemo(() => (v?.points ?? []).slice(-semaines).map((p) => ({ ...p, label: court(p.semaine) })), [v, semaines]);
+  if (!v?.actuelle && !v?.tests?.length) {
+    return <Card><Vide>Pas encore assez de sorties (ou de tests demi-Cooper) pour estimer ta VMA.</Vide></Card>;
+  }
+  const act = v.actuelle?.vma, t = v.dernier_test;
+  const kmh = (x) => (x == null ? "—" : `${nombre(x, 1)} km/h`);
+  return (
+    <Graphe titre="Évolution de la VMA" couleur={VIOLET}
+      sousTitre={act ? `Estimée aujourd'hui : ${nombre(act, 1)} km/h (${allureVma(act, 1)})` : null}
+      action={<Segmente valeur={semaines} onChange={setSemaines} options={[[26, "6 m"], [52, "1 an"], [104, "2 ans"]]} />}
+      note={`Les points violets sont tes tests demi-Cooper (distance en 6 min × 10). Entre deux tests, la VMA est estimée chaque semaine à partir de deux sources : tes meilleurs passages GPS des 8 dernières semaines (ramenés à la VMA selon la durée tenue) et le rapport vitesse / FC de réserve de tes sorties des 4 dernières semaines. Les deux sont calés sur tes tests (×${nombre(v.calage.efforts, 2)} et ×${nombre(v.calage.fc, 2)}). C'est une estimation : un nouveau test reste la référence.`}>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+        <Tuile label="VMA estimée" value={kmh(act)} sub={v.actuelle ? `semaine du ${court(v.actuelle.semaine)}` : null} />
+        <Tuile label="Dernier test" value={kmh(t?.vma)} sub={t ? fmtDate(t.date) : "aucun test"} />
+        <Tuile label="Allure VMA (100 %)" value={allureVma(act ?? t?.vma, 1)} sub={`90 % : ${allureVma(act ?? t?.vma, 0.9)}`} />
+        <Tuile label="Endurance (65-75 %)" value={allureVma(act ?? t?.vma, 0.7)} sub={`${allureVma(act ?? t?.vma, 0.75)} → ${allureVma(act ?? t?.vma, 0.65)}`} />
+      </div>
+      <ResponsiveContainer width="100%" height={240}>
+        <ComposedChart data={data} margin={{ left: 0, right: 0, top: 8 }}>
+          <CartesianGrid {...grille} />
+          <XAxis dataKey="label" {...axeX} minTickGap={32} />
+          <YAxis {...axeY} domain={[(m) => Math.floor(m - 0.5), (m) => Math.ceil(m + 0.5)]} width={36} allowDecimals={false} />
+          <Tooltip cursor={ligneCurseur} content={<InfoBulle format={(x) => `${nombre(x, 1)} km/h`} />} />
+          <Line dataKey="vma_efforts" name="Meilleurs efforts" stroke={ORANGE} strokeWidth={1.5} strokeOpacity={0.55} strokeDasharray="4 3" dot={false} connectNulls />
+          <Line dataKey="vma_fc" name="FC de réserve" stroke={ROSE} strokeWidth={1.5} strokeOpacity={0.55} strokeDasharray="4 3" dot={false} connectNulls />
+          <Line dataKey="estimee" name="VMA estimée" stroke={VIOLET} strokeWidth={3} dot={false} connectNulls />
+          <Line dataKey="test" name="Test demi-Cooper" stroke="none" isAnimationActive={false}
+            dot={{ r: 6, fill: VIOLET, stroke: "white", strokeWidth: 2 }} activeDot={{ r: 7 }} />
+        </ComposedChart>
+      </ResponsiveContainer>
+      <Legende items={[{ label: "VMA estimée", couleur: VIOLET }, { label: "Meilleurs efforts", couleur: ORANGE }, { label: "FC de réserve", couleur: ROSE }]} />
+    </Graphe>
+  );
+}
+
 function Course({ c }) {
   const [dist, setDist] = useState("5 km");
   const preds = useMemo(() => (c?.predictions ?? []).filter((p) => p["5 km"] || p["10 km"]).map((p) => ({ ...p, label: court(p.semaine) })), [c]);
@@ -553,7 +593,7 @@ export default function Analyses() {
       <Section titre="Forme et fatigue"><FormeFatigue f={a.forme} /></Section>
       <Section titre="Récupération"><Recuperation r={a.recuperation} /></Section>
       <Section titre="Intensité"><Zones z={a.zones} /></Section>
-      <Section titre="Course à pied"><Course c={a.course} /></Section>
+      <Section titre="Course à pied"><Vma v={a.vma} /><Course c={a.course} /></Section>
       <Section titre="Respect du plan"><RespectPlan p={a.plan} /></Section>
       <Section titre="Année par année"><Annuel y={a.annuel} /></Section>
       <Section titre="Corrélations">

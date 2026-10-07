@@ -1,7 +1,7 @@
 """
 Analyses avancées du carnet : forme / fatigue (CTL, ATL, TSB), répartition des zones de FC,
 indice de récupération (VFC, FC repos, sommeil), analyses de course (meilleurs efforts tirés
-des tracés GPS, dérive cardiaque, prédictions, cadence), respect du plan, comparaison d'une
+des tracés GPS, dérive cardiaque, prédictions, cadence), évolution de la VMA, respect du plan, comparaison d'une
 année sur l'autre et corrélations entre les données.
 
 Tout est recalculé à la demande à partir du carnet ; seuls les meilleurs efforts d'une séance
@@ -13,9 +13,10 @@ import json
 import math
 from collections import defaultdict
 from datetime import date, datetime, timedelta
-from statistics import mean, pstdev
+from statistics import mean, median, pstdev
 from typing import Iterable, Optional
 
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 import carnet_service as cs
@@ -358,6 +359,148 @@ def _course(acts: list[Activite], auj: date) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# VMA : tests demi-Cooper + estimations continues (meilleurs efforts, FC de réserve)
+# ---------------------------------------------------------------------------
+
+VMA_FENETRE_EFFORTS = 56   # jours : enveloppe des meilleures performances
+VMA_FENETRE_FC = 28        # jours : médiane des estimations par la FC
+VMA_CALAGE_JOURS = 28      # jours autour d'un test pour caler les estimations
+VMA_SEMAINES = 104
+VMA_SAUT_GPS = 1.35       # effort jugé aberrant au-delà de 135 % de la médiane des séances voisines
+
+
+def fraction_vma(t_min: float) -> float:
+    """Fraction de la VMA tenable pendant t minutes (≈ 103 % sur 4 min, 92 % sur 20 min, 81 % sur un semi)."""
+    return 1 - 0.0665 * math.log(max(t_min, 3) / 6)
+
+
+def _est_test_vma(a: Activite) -> bool:
+    t = (a.titre or "").lower()
+    return bool(a.sport in cs.SPORTS_PIED and ("vma" in t or "cooper" in t) and a.distance_km
+                and a.duree_sec and 330 <= a.duree_sec <= 390)
+
+
+def _tests_anciens(db: Session, user_id: int) -> list[tuple[date, float]]:
+    """Tests demi-Cooper enregistrés par l'ancien programme (tables conservées en base, non mappées)."""
+    try:
+        with db.begin_nested():
+            rows = db.execute(text(
+                "SELECT j.evalue_le, r.vma_calculee_kmh, r.distance_metres FROM resultats_demi_cooper r "
+                "JOIN journaux_evaluation_seance j ON r.evaluation_id = j.id WHERE j.utilisateur_id = :u"),
+                {"u": user_id}).fetchall()
+    except Exception:
+        return []
+    out = []
+    for jour, vma, dist in rows:
+        v = vma or (dist / 100 if dist else None)
+        if isinstance(jour, str):
+            jour = datetime.fromisoformat(jour)
+        if jour and v:
+            out.append((jour.date() if isinstance(jour, datetime) else jour, float(v)))
+    return out
+
+
+def _vma(db: Session, user: Utilisateur, acts: list[Activite], mesures: dict[str, dict[date, float]],
+         auj: date) -> dict:
+    pied = [a for a in acts if a.sport in cs.SPORTS_PIED]
+
+    # 1. Tests : demi-Cooper (6 min) → VMA = distance parcourue × 10
+    tests = [{"date": a.debut.date().isoformat(), "vma": round(a.distance_km * 10, 1), "titre": a.titre,
+              "activite_id": a.id, "source": "carnet"} for a in pied if _est_test_vma(a)]
+    jours_tests = [date.fromisoformat(t["date"]) for t in tests]
+    for j, v in _tests_anciens(db, user.id):
+        if j <= auj and all(abs((j - d).days) > 14 for d in jours_tests):
+            tests.append({"date": j.isoformat(), "vma": round(v, 1), "titre": "Demi-Cooper (ancien programme)",
+                          "activite_id": None, "source": "ancien"})
+            jours_tests.append(j)
+    tests.sort(key=lambda t: t["date"])
+    ids_tests = {t["activite_id"] for t in tests}
+
+    # 2. Meilleurs efforts (tracés GPS) : vitesse / fraction de VMA tenable sur cette durée
+    par_efforts: list[tuple[date, float, Activite]] = []
+    for a in pied:
+        if a.id in ids_tests:
+            continue
+        eff = cs._details_dict(a).get("efforts") or {}
+        ests = [d / 1000 / (eff[l] / 3600) / fraction_vma(eff[l] / 60) for l, d in EFFORTS if eff.get(l)]
+        if ests:
+            par_efforts.append((a.debut.date(), max(ests), a))
+    # Écarte les sauts GPS : effort > 35 % au-dessus de la médiane des séances voisines (± 90 jours)
+    def plausible(j: date, v: float) -> bool:
+        voisins = [x for d, x, _ in par_efforts if abs((d - j).days) <= 90 and d != j]
+        return len(voisins) < 5 or v <= VMA_SAUT_GPS * median(voisins)
+    par_efforts = [e for e in par_efforts if plausible(e[0], e[1])]
+
+    # 3. FC de réserve : %VO2 de réserve ≈ %FC de réserve (Swain), vitesse corrigée du dénivelé
+    fc_max = user.fc_max
+    fc_rep = user.fc_repos or (median(mesures["fc_repos"].values()) if mesures.get("fc_repos") else None)
+    par_fc: list[tuple[date, float, Activite]] = []
+    if fc_max and fc_rep and fc_max > fc_rep:
+        for a in pied:
+            if (a.id in ids_tests or a.sport != "course" or not a.fc_moyenne_bpm or not a.distance_km
+                    or not a.duree_sec or a.duree_sec < 900):
+                continue
+            h = a.duree_sec / 3600
+            if not 6 <= a.distance_km / h <= 25:
+                continue
+            frac = (a.fc_moyenne_bpm - fc_rep) / (fc_max - fc_rep)
+            if 0.5 <= frac <= 0.97:
+                par_fc.append((a.debut.date(), (a.distance_km + 8 * (a.dplus_m or 0) / 1000) / h / frac, a))
+
+    def enveloppe(j: date) -> Optional[float]:
+        xs = [v for d, v, _ in par_efforts if j - timedelta(days=VMA_FENETRE_EFFORTS) < d <= j]
+        return max(xs) if xs else None
+
+    def mediane_fc(j: date, avant: int = VMA_FENETRE_FC, apres: int = 0) -> Optional[float]:
+        xs = [v for d, v, _ in par_fc if j - timedelta(days=avant) < d <= j + timedelta(days=apres)]
+        return median(xs) if len(xs) >= 3 else None
+
+    # Calage : rapport moyen « VMA du test / estimation » autour des dates de test
+    def calage(estimer) -> tuple[float, int]:
+        r = [t["vma"] / e for t in tests if (e := estimer(date.fromisoformat(t["date"])))]
+        return (min(1.25, max(0.85, mean(r))), len(r)) if r else (1.0, 0)
+    k_eff, n_eff = calage(lambda j: enveloppe(j + timedelta(days=VMA_CALAGE_JOURS // 2)))
+    k_fc, n_fc = calage(lambda j: mediane_fc(j, VMA_CALAGE_JOURS, VMA_CALAGE_JOURS))
+
+    # 4. Série hebdomadaire : moyenne des estimations calées, lissée sur 3 semaines
+    points = []
+    debut = min([d for d, _, _ in par_efforts + par_fc] + jours_tests, default=None)
+    if debut:
+        lundi = max(cs._lundi(debut), cs._lundi(auj) - timedelta(weeks=VMA_SEMAINES - 1))
+        while lundi <= auj:
+            fin = min(lundi + timedelta(days=6), auj)
+            e, f = enveloppe(fin), mediane_fc(fin)
+            e, f = e and e * k_eff, f and f * k_fc
+            ests = [x for x in (e, f) if x]
+            t = [x["vma"] for x in tests if lundi <= date.fromisoformat(x["date"]) <= fin]
+            points.append({"semaine": lundi.isoformat(), "vma_efforts": _r(e), "vma_fc": _r(f),
+                           "estimee": mean(ests) if ests else None, "test": t[-1] if t else None})
+            lundi += timedelta(weeks=1)
+    brut = [p["estimee"] for p in points]
+    for i, p in enumerate(points):
+        xs = [x for x in brut[max(0, i - 2): i + 1] if x]
+        p["estimee"] = _r(mean(xs)) if xs and brut[i] else None
+
+    actuelle = next((p for p in reversed(points) if p["estimee"]), None)
+    dernier = tests[-1] if tests else None
+    premiere = points[0]["semaine"] if points else ""
+    seances = sorted(
+        [{"date": d.isoformat(), "vma": round(v * k_eff, 1), "source": "effort", "titre": a.titre, "activite_id": a.id}
+         for d, v, a in par_efforts] +
+        [{"date": d.isoformat(), "vma": round(v * k_fc, 1), "source": "fc", "titre": a.titre, "activite_id": a.id}
+         for d, v, a in par_fc], key=lambda s: s["date"])
+    return {
+        "tests": tests, "points": points,
+        "seances": [s for s in seances if s["date"] >= premiere],
+        "actuelle": actuelle and {"vma": actuelle["estimee"], "semaine": actuelle["semaine"],
+                                  "ecart_dernier_test": _r(actuelle["estimee"] - dernier["vma"]) if dernier else None},
+        "dernier_test": dernier,
+        "calage": {"efforts": round(k_eff, 3), "fc": round(k_fc, 3), "tests_efforts": n_eff, "tests_fc": n_fc},
+        "fc_max": fc_max, "fc_repos": _r(fc_rep, 0),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Respect du plan
 # ---------------------------------------------------------------------------
 
@@ -565,6 +708,7 @@ def calculer_analyses(db: Session, user: Utilisateur, aujourd_hui: Optional[date
         "zones": _zones_hebdo(acts, user, auj),
         "recuperation": _recuperation(mesures, auj),
         "course": _course(acts, auj),
+        "vma": _vma(db, user, acts, mesures, auj),
         "plan": _respect_plan(db, user.id, auj),
         "annuel": _annuel(acts, auj),
         "correlations": _correlations(acts, mesures, serie_complete, poids, auj),
@@ -586,4 +730,6 @@ def resume(analyses: dict) -> dict:
         "plan_4s": p["bilan_4s"], "plan_12s": p["bilan_12s"],
         "meilleurs_efforts": {k: {"temps": v["temps_str"], "date": v["date"]} for k, v in c["records"].items()},
         "derives_recentes": c["derives"][-5:],
+        "vma": analyses["vma"]["actuelle"] and {"estimee": analyses["vma"]["actuelle"]["vma"],
+                                                "dernier_test": analyses["vma"]["dernier_test"]},
     }
