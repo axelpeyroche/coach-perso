@@ -5,7 +5,7 @@ import { STYLE, Bascule } from "./CarteTrace";
 import { calculerPassages, decoderTraces } from "../passages";
 
 const SPORTS = [["course", "Course"], ["trail", "Trail"], ["velo", "Vélo"], ["marche", "Marche"], ["randonnee", "Rando"]];
-const PAR_DEFAUT = ["course", "trail", "velo"];
+const PAR_DEFAUT = ["course", "trail", "velo", "marche", "randonnee"];
 // Paliers de passages (bornes basses) → couleur du trait
 const PALIERS = [
   [1, "1", "#64D2FF"], [2, "2", "#30D158"], [3, "3–4", "#FFD60A"], [5, "5–9", "#FF9F0A"],
