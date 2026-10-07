@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getCarteTraces } from "../api";
 import { STYLE, Bascule } from "./CarteTrace";
+import { calculerPassages, decoderTraces } from "../passages";
 
 const SPORTS = [["course", "Course"], ["trail", "Trail"], ["velo", "Vélo"], ["marche", "Marche"], ["randonnee", "Rando"]];
 const PAR_DEFAUT = ["course", "trail", "velo"];
-// Paliers de passages (bornes basses renvoyées par l'API) → couleur du trait
+// Paliers de passages (bornes basses) → couleur du trait
 const PALIERS = [
   [1, "1", "#64D2FF"], [2, "2", "#30D158"], [3, "3–4", "#FFD60A"], [5, "5–9", "#FF9F0A"],
   [10, "10–19", "#FF453A"], [20, "20–49", "#FF2DAA"], [50, "50+", "#8E5CFF"],
@@ -23,12 +24,19 @@ export default function CartePassages() {
   const [prete, setPrete] = useState(false);
   const [fond, setFond] = useState("plan");
   const [sports, setSports] = useState(PAR_DEFAUT);
-  const { data, isLoading, isError, isFetching } = useQuery({
-    queryKey: ["carte-traces", sports], queryFn: () => getCarteTraces(sports),
-    enabled: visible, staleTime: 10 * 60 * 1000, placeholderData: (prec) => prec,
+  // Tous les tracés sont chargés une fois ; changer de filtre ne fait que recalculer ici.
+  const { data: brut, isLoading, isError } = useQuery({
+    queryKey: ["carte-traces"], queryFn: getCarteTraces, enabled: visible, staleTime: 10 * 60 * 1000,
   });
+  const traces = useMemo(() => (brut ? decoderTraces(brut.traces) : null), [brut]);
+  const data = useMemo(() => {
+    if (!traces) return null;
+    const idx = brut.meta.flatMap(([sport], i) => (sports.includes(sport) ? [i] : []));
+    return { ...calculerPassages(idx.map((i) => traces[i])), nb_traces: idx.length,
+      km: Math.round(idx.reduce((t, i) => t + brut.meta[i][1], 0)) };
+  }, [traces, brut, sports]);
 
-  // Ne charge la carte (≈ 300 Ko) que lorsqu'elle arrive à l'écran
+  // Ne charge les tracés (≈ 400 Ko) que lorsqu'elle arrive à l'écran
   useEffect(() => {
     const obs = new IntersectionObserver(([e]) => e.isIntersecting && setVisible(true), { rootMargin: "200px" });
     if (cadre.current) obs.observe(cadre.current);
@@ -104,16 +112,13 @@ export default function CartePassages() {
       <div ref={cadre} className="relative h-80 lg:h-[26rem] rounded-[14px] overflow-hidden bg-remplissage">
         <div ref={conteneur} className="w-full h-full" />
         {(isLoading || !visible) && (
-          <p className="absolute inset-0 grid place-items-center text-[13px] text-label-2">Chargement des tracés…</p>
+          <div className="absolute inset-0 grid place-items-center pointer-events-none">
+            <span className="rounded-[8px] bg-black/60 backdrop-blur px-2.5 py-1 text-[13px] font-semibold text-white">Chargement des tracés…</span>
+          </div>
         )}
         <div className="absolute top-2 left-2">
           <Bascule options={[["plan", "Plan"], ["satellite", "Satellite"]]} valeur={fond} onChange={setFond} />
         </div>
-        {isFetching && !isLoading && (
-          <span className="absolute bottom-2 left-2 rounded-[8px] bg-black/55 backdrop-blur px-2 py-1 text-[12px] font-semibold text-white">
-            Mise à jour…
-          </span>
-        )}
       </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-[12px] text-label-2 chiffres">
         <span>Passages :</span>

@@ -230,6 +230,15 @@ class TraceGPS(Base):
     points: Mapped[str] = mapped_column(Text, nullable=False)
 
 
+class CacheCarte(Base):
+    """Tracés allégés et encodés pour la carte « Mes tracés » (regénérés quand les tracés changent)."""
+    __tablename__ = "cache_cartes"
+
+    utilisateur_id: Mapped[int] = mapped_column(ForeignKey("utilisateurs.id"), primary_key=True)
+    signature: Mapped[str] = mapped_column(String(100), nullable=False)
+    donnees: Mapped[str] = mapped_column(Text, nullable=False)
+
+
 class SeancePrevue(Base):
     """
     Séance planifiée (envoyée par Claude via le token Claude, ou saisie).
