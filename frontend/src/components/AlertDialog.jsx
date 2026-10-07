@@ -1,18 +1,24 @@
-// Alerte iOS : verre, texte centré, bouton pleine largeur
+import { createPortal } from "react-dom";
+import { useVerrouDefilement } from "../navigation";
+
+// Alerte iOS 26 : verre épais, texte centré, bouton en capsule pleine largeur
 export default function AlertDialog({ open, title, message, closeLabel = "OK", onClose }) {
+  useVerrouDefilement(open);
   if (!open) return null;
-  return (
+  return createPortal(
     <div className="voile !items-center p-6" onClick={onClose}>
-      <div className="alerte" onClick={e => e.stopPropagation()}>
-        <div className="px-5 pt-5 pb-4 space-y-1">
+      <div role="alertdialog" className="alerte glass glass-epais" onClick={e => e.stopPropagation()}>
+        <div className="px-6 pt-6 pb-4 space-y-1.5">
           {title && <h3 className="text-[17px] font-semibold">{title}</h3>}
-          {message && <p className="text-[13px] text-label whitespace-pre-line">{message}</p>}
+          {message && <p className="text-[14px] text-label whitespace-pre-line">{message}</p>}
         </div>
-        <button onClick={onClose}
-          className="w-full h-11 border-t-[0.5px] border-separateur text-[17px] font-semibold text-brand active:bg-remplissage">
-          {closeLabel}
-        </button>
+        <div className="px-4 pb-4">
+          <button onClick={onClose} className="btn-alerte w-full bg-brand text-white font-semibold">
+            {closeLabel}
+          </button>
+        </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

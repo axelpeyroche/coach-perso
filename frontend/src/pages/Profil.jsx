@@ -59,7 +59,7 @@ function Avatar({ initials, photoUrl, onPhotoChange }) {
   }
 
   const errMsg = sizeErr || (mutation.isError ? getErrorMessage(mutation.error, "Erreur lors de l'enregistrement de la photo") : "");
-  const item = "w-full flex items-center justify-between gap-6 px-4 h-11 text-[17px] active:bg-remplissage";
+  const item = "menu-item justify-between gap-6";
 
   return (
     <div className="relative flex flex-col items-center">
@@ -78,8 +78,8 @@ function Avatar({ initials, photoUrl, onPhotoChange }) {
       {menuOpen && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
-          <div className="absolute left-1/2 -translate-x-1/2 top-[132px] z-50 glass rounded-[14px] overflow-hidden min-w-[250px] divide-y-[0.5px] divide-separateur"
-            style={{ animation: "zoom 0.18s ease-out" }}>
+          <div className="absolute left-1/2 -translate-x-1/2 top-[132px] z-50">
+          <div role="menu" className="menu-verre" style={{ transformOrigin: "top center" }}>
             <button onClick={() => { setMenuOpen(false); setTimeout(() => galleryRef.current?.click(), 50); }} className={item}>
               Choisir une photo
               <svg className="w-5 h-5" {...svg}><rect x="3" y="4" width="18" height="16" rx="3" /><path d="M3 16l5-5 4 4 3-3 6 6" /><circle cx="15.5" cy="8.5" r="1.5" /></svg>
@@ -89,11 +89,12 @@ function Avatar({ initials, photoUrl, onPhotoChange }) {
               <svg className="w-5 h-5" {...svg}><path d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><circle cx="12" cy="13" r="3" /></svg>
             </button>
             {photo && (
-              <button onClick={removePhoto} className={`${item} text-ios-red`}>
+              <button onClick={removePhoto} className={`${item} !text-ios-red`}>
                 Supprimer la photo
                 <svg className="w-5 h-5" {...svg}><path d="M4 7h16M10 11v6M14 11v6M5 7l1 12a2 2 0 002 2h8a2 2 0 002-2l1-12M9 7V4h6v3" /></svg>
               </button>
             )}
+          </div>
           </div>
         </>
       )}

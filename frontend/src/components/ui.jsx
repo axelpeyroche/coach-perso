@@ -32,10 +32,16 @@ export function Chevron() {
   );
 }
 
-// Contrôle segmenté iOS. options : [[valeur, libellé], …]
+// Contrôle segmenté iOS 26 : le curseur glisse avec un ressort.
+// options : [[valeur, libellé], …]
 export function Segmente({ options, valeur, onChange, className }) {
+  const idx = options.findIndex(([v]) => v === valeur);
   return (
     <div className={clsx("segmente", className)}>
+      {idx >= 0 && (
+        <span aria-hidden className="curseur-segment"
+          style={{ width: `calc((100% - 6px) / ${options.length})`, transform: `translateX(${idx * 100}%)` }} />
+      )}
       {options.map(([v, l]) => (
         <button type="button" key={v} onClick={() => onChange(v)}
           className={clsx("segment", valeur === v && "segment-actif")}>

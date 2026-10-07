@@ -37,10 +37,21 @@
     --sep: 60 60 67;
     --sep-a: 0.18;
 
-    --glass-bg: rgba(255, 255, 255, 0.62);
+    --glass-bg: rgba(255, 255, 255, 0.58);
+    --glass-bg-epais: rgba(250, 250, 252, 0.8);
     --glass-edge: rgba(255, 255, 255, 0.85);
     --glass-ring: rgba(0, 0, 0, 0.06);
     --glass-shadow: 0 10px 40px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.05);
+    /* Reflets spéculaires du bord (haut-gauche vif, bas-droite plus doux) */
+    --glass-rim-hi: rgba(255, 255, 255, 0.95);
+    --glass-rim-lo: rgba(255, 255, 255, 0.45);
+    --glass-sheen: rgba(255, 255, 255, 0.35);
+    /* Pastille de sélection de la barre d'onglets */
+    --selection: rgba(0, 0, 0, 0.065);
+    --lentille: rgba(255, 255, 255, 0.4);
+    /* Ressort façon UIKit : léger dépassement puis stabilisation */
+    --ressort: cubic-bezier(0.28, 1.32, 0.48, 1);
+    --doux: cubic-bezier(0.2, 0.9, 0.3, 1);
 
     color-scheme: light;
   }
@@ -71,10 +82,16 @@
     --sep: 84 84 88;
     --sep-a: 0.6;
 
-    --glass-bg: rgba(40, 40, 44, 0.58);
+    --glass-bg: rgba(34, 34, 38, 0.52);
+    --glass-bg-epais: rgba(40, 40, 44, 0.82);
     --glass-edge: rgba(255, 255, 255, 0.16);
     --glass-ring: rgba(255, 255, 255, 0.08);
     --glass-shadow: 0 10px 40px rgba(0, 0, 0, 0.5), 0 2px 6px rgba(0, 0, 0, 0.3);
+    --glass-rim-hi: rgba(255, 255, 255, 0.38);
+    --glass-rim-lo: rgba(255, 255, 255, 0.12);
+    --glass-sheen: rgba(255, 255, 255, 0.07);
+    --selection: rgba(255, 255, 255, 0.12);
+    --lentille: rgba(255, 255, 255, 0.1);
 
     color-scheme: dark;
   }
@@ -83,7 +100,13 @@
     overflow-x: hidden;
     -webkit-tap-highlight-color: transparent;
     -webkit-text-size-adjust: 100%;
+    /* Pas de délai ni de zoom au double tap, comme une app native */
+    touch-action: manipulation;
   }
+  /* Feuille ou alerte ouverte : la page derrière ne défile plus */
+  html.verrou, html.verrou body { overflow: hidden; }
+
+  a, button { -webkit-touch-callout: none; }
 
   body {
     margin: 0;
@@ -156,23 +179,188 @@
   }
   button.ligne, a.ligne { @apply w-full text-left transition-colors active:bg-remplissage; }
 
-  /* ── Liquid Glass : éléments flottants ──────────────────────────────── */
-  .glass {
+  /* ── Liquid Glass : éléments flottants ──────────────────────────────────
+     Trois couches comme le matériau d'iOS 26 : le flou saturé de ce qui
+     passe dessous, un liseré spéculaire qui capte la lumière sur les bords
+     (vif en haut à gauche, doux en bas à droite) et un voile intérieur qui
+     donne l'épaisseur du verre. */
+  .glass, .btn-verre, .barre-nav-actions .btn-rond, .barre-nav-actions .btn-texte, .menu-verre {
+    position: relative;
+    isolation: isolate;
     background: var(--glass-bg);
-    backdrop-filter: blur(24px) saturate(190%);
-    -webkit-backdrop-filter: blur(24px) saturate(190%);
+    backdrop-filter: blur(22px) saturate(200%) brightness(1.04);
+    -webkit-backdrop-filter: blur(22px) saturate(200%) brightness(1.04);
     box-shadow:
       var(--glass-shadow),
-      inset 0 0.5px 0 var(--glass-edge),
       inset 0 0 0 0.5px var(--glass-ring);
   }
-  /* Bandeau supérieur discret (zone de la barre d'état) */
-  .glass-bord-haut {
-    background: linear-gradient(to bottom, rgb(var(--bg) / 0.92), rgb(var(--bg) / 0.6) 70%, rgb(var(--bg) / 0));
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    -webkit-mask-image: linear-gradient(to bottom, #000 60%, transparent);
-    mask-image: linear-gradient(to bottom, #000 60%, transparent);
+  .glass::before, .btn-verre::before, .barre-nav-actions .btn-rond::before,
+  .barre-nav-actions .btn-texte::before, .menu-verre::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(135deg,
+      var(--glass-rim-hi) 0%, transparent 28%, transparent 62%, var(--glass-rim-lo) 100%);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+  .glass::after, .btn-verre::after, .barre-nav-actions .btn-rond::after,
+  .barre-nav-actions .btn-texte::after, .menu-verre::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(180deg, var(--glass-sheen), transparent 45%);
+    box-shadow: inset 0 1px 1.5px var(--glass-edge), inset 0 -1px 1px rgba(255, 255, 255, 0.06);
+    pointer-events: none;
+    z-index: -1;
+  }
+  /* Verre plus dense pour ce qui doit se lire (alertes, menus, bulles) */
+  .glass-epais, .menu-verre { background: var(--glass-bg-epais); }
+
+  /* Bouton rond en verre (barre de navigation, feuilles, carte) */
+  .btn-verre {
+    @apply inline-flex items-center justify-center shrink-0 w-11 h-11 rounded-full text-label;
+    transition: transform 0.35s var(--ressort), opacity 0.2s;
+  }
+  .btn-verre:active { transform: scale(1.12); }
+  /* Actions de page placées dans la barre de navigation mobile */
+  .barre-nav-actions .btn-rond {
+    @apply w-11 h-11 text-brand;
+    transition: transform 0.35s var(--ressort);
+  }
+  .barre-nav-actions .btn-rond:active { transform: scale(1.12); }
+  .barre-nav-actions .btn-texte {
+    @apply h-11 px-4 rounded-full text-[15px] font-semibold;
+    transition: transform 0.35s var(--ressort);
+  }
+  .barre-nav-actions .btn-texte:active { transform: scale(1.08); opacity: 1; }
+
+  /* ── Barre de navigation mobile (iOS 26) ───────────────────────────────
+     Boutons de verre flottants et, au défilement, un bord flouté progressif
+     sous la barre d'état avec le titre compact au centre. */
+  .barre-nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 30;
+    padding-top: env(safe-area-inset-top);
+    pointer-events: none;
+  }
+  .barre-nav > * { pointer-events: auto; }
+  .barre-nav::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 -22px 0;
+    background: linear-gradient(to bottom, rgb(var(--bg) / 0.94) 0%, rgb(var(--bg) / 0.7) 55%, rgb(var(--bg) / 0));
+    backdrop-filter: blur(14px) saturate(180%);
+    -webkit-backdrop-filter: blur(14px) saturate(180%);
+    -webkit-mask-image: linear-gradient(to bottom, #000 55%, transparent);
+    mask-image: linear-gradient(to bottom, #000 55%, transparent);
+    opacity: 0;
+    transition: opacity 0.25s ease;
+    pointer-events: none;
+  }
+  .barre-nav.defile::before { opacity: 1; }
+  .barre-nav-titre {
+    @apply absolute left-1/2 top-1/2 max-w-[56%] truncate text-[17px] font-semibold tracking-[-0.02em];
+    transform: translate(-50%, calc(-50% + 6px));
+    opacity: 0;
+    transition: opacity 0.2s ease, transform 0.3s var(--doux);
+    pointer-events: none;
+  }
+  .barre-nav-titre.visible { opacity: 1; transform: translate(-50%, -50%); }
+
+  /* ── Barre d'onglets Liquid Glass ────────────────────────────────────── */
+  .barre-onglets {
+    @apply relative flex rounded-full p-1;
+    height: 62px;
+    margin-inline: 0;
+    transition: height 0.45s var(--ressort), margin 0.45s var(--ressort);
+  }
+  .barre-onglets.compacte { height: 52px; margin-inline: 2.25rem; }
+  .onglet {
+    @apply relative z-10 flex-1 flex flex-col items-center justify-center gap-[3px] min-w-0;
+    transition: color 0.25s ease, transform 0.35s var(--ressort);
+  }
+  .onglet svg { transition: transform 0.45s var(--ressort); }
+  .onglet-libelle {
+    @apply text-[10px] font-semibold leading-none whitespace-nowrap;
+    transition: opacity 0.2s ease, max-height 0.35s var(--doux);
+    max-height: 12px;
+  }
+  .barre-onglets.compacte .onglet-libelle { opacity: 0; max-height: 0; }
+  .barre-onglets.compacte .onglet svg { transform: scale(1.04); }
+
+  /* Pastille de sélection : glisse avec un ressort et s'étire comme une
+     goutte pendant le trajet ; sous le doigt elle devient une lentille de
+     verre plus grande que la barre. */
+  .pastille-onglet {
+    position: absolute;
+    top: 4px;
+    bottom: 4px;
+    left: 4px;
+    border-radius: 9999px;
+    background: var(--selection);
+    pointer-events: none;
+    transition:
+      transform 0.55s var(--ressort),
+      scale 0.4s var(--ressort),
+      background-color 0.3s ease,
+      box-shadow 0.3s ease;
+  }
+  .pastille-onglet.etire { animation: goutte 0.55s var(--doux); }
+  .pastille-onglet.lentille {
+    scale: 1.14 1.3;
+    background: var(--lentille);
+    backdrop-filter: blur(3px) saturate(220%) brightness(1.1);
+    -webkit-backdrop-filter: blur(3px) saturate(220%) brightness(1.1);
+    box-shadow:
+      0 6px 22px rgba(0, 0, 0, 0.14),
+      inset 0 1px 1.5px var(--glass-rim-hi),
+      inset 0 -1px 1.5px var(--glass-rim-lo),
+      inset 0 0 0 0.5px var(--glass-rim-lo);
+    transition:
+      transform 0.12s linear,
+      scale 0.35s var(--ressort),
+      background-color 0.25s ease,
+      box-shadow 0.25s ease;
+  }
+  @keyframes goutte {
+    0% { scale: 1 1; }
+    30% { scale: 1.28 0.86; }
+    62% { scale: 0.95 1.05; }
+    100% { scale: 1 1; }
+  }
+
+  /* ── Menu contextuel en verre (iOS 26) ───────────────────────────────── */
+  .menu-verre {
+    @apply rounded-[22px] py-1.5 min-w-[236px] max-w-[300px] overflow-hidden;
+    animation: menuOuvre 0.34s var(--ressort) both;
+  }
+  .menu-item {
+    @apply w-full flex items-center gap-3 px-4 h-11 text-left text-[17px] text-label transition-colors
+      active:bg-remplissage disabled:opacity-40;
+  }
+  .menu-item svg { @apply w-[19px] h-[19px] shrink-0; }
+  .menu-separateur { @apply my-1.5 mx-4 h-[0.5px] bg-separateur; }
+  @keyframes menuOuvre {
+    from { opacity: 0; transform: scale(0.4); filter: blur(4px); }
+    to { opacity: 1; transform: none; filter: none; }
+  }
+
+  /* ── Transitions entre écrans ────────────────────────────────────────── */
+  .vue-fondu { animation: vueFondu 0.24s ease-out backwards; }
+  .vue-pousse { animation: vuePousse 0.42s var(--doux) backwards; }
+  @keyframes vueFondu { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes vuePousse {
+    from { opacity: 0.3; transform: translate3d(32%, 0, 0); }
+    to { opacity: 1; transform: none; }
   }
 
   /* ── Boutons ────────────────────────────────────────────────────────── */
@@ -203,16 +391,22 @@
   }
 
   /* ── Contrôle segmenté ──────────────────────────────────────────────── */
+  /* Capsule iOS 26 : le curseur glisse d'un segment à l'autre */
   .segmente {
-    @apply flex p-[2px] rounded-[10px] bg-remplissage;
+    @apply relative flex p-[3px] rounded-full bg-remplissage;
   }
   .segment {
-    @apply flex-1 min-w-0 px-3 py-[6px] text-[13px] font-medium rounded-[8px] text-label transition whitespace-nowrap;
+    @apply relative z-10 flex-1 min-w-0 px-3 h-[30px] text-[13px] font-medium rounded-full text-label whitespace-nowrap;
+    transition: font-weight 0.2s, transform 0.3s var(--ressort);
   }
-  .segment-actif {
-    @apply bg-white text-label font-semibold shadow-[0_3px_8px_rgba(0,0,0,0.12),0_3px_1px_rgba(0,0,0,0.04)];
+  .segment:active { transform: scale(0.96); }
+  .segment-actif { @apply font-semibold; }
+  .curseur-segment {
+    @apply absolute top-[3px] bottom-[3px] left-[3px] rounded-full bg-white pointer-events-none
+      shadow-[0_3px_8px_rgba(0,0,0,0.12),0_3px_1px_rgba(0,0,0,0.04)];
+    transition: transform 0.5s var(--ressort);
   }
-  .dark .segment-actif { background: #636366; }
+  .dark .curseur-segment { background: #636366; }
 
   /* Pastille de filtre (chips) */
   .puce {
@@ -229,13 +423,24 @@
   .voile {
     @apply fixed inset-0 z-50 flex items-end md:items-center justify-center bg-black/40;
     animation: fondu 0.2s ease-out;
+    transition: background-color 0.25s ease;
   }
+  .voile.ferme { animation: fonduSortie 0.26s ease-in forwards; }
   .feuille {
-    @apply relative w-full md:max-w-lg max-h-[92vh] overflow-y-auto bg-fond md:rounded-carte rounded-t-[28px]
-      shadow-[0_-10px_40px_rgba(0,0,0,0.15)];
+    @apply relative w-full md:max-w-lg max-h-[calc(100dvh-env(safe-area-inset-top)-10px)] overflow-y-auto bg-fond
+      md:rounded-carte rounded-t-[34px] shadow-[0_-10px_40px_rgba(0,0,0,0.15)];
     padding-bottom: env(safe-area-inset-bottom);
-    animation: monte 0.32s cubic-bezier(0.2, 0.9, 0.3, 1);
+    overscroll-behavior: contain;
+    animation: monte 0.42s var(--doux);
   }
+  .feuille.ferme { animation: descend 0.26s ease-in forwards; }
+  /* Barre d'outils de la feuille : ✕ en verre à gauche, validation en capsule bleue */
+  .feuille-barre .btn-texte {
+    @apply h-9 px-4 rounded-full bg-brand text-white text-[15px] font-semibold;
+    transition: transform 0.35s var(--ressort), opacity 0.2s;
+  }
+  .feuille-barre .btn-texte:active { transform: scale(1.08); opacity: 1; }
+  .feuille-barre .btn-verre { @apply w-10 h-10 text-label-2; }
   .dark .feuille { background: rgb(28 28 30); }
   .dark .feuille .card { background: rgb(44 44 46); }
   /* Dans une feuille (fond gris), les champs passent en blanc comme les listes iOS */
@@ -246,9 +451,14 @@
   }
   /* Alerte centrée (dialogue de confirmation) */
   .alerte {
-    @apply w-full max-w-[290px] rounded-[20px] overflow-hidden text-center glass;
-    animation: zoom 0.2s ease-out;
+    @apply w-full max-w-[300px] rounded-[30px] overflow-hidden text-center;
+    animation: zoom 0.32s var(--ressort);
   }
+  .btn-alerte {
+    @apply h-[46px] rounded-full text-[17px] disabled:opacity-40;
+    transition: transform 0.35s var(--ressort), filter 0.2s;
+  }
+  .btn-alerte:active { transform: scale(1.05); filter: brightness(0.92); }
 
   /* Interrupteur iOS */
   .interrupteur {
@@ -272,10 +482,13 @@
 }
 
 @keyframes fondu { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fonduSortie { from { opacity: 1; } to { opacity: 0; } }
 @keyframes monte { from { transform: translateY(100%); } to { transform: translateY(0); } }
-@keyframes zoom { from { opacity: 0; transform: scale(1.08); } to { opacity: 1; transform: scale(1); } }
+@keyframes descend { from { transform: var(--depart, translateY(0)); } to { transform: translateY(100%); } }
+@keyframes zoom { from { opacity: 0; transform: scale(1.12); } to { opacity: 1; transform: scale(1); } }
 @media (min-width: 768px) {
   @keyframes monte { from { opacity: 0; transform: translateY(16px) scale(0.98); } to { opacity: 1; transform: none; } }
+  @keyframes descend { from { opacity: 1; } to { opacity: 0; transform: translateY(16px) scale(0.98); } }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }

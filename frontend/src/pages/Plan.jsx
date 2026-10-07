@@ -7,6 +7,7 @@ import Feuille from "../components/Feuille";
 import ActiviteLigne from "../components/ActiviteLigne";
 import ModalActivite from "../components/ModalActivite";
 import ConfirmDialog from "../components/ConfirmDialog";
+import Menu, { IconesMenu } from "../components/Menu";
 import { Section, BoutonAjout } from "../components/ui";
 import {
   getPlan, getActivites, creerPrevue, modifierPrevue, supprimerPrevue, getActivitesProches,
@@ -90,7 +91,22 @@ function CarteSeance({ s, onOuvrirActivite }) {
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
             <p className={`text-[15px] font-semibold leading-5 ${s.statut === "sautee" ? "line-through" : ""}`}>{s.titre}</p>
-            <span className={`badge shrink-0 ${statut.cls}`}>{statut.label}</span>
+            <div className="flex items-center gap-1 shrink-0 -mt-1 md:mt-0">
+              <span className={`badge ${statut.cls}`}>{statut.label}</span>
+              <Menu className="md:hidden -mr-1" items={[
+                { label: s.commentaire ? "Modifier le commentaire" : "Commenter", icone: IconesMenu.commenter,
+                  onClick: () => { setCommentaire(s.commentaire ?? ""); setEdition(true); } },
+                s.statut !== "sautee" && { label: s.activite ? "Changer d'activité" : "Relier une activité", icone: IconesMenu.relier,
+                  onClick: () => setChoix(true) },
+                s.activite && { label: "Délier l'activité", icone: IconesMenu.delier, disabled: maj.isPending,
+                  onClick: () => maj.mutate({ delier: true }) },
+                s.statut === "sautee"
+                  ? { label: "Rétablir", icone: IconesMenu.retablir, disabled: maj.isPending, onClick: () => maj.mutate({ statut: "prevue" }) }
+                  : !s.activite && { label: "Marquer comme sautée", icone: IconesMenu.sauter, disabled: maj.isPending, onClick: () => maj.mutate({ statut: "sautee" }) },
+                { separateur: true },
+                { label: "Supprimer", icone: IconesMenu.supprimer, danger: true, onClick: () => setConfirmSuppr(true) },
+              ]} />
+            </div>
           </div>
           <Pastilles s={s} />
         </div>
@@ -139,7 +155,7 @@ function CarteSeance({ s, onOuvrirActivite }) {
         </div>
       )}
 
-      <div className={`flex gap-1.5 overflow-x-auto scrollbar-hide ${retrait} -mr-4 pr-4`}>
+      <div className={`hidden md:flex gap-1.5 flex-wrap ${retrait}`}>
         {s.statut === "sautee" ? (
           <button className={action} disabled={maj.isPending} onClick={() => maj.mutate({ statut: "prevue" })}>Rétablir</button>
         ) : !s.activite && (

@@ -1,10 +1,11 @@
-import { useState, useEffect, useRef, lazy, Suspense } from "react";
-import { Routes, Route, NavLink, Navigate, useLocation, useNavigate } from "react-router-dom";
+import { useState, useEffect, useLayoutEffect, useRef, lazy, Suspense } from "react";
+import { Routes, Route, NavLink, Link, Navigate, useLocation, useNavigate, useNavigationType } from "react-router-dom";
 import clsx from "clsx";
 import { useAuth } from "./AuthContext";
 import { useQueryClient } from "@tanstack/react-query";
 import { synchroIntervals } from "./api";
 import Auth from "./pages/Auth";
+import { ONGLETS, ongletDe, estPoussee } from "./navigation";
 
 // Pages chargées à la demande : chaque page (et recharts) dans son propre chunk
 const Accueil = lazy(() => import("./pages/Accueil"));
@@ -98,97 +99,181 @@ function SidebarLink({ to, label, IconC }) {
   );
 }
 
-// Barre d'onglets flottante en Liquid Glass (iOS 26) : icône + libellé,
-// pastille de verre sous l'onglet actif, glisser le doigt pour changer d'onglet
+// Barre compacte au défilement vers le bas (comme Musique ou News sous
+// iOS 26) ; elle reprend sa taille dès qu'on remonte.
+function useBarreCompacte(pathname) {
+  const [compacte, setCompacte] = useState(false);
+  useEffect(() => {
+    setCompacte(false);
+    let y0 = window.scrollY, cumul = 0;
+    const f = () => {
+      if (document.documentElement.classList.contains("verrou")) return;
+      const y = window.scrollY, dy = y - y0;
+      y0 = y;
+      if (y < 80) { cumul = 0; setCompacte(false); return; }
+      // Rebond élastique en bas de page : ignoré
+      if (y + window.innerHeight >= document.documentElement.scrollHeight - 2) return;
+      cumul = (Math.sign(dy) === Math.sign(cumul) ? cumul : 0) + dy;
+      if (cumul > 28) setCompacte(true);
+      else if (cumul < -28) setCompacte(false);
+    };
+    window.addEventListener("scroll", f, { passive: true });
+    return () => window.removeEventListener("scroll", f);
+  }, [pathname]);
+  return compacte;
+}
+
+// Barre d'onglets flottante en Liquid Glass (iOS 26). Toucher un onglet fait
+// apparaître une lentille de verre sous le doigt ; glisser la déplace d'un
+// onglet à l'autre et relâcher ouvre l'onglet visé. La pastille de sélection
+// rejoint l'onglet choisi avec un ressort en s'étirant comme une goutte.
+// Toucher l'onglet déjà actif remonte en haut (ou revient à sa racine).
 function BottomNav() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const navRef = useRef(null);
   const items = NAV.filter(n => !n.mobileHide);
+  const n = items.length;
+  const actif = ONGLETS.indexOf(ongletDe(pathname));
+  const [lentille, setLentille] = useState(null);   // { t: décalage px, i: onglet sous le doigt }
+  const [etire, setEtire] = useState(false);
+  const compacte = useBarreCompacte(pathname);
+  const ignorerClic = useRef(false);
+  const actifRef = useRef(actif);
+  actifRef.current = actif;
 
-  // Index de l'onglet actif (route la plus spécifique) ; -1 sur une page hors barre
-  const activeIdx = items.findIndex(n =>
-    n.to === "/" ? pathname === "/" : pathname.startsWith(n.to)
-  );
+  // Effet « goutte » à chaque changement d'onglet
+  const precedent = useRef(actif);
+  useEffect(() => {
+    if (precedent.current === actif) return;
+    precedent.current = actif;
+    setEtire(false);
+    const r = requestAnimationFrame(() => setEtire(true));
+    const t = setTimeout(() => setEtire(false), 600);
+    return () => { cancelAnimationFrame(r); clearTimeout(t); };
+  }, [actif]);
 
   useEffect(() => {
-    const el = navRef.current;
-    if (!el) return;
+    const nav = navRef.current;
+    if (!nav) return;
+    let x0 = 0, y0 = 0, glisse = false, enCours = false, largeur = 0, gauche = 0, idx = -1;
 
-    let startX = 0, startY = 0, scrubbing = false, lastIdx = -1;
-
-    function getIdx(clientX) {
-      const rect = el.getBoundingClientRect();
-      const rel = clientX - rect.left;
-      return Math.max(0, Math.min(items.length - 1, Math.floor(rel / (rect.width / items.length))));
-    }
-
-    function onStart(e) {
-      startX = e.touches[0].clientX;
-      startY = e.touches[0].clientY;
-      scrubbing = false;
-      lastIdx = getIdx(startX);
-    }
-
-    function onMove(e) {
-      const x = e.touches[0].clientX;
-      const y = e.touches[0].clientY;
-      const dx = Math.abs(x - startX);
-      const dy = Math.abs(y - startY);
-      // Attend un mouvement minimal et ignore le scroll vertical
-      if (!scrubbing) {
-        if (dx < 5 && dy < 5) return;
-        if (dy > dx) return;
-        scrubbing = true;
+    const placer = (x) => {
+      const w = (largeur - 8) / n;
+      const t = Math.max(0, Math.min(largeur - 8 - w, x - gauche - 4 - w / 2));
+      idx = Math.round(t / w);
+      setLentille({ t, i: idx });
+    };
+    const debut = (e) => {
+      const r = nav.getBoundingClientRect();
+      largeur = r.width; gauche = r.left;
+      x0 = e.touches[0].clientX; y0 = e.touches[0].clientY;
+      glisse = false; enCours = true;
+      placer(x0);
+    };
+    const bouge = (e) => {
+      if (!enCours) return;
+      const x = e.touches[0].clientX, y = e.touches[0].clientY;
+      if (!glisse) {
+        const dx = Math.abs(x - x0), dy = Math.abs(y - y0);
+        if (dx < 6 && dy < 6) return;
+        if (dy > dx) { enCours = false; setLentille(null); return; }
+        glisse = true;
       }
       e.preventDefault();
-      const idx = getIdx(x);
-      if (idx !== lastIdx) {
-        lastIdx = idx;
-        navigate(items[idx].to);
-      }
-    }
-
-    el.addEventListener("touchstart", onStart, { passive: true });
-    el.addEventListener("touchmove", onMove, { passive: false });
-    return () => {
-      el.removeEventListener("touchstart", onStart);
-      el.removeEventListener("touchmove", onMove);
+      placer(x);
     };
-  }, [navigate, items.length]);
+    const fin = (e) => {
+      if (!enCours) return;
+      enCours = false;
+      setLentille(null);
+      if (glisse && e.type === "touchend") {
+        ignorerClic.current = true;
+        setTimeout(() => { ignorerClic.current = false; }, 450);
+        if (idx >= 0 && idx !== actifRef.current) navigate(items[idx].to);
+      }
+    };
+
+    nav.addEventListener("touchstart", debut, { passive: true });
+    nav.addEventListener("touchmove", bouge, { passive: false });
+    nav.addEventListener("touchend", fin);
+    nav.addEventListener("touchcancel", fin);
+    return () => {
+      nav.removeEventListener("touchstart", debut);
+      nav.removeEventListener("touchmove", bouge);
+      nav.removeEventListener("touchend", fin);
+      nav.removeEventListener("touchcancel", fin);
+    };
+  }, [navigate, n]);   // eslint-disable-line react-hooks/exhaustive-deps
+
+  const surligne = lentille ? lentille.i : actif;
 
   return (
     <div className="md:hidden fixed bottom-0 left-0 right-0 z-30 px-4 pointer-events-none"
-      style={{ paddingBottom: "max(env(safe-area-inset-bottom), 12px)" }}>
-      <nav ref={navRef} className="glass pointer-events-auto relative flex h-[62px] rounded-full p-1">
-        {/* Pastille de verre sous l'onglet actif */}
-        {activeIdx >= 0 && (
-          <div
-            className="absolute top-1 bottom-1 left-1 rounded-full bg-remplissage transition-transform duration-300 ease-[cubic-bezier(0.3,1.3,0.5,1)] pointer-events-none"
-            style={{
-              width: `calc((100% - 0.5rem) / ${items.length})`,
-              transform: `translateX(${activeIdx * 100}%)`,
+      style={{ paddingBottom: "max(calc(env(safe-area-inset-bottom) - 8px), 14px)" }}>
+      <nav ref={navRef} aria-label="Onglets"
+        className={clsx("barre-onglets glass pointer-events-auto", compacte && !lentille && "compacte")}>
+        <div aria-hidden
+          className={clsx("pastille-onglet", lentille && "lentille", etire && !lentille && "etire")}
+          style={{
+            width: `calc((100% - 8px) / ${n})`,
+            transform: lentille ? `translateX(${lentille.t}px)` : `translateX(${Math.max(actif, 0) * 100}%)`,
+            opacity: actif < 0 && !lentille ? 0 : 1,
+          }} />
+        {items.map((it, i) => (
+          <Link key={it.to} to={it.to} aria-current={i === actif ? "page" : undefined}
+            onClick={(e) => {
+              if (ignorerClic.current) { e.preventDefault(); return; }
+              if (i === actif) {
+                e.preventDefault();
+                if (pathname !== it.to) navigate(it.to);
+                else window.scrollTo({ top: 0, behavior: "smooth" });
+              }
             }}
-          />
-        )}
-        {items.map((n, i) => (
-          <NavLink key={n.to} to={n.to} end={n.to === "/"}
-            className={clsx(
-              "relative z-10 flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors duration-200",
-              i === activeIdx ? "text-brand" : "text-label"
-            )}>
-            <n.IconC c="w-[23px] h-[23px]" f={i === activeIdx ? "currentColor" : "none"} />
-            <span className="text-[10px] font-semibold leading-none">{n.label}</span>
-          </NavLink>
+            className={clsx("onglet", i === surligne ? "text-brand" : "text-label")}>
+            <it.IconC c="w-[24px] h-[24px]" f={i === surligne ? "currentColor" : "none"} />
+            <span className="onglet-libelle">{it.label}</span>
+          </Link>
         ))}
       </nav>
     </div>
   );
 }
 
-function ScrollToTop() {
+// Position de défilement mémorisée par écran : changer d'onglet puis revenir
+// retrouve l'endroit où on était, comme dans une app iOS. Une page poussée
+// (Objectifs, Analyses, Sources) s'ouvre toujours en haut.
+function MemoireDefilement() {
   const { pathname } = useLocation();
-  useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
+  const type = useNavigationType();
+  const positions = useRef({});
+  const courant = useRef(pathname);
+
+  useEffect(() => {
+    if ("scrollRestoration" in window.history) window.history.scrollRestoration = "manual";
+    const f = () => {
+      if (!document.documentElement.classList.contains("verrou")) positions.current[courant.current] = window.scrollY;
+    };
+    window.addEventListener("scroll", f, { passive: true });
+    return () => window.removeEventListener("scroll", f);
+  }, []);
+
+  useLayoutEffect(() => {
+    courant.current = pathname;
+    const y = estPoussee(pathname) && type === "PUSH" ? 0 : positions.current[pathname] ?? 0;
+    window.scrollTo(0, y);
+    if (y <= 0) return;
+    // Contenu chargé à la demande : on réessaie le temps que la page grandisse
+    let essais = 0;
+    const id = setInterval(() => {
+      if (Math.abs(window.scrollY - y) < 2 || ++essais > 12) clearInterval(id);
+      else window.scrollTo(0, y);
+    }, 50);
+    const stop = () => clearInterval(id);
+    window.addEventListener("touchstart", stop, { once: true });
+    return () => { stop(); window.removeEventListener("touchstart", stop); };
+  }, [pathname]);   // eslint-disable-line react-hooks/exhaustive-deps
+
   return null;
 }
 
@@ -228,6 +313,9 @@ function SynchroIntervals() {
 
 export default function App() {
   const { user } = useAuth();
+  const location = useLocation();
+  const { pathname } = location;
+  const typeNav = useNavigationType();
 
   const [dark, setDark] = useState(() => {
     const saved = localStorage.getItem("theme");
@@ -263,17 +351,15 @@ export default function App() {
                 {NAV.map(n => <SidebarLink key={n.to} {...n} />)}
               </aside>
 
-              {/* ── Bord supérieur mobile : floute le contenu sous la barre d'état ── */}
-              <div className="md:hidden fixed top-0 left-0 right-0 z-20 glass-bord-haut pointer-events-none"
-                style={{ height: "calc(env(safe-area-inset-top) + 10px)" }} />
-
               {/* ── Contenu principal ── */}
               <main
-                className="flex-1 md:ml-60 pb-[calc(6rem+env(safe-area-inset-bottom))] md:pb-0 min-h-screen w-full min-w-0"
+                className="flex-1 md:ml-60 pb-[calc(6.5rem+env(safe-area-inset-bottom))] md:pb-0 min-h-screen w-full min-w-0"
                 style={{ overflowX: "clip" }}
               >
-                <ScrollToTop />
+                <MemoireDefilement />
                 <Suspense fallback={<p className="p-8 text-[15px] text-label-2">Chargement…</p>}>
+                {/* Transition iOS : glissement depuis la droite pour une page poussée */}
+                <div key={pathname} className={estPoussee(pathname) && typeNav === "PUSH" ? "vue-pousse" : "vue-fondu"}>
                 <Routes>
                   <Route path="/"           element={<Accueil />} />
                   <Route path="/plan"       element={<Plan />} />
@@ -285,6 +371,7 @@ export default function App() {
                   <Route path="/profil"     element={<Profil dark={dark} setDark={setDark} />} />
                   <Route path="*"           element={<Navigate to="/" replace />} />
                 </Routes>
+                </div>
                 </Suspense>
               </main>
 
