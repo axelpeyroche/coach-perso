@@ -71,6 +71,8 @@ export const importerFichierActivites = (fichier) => {
 export const importerTraces = (traces) =>
   api.post("/activites/traces", { traces }, { timeout: 120000 }).then((r) => r.data);
 export const getTrace = (id) => api.get(`/activites/${id}/trace`).then((r) => r.data);
+export const getCarteTraces = (sports) =>
+  api.get("/traces/carte", { params: { sports: sports.join(",") }, timeout: 60000 }).then((r) => r.data);
 
 // --- Carnet : objectifs ---
 export const getObjectifs = () => api.get("/objectifs").then((r) => r.data);

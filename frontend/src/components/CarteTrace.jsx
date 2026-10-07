@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { getTrace } from "../api";
 
 // Fonds gratuits, sans clé : plan OSM, imagerie Esri, relief AWS (Terrarium) pour la 3D.
-const STYLE = {
+export const STYLE = {
   version: 8,
   sources: {
     plan: {
@@ -27,7 +27,7 @@ const STYLE = {
   ],
 };
 
-function Bascule({ options, valeur, onChange }) {
+export function Bascule({ options, valeur, onChange }) {
   return (
     <div className="flex rounded-[9px] bg-black/55 backdrop-blur p-0.5 text-[12px] font-semibold">
       {options.map(([k, label]) => (

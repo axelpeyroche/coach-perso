@@ -16,6 +16,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 
 logger = logging.getLogger(__name__)
@@ -34,6 +35,7 @@ _ALLOWED_ORIGINS = [
     "http://localhost:4173",
 ]
 
+app.add_middleware(GZipMiddleware, minimum_size=2000)  # la carte des tracés pèse ~1 Mo en JSON
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_ALLOWED_ORIGINS,

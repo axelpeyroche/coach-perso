@@ -259,6 +259,32 @@ def trace_activite(
             "points": json.loads(t.points)}
 
 
+_CACHE_CARTE: dict[tuple, dict] = {}
+
+
+@router.get("/api/traces/carte", summary="Carte de tous les tracés, colorés selon le nombre de passages")
+def carte_traces(
+    sports: str = Query(",".join(cs.SPORTS_CARTE), description="Sports séparés par des virgules"),
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(obtenir_session),
+):
+    choix = tuple(sorted({s for s in sports.split(",") if s in cs.SPORTS_CARTE}))
+    lignes = (db.query(TraceGPS.id, TraceGPS.debut, TraceGPS.fin, TraceGPS.distance_km, TraceGPS.dplus_m, Activite.sport)
+              .outerjoin(Activite, Activite.id == TraceGPS.activite_id)
+              .filter(TraceGPS.utilisateur_id == current_user.id).all())
+    retenus = [l.id for l in lignes
+               if cs.sport_trace(l.sport, l.distance_km, (l.fin - l.debut).total_seconds(), l.dplus_m) in choix]
+    cle = (current_user.id, choix, tuple(retenus))
+    if cle not in _CACHE_CARTE:
+        points = [json.loads(p) for (p,) in db.query(TraceGPS.points).filter(TraceGPS.id.in_(retenus))] if retenus else []
+        if len(_CACHE_CARTE) >= 6:
+            _CACHE_CARTE.pop(next(iter(_CACHE_CARTE)))
+        ids = set(retenus)
+        _CACHE_CARTE[cle] = {**cs.carte_passages(points), "nb_traces": len(points),
+                             "km": round(sum(l.distance_km or 0 for l in lignes if l.id in ids))}
+    return _CACHE_CARTE[cle]
+
+
 class ActiviteImportee(BaseModel):
     """Format souple accepté depuis un raccourci iOS (Apple Santé) ou un script.
     Les nombres peuvent arriver tels que iOS les écrit (« 10,2 km », « 690 kcal »,

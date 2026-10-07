@@ -7,6 +7,7 @@ import Page from "../components/Page";
 import StatTile from "../components/StatTile";
 import ActiviteLigne from "../components/ActiviteLigne";
 import ModalActivite from "../components/ModalActivite";
+import CartePassages from "../components/CartePassages";
 import { FormeTuiles } from "../components/Forme";
 import { axeX, axeY, grille, curseur, InfoBulle } from "../components/graphiques";
 import { ObjectifCarte } from "./Objectifs";
@@ -128,6 +129,12 @@ export default function Accueil() {
           </Link>
         </div>
       </div>
+
+      {!vide && (
+        <Section titre="Mes tracés">
+          <CartePassages />
+        </Section>
+      )}
 
       {modal !== undefined && <ModalActivite activite={modal} onClose={() => setModal(undefined)} />}
     </Page>

@@ -1308,6 +1308,136 @@ def rattacher_traces(db: Session, user_id: int) -> int:
     return n
 
 
+SPORTS_CARTE = ("course", "trail", "velo")
+PALIERS_PASSAGES = (1, 2, 3, 5, 10, 20, 50)  # bornes basses des couleurs de la carte
+
+
+def sport_trace(sport_seance: Optional[str], distance_km: Optional[float], secondes: float,
+                dplus_m: Optional[int]) -> Optional[str]:
+    """Sport d'un tracé : celui de sa séance, sinon déduit de la vitesse moyenne
+    (tes séances : course 8–11 km/h, vélo 12–20 km/h, marche sous 5 km/h)."""
+    if sport_seance:
+        return sport_seance
+    if not distance_km or secondes <= 0:
+        return None
+    v = distance_km / (secondes / 3600)
+    pente = (dplus_m or 0) / max(distance_km, 0.1)
+    if v < 5 or (v < 6.5 and pente < 40):
+        return "marche"
+    if v < 11.5:
+        return "trail" if pente >= 30 else "course"
+    return "velo" if v < 35 else None  # au-delà : voiture, train…
+
+
+def _simplifier(pts: list[tuple[float, float]], tol: float) -> list[tuple[float, float]]:
+    """Douglas-Peucker sur des points en mètres (x, y)."""
+    if len(pts) < 3:
+        return pts
+    garde = [False] * len(pts)
+    garde[0] = garde[-1] = True
+    pile = [(0, len(pts) - 1)]
+    while pile:
+        i, j = pile.pop()
+        (ax, ay), (bx, by) = pts[i], pts[j]
+        dx, dy = bx - ax, by - ay
+        l2 = dx * dx + dy * dy or 1e-9
+        pire, k_pire = 0.0, -1
+        for k in range(i + 1, j):
+            px, py = pts[k]
+            t = max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / l2))
+            d = (px - ax - t * dx) ** 2 + (py - ay - t * dy) ** 2
+            if d > pire:
+                pire, k_pire = d, k
+        if pire > tol * tol:
+            garde[k_pire] = True
+            pile += [(i, k_pire), (k_pire, j)]
+    return [p for p, g in zip(pts, garde) if g]
+
+
+def carte_passages(traces: list[list[list]], cellule: float = 15.0) -> dict:
+    """Superpose des tracés [[lat, lon, …], …] et compte les passages.
+
+    Le terrain est découpé en cases de `cellule` mètres ; une case compte les sorties distinctes
+    passées dans un rayon d'une case (tolérance au bruit GPS). Chaque portion de chemin est tracée
+    une seule fois, au centre moyen des points GPS de ses cases, avec le palier de passages le plus bas
+    de ses deux extrémités. Retourne un GeoJSON (une entité MultiLineString par palier) et la vue initiale.
+    """
+    from math import cos, radians
+    traces = [t for t in traces if len(t) >= 2]
+    if not traces:
+        return {"type": "FeatureCollection", "features": [], "vue": None, "max": 0}
+    departs = sorted((t[0][0], t[0][1]) for t in traces)
+    lat0 = departs[len(departs) // 2][0]
+    kx, ky = 111_320 * cos(radians(lat0)) / cellule, 110_574 / cellule
+
+    somme: dict[tuple, list] = {}           # case → [Σlat, Σlon, n]
+    compte: dict[tuple, int] = defaultdict(int)
+    segments: list[list[tuple]] = []         # suites de cases, coupées aux trous GPS
+    for t in traces:
+        voisinage, seg = set(), []
+        for p in t:
+            c = (int(p[1] * kx // 1), int(p[0] * ky // 1))
+            s = somme.get(c)
+            if s is None:
+                somme[c] = [p[0], p[1], 1]
+            else:
+                s[0] += p[0]; s[1] += p[1]; s[2] += 1
+            if seg and c == seg[-1]:
+                continue
+            if seg and max(abs(c[0] - seg[-1][0]), abs(c[1] - seg[-1][1])) > 3:
+                segments.append(seg)
+                seg = []
+            seg.append(c)
+            for dx in (-1, 0, 1):
+                for dy in (-1, 0, 1):
+                    voisinage.add((c[0] + dx, c[1] + dy))
+        segments.append(seg)
+        for c in voisinage:
+            compte[c] += 1
+
+    def palier(n: int) -> int:
+        return max(p for p in PALIERS_PASSAGES if p <= n)
+
+    def centre(c):
+        s = somme[c]
+        return s[0] / s[2], s[1] / s[2]
+
+    chaines: dict[int, list] = defaultdict(list)
+    vus = set()
+    for seg in segments:
+        chaine, niv = None, None
+        for a, b in zip(seg, seg[1:]):
+            e = (a, b) if a < b else (b, a)
+            if e in vus:
+                chaine = None
+                continue
+            vus.add(e)
+            n = palier(min(compte[a], compte[b]))
+            if chaine is not None and n == niv and chaine[-1] == a:
+                chaine.append(b)
+            else:
+                chaine, niv = [a, b], n
+                chaines[n].append(chaine)
+
+    features = []
+    for n in sorted(chaines):
+        lignes = []
+        for ch in chaines[n]:
+            pts = [centre(c) for c in ch]
+            xy = _simplifier([(lon * kx * cellule, lat * ky * cellule) for lat, lon in pts], 2.0)
+            lignes.append([[round(x / (kx * cellule), 5), round(y / (ky * cellule), 5)] for x, y in xy])
+        features.append({"type": "Feature", "properties": {"n": n},
+                         "geometry": {"type": "MultiLineString", "coordinates": lignes}})
+
+    # Vue initiale : les sorties qui partent à moins de 25 km du départ médian (pas les voyages)
+    lat_m, lon_m = lat0, sorted(d[1] for d in departs)[len(departs) // 2]
+    proches = [t for t in traces if _distance_m([lat_m, lon_m], t[0]) < 25_000] or traces
+    lats = [p[0] for t in proches for p in t]
+    lons = [p[1] for t in proches for p in t]
+    return {"type": "FeatureCollection", "features": features,
+            "vue": [[min(lons), min(lats)], [max(lons), max(lats)]], "max": max(compte.values())}
+
+
 def _ignorees(user: Utilisateur) -> list[str]:
     try:
         v = json.loads(user.seances_ignorees) if user.seances_ignorees else []
