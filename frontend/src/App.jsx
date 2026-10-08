@@ -344,8 +344,8 @@ function SynchroIntervals() {
     const lancer = () => {
       if (document.visibilityState !== "visible") return;
       synchroIntervals().then((r) => {
-        if (r.nouvelles || r.completees || r.traces) {
-          ["activites", "stats-carnet", "objectifs", "plan", "carte-traces", "intervals", "analyses"].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+        if (r.nouvelles || r.completees || r.traces || r.mesures) {
+          ["activites", "stats-carnet", "objectifs", "plan", "carte-traces", "intervals", "analyses", "mesures", "profil-fc"].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
         }
       }).catch(() => {});
     };
