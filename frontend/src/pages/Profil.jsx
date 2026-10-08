@@ -12,7 +12,29 @@ import ModalPoids from "../components/ModalPoids";
 import { Chevron, Interrupteur } from "../components/ui";
 
 // ── Avatar ─────────────────────────────────────────────────────────────────
-const MAX_PHOTO_FILE_BYTES = 1_500_000; // ~2 Mo une fois encodée en base64, cf. limite backend
+// La photo est redimensionnée dans le navigateur avant l'envoi (512 px, JPEG) : n'importe
+// quelle photo de téléphone passe et ne pèse plus que quelques dizaines de Ko en base.
+const MAX_PHOTO_FILE_BYTES = 40_000_000;
+const COTE_PHOTO = 512;
+
+function reduirePhoto(file) {
+  return new Promise((resoudre, rejeter) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      // Recadrage carré centré, comme l'affichage rond de l'avatar
+      const c = Math.min(img.naturalWidth, img.naturalHeight);
+      const cote = Math.min(COTE_PHOTO, c);
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = cote;
+      canvas.getContext("2d").drawImage(img, (img.naturalWidth - c) / 2, (img.naturalHeight - c) / 2, c, c, 0, 0, cote, cote);
+      URL.revokeObjectURL(url);
+      resoudre(canvas.toDataURL("image/jpeg", 0.85));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); rejeter(new Error("Image illisible")); };
+    img.src = url;
+  });
+}
 
 const svg = { fill: "none", viewBox: "0 0 24 24", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" };
 
@@ -39,15 +61,15 @@ function Avatar({ initials, photoUrl, onPhotoChange }) {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > MAX_PHOTO_FILE_BYTES) {
-      setSizeErr("Photo trop grande (max environ 1,5 Mo)");
+      setSizeErr("Photo trop grande (max 40 Mo)");
       setMenuOpen(false);
       e.target.value = "";
       return;
     }
     setSizeErr("");
-    const reader = new FileReader();
-    reader.onload = ev => mutation.mutate(ev.target.result);
-    reader.readAsDataURL(file);
+    reduirePhoto(file)
+      .then((dataUrl) => mutation.mutate(dataUrl))
+      .catch(() => setSizeErr("Format d'image non pris en charge — essaie une photo JPEG ou PNG"));
     setMenuOpen(false);
     e.target.value = "";
   }
