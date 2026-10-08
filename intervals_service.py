@@ -369,6 +369,24 @@ def _serie(type_: str, nom: Optional[str], data: list, sport: str) -> Optional[d
             "brut": [x * facteur if isinstance(x, (int, float)) else None for x in data]}
 
 
+def _combler(brut: list, temps: list, ecart_max: float = 15.0) -> list:
+    """Interpole entre deux mesures espacées de moins de `ecart_max` s. La montre n'enregistre
+    foulée, oscillation et contact au sol que toutes les ~5 s (puissance ~3 s) : sans cela la
+    courbe serait hachée. Les vrais trous (récupération marchée, pause) restent vides."""
+    idx = [i for i, v in enumerate(brut) if isinstance(v, (int, float))]
+    if len(idx) < 2 or len(idx) == len(brut):
+        return brut
+    sortie = list(brut)
+    for a, b in zip(idx, idx[1:]):
+        ta, tb = temps[a], temps[b]
+        if b - a < 2 or not isinstance(ta, (int, float)) or not isinstance(tb, (int, float)) or not 0 < tb - ta <= ecart_max:
+            continue
+        for i in range(a + 1, b):
+            ti = temps[i] if isinstance(temps[i], (int, float)) else ta
+            sortie[i] = brut[a] + (brut[b] - brut[a]) * (ti - ta) / (tb - ta)
+    return sortie
+
+
 def _sortie(source: str, temps: list, dist_km: Optional[list], series: list) -> dict:
     tr = _tranches(len(temps))
     return {
@@ -395,7 +413,7 @@ def _depuis_streams(streams: list, sport: str) -> Optional[dict]:
         serie = _serie(s.get("type") or "", s.get("name"), data, sport)
         if serie and serie["cle"] not in vues:
             vues.add(serie["cle"])
-            series.append(serie)
+            series.append({**serie, "brut": _combler(serie["brut"], temps)})
     if not series:
         return None
     dist_km = [d / 1000 if isinstance(d, (int, float)) else None for d in dist] if len(dist) == n else None
