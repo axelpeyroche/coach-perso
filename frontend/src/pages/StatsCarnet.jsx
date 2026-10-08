@@ -158,7 +158,7 @@ export default function StatsCarnet() {
   return (
     <Page titre="Statistiques" large
       sousTitre={s.premiere_activite ? `Depuis le ${fmtDate(s.premiere_activite)}` : null}
-      action={<span className="flex gap-4"><Link to="/records" className="btn-texte">Records</Link><Link to="/analyses" className="btn-texte">Analyses</Link></span>}>
+      action={<span className="flex gap-4"><Link to="/records" className="btn-texte">Records</Link><Link to="/analyses" className="btn-texte md:hidden">Analyses</Link></span>}>
       {filtres}
 
       {aucune ? (
