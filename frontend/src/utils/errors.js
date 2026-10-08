@@ -13,6 +13,7 @@ export function getErrorMessage(error, fallback = "Une erreur est survenue — r
         });
       if (msgs.length) return msgs.join(" · ");
     }
+    if ([502, 503, 504].includes(error.response.status)) return "Le serveur démarre — réessaie dans un instant.";
     if (error.response.status === 422) return "Données invalides — vérifie les champs.";
     return fallback;
   }

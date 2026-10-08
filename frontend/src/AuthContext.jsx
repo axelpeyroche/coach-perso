@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect } from "react";
-import api, { setUnauthorizedHandler, patchFuseauHoraire } from "./api";
+import api, { setUnauthorizedHandler, patchFuseauHoraire, avecReveil } from "./api";
 
 const AuthContext = createContext(null);
 
@@ -20,9 +20,11 @@ export function AuthProvider({ children }) {
   // Charger le profil au démarrage si token existant
   useEffect(() => {
     if (!token) { setLoading(false); return; }
-    api.get("/auth/me")
+    // Ne déconnecter que si l'API refuse le token (401) : un serveur endormi ou une coupure
+    // réseau ne doit pas effacer la session. Dans ce cas on garde le token et on réessaie.
+    avecReveil(() => api.get("/auth/me", { timeout: 20_000 }))
       .then(r => setUser(r.data))
-      .catch(() => { logout(); })
+      .catch((e) => { if (e?.response?.status === 401) logout(); })
       .finally(() => setLoading(false));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 

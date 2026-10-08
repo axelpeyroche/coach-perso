@@ -332,11 +332,23 @@ function MemoireDefilement() {
 function RequireAuth({ children }) {
   const { token, loading } = useAuth();
   const location = useLocation();
+  // Chargement qui dure : le serveur gratuit sort de veille, on le dit au lieu d'un écran muet
+  const [lent, setLent] = useState(false);
+  useEffect(() => {
+    if (!loading) return;
+    const t = setTimeout(() => setLent(true), 3_000);
+    return () => clearTimeout(t);
+  }, [loading]);
   if (loading) return (
-    <div className="min-h-screen flex items-center justify-center">
+    <div className="min-h-screen flex flex-col items-center justify-center gap-4 px-8 text-center">
       <div className="animate-pulse text-label-3">
         <Icon.Carnet c="w-8 h-8" />
       </div>
+      {lent && (
+        <p className="text-[13px] text-label-2" role="status">
+          Réveil du serveur… cela peut prendre jusqu'à une minute.
+        </p>
+      )}
     </div>
   );
   if (!token) return <Navigate to="/login" state={{ from: location }} replace />;

@@ -22,6 +22,53 @@ api.interceptors.response.use(
 
 export default api;
 
+// --- Réveil du serveur ---
+// L'hébergement gratuit (Render) endort l'API après 15 min d'inactivité : la première
+// requête peut alors attendre ~1 min, voire échouer (502/503, coupure réseau sur mobile).
+const URL_SANTE = (() => {
+  try {
+    const base = api.defaults.baseURL;
+    return /^https?:/.test(base) ? new URL(base).origin + "/health" : null;
+  } catch { return null; }
+})();
+
+// Erreur due au serveur endormi ou au réseau (et non à une vraie réponse de l'API)
+export const erreurTransitoire = (e) =>
+  !e?.response || [502, 503, 504].includes(e.response.status);
+
+// Résout quand le serveur répond (ou au bout de `maxMs`, sans lever d'erreur).
+let reveil = null;
+export function reveillerServeur(maxMs = 90_000) {
+  if (!URL_SANTE) return Promise.resolve();
+  if (reveil) return reveil;
+  const fin = Date.now() + maxMs;
+  reveil = (async () => {
+    while (Date.now() < fin) {
+      const ctrl = new AbortController();
+      const minuteur = setTimeout(() => ctrl.abort(), 15_000);
+      try {
+        const r = await fetch(URL_SANTE, { cache: "no-store", signal: ctrl.signal });
+        if (r.ok) return;
+      } catch { /* serveur encore endormi */ } finally { clearTimeout(minuteur); }
+      await new Promise((ok) => setTimeout(ok, 2_000));
+    }
+  })().finally(() => { reveil = null; });
+  return reveil;
+}
+
+// Exécute `appel` en réessayant tant que le serveur se réveille (erreurs réseau, 502-504, délai dépassé).
+export async function avecReveil(appel, maxMs = 120_000) {
+  const fin = Date.now() + maxMs;
+  for (;;) {
+    try {
+      return await appel();
+    } catch (e) {
+      if (!erreurTransitoire(e) || Date.now() >= fin) throw e;
+      await reveillerServeur(Math.max(fin - Date.now(), 1_000));
+    }
+  }
+}
+
 // --- Profil FC ---
 export const getProfilFC = () =>
   api.get("/utilisateur/profil-fc").then((r) => r.data);

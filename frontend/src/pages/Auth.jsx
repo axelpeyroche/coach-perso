@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../AuthContext";
-import api from "../api";
+import api, { avecReveil, reveillerServeur } from "../api";
 import { getErrorMessage } from "../utils/errors";
 import { Segmente } from "../components/ui";
 
@@ -57,10 +57,24 @@ function Indicateur() {
 }
 
 function BoutonPrincipal({ loading, children }) {
+  // Au-delà de 3 s, c'est que le serveur se réveille : on le dit plutôt que de laisser tourner en silence
+  const [lent, setLent] = useState(false);
+  useEffect(() => {
+    if (!loading) { setLent(false); return; }
+    const t = setTimeout(() => setLent(true), 3_000);
+    return () => clearTimeout(t);
+  }, [loading]);
   return (
-    <button type="submit" disabled={loading} className="btn-primaire w-full h-[50px] text-[17px]">
-      {loading ? <Indicateur /> : children}
-    </button>
+    <div className="space-y-2">
+      <button type="submit" disabled={loading} className="btn-primaire w-full h-[50px] text-[17px]">
+        {loading ? <Indicateur /> : children}
+      </button>
+      {lent && (
+        <p className="text-center text-[13px] text-label-2" role="status">
+          Réveil du serveur… cela peut prendre jusqu'à une minute.
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -78,8 +92,8 @@ function FormLogin({ onSwitch }) {
     e.preventDefault();
     setErr(""); setLoading(true);
     try {
-      const r = await api.post("/auth/login", { email, password });
-      const me = await api.get("/auth/me", { headers: { Authorization: `Bearer ${r.data.access_token}` } });
+      const r = await avecReveil(() => api.post("/auth/login", { email, password }, { timeout: 30_000 }));
+      const me = await avecReveil(() => api.get("/auth/me", { timeout: 20_000, headers: { Authorization: `Bearer ${r.data.access_token}` } }));
       login(r.data.access_token, me.data);
       navigate("/");
     } catch (e) {
@@ -131,7 +145,8 @@ function FormRegister({ onSwitch, onSuccess }) {
         date_naissance: dateNaissance || null,
         sexe: sexe || null,
       };
-      const r = await api.post("/auth/register", payload);
+      await reveillerServeur();  // pas de nouvel essai automatique : il pourrait créer le compte deux fois
+      const r = await api.post("/auth/register", payload, { timeout: 30_000 });
       onSuccess(r.data.access_token);
     } catch (e) {
       setErr(getErrorMessage(e, "Erreur lors de l'inscription"));
