@@ -132,65 +132,99 @@ function BottomNav() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const navRef = useRef(null);
+  const pastilleRef = useRef(null);
   const items = NAV.filter(n => !n.mobileHide);
   const n = items.length;
   const actif = ONGLETS.indexOf(ongletDe(pathname));
-  const [lentille, setLentille] = useState(null);   // { t: décalage px, i: onglet sous le doigt }
+  const [glisse, setGlisse] = useState(false);   // lentille sous le doigt
+  const [sous, setSous] = useState(-1);          // onglet sous le doigt
+  const [cible, setCible] = useState(null);      // onglet choisi, en attendant la navigation
   const [etire, setEtire] = useState(false);
   const compacte = useBarreCompacte(pathname);
   const ignorerClic = useRef(false);
   const actifRef = useRef(actif);
   actifRef.current = actif;
+  const choisi = cible ?? actif;
+
+  // La navigation est faite : l'onglet choisi est devenu l'onglet actif
+  useEffect(() => { setCible(null); }, [actif]);
+  useEffect(() => {
+    if (cible == null) return;
+    const t = setTimeout(() => setCible(null), 1000);  // navigation annulée
+    return () => clearTimeout(t);
+  }, [cible]);
 
   // Effet « goutte » à chaque changement d'onglet
-  const precedent = useRef(actif);
+  const precedent = useRef(choisi);
   useEffect(() => {
-    if (precedent.current === actif) return;
-    precedent.current = actif;
+    if (precedent.current === choisi) return;
+    precedent.current = choisi;
     setEtire(false);
     const r = requestAnimationFrame(() => setEtire(true));
     const t = setTimeout(() => setEtire(false), 600);
     return () => { cancelAnimationFrame(r); clearTimeout(t); };
-  }, [actif]);
+  }, [choisi]);
+
+  // Hors geste, la pastille se pose sur l'onglet choisi (pendant le geste, la
+  // position sous le doigt est écrite directement dans le style, sans rendu React)
+  useLayoutEffect(() => {
+    if (!glisse && pastilleRef.current) {
+      pastilleRef.current.style.transform = `translateX(${Math.max(choisi, 0) * 100}%)`;
+    }
+  }, [glisse, choisi]);
 
   // Pointer Events + capture : le geste reste à la barre du début à la fin
-  // (touch-action: none en CSS empêche Safari de le récupérer pour défiler),
-  // donc la navigation se fait au relâchement, que l'on ait tapé ou glissé.
+  // (touch-action: none en CSS empêche Safari de le récupérer pour défiler).
+  // La lentille suit le doigt image par image ; on navigue au relâchement.
   useEffect(() => {
     const nav = navRef.current;
-    if (!nav) return;
-    let enCours = null, largeur = 0, gauche = 0, idx = -1;
+    const pastille = pastilleRef.current;
+    if (!nav || !pastille) return;
+    let enCours = null, idx = -1, x = 0, image = 0;
 
-    const placer = (x) => {
-      const w = (largeur - 8) / n;
-      const t = Math.max(0, Math.min(largeur - 8 - w, x - gauche - 4 - w / 2));
-      idx = Math.max(0, Math.min(n - 1, Math.floor((x - gauche - 4) / w)));
-      setLentille({ t, i: idx });
+    const indice = (r) => Math.max(0, Math.min(n - 1, Math.floor((x - r.left - 4) / ((r.width - 8) / n))));
+    const dessiner = () => {
+      image = 0;
+      const r = nav.getBoundingClientRect();
+      const w = (r.width - 8) / n;
+      const t = Math.max(0, Math.min(r.width - 8 - w, x - r.left - 4 - w / 2));
+      pastille.style.transform = `translateX(${t}px)`;
+      const i = indice(r);
+      if (i !== idx) { idx = i; setSous(i); }
     };
     const debut = (e) => {
       if (enCours != null || (e.pointerType === "mouse" && e.button !== 0)) return;
       enCours = e.pointerId;
       try { nav.setPointerCapture(e.pointerId); } catch { /* navigateur ancien */ }
-      const r = nav.getBoundingClientRect();
-      largeur = r.width; gauche = r.left;
-      placer(e.clientX);
+      pastille.classList.remove("suit");   // la lentille rejoint le doigt en glissant…
+      idx = -1;
+      x = e.clientX;
+      setGlisse(true);
+      dessiner();
     };
     const bouge = (e) => {
       if (e.pointerId !== enCours) return;
       e.preventDefault();
-      placer(e.clientX);
+      pastille.classList.add("suit");      // …puis colle au doigt, sans retard
+      x = e.clientX;
+      if (!image) image = requestAnimationFrame(dessiner);
     };
     const fin = (e) => {
       if (e.pointerId !== enCours) return;
       enCours = null;
-      setLentille(null);
-      if (e.type !== "pointerup" || idx < 0) return;
+      if (image) { cancelAnimationFrame(image); image = 0; }
+      pastille.classList.remove("suit");
+      if (e.type !== "pointerup" || idx < 0) { setGlisse(false); return; }
+      // L'onglet sous le doigt au relâchement (la dernière image n'est peut-être pas dessinée)
+      x = e.clientX;
+      idx = indice(nav.getBoundingClientRect());
       // Le « click » qui suit est ignoré : c'est ici qu'on navigue
       ignorerClic.current = true;
       setTimeout(() => { ignorerClic.current = false; }, 400);
-      const cible = items[idx].to;
-      if (idx !== actifRef.current) navigate(cible);
-      else if (window.location.pathname !== cible) navigate(cible);
+      const i = idx, destination = items[i].to;
+      setCible(i);
+      setGlisse(false);
+      if (i !== actifRef.current || window.location.pathname !== destination) navigate(destination);
       else window.scrollTo({ top: 0, behavior: "smooth" });
     };
 
@@ -200,6 +234,7 @@ function BottomNav() {
     nav.addEventListener("pointercancel", fin);
     nav.addEventListener("lostpointercapture", fin);
     return () => {
+      if (image) cancelAnimationFrame(image);
       nav.removeEventListener("pointerdown", debut);
       nav.removeEventListener("pointermove", bouge);
       nav.removeEventListener("pointerup", fin);
@@ -208,20 +243,17 @@ function BottomNav() {
     };
   }, [navigate, n]);   // eslint-disable-line react-hooks/exhaustive-deps
 
-  const surligne = lentille ? lentille.i : actif;
+  const surligne = glisse ? sous : choisi;
 
   return (
     <div className="md:hidden fixed bottom-0 left-0 right-0 z-30 px-4 pointer-events-none"
       style={{ paddingBottom: "max(calc(env(safe-area-inset-bottom) - 8px), 14px)" }}>
+      {/* La barre garde sa taille pendant le geste : sinon la lentille se décale du doigt */}
       <nav ref={navRef} aria-label="Onglets"
-        className={clsx("barre-onglets glass pointer-events-auto", compacte && !lentille && "compacte")}>
-        <div aria-hidden
-          className={clsx("pastille-onglet", lentille && "lentille", etire && !lentille && "etire")}
-          style={{
-            width: `calc((100% - 8px) / ${n})`,
-            transform: lentille ? `translateX(${lentille.t}px)` : `translateX(${Math.max(actif, 0) * 100}%)`,
-            opacity: actif < 0 && !lentille ? 0 : 1,
-          }} />
+        className={clsx("barre-onglets glass pointer-events-auto", compacte && "compacte")}>
+        <div aria-hidden ref={pastilleRef}
+          className={clsx("pastille-onglet", glisse && "lentille", etire && !glisse && "etire")}
+          style={{ width: `calc((100% - 8px) / ${n})`, opacity: choisi < 0 && !glisse ? 0 : 1 }} />
         {items.map((it, i) => (
           <Link key={it.to} to={it.to} aria-current={i === actif ? "page" : undefined}
             draggable={false}

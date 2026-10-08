@@ -313,6 +313,7 @@
     border-radius: 9999px;
     background: var(--selection);
     pointer-events: none;
+    will-change: transform;
     transition:
       transform 0.55s var(--ressort),
       scale 0.4s var(--ressort),
@@ -320,21 +321,24 @@
       box-shadow 0.3s ease;
   }
   .pastille-onglet.etire { animation: goutte 0.55s var(--doux); }
+  /* Pas de backdrop-filter : recalculer le flou à chaque image saccade sur iPhone */
   .pastille-onglet.lentille {
     scale: 1.14 1.3;
     background: var(--lentille);
-    backdrop-filter: blur(3px) saturate(220%) brightness(1.1);
-    -webkit-backdrop-filter: blur(3px) saturate(220%) brightness(1.1);
     box-shadow:
       0 6px 22px rgba(0, 0, 0, 0.14),
       inset 0 1px 1.5px var(--glass-rim-hi),
       inset 0 -1px 1.5px var(--glass-rim-lo),
       inset 0 0 0 0.5px var(--glass-rim-lo);
     transition:
-      transform 0.12s linear,
+      transform 0.22s var(--doux),
       scale 0.35s var(--ressort),
       background-color 0.25s ease,
       box-shadow 0.25s ease;
+  }
+  /* Pendant le glissement, la lentille colle au doigt */
+  .pastille-onglet.lentille.suit {
+    transition: scale 0.35s var(--ressort), background-color 0.25s ease, box-shadow 0.25s ease;
   }
   @keyframes goutte {
     0% { scale: 1 1; }
