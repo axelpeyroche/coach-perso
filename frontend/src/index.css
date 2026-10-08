@@ -240,9 +240,23 @@
   }
   .barre-nav-actions .btn-texte:active { transform: scale(1.08); opacity: 1; }
 
+  /* ── Bande sous la barre d'état (heure, batterie) ───────────────────────
+     Toujours opaque : le contenu disparaît net sous l'heure au lieu de
+     passer dessous, ce qui déclenchait le flou automatique d'iOS 26. */
+  body::before {
+    content: "";
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: env(safe-area-inset-top);
+    background: rgb(var(--bg));
+    z-index: 40;
+    pointer-events: none;
+  }
+
   /* ── Barre de navigation mobile (iOS 26) ───────────────────────────────
-     Boutons de verre flottants. Au défilement, seule la zone de la barre
-     d'état (heure, batterie) reçoit un fond uni : rien ne recouvre le contenu. */
+     Boutons de verre flottants, sans bandeau flouté. */
   .barre-nav {
     position: fixed;
     top: 0;
@@ -253,19 +267,6 @@
     pointer-events: none;
   }
   .barre-nav > * { pointer-events: auto; }
-  .barre-nav::before {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: env(safe-area-inset-top);
-    background: rgb(var(--bg));
-    opacity: 0;
-    transition: opacity 0.2s ease;
-    pointer-events: none;
-  }
-  .barre-nav.defile::before { opacity: 1; }
 
   /* ── Barre d'onglets Liquid Glass ────────────────────────────────────── */
   .barre-onglets {

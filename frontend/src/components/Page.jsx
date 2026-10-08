@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from "react-router-dom";
 import { PARENTS, estPoussee } from "../navigation";
@@ -8,15 +7,6 @@ import { PARENTS, estPoussee } from "../navigation";
 function BarreNav({ action }) {
   const { pathname } = useLocation();
   const navigate = useNavigate();
-  const [defile, setDefile] = useState(false);
-
-  useEffect(() => {
-    const f = () => setDefile(window.scrollY > 2);
-    f();
-    window.addEventListener("scroll", f, { passive: true });
-    window.addEventListener("resize", f);
-    return () => { window.removeEventListener("scroll", f); window.removeEventListener("resize", f); };
-  }, []);
 
   const retour = () => {
     if ((window.history.state?.idx ?? 0) > 0) navigate(-1);
@@ -24,7 +14,7 @@ function BarreNav({ action }) {
   };
 
   return createPortal(
-    <div className={`barre-nav md:hidden ${defile ? "defile" : ""}`}>
+    <div className="barre-nav md:hidden">
       <div className="relative flex items-center justify-between gap-3 h-[52px] px-4">
         {estPoussee(pathname) ? (
           <button type="button" onClick={retour} aria-label="Retour" className="btn-verre">
