@@ -338,8 +338,8 @@ def _reduire(valeurs: list, tranches: list[tuple[int, int]], dec: int = 1) -> li
     return sortie
 
 
-def _tranches(n: int) -> list[tuple[int, int]]:
-    pas = max(1, -(-n // POINTS_GRAPHIQUE))
+def _tranches(n: int, total: Optional[int] = None) -> list[tuple[int, int]]:
+    pas = max(1, -(-(total or n) // POINTS_GRAPHIQUE))
     return [(i, min(n, i + pas)) for i in range(0, n, pas)]
 
 
@@ -369,34 +369,81 @@ def _serie(type_: str, nom: Optional[str], data: list, sport: str) -> Optional[d
             "brut": [x * facteur if isinstance(x, (int, float)) else None for x in data]}
 
 
-def _combler(brut: list, temps: list) -> list:
-    """Interpole entre deux mesures successives. La montre n'enregistre foulée, oscillation et
+def _num(x) -> bool:
+    return isinstance(x, (int, float)) and not isinstance(x, bool)
+
+
+def _pauses(temps: list, vitesse: Optional[list]) -> tuple[set[int], list[int]]:
+    """Pauses d'une séance : (indices à l'arrêt — moins de 3,6 km/h pendant 5 s ou plus —,
+    indices qui suivent un saut du chrono, c.-à-d. une pause de la montre)."""
+    arret, serie = set(), []
+    for i, v in enumerate(vitesse or []):
+        if _num(v) and v < 1.0:
+            serie.append(i)
+            continue
+        if len(serie) >= 5:
+            arret.update(serie)
+        serie = []
+    if len(serie) >= 5:
+        arret.update(serie)
+    sauts = [i for i in range(1, len(temps)) if _num(temps[i]) and _num(temps[i - 1]) and temps[i] - temps[i - 1] > 2]
+    return arret, sauts
+
+
+def _combler(brut: list, temps: list, arret: set[int] = frozenset(), sauts: list[int] = ()) -> list:
+    """Interpole entre deux mesures successives : la montre n'enregistre foulée, oscillation et
     contact au sol que toutes les ~5 s (puissance ~3 s), et plus du tout pendant une récupération
-    marchée ou une pause : sans cela la courbe serait hachée et trouée."""
-    idx = [i for i, v in enumerate(brut) if isinstance(v, (int, float))]
-    if len(idx) < 2 or len(idx) == len(brut):
+    marchée. Les pauses (arrêt, chrono en pause) restent vides."""
+    idx = [i for i, v in enumerate(brut) if _num(v) and i not in arret]
+    if len(idx) < 2:
         return brut
-    sortie = list(brut)
+    coupe = set(sauts)
+    sortie = [None if i in arret else v for i, v in enumerate(brut)]
     for a, b in zip(idx, idx[1:]):
         ta, tb = temps[a], temps[b]
-        if b - a < 2 or not isinstance(ta, (int, float)) or not isinstance(tb, (int, float)) or tb <= ta:
+        if b - a < 2 or not _num(ta) or not _num(tb) or tb <= ta:
             continue
+        if any(i in arret or i in coupe for i in range(a + 1, b + 1)):
+            continue  # une pause entre les deux mesures
         for i in range(a + 1, b):
-            ti = temps[i] if isinstance(temps[i], (int, float)) else ta
+            ti = temps[i] if _num(temps[i]) else ta
             sortie[i] = brut[a] + (brut[b] - brut[a]) * (ti - ta) / (tb - ta)
-    # Avant la première / après la dernière mesure : on prolonge la plus proche
-    sortie[:idx[0]] = [brut[idx[0]]] * idx[0]
-    sortie[idx[-1] + 1:] = [brut[idx[-1]]] * (len(brut) - idx[-1] - 1)
+    # Avant la première / après la dernière mesure : on prolonge la plus proche, sans traverser de pause
+    for i in range(idx[0] - 1, -1, -1):
+        if i in arret or i + 1 in coupe:
+            break
+        sortie[i] = brut[idx[0]]
+    for i in range(idx[-1] + 1, len(brut)):
+        if i in arret or i in coupe:
+            break
+        sortie[i] = brut[idx[-1]]
     return sortie
 
 
-def _sortie(source: str, temps: list, dist_km: Optional[list], series: list) -> dict:
-    tr = _tranches(len(temps))
+def _sortie(source: str, temps: list, dist_km: Optional[list], series: list, sauts: list[int] = ()) -> dict:
+    """Réduit à ~POINTS_GRAPHIQUE points. À chaque saut du chrono, un point vide coupe les courbes."""
+    n = len(temps)
+    bornes = [0, *[i for i in sauts if 0 < i < n], n]
+    tr: list = []
+    for k, (a, b) in enumerate(zip(bornes, bornes[1:])):
+        if k:
+            tr.append(None)  # coupure
+        tr += [(i + a, j + a) for i, j in _tranches(b - a, n)]
+
+    def reduire(valeurs, dec, vide_en_coupure=True):
+        out = []
+        for x, t in enumerate(tr):
+            if t is None:
+                out.append(None if vide_en_coupure else out[-1])
+            else:
+                out.extend(_reduire(valeurs, [t], dec))
+        return out
+
     return {
         "source": source,
-        "temps": _reduire(temps, tr, 0),
-        "distance": _reduire(dist_km, tr, 3) if dist_km else None,
-        "series": [{**{k: v for k, v in s.items() if k != "brut"}, "data": _reduire(s["brut"], tr, 2)}
+        "temps": reduire(temps, 0, False),
+        "distance": reduire(dist_km, 3, False) if dist_km else None,
+        "series": [{**{k: v for k, v in s.items() if k != "brut"}, "data": reduire(s["brut"], 2)}
                    for s in series],
     }
 
@@ -408,6 +455,8 @@ def _depuis_streams(streams: list, sport: str) -> Optional[dict]:
     if n < 10:
         return None
     dist = (par_type.get("distance") or {}).get("data") or []
+    vitesse = (par_type.get("velocity_smooth") or {}).get("data")
+    arret, sauts = _pauses(temps, vitesse if vitesse and len(vitesse) == n else None)
     series, vues = [], set()
     for s in streams:
         data = s.get("data") or []
@@ -416,11 +465,11 @@ def _depuis_streams(streams: list, sport: str) -> Optional[dict]:
         serie = _serie(s.get("type") or "", s.get("name"), data, sport)
         if serie and serie["cle"] not in vues:
             vues.add(serie["cle"])
-            series.append({**serie, "brut": _combler(serie["brut"], temps)})
+            series.append({**serie, "brut": _combler(serie["brut"], temps, arret, sauts)})
     if not series:
         return None
     dist_km = [d / 1000 if isinstance(d, (int, float)) else None for d in dist] if len(dist) == n else None
-    return _sortie("intervals", temps, dist_km, series)
+    return _sortie("intervals", temps, dist_km, series, sauts)
 
 
 def _depuis_trace(points: list) -> Optional[dict]:
