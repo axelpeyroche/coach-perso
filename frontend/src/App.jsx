@@ -169,12 +169,17 @@ function BottomNav() {
   }, [choisi]);
 
   // Hors geste, la pastille se pose sur l'onglet choisi (pendant le geste, la
-  // position sous le doigt est écrite directement dans le style, sans rendu React)
+  // position sous le doigt est écrite directement dans le style, sans rendu React).
+  // Position par `left` en calc() relatif à la barre, et non par un translate en % :
+  // quand la barre rétrécit au défilement, Safari iOS ne recalcule pas le
+  // pourcentage du translate et la bulle des onglets 3 à 5 partait vers la droite.
   useLayoutEffect(() => {
     if (!glisse && pastilleRef.current) {
-      pastilleRef.current.style.translate = `${Math.max(choisi, 0) * 100}% 0`;
+      const st = pastilleRef.current.style;
+      st.left = `calc(4px + ${Math.max(choisi, 0)} * (100% - 8px) / ${n})`;
+      st.translate = "0px 0";
     }
-  }, [glisse, choisi]);
+  }, [glisse, choisi, n]);
 
   // Pointer Events + capture : le geste reste à la barre du début à la fin
   // (touch-action: none en CSS empêche Safari de le récupérer pour défiler).
@@ -205,6 +210,7 @@ function BottomNav() {
       idx = -1;
       x = e.clientX;
       setGlisse(true);
+      pastille.style.left = "4px";         // pendant le geste, tout passe par le translate en px
       dessiner();
     };
     const bouge = (e) => {

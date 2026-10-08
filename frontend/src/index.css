@@ -315,6 +315,7 @@
     pointer-events: none;
     will-change: translate, scale;
     transition:
+      left 0.55s var(--ressort),
       translate 0.55s var(--ressort),
       scale 0.4s var(--ressort),
       background-color 0.3s ease,
@@ -331,6 +332,7 @@
       inset 0 -1px 1.5px var(--glass-rim-lo),
       inset 0 0 0 0.5px var(--glass-rim-lo);
     transition:
+      left 0.22s var(--doux),
       translate 0.22s var(--doux),
       scale 0.35s var(--ressort),
       background-color 0.25s ease,
