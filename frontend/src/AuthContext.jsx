@@ -1,9 +1,11 @@
 import { createContext, useContext, useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import api, { setUnauthorizedHandler, patchFuseauHoraire, avecReveil } from "./api";
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
+  const queryClient = useQueryClient();
   const [token, setToken] = useState(() => localStorage.getItem("token"));
   const [user, setUser]   = useState(null);
   const [loading, setLoading] = useState(true);
@@ -28,7 +30,15 @@ export function AuthProvider({ children }) {
       .finally(() => setLoading(false));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Les données en cache appartiennent au compte précédent : on les jette à chaque
+  // changement de session pour ne jamais afficher celles d'un autre utilisateur.
+  function viderCache() {
+    queryClient.cancelQueries();
+    queryClient.clear();
+  }
+
   function login(tokenStr, userData) {
+    if (userData?.id !== user?.id) viderCache();  // pas pour un simple renouvellement du token
     localStorage.setItem("token", tokenStr);
     setToken(tokenStr);
     api.defaults.headers.common["Authorization"] = `Bearer ${tokenStr}`;
@@ -36,6 +46,7 @@ export function AuthProvider({ children }) {
   }
 
   function logout() {
+    viderCache();
     localStorage.removeItem("token");
     setToken(null);
     setUser(null);
