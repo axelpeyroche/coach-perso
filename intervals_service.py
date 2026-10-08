@@ -369,21 +369,24 @@ def _serie(type_: str, nom: Optional[str], data: list, sport: str) -> Optional[d
             "brut": [x * facteur if isinstance(x, (int, float)) else None for x in data]}
 
 
-def _combler(brut: list, temps: list, ecart_max: float = 15.0) -> list:
-    """Interpole entre deux mesures espacées de moins de `ecart_max` s. La montre n'enregistre
-    foulée, oscillation et contact au sol que toutes les ~5 s (puissance ~3 s) : sans cela la
-    courbe serait hachée. Les vrais trous (récupération marchée, pause) restent vides."""
+def _combler(brut: list, temps: list) -> list:
+    """Interpole entre deux mesures successives. La montre n'enregistre foulée, oscillation et
+    contact au sol que toutes les ~5 s (puissance ~3 s), et plus du tout pendant une récupération
+    marchée ou une pause : sans cela la courbe serait hachée et trouée."""
     idx = [i for i, v in enumerate(brut) if isinstance(v, (int, float))]
     if len(idx) < 2 or len(idx) == len(brut):
         return brut
     sortie = list(brut)
     for a, b in zip(idx, idx[1:]):
         ta, tb = temps[a], temps[b]
-        if b - a < 2 or not isinstance(ta, (int, float)) or not isinstance(tb, (int, float)) or not 0 < tb - ta <= ecart_max:
+        if b - a < 2 or not isinstance(ta, (int, float)) or not isinstance(tb, (int, float)) or tb <= ta:
             continue
         for i in range(a + 1, b):
             ti = temps[i] if isinstance(temps[i], (int, float)) else ta
             sortie[i] = brut[a] + (brut[b] - brut[a]) * (ti - ta) / (tb - ta)
+    # Avant la première / après la dernière mesure : on prolonge la plus proche
+    sortie[:idx[0]] = [brut[idx[0]]] * idx[0]
+    sortie[idx[-1] + 1:] = [brut[idx[-1]]] * (len(brut) - idx[-1] - 1)
     return sortie
 
 
