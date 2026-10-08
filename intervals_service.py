@@ -5,8 +5,9 @@ grâce à la clé API personnelle de l'utilisateur (gratuite).
 
 Chaque séance est fusionnée avec celle du carnet qui commence au même moment (ou créée),
 puis son tracé est enregistré et rattaché comme un GPX de l'export Santé. Le flux de FC sert
-à calculer les zones et la dérive cardiaque ; le suivi « wellness » apporte la durée du sommeil
-(et comble les jours sans FC repos / VFC envoyées par le raccourci).
+à calculer les zones et la dérive cardiaque, les autres flux donnent la puissance, la foulée,
+l'oscillation verticale, le temps de contact et les pas ; le suivi « wellness » apporte le sommeil,
+la FC au repos, la VFC et la VO2max (sans écraser les valeurs envoyées par le raccourci).
 """
 from __future__ import annotations
 
@@ -33,7 +34,7 @@ FENETRE_JOURS = 14          # séances relues à chaque synchro (l'iPhone peut e
 PREMIERE_FENETRE_JOURS = 60
 INTERVALLE_MIN = timedelta(minutes=15)  # pas plus d'une synchro automatique par quart d'heure
 PAS_TRACE_M = 10            # comme les GPX importés : un point tous les 10 m
-VERSION_ANALYSE = 1         # zones de FC + dérive cardiaque tirées du flux de FC
+VERSION_ANALYSE = 2         # zones de FC, dérive cardiaque, puissance, foulée, oscillation, contact, pas
 
 
 class IntervalsErreur(Exception):
@@ -134,14 +135,56 @@ def analyse_fc(streams: list, user: Utilisateur, sport: str, duree_sec: Optional
     return res
 
 
+def resume_flux(streams: list, sport: str) -> dict:
+    """Moyennes de la séance tirées de ses flux, avec les mêmes clés que le raccourci iOS :
+    puissance moyenne / max, foulée, oscillation verticale, temps de contact, pas, FC min."""
+    par_type = {s.get("type"): (s.get("data") or []) for s in streams or []}
+    temps = par_type.get("time") or []
+    n = len(temps)
+    if n < 10:
+        return {}
+    dt = []
+    for i in range(n):
+        a, b = temps[i], temps[i + 1] if i + 1 < n else None
+        dt.append(max(0.0, min(30.0, b - a)) if isinstance(a, (int, float)) and isinstance(b, (int, float)) else 1.0)
+    res: dict = {}
+    for s in streams or []:
+        data = s.get("data") or []
+        if len(data) != n:
+            continue
+        serie = _serie(s.get("type") or "", s.get("name"), data, sport)
+        if not serie:
+            continue
+        cle = serie["cle"]
+        # Les zéros sont des arrêts (sauf en puissance, où l'on peut rouler sans pédaler)
+        pts = [(v, p) for v, p in zip(serie["brut"], dt)
+               if isinstance(v, (int, float)) and (v > 0 or (cle == "puissance" and v == 0))]
+        total = sum(p for _, p in pts)
+        if not pts or not total:
+            continue
+        moy = sum(v * p for v, p in pts) / total
+        if cle == "puissance":
+            res["puissance_moy_w"] = round(moy, 2)
+            res["puissance_max_w"] = round(max(v for v, _ in pts), 2)
+        elif cle in ("foulee", "oscillation", "contact"):
+            res[{"foulee": "foulee_m", "oscillation": "oscillation_cm", "contact": "contact_sol_ms"}[cle]] = round(moy, 2)
+        elif cle == "cadence" and sport in cs.SPORTS_PIED:
+            res["pas"] = round(sum(v * p for v, p in pts) / 60)
+        elif cle == "fc":
+            fc = [v for v, _ in pts if 30 <= v <= 240]
+            if fc:
+                res["fc_min_bpm"] = round(min(fc))
+    return res
+
+
 def synchroniser_wellness(db: Session, user: Utilisateur, depuis, jusqu_a) -> int:
-    """Sommeil de chaque nuit ; FC repos et VFC (SDNN) seulement pour les jours où le
+    """Sommeil de chaque nuit ; FC repos, VFC (SDNN) et VO2max seulement pour les jours où le
     raccourci n'a rien envoyé (ses valeurs restent la référence)."""
     athlete = user.intervals_athlete_id or "0"
     lignes = _appel(user.intervals_cle, f"/athlete/{urllib.parse.quote(athlete)}/wellness",
                     {"oldest": depuis.isoformat(), "newest": jusqu_a.isoformat()}) or []
     deja = {(m.type, m.jour) for m in db.query(MesureSante).filter(
-        MesureSante.utilisateur_id == user.id, MesureSante.jour >= depuis, MesureSante.type.in_(("fc_repos", "vfc")))}
+        MesureSante.utilisateur_id == user.id, MesureSante.jour >= depuis, MesureSante.type.in_(("fc_repos", "vfc", "vo2max")))}
     items = []
     for w in lignes if isinstance(lignes, list) else []:
         try:
@@ -150,7 +193,7 @@ def synchroniser_wellness(db: Session, user: Utilisateur, depuis, jusqu_a) -> in
             continue
         if w.get("sleepSecs"):
             items.append(("sommeil", jour, w["sleepSecs"] / 3600))
-        for cle, t in (("restingHR", "fc_repos"), ("hrvSDNN", "vfc")):
+        for cle, t in (("restingHR", "fc_repos"), ("hrvSDNN", "vfc"), ("vo2max", "vo2max")):
             if w.get(cle) and (t, jour) not in deja:
                 items.append((t, jour, float(w[cle])))
     if not items:
@@ -170,9 +213,10 @@ def synchroniser(db: Session, user: Utilisateur, force: bool = False) -> dict:
     if not force and user.intervals_derniere_synchro and maintenant - user.intervals_derniere_synchro < INTERVALLE_MIN:
         return {"ignore": True, "nouvelles": 0, "completees": 0, "traces": 0, "analyses": 0, "mesures": 0}
     tz = ZoneInfo(user.fuseau_horaire or "Europe/Paris")
-    deja_analyse = db.query(Activite.id).filter(Activite.utilisateur_id == user.id,
-                                                Activite.details.like('%"analyse_iv"%')).first()
-    # 1re synchro, ou 1re analyse de la FC : on remonte plus loin
+    deja_analyse = db.query(Activite.id).filter(
+        Activite.utilisateur_id == user.id,
+        Activite.details.like(f'%"analyse_iv": {VERSION_ANALYSE}%')).first()
+    # 1re synchro, ou nouvelle version de l'analyse des flux : on remonte plus loin
     jours = FENETRE_JOURS if user.intervals_derniere_synchro and deja_analyse else PREMIERE_FENETRE_JOURS
     depuis = (datetime.now(tz) - timedelta(days=jours)).date()
     athlete = user.intervals_athlete_id or "0"
@@ -211,12 +255,13 @@ def synchroniser(db: Session, user: Utilisateur, force: bool = False) -> dict:
                      and "heartrate" in (dispo or ["heartrate"]))
         if not besoin_trace and not besoin_fc:
             continue
-        types = (["latlng", "altitude"] if besoin_trace else []) + (["heartrate", "distance"] if besoin_fc else []) + ["time"]
-        streams = _appel(user.intervals_cle, f"/activity/{urllib.parse.quote(iid)}/streams.json",
-                         {"types": ",".join(types)})
+        # Analyse : tous les flux (FC, puissance, foulée…) ; tracé seul : juste ce qu'il faut
+        params = None if besoin_fc else {"types": "latlng,altitude,time"}
+        streams = _appel(user.intervals_cle, f"/activity/{urllib.parse.quote(iid)}/streams.json", params)
         if besoin_fc:
             analyse = analyse_fc(streams, user, act.sport, act.duree_sec)
-            cs.fusionner_details(act, {"zones_fc": analyse.get("zones_fc")})  # celles du raccourci restent
+            # Les valeurs déjà présentes (raccourci, export Santé, saisie) restent
+            cs.fusionner_details(act, {"zones_fc": analyse.get("zones_fc"), **resume_flux(streams, act.sport)})
             cs.fusionner_details(act, {"derive_fc": analyse.get("derive_fc"), "analyse_iv": VERSION_ANALYSE}, ecraser=True)
             bilan["analyses"] += 1
         if not besoin_trace:
