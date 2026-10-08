@@ -277,6 +277,11 @@ def importer_activite(db: Session, user_id: int, source: str, donnees: dict,
         for p in candidates:
             if p.source == source and not _detectee_auto(p):
                 continue  # même source : seul l'id_externe identifie la séance
+            det_p = _details_dict(p)
+            if source == "intervals" and id_externe and det_p.get("intervals_id") not in (None, str(id_externe)):
+                continue  # déjà associée à une autre séance Intervals : deux sorties distinctes
+            if det_p.get("fin") and not _sans_heure(debut) and debut > fin_activite(p) + timedelta(minutes=1):
+                continue  # commence après la fin connue de la séance : sortie suivante
             if _detectee_auto(p) and not _sans_heure(debut) and abs((p.debut - debut).total_seconds()) <= 15 * 60:
                 # Séance reconstituée par le raccourci : la vraie séance (export Santé…)
                 # la remplace, en gardant ce qui a été calculé ou saisi entre-temps
