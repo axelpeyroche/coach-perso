@@ -481,7 +481,7 @@ export default function Sources() {
     <Page titre="Sources" sousTitre="Import et export">
       <div className="space-y-1.5">
         <h2 className="entete-liste">Importer</h2>
-        <div className="grid gap-3 lg:grid-cols-2 items-start">
+        <div className="space-y-3">
           {/* Import CSV et GPX masqués : les séances et tracés arrivent par Intervals.icu (BlocFichier, BlocTraces) */}
           <BlocIntervals />
         </div>
