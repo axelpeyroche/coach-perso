@@ -71,6 +71,7 @@ export const importerFichierActivites = (fichier) => {
 export const importerTraces = (traces) =>
   api.post("/activites/traces", { traces }, { timeout: 120000 }).then((r) => r.data);
 export const getTrace = (id) => api.get(`/activites/${id}/trace`).then((r) => r.data);
+export const getFlux = (id) => api.get(`/activites/${id}/flux`).then((r) => r.data);
 export const getCarteTraces = () => api.get("/traces/carte", { timeout: 90000 }).then((r) => r.data);
 
 // --- Intervals.icu (séances de la montre avec tracé GPS) ---

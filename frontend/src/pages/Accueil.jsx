@@ -7,6 +7,7 @@ import Page from "../components/Page";
 import StatTile from "../components/StatTile";
 import ActiviteLigne from "../components/ActiviteLigne";
 import ModalActivite from "../components/ModalActivite";
+import FicheActivite from "../components/FicheActivite";
 import CartePassages from "../components/CartePassages";
 import { FormeTuiles } from "../components/Forme";
 import { axeX, axeY, grille, curseur, InfoBulle } from "../components/graphiques";
@@ -22,6 +23,7 @@ const ZONE_COULEUR = { "sous-charge": "blue", optimale: "green", vigilance: "ora
 export default function Accueil() {
   const { user } = useAuth();
   const [modal, setModal] = useState(undefined);
+  const [fiche, setFiche] = useState(null);
   const { data: stats } = useQuery({ queryKey: ["stats-carnet", ""], queryFn: () => getStatsCarnet() });
   const { data: liste } = useQuery({ queryKey: ["activites", { recentes: true }], queryFn: () => getActivites({ limit: 6 }) });
   const { data: objectifs = [] } = useQuery({ queryKey: ["objectifs"], queryFn: getObjectifs });
@@ -80,7 +82,7 @@ export default function Accueil() {
                 <p className="p-4 text-[15px] text-label-2">Aucune activité.</p>
               ) : (
                 <div className="py-1">
-                  {liste.activites.map((a) => <ActiviteLigne key={a.id} a={a} onClick={() => setModal(a)} />)}
+                  {liste.activites.map((a) => <ActiviteLigne key={a.id} a={a} onClick={() => setFiche(a)} />)}
                 </div>
               )}
             </Card>
@@ -137,6 +139,7 @@ export default function Accueil() {
       )}
 
       {modal !== undefined && <ModalActivite activite={modal} onClose={() => setModal(undefined)} />}
+      {fiche && <FicheActivite key={fiche.id} activite={fiche} onClose={() => setFiche(null)} />}
     </Page>
   );
 }

@@ -280,6 +280,11 @@
   .barre-onglets {
     @apply relative flex rounded-full p-1;
     height: 62px;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
     margin-inline: 0;
     transition: height 0.45s var(--ressort), margin 0.45s var(--ressort);
   }
@@ -434,6 +439,12 @@
     animation: monte 0.42s var(--doux);
   }
   .feuille.ferme { animation: descend 0.26s ease-in forwards; }
+  /* Grande feuille (fiche d'une séance) : pleine hauteur sur iPhone,
+     large fenêtre centrée sur ordinateur */
+  .feuille.feuille-large { height: calc(100dvh - env(safe-area-inset-top) - 10px); }
+  @media (min-width: 768px) {
+    .feuille.feuille-large { max-width: 56rem; height: auto; max-height: calc(100dvh - 64px); }
+  }
   /* Barre d'outils de la feuille : ✕ en verre à gauche, validation en capsule bleue */
   .feuille-barre .btn-texte {
     @apply h-9 px-4 rounded-full bg-brand text-white text-[15px] font-semibold;

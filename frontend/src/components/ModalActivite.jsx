@@ -23,7 +23,7 @@ function Champ({ label, children, className = "" }) {
 const num = (v) => (v === "" || v == null ? null : Number(String(v).replace(",", ".")));
 
 // Ajout / édition d'une activité du carnet. `activite` = null pour une création.
-export default function ModalActivite({ activite, onClose }) {
+export default function ModalActivite({ activite, onClose, onEnregistre, onSupprime }) {
   const qc = useQueryClient();
   const [f, setF] = useState(() => ({
     sport: activite?.sport ?? "course",
@@ -49,13 +49,13 @@ export default function ModalActivite({ activite, onClose }) {
 
   const enregistrer = useMutation({
     mutationFn: (payload) => (activite ? modifierActivite(activite.id, payload) : creerActivite(payload)),
-    onSuccess: () => { invalider(); onClose(); },
+    onSuccess: (data) => { invalider(); onEnregistre?.(data); onClose(); },
     onError: (e) => setErreur(e?.response?.data?.detail?.toString?.() ?? "Erreur lors de l'enregistrement"),
   });
 
   const supprimer = useMutation({
     mutationFn: () => supprimerActivite(activite.id),
-    onSuccess: () => { invalider(); onClose(); },
+    onSuccess: () => { invalider(); onSupprime?.(); onClose(); },
   });
 
   function soumettre(e) {

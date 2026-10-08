@@ -260,6 +260,19 @@ def trace_activite(
             "points": json.loads(t.points)}
 
 
+@router.get("/api/activites/{activite_id}/flux", summary="Courbes détaillées d'une séance (FC, vitesse, cadence…)")
+def flux_activite(
+    activite_id: int,
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(obtenir_session),
+):
+    """Lecture seule : flux d'Intervals.icu lus à la demande, sinon recalculés depuis le tracé GPS."""
+    import intervals_service as iv
+    a = _activite_utilisateur(db, current_user, activite_id)
+    t = db.query(TraceGPS).filter(TraceGPS.activite_id == a.id).first()
+    return iv.flux_seance(current_user, a, json.loads(t.points) if t else None)
+
+
 @router.get("/api/traces/carte", summary="Tous les tracés allégés, pour la carte des passages")
 def carte_traces(
     current_user: Utilisateur = Depends(get_current_user),

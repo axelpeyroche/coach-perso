@@ -6,6 +6,7 @@ import Page from "../components/Page";
 import { BoutonAjout } from "../components/ui";
 import ActiviteLigne from "../components/ActiviteLigne";
 import ModalActivite from "../components/ModalActivite";
+import FicheActivite from "../components/FicheActivite";
 import api, { getActivites } from "../api";
 import { SPORTS, nombre, fmtDuree } from "../carnet";
 
@@ -20,6 +21,7 @@ export default function Carnet() {
   const [q, setQ] = useState("");
   const [limite, setLimite] = useState(PAGE);
   const [modal, setModal] = useState(undefined); // undefined = fermé, null = création, objet = édition
+  const [fiche, setFiche] = useState(null);
 
   const { data, isLoading, isFetching } = useQuery({
     queryKey: ["activites", { sport, q, limite }],
@@ -108,7 +110,7 @@ export default function Carnet() {
                 </span>
               </div>
               <Card pad={false} className="py-1">
-                {g.items.map((a) => <ActiviteLigne key={a.id} a={a} onClick={() => setModal(a)} />)}
+                {g.items.map((a) => <ActiviteLigne key={a.id} a={a} onClick={() => setFiche(a)} />)}
               </Card>
             </section>
           ))}
@@ -123,6 +125,7 @@ export default function Carnet() {
       )}
 
       {modal !== undefined && <ModalActivite activite={modal} onClose={() => setModal(undefined)} />}
+      {fiche && <FicheActivite key={fiche.id} activite={fiche} onClose={() => setFiche(null)} />}
     </Page>
   );
 }

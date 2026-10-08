@@ -242,3 +242,172 @@ def synchroniser(db: Session, user: Utilisateur, force: bool = False) -> dict:
     user.intervals_derniere_synchro = maintenant
     db.flush()
     return bilan
+
+
+# ---------------------------------------------------------------------------
+# Flux détaillés d'une séance (graphiques du carnet) — lecture seule, rien n'est stocké
+# ---------------------------------------------------------------------------
+
+POINTS_GRAPHIQUE = 600
+_CACHE_FLUX: dict = {}      # (utilisateur, activité) → (instant, réponse) : évite de relire Intervals à chaque ouverture
+_CACHE_DUREE = timedelta(minutes=30)
+
+# type de flux (minuscules, sans « _ ») → (clé, libellé, unité, couleur)
+_FLUX_CONNUS = {
+    "heartrate": ("fc", "Fréquence cardiaque", "bpm", "#FF375F"),
+    "velocitysmooth": ("vitesse", "Vitesse", "km/h", "#0A84FF"),
+    "cadence": ("cadence", "Cadence", "pas/min", "#BF5AF2"),
+    "fixedaltitude": ("altitude", "Altitude", "m", "#30B0C7"),
+    "altitude": ("altitude", "Altitude", "m", "#30B0C7"),
+    "watts": ("puissance", "Puissance", "W", "#FF9F0A"),
+    "verticaloscillation": ("oscillation", "Oscillation verticale", "cm", "#34C759"),
+    "groundcontacttime": ("contact", "Temps de contact au sol", "ms", "#AC8E68"),
+    "stancetime": ("contact", "Temps de contact au sol", "ms", "#AC8E68"),
+    "stridelength": ("foulee", "Longueur de foulée", "m", "#5E5CE6"),
+    "steplength": ("foulee", "Longueur de foulée", "m", "#5E5CE6"),
+    "verticalratio": ("ratio_vertical", "Ratio vertical", "%", "#64D2FF"),
+    "gradesmooth": ("pente", "Pente", "%", "#8E8E93"),
+    "temp": ("temperature", "Température", "°C", "#FF6482"),
+    "respiration": ("respiration", "Respiration", "resp/min", "#66D4CF"),
+}
+_FLUX_IGNORES = {"time", "distance", "latlng", "moving", "fixedheartrate", "lefttorightbalance"}
+
+
+def _mediane(v: list) -> float:
+    s = sorted(v)
+    return s[len(s) // 2] if s else 0
+
+
+def _reduire(valeurs: list, tranches: list[tuple[int, int]], dec: int = 1) -> list:
+    """Moyenne de chaque tranche [i, j[ (les trous restent vides)."""
+    sortie = []
+    for i, j in tranches:
+        bloc = [x for x in valeurs[i:j] if isinstance(x, (int, float))]
+        sortie.append(round(sum(bloc) / len(bloc), dec) if bloc else None)
+    return sortie
+
+
+def _tranches(n: int) -> list[tuple[int, int]]:
+    pas = max(1, -(-n // POINTS_GRAPHIQUE))
+    return [(i, min(n, i + pas)) for i in range(0, n, pas)]
+
+
+def _serie(type_: str, nom: Optional[str], data: list, sport: str) -> Optional[dict]:
+    norme = type_.lower().replace("_", "")
+    if norme in _FLUX_IGNORES:
+        return None
+    nums = [x for x in data if isinstance(x, (int, float)) and not isinstance(x, bool)]
+    if len(nums) < 10 or max(nums) == min(nums):
+        return None
+    cle, libelle, unite, couleur = _FLUX_CONNUS.get(norme, (type_, nom or type_, "", "#8E8E93"))
+    facteur, med = 1.0, _mediane([x for x in nums if x])
+    if cle == "vitesse":
+        facteur = 3.6
+    elif cle == "cadence":
+        if sport in cs.SPORTS_PIED:
+            facteur = 2.0 if med < 120 else 1.0     # cadence d'une seule jambe → pas/min
+        else:
+            unite = "tr/min"
+    elif cle == "oscillation" and med > 30:
+        facteur = 0.1                               # mm → cm
+    elif cle == "foulee":
+        facteur = 0.001 if med > 100 else 0.01 if med > 4 else 1.0
+    elif cle == "ratio_vertical" and med < 1:
+        facteur = 100.0
+    return {"cle": cle, "nom": libelle, "unite": unite, "couleur": couleur,
+            "brut": [x * facteur if isinstance(x, (int, float)) else None for x in data]}
+
+
+def _sortie(source: str, temps: list, dist_km: Optional[list], series: list) -> dict:
+    tr = _tranches(len(temps))
+    return {
+        "source": source,
+        "temps": _reduire(temps, tr, 0),
+        "distance": _reduire(dist_km, tr, 3) if dist_km else None,
+        "series": [{**{k: v for k, v in s.items() if k != "brut"}, "data": _reduire(s["brut"], tr, 2)}
+                   for s in series],
+    }
+
+
+def _depuis_streams(streams: list, sport: str) -> Optional[dict]:
+    par_type = {s.get("type"): s for s in streams or [] if s.get("type")}
+    temps = (par_type.get("time") or {}).get("data") or []
+    n = len(temps)
+    if n < 10:
+        return None
+    dist = (par_type.get("distance") or {}).get("data") or []
+    series, vues = [], set()
+    for s in streams:
+        data = s.get("data") or []
+        if len(data) != n:
+            continue
+        serie = _serie(s.get("type") or "", s.get("name"), data, sport)
+        if serie and serie["cle"] not in vues:
+            vues.add(serie["cle"])
+            series.append(serie)
+    if not series:
+        return None
+    dist_km = [d / 1000 if isinstance(d, (int, float)) else None for d in dist] if len(dist) == n else None
+    return _sortie("intervals", temps, dist_km, series)
+
+
+def _depuis_trace(points: list) -> Optional[dict]:
+    """Repli sans Intervals : vitesse et altitude recalculées depuis le tracé GPS (un point tous les 10 m)."""
+    if len(points) < 10:
+        return None
+    temps, dist, alt = [], [], []
+    cumul = 0.0
+    for i, p in enumerate(points):
+        if i:
+            cumul += cs._distance_m(points[i - 1], p)
+        temps.append(p[3] if len(p) > 3 and p[3] is not None else i)
+        dist.append(cumul)
+        alt.append(p[2] if len(p) > 2 else None)
+    # Vitesse lissée sur ±15 s
+    vit = []
+    for i in range(len(points)):
+        a = b = i
+        while a > 0 and temps[i] - temps[a - 1] <= 15:
+            a -= 1
+        while b < len(points) - 1 and temps[b + 1] - temps[i] <= 15:
+            b += 1
+        dt = temps[b] - temps[a]
+        vit.append((dist[b] - dist[a]) / dt * 3.6 if dt > 0 else None)
+    series = []
+    for cle, nom, unite, couleur, data in (("vitesse", "Vitesse", "km/h", "#0A84FF", vit),
+                                          ("altitude", "Altitude", "m", "#30B0C7", alt)):
+        nums = [x for x in data if isinstance(x, (int, float))]
+        if len(nums) >= 10 and max(nums) != min(nums):
+            series.append({"cle": cle, "nom": nom, "unite": unite, "couleur": couleur, "brut": data})
+    if not series:
+        return None
+    return _sortie("trace", temps, [d / 1000 for d in dist], series)
+
+
+def flux_seance(user: Utilisateur, act: Activite, points_trace: Optional[list]) -> dict:
+    """Courbes d'une séance : tous les flux d'Intervals.icu s'ils sont disponibles
+    (FC, vitesse, cadence, altitude, oscillation verticale, foulée…), sinon ceux du tracé GPS.
+    Retourne {source, temps, distance, series: [{cle, nom, unite, couleur, data}], avertissement?}."""
+    cle_cache = (user.id, act.id)
+    deja = _CACHE_FLUX.get(cle_cache)
+    if deja and datetime.utcnow() - deja[0] < _CACHE_DUREE:
+        return deja[1]
+    iid = cs._details_dict(act).get("intervals_id")
+    res, avertissement = None, None
+    if iid and user.intervals_cle:
+        try:
+            streams = _appel(user.intervals_cle, f"/activity/{urllib.parse.quote(str(iid))}/streams.json")
+            res = _depuis_streams(streams if isinstance(streams, list) else [], act.sport)
+        except IntervalsErreur as e:
+            avertissement = str(e)
+    if res is None and points_trace:
+        res = _depuis_trace(points_trace)
+    if res is None:
+        res = {"source": None, "temps": [], "distance": None, "series": []}
+    if avertissement:
+        res = {**res, "avertissement": avertissement}
+    else:
+        if len(_CACHE_FLUX) > 50:
+            _CACHE_FLUX.pop(next(iter(_CACHE_FLUX)))
+        _CACHE_FLUX[cle_cache] = (datetime.utcnow(), res)
+    return res

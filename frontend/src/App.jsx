@@ -153,56 +153,58 @@ function BottomNav() {
     return () => { cancelAnimationFrame(r); clearTimeout(t); };
   }, [actif]);
 
+  // Pointer Events + capture : le geste reste à la barre du début à la fin
+  // (touch-action: none en CSS empêche Safari de le récupérer pour défiler),
+  // donc la navigation se fait au relâchement, que l'on ait tapé ou glissé.
   useEffect(() => {
     const nav = navRef.current;
     if (!nav) return;
-    let x0 = 0, y0 = 0, glisse = false, enCours = false, largeur = 0, gauche = 0, idx = -1;
+    let enCours = null, largeur = 0, gauche = 0, idx = -1;
 
     const placer = (x) => {
       const w = (largeur - 8) / n;
       const t = Math.max(0, Math.min(largeur - 8 - w, x - gauche - 4 - w / 2));
-      idx = Math.round(t / w);
+      idx = Math.max(0, Math.min(n - 1, Math.floor((x - gauche - 4) / w)));
       setLentille({ t, i: idx });
     };
     const debut = (e) => {
+      if (enCours != null || (e.pointerType === "mouse" && e.button !== 0)) return;
+      enCours = e.pointerId;
+      try { nav.setPointerCapture(e.pointerId); } catch { /* navigateur ancien */ }
       const r = nav.getBoundingClientRect();
       largeur = r.width; gauche = r.left;
-      x0 = e.touches[0].clientX; y0 = e.touches[0].clientY;
-      glisse = false; enCours = true;
-      placer(x0);
+      placer(e.clientX);
     };
     const bouge = (e) => {
-      if (!enCours) return;
-      const x = e.touches[0].clientX, y = e.touches[0].clientY;
-      if (!glisse) {
-        const dx = Math.abs(x - x0), dy = Math.abs(y - y0);
-        if (dx < 6 && dy < 6) return;
-        if (dy > dx) { enCours = false; setLentille(null); return; }
-        glisse = true;
-      }
+      if (e.pointerId !== enCours) return;
       e.preventDefault();
-      placer(x);
+      placer(e.clientX);
     };
     const fin = (e) => {
-      if (!enCours) return;
-      enCours = false;
+      if (e.pointerId !== enCours) return;
+      enCours = null;
       setLentille(null);
-      if (glisse && e.type === "touchend") {
-        ignorerClic.current = true;
-        setTimeout(() => { ignorerClic.current = false; }, 450);
-        if (idx >= 0 && idx !== actifRef.current) navigate(items[idx].to);
-      }
+      if (e.type !== "pointerup" || idx < 0) return;
+      // Le « click » qui suit est ignoré : c'est ici qu'on navigue
+      ignorerClic.current = true;
+      setTimeout(() => { ignorerClic.current = false; }, 400);
+      const cible = items[idx].to;
+      if (idx !== actifRef.current) navigate(cible);
+      else if (window.location.pathname !== cible) navigate(cible);
+      else window.scrollTo({ top: 0, behavior: "smooth" });
     };
 
-    nav.addEventListener("touchstart", debut, { passive: true });
-    nav.addEventListener("touchmove", bouge, { passive: false });
-    nav.addEventListener("touchend", fin);
-    nav.addEventListener("touchcancel", fin);
+    nav.addEventListener("pointerdown", debut);
+    nav.addEventListener("pointermove", bouge);
+    nav.addEventListener("pointerup", fin);
+    nav.addEventListener("pointercancel", fin);
+    nav.addEventListener("lostpointercapture", fin);
     return () => {
-      nav.removeEventListener("touchstart", debut);
-      nav.removeEventListener("touchmove", bouge);
-      nav.removeEventListener("touchend", fin);
-      nav.removeEventListener("touchcancel", fin);
+      nav.removeEventListener("pointerdown", debut);
+      nav.removeEventListener("pointermove", bouge);
+      nav.removeEventListener("pointerup", fin);
+      nav.removeEventListener("pointercancel", fin);
+      nav.removeEventListener("lostpointercapture", fin);
     };
   }, [navigate, n]);   // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -222,8 +224,10 @@ function BottomNav() {
           }} />
         {items.map((it, i) => (
           <Link key={it.to} to={it.to} aria-current={i === actif ? "page" : undefined}
+            draggable={false}
             onClick={(e) => {
-              if (ignorerClic.current) { e.preventDefault(); return; }
+              // Souris / doigt : déjà géré au relâchement. Reste le clavier.
+              if (ignorerClic.current || e.detail > 0) { e.preventDefault(); return; }
               if (i === actif) {
                 e.preventDefault();
                 if (pathname !== it.to) navigate(it.to);
