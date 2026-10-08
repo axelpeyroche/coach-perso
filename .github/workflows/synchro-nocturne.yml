@@ -1,0 +1,35 @@
+# Synchro Intervals.icu chaque nuit, même si le carnet n'est pas ouvert.
+# Secret à créer dans GitHub (Settings → Secrets and variables → Actions) :
+#   CARNET_IMPORT_TOKEN = token d'import (Sources → Apple Santé → « Configurer le raccourci »)
+name: Synchro nocturne Intervals.icu
+
+on:
+  schedule:
+    - cron: "17 1 * * *"   # 01:17 UTC = 3 h 17 en été, 2 h 17 en hiver (heure de Paris)
+  workflow_dispatch:        # bouton « Run workflow » pour tester
+
+jobs:
+  synchro:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Synchroniser
+        env:
+          TOKEN: ${{ secrets.CARNET_IMPORT_TOKEN }}
+          API: https://coach-perso.onrender.com
+        run: |
+          if [ -z "$TOKEN" ]; then echo "::error::Secret CARNET_IMPORT_TOKEN manquant"; exit 1; fi
+          # Le serveur gratuit de Render dort : le premier appel le réveille (jusqu'à ~1 min)
+          curl -s -o /dev/null --max-time 120 "$API/health" || true
+          for essai in 1 2 3; do
+            code=$(curl -s -o reponse.json -w "%{http_code}" --max-time 300 -X POST \
+              -H "Authorization: Bearer $TOKEN" "$API/api/intervals/synchro-nuit" || echo 000)
+            if [ "$code" = "200" ]; then
+              jq '{nouvelles, completees, traces, mesures, forme_recue}' reponse.json
+              exit 0
+            fi
+            echo "Essai $essai : HTTP $code — $(jq -r '.detail // empty' reponse.json 2>/dev/null)"
+            if [ "$code" = "401" ] || [ "$code" = "409" ]; then exit 1; fi
+            sleep 60
+          done
+          exit 1

@@ -2,22 +2,23 @@
 Connexion à Intervals.icu (séances de l'Apple Watch avec tracé GPS et dénivelé).
 
 La clé API personnelle est saisie dans la page Sources ; elle n'est jamais renvoyée au navigateur.
-La synchro se lance d'elle-même à chaque envoi du raccourci quotidien et à l'ouverture de l'app
-(au plus une fois par quart d'heure), ou à la demande.
+La synchro se lance d'elle-même à l'ouverture de l'app (au plus une fois par quart d'heure),
+chaque nuit via GitHub Actions (route /api/intervals/synchro-nuit, token d'import), ou à la demande.
 """
 from __future__ import annotations
 
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Security
+from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 import intervals_service as iv
 from database import SessionLocal, obtenir_session
-from deps import get_current_user
+from deps import get_current_user, http_bearer
 from models import Utilisateur
 
 router = APIRouter()
@@ -68,10 +69,27 @@ def deconnecter(db: Session = Depends(obtenir_session), current_user: Utilisateu
 @router.post("/api/intervals/synchro", summary="Récupérer les séances et tracés d'Intervals.icu")
 def synchro(force: bool = Query(False), db: Session = Depends(obtenir_session),
             current_user: Utilisateur = Depends(get_current_user)):
-    if not current_user.intervals_cle:
-        return {**_statut(current_user), "ignore": True}
+    return _synchroniser(db, current_user, force)
+
+
+@router.post("/api/intervals/synchro-nuit", summary="Synchro planifiée (GitHub Actions) — auth par token d'import")
+def synchro_nuit(credentials: HTTPAuthorizationCredentials = Security(http_bearer),
+                 db: Session = Depends(obtenir_session)):
+    # Token dans l'en-tête Authorization (jamais dans l'URL, qui finit dans les journaux)
+    token = credentials.credentials.strip() if credentials else ""
+    user = db.query(Utilisateur).filter(Utilisateur.import_token == token).first() if token else None
+    if not user:
+        raise HTTPException(401, "Token d'import invalide : recopie-le depuis la page Sources du carnet")
+    if not user.intervals_cle:
+        raise HTTPException(409, "Intervals.icu n'est pas connecté sur ce compte")
+    return _synchroniser(db, user, True)
+
+
+def _synchroniser(db: Session, user: Utilisateur, force: bool) -> dict:
+    if not user.intervals_cle:
+        return {**_statut(user), "ignore": True}
     try:
-        bilan = iv.synchroniser(db, current_user, force=force)
+        bilan = iv.synchroniser(db, user, force=force)
         db.commit()
     except iv.IntervalsErreur as e:
         db.rollback()
@@ -79,7 +97,7 @@ def synchro(force: bool = Query(False), db: Session = Depends(obtenir_session),
     except IntegrityError:
         db.rollback()  # une autre synchro tournait en même temps : elle a déjà tout enregistré
         bilan = {"ignore": True}
-    return {**_statut(current_user), **bilan}
+    return {**_statut(user), **bilan}
 
 
 def synchro_en_arriere_plan(user_id: int) -> None:
