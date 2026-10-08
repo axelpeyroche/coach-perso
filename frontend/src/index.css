@@ -241,8 +241,8 @@
   .barre-nav-actions .btn-texte:active { transform: scale(1.08); opacity: 1; }
 
   /* ── Barre de navigation mobile (iOS 26) ───────────────────────────────
-     Boutons de verre flottants et, au défilement, un bord flouté progressif
-     sous la barre d'état avec le titre compact au centre. */
+     Boutons de verre flottants. Au défilement, seule la zone de la barre
+     d'état (heure, batterie) reçoit un fond uni : rien ne recouvre le contenu. */
   .barre-nav {
     position: fixed;
     top: 0;
@@ -256,25 +256,16 @@
   .barre-nav::before {
     content: "";
     position: absolute;
-    inset: 0 0 -22px 0;
-    background: linear-gradient(to bottom, rgb(var(--bg) / 0.94) 0%, rgb(var(--bg) / 0.7) 55%, rgb(var(--bg) / 0));
-    backdrop-filter: blur(14px) saturate(180%);
-    -webkit-backdrop-filter: blur(14px) saturate(180%);
-    -webkit-mask-image: linear-gradient(to bottom, #000 55%, transparent);
-    mask-image: linear-gradient(to bottom, #000 55%, transparent);
+    top: 0;
+    left: 0;
+    right: 0;
+    height: env(safe-area-inset-top);
+    background: rgb(var(--bg));
     opacity: 0;
-    transition: opacity 0.25s ease;
+    transition: opacity 0.2s ease;
     pointer-events: none;
   }
   .barre-nav.defile::before { opacity: 1; }
-  .barre-nav-titre {
-    @apply absolute left-1/2 top-1/2 max-w-[56%] truncate text-[17px] font-semibold tracking-[-0.02em];
-    transform: translate(-50%, calc(-50% + 6px));
-    opacity: 0;
-    transition: opacity 0.2s ease, transform 0.3s var(--doux);
-    pointer-events: none;
-  }
-  .barre-nav-titre.visible { opacity: 1; transform: translate(-50%, -50%); }
 
   /* ── Barre d'onglets Liquid Glass ────────────────────────────────────── */
   .barre-onglets {
