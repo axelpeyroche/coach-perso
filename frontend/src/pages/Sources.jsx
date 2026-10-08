@@ -242,7 +242,7 @@ function BlocIntervals() {
             {statut.derniere_synchro && <span className="text-label-2"> Dernière synchro : {dateHeure(statut.derniere_synchro)}.</span>}</p>
           <p className="text-[13px] text-label-2">L'app Intervals.icu Companion envoie chaque entraînement de la montre
             sur Intervals.icu ; le carnet va ensuite les chercher via l'API d'Intervals.icu à chaque ouverture (au plus une fois
-            par quart d'heure). Chaque séance est fusionnée avec celle du carnet qui commence au même moment, sans toucher à
+            par quart d'heure) et chaque nuit si la synchro nocturne est activée. Chaque séance est fusionnée avec celle du carnet qui commence au même moment, sans toucher à
             son titre, et son tracé apparaît sur la carte.</p>
           <div className="flex items-center gap-3">
             <button className={btnP} disabled={synchro.isPending} onClick={() => synchro.mutate()}>
@@ -250,6 +250,7 @@ function BlocIntervals() {
             </button>
             <button className={lienDanger} onClick={() => setConfirmDeco(true)}>Déconnecter</button>
           </div>
+          <SynchroNocturne />
         </div>
       ) : (
         <div className="space-y-3">
@@ -290,148 +291,48 @@ function BlocIntervals() {
   );
 }
 
-// ── Raccourci iOS (Apple Santé) ────────────────────────────────────────────
-// Champs Texte du corps JSON : [clé, valeur à insérer]
-const Champs = ({ lignes }) => (
-  <span className="mt-1 grid grid-cols-[auto,1fr] gap-x-2 gap-y-0.5">
-    {lignes.map(([k, v]) => (
-      <span key={k} className="contents">
-        <code className="text-label">{k}</code>
-        <span>{v}</span>
-      </span>
-    ))}
-  </span>
-);
-
-const ETAPES_RACCOURCI = (url) => [
-  ["Rechercher des échantillons de santé (une action par type)", <>
-    Limite désactivée pour chacune. Après chaque recherche, ajoute « Définir la variable » pour nommer le résultat.
-    <Champs lignes={[
-      ["7 derniers jours", "Fréquence cardiaque au repos · Variabilité de la fréquence cardiaque · VO2 max"],
-      ["3 derniers jours", "Minutes d'exercice · Distance (marche et course) · Distance à vélo · Énergie active · Fréquence cardiaque · Puissance de course · Vitesse de course · Longueur de foulée · Oscillation verticale · Temps de contact au sol · Nombre de pas"],
-      ["3 derniers jours, si proposé", "Effort de l'entraînement (noté) · Effort estimé de l'entraînement"],
-    ]} />
-  </>],
-  ["Obtenir le contenu de l'URL", <>
-    URL : <code>{url}/activites/import</code> · Méthode : POST · Corps : JSON, champs de type Texte.
-    Pour chaque type, deux champs : <code>&lt;type&gt;_valeurs</code> = la variable › Valeur,
-    et <code>&lt;type&gt;_dates</code> = la variable › Date de début (ISO 8601). Un type absent est simplement ignoré.
-    <Champs lignes={[
-      ["token", "ton token (ci-dessus)"],
-      ["fc_repos_…", "FC au repos"],
-      ["vfc_…", "Variabilité"],
-      ["vo2max_…", "VO2 max"],
-      ["exercice_…", "Minutes d'exercice"],
-      ["distance_…", "Distance (marche et course)"],
-      ["distance_velo_…", "Distance à vélo"],
-      ["energie_…", "Énergie active"],
-      ["fc_…", "Fréquence cardiaque"],
-      ["puissance_…", "Puissance de course"],
-      ["vitesse_…", "Vitesse de course"],
-      ["foulee_…", "Longueur de foulée"],
-      ["oscillation_…", "Oscillation verticale"],
-      ["contact_sol_…", "Temps de contact au sol"],
-      ["pas_…", "Nombre de pas"],
-      ["effort_…", "Effort noté sur la montre"],
-      ["effort_estime_…", "Effort estimé par la montre"],
-    ]} />
-    Le carnet reconstitue les séances à partir des minutes d'exercice (au moins 15 min d'affilée) : course si la montre a
-    mesuré des métriques de course, vélo s'il y a de la distance à vélo, sinon « Séance à préciser » (change le type en un
-    clic ; une séance supprimée n'est pas recréée). Il y rattache ensuite FC, zones, puissance, allure, foulée, pas et RPE
-    depuis le score d'effort. Les valeurs d'un export Santé ou saisies à la main restent prioritaires.
-  </>],
-  ["Afficher une notification (facultatif)", "Contenu : « Contenu de l'URL » — le carnet répond par exemple « 5 mesure(s) de forme · 1 séance(s) détectée(s) · 1 séance(s) complétée(s) »."],
-];
-
-function BlocRaccourci() {
+// Synchro chaque nuit via GitHub Actions (.github/workflows/synchro-nocturne.yml).
+// Le token de synchro (import_token côté serveur) prouve au carnet que l'appel vient de toi.
+function SynchroNocturne() {
   const [token, setToken] = useState(null);
   const [ouvert, setOuvert] = useState(false);
   const [confirmRegen, setConfirmRegen] = useState(false);
   const [copie, copier] = useCopie();
-  const url = urlApiAbsolue();
 
   async function ouvrir() {
     if (!token) setToken((await getImportToken()).import_token);
     setOuvert((o) => !o);
   }
 
-  const exemple = JSON.stringify({
-    token: "TON_TOKEN",
-    type: "Course à pied", debut: "2026-10-05T07:30:00+02:00", fin: "2026-10-05T08:22:00+02:00",
-    duree: "50 min", distance: "10,2 km", calories: "690 kcal",
-    vfc_valeurs: "56\n47,9", vfc_dates: "2026-10-04T06:10:00+02:00\n2026-10-05T05:58:00+02:00",
-    exercice_valeurs: "1 min\n1 min\n…", exercice_dates: "2026-10-05T07:30:00+02:00\n2026-10-05T07:31:00+02:00\n…",
-    fc_valeurs: "128\n141\n…", fc_dates: "2026-10-05T07:30:05+02:00\n2026-10-05T07:30:10+02:00\n…",
-    puissance_valeurs: "251 W\n…", puissance_dates: "2026-10-05T07:31:00+02:00\n…",
-    effort_estime_valeurs: "6,4", effort_estime_dates: "2026-10-05T08:22:00+02:00",
-  }, null, 2);
-
   return (
-    <Bloc icone="❤️" couleur="#FF2D5526" titre="Apple Santé" sousTitre="Raccourci iOS automatique">
-      <div className="space-y-3">
-        <p className="text-[13px] text-label-2">
-          Apple ne permet pas aux sites web de lire Santé directement : un raccourci iOS envoie tes entraînements
-          (Apple Watch ou autres apps synchronisées avec Santé) tes mesures de forme (FC au repos, VFC, VO2max) et le détail de chaque séance (FC, zones, puissance, foulée, effort…) vers ton carnet. Lance-le à la main ou via une
-          automatisation quotidienne. Renvoyer plusieurs fois la même séance ne crée pas de doublon, et les doublons avec Strava sont fusionnés automatiquement.
-        </p>
-        <button className="btn-teinte w-full" onClick={ouvrir}>{ouvert ? "Masquer le guide" : "Configurer le raccourci"}</button>
-        {ouvert && token && (
-          <div className="space-y-3">
-            <div>
-              <p className="libelle">Ton token d'import (à garder secret)</p>
-              <div className="flex gap-2 items-start">
-                <Code>{token}</Code>
-                <button className={btn} onClick={() => copier(token, "tok")}>{copie === "tok" ? "✓" : "Copier"}</button>
-              </div>
-              <button className={`${lienDanger} mt-1.5 px-1`} onClick={() => setConfirmRegen(true)}>Régénérer le token</button>
+    <div className="tuile p-3.5 text-[13px] space-y-2">
+      <p className="text-[15px] font-semibold">Synchro nocturne</p>
+      <p className="text-label-2">Une tâche GitHub gratuite réveille le carnet chaque nuit vers 3 h pour récupérer
+        séances et mesures de forme, même si tu n'ouvres pas l'app.</p>
+      <button className="btn-teinte w-full" onClick={ouvrir}>{ouvert ? "Masquer" : "Configurer"}</button>
+      {ouvert && token && (
+        <div className="space-y-2 text-label-2">
+          <div>
+            <p className="libelle">Ton token de synchro (à garder secret)</p>
+            <div className="flex gap-2 items-start">
+              <Code>{token}</Code>
+              <button className={btn} onClick={() => copier(token, "tok")}>{copie === "tok" ? "✓" : "Copier"}</button>
             </div>
-            <div>
-              <p className="libelle">Adresse d'envoi</p>
-              <div className="flex gap-2 items-start">
-                <Code>{url}/activites/import</Code>
-                <button className={btn} onClick={() => copier(`${url}/activites/import`, "url")}>{copie === "url" ? "✓" : "Copier"}</button>
-              </div>
-            </div>
-            <ol className="space-y-2">
-              {ETAPES_RACCOURCI(url).map(([titre, corps], i) => (
-                <li key={i} className="flex gap-3 tuile p-3">
-                  <span className="shrink-0 w-6 h-6 rounded-full bg-brand text-white flex items-center justify-center text-[12px] font-bold">{i + 1}</span>
-                  <span className="min-w-0">
-                    <span className="block text-[15px] font-semibold">{titre}</span>
-                    <span className="block text-[13px] text-label-2 break-words">{corps}</span>
-                  </span>
-                </li>
-              ))}
-            </ol>
-            <details className="text-[13px]">
-              <summary className="cursor-pointer text-brand">Format JSON accepté (pour un script ou un autre outil)</summary>
-              <pre className="mt-2 tuile p-3 text-[11px] overflow-x-auto">{exemple}</pre>
-              <p className="mt-1.5 text-label-2">
-                Les unités écrites par iOS (« km », « m », « kcal », « min ») et les dates localisées sont comprises.
-                Aussi accepté : <code>activites</code> (liste), <code>mesures</code> (liste de {"{type, date, valeur}"}),
-                <code> dplus_m</code>, <code>fc_moyenne_bpm</code>, <code>fc_max_bpm</code>, <code>rpe</code>, <code>notes</code>,
-                <code> id</code> (identifiant unique pour éviter les doublons).
-              </p>
-            </details>
-            <div className="tuile p-3.5 text-[13px] space-y-1.5">
-              <p className="text-[15px] font-semibold">Pour que ça tourne tout seul</p>
-              <p className="text-label-2">
-                Raccourcis → Automatisation → <b>+</b> → « App » → Forme → « Est fermée » → « Exécuter immédiatement »
-                → ce raccourci. Ajoute une 2ᵉ automatisation « Heure de la journée » (ex. 7 h 30, tous les jours) en filet de sécurité.
-              </p>
-              <p className="text-label-3">
-                iOS bloque l'accès à Santé quand l'iPhone est verrouillé : une exécution peut alors échouer, la suivante
-                rattrape (le raccourci regarde 3 jours en arrière, sans créer de doublon).
-              </p>
-            </div>
+            <button className={`${lienDanger} mt-1.5 px-1`} onClick={() => setConfirmRegen(true)}>Régénérer le token</button>
           </div>
-        )}
-      </div>
+          <ol className="list-decimal pl-5 space-y-1">
+            <li>Sur github.com, dépôt du carnet : <em>Settings</em> → <em>Secrets and variables</em> → <em>Actions</em>
+              → <em>New repository secret</em>.</li>
+            <li>Nom : <code>CARNET_IMPORT_TOKEN</code> · Valeur : le token ci-dessus.</li>
+            <li>Pour tester : onglet <em>Actions</em> → « Synchro nocturne Intervals.icu » → <em>Run workflow</em>.</li>
+          </ol>
+        </div>
+      )}
       <ConfirmDialog open={confirmRegen} title="Régénérer le token ?" danger
-        message="L'ancien token ne fonctionnera plus : il faudra mettre à jour le raccourci."
+        message="L'ancien token ne fonctionnera plus : il faudra mettre à jour le secret GitHub."
         onConfirm={async () => { setToken((await regenererImportToken()).import_token); setConfirmRegen(false); }}
         onCancel={() => setConfirmRegen(false)} />
-    </Bloc>
+    </div>
   );
 }
 
@@ -581,7 +482,6 @@ export default function Sources() {
       <div className="space-y-1.5">
         <h2 className="entete-liste">Importer</h2>
         <div className="grid gap-3 lg:grid-cols-2 items-start">
-          <BlocRaccourci />
           {/* Import CSV et GPX masqués : les séances et tracés arrivent par Intervals.icu (BlocFichier, BlocTraces) */}
           <BlocIntervals />
         </div>

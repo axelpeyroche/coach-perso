@@ -1,6 +1,6 @@
 # Synchro Intervals.icu chaque nuit, même si le carnet n'est pas ouvert.
 # Secret à créer dans GitHub (Settings → Secrets and variables → Actions) :
-#   CARNET_IMPORT_TOKEN = token d'import (Sources → Apple Santé → « Configurer le raccourci »)
+#   CARNET_IMPORT_TOKEN = token de synchro (Sources → Intervals.icu → Synchro nocturne → « Configurer »)
 name: Synchro nocturne Intervals.icu
 
 on:

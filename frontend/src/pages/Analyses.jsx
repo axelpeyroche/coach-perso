@@ -411,7 +411,7 @@ function Course({ c }) {
               </ResponsiveContainer>
               <Legende items={[{ label: "Cadence pas/min (droite)", couleur: CYAN }, { label: "Foulée m (gauche)", couleur: ORANGE }]} />
             </>
-          ) : <Vide>Il faut le nombre de pas des sorties (raccourci Santé).</Vide>}
+          ) : <Vide>Il faut le nombre de pas des sorties (cadence mesurée par la montre).</Vide>}
         </Graphe>
       </div>
     </>

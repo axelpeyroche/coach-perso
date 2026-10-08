@@ -382,7 +382,7 @@ export default function Profil({ dark, setDark }) {
         </Groupe>
 
         <Groupe titre="Physiologie"
-          pied="FC max : plus haute FC de séance des 12 derniers mois (pics isolés écartés). FC repos : moyenne des 7 dernières mesures Apple Santé. Calculées automatiquement pour les zones de FC ; touche le poids pour le modifier.">
+          pied="FC max : plus haute FC de séance des 12 derniers mois (pics isolés écartés). FC repos : moyenne des 7 dernières mesures de la montre. Calculées automatiquement pour les zones de FC ; touche le poids pour le modifier.">
           <div className="flex divide-x-[0.5px] divide-separateur">
             <BioStat label="FC max" value={user?.fc_max} unit="bpm" couleur="#FF3B30" auto={user?.fc_max_auto} />
             <BioStat label="FC repos" value={user?.fc_repos} unit="bpm" couleur="#FF2D55" auto={user?.fc_repos_auto} />

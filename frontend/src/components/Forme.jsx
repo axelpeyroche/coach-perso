@@ -86,7 +86,7 @@ export function FormeGraphiques() {
   const mesures = avecCles(data);
   if (!mesures.length) return null;
   return (
-    <Section titre="Forme" action={<span className="text-[13px] text-label-2">Apple Santé · 12 mois</span>}>
+    <Section titre="Forme" action={<span className="text-[13px] text-label-2">Montre · 12 mois</span>}>
       <Card>
         <div className="grid gap-6 lg:grid-cols-3">
           {mesures.map((m) => <Courbe key={m.cle} m={m} />)}
