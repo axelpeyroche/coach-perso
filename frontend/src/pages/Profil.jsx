@@ -215,6 +215,7 @@ function EditInfosModal({ user, onClose, onSaved }) {
 
 // ── Edit password ──────────────────────────────────────────────────────────
 function EditPasswordModal({ onClose }) {
+  const { user, login } = useAuth();
   const [form, setForm] = useState({ ancien: "", nouveau: "", confirmer: "" });
   const [validationErr, setValidationErr] = useState("");
 
@@ -223,6 +224,8 @@ function EditPasswordModal({ onClose }) {
       ancien_mot_de_passe: form.ancien,
       nouveau_mot_de_passe: form.nouveau,
     }),
+    // Les autres appareils sont déconnectés ; celui-ci reçoit un nouveau jeton
+    onSuccess: (r) => { if (r.data?.access_token) login(r.data.access_token, user); },
   });
 
   function set(k) { return e => setForm(f => ({ ...f, [k]: e.target.value })); }
@@ -244,6 +247,7 @@ function EditPasswordModal({ onClose }) {
             <svg className="w-7 h-7" {...svg} strokeWidth={2.6}><path d="M5 12l5 5 9-10" /></svg>
           </div>
           <p className="text-[17px] font-semibold">Mot de passe modifié</p>
+          <p className="text-[13px] text-label-2">Tes autres appareils ont été déconnectés.</p>
           <button onClick={onClose} className="btn-teinte">Fermer</button>
         </div>
       ) : (
@@ -402,6 +406,7 @@ function Notifications() {
 
 function DonneesCompte({ onDeleted }) {
   const [confirmSuppr, setConfirmSuppr] = useState(false);
+  const [mdpSuppr, setMdpSuppr] = useState("");
 
   const exportMutation = useMutation({
     mutationFn: exporterDonnees,
@@ -413,7 +418,7 @@ function DonneesCompte({ onDeleted }) {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: supprimerCompte,
+    mutationFn: () => supprimerCompte(mdpSuppr),
     onSuccess: () => { setConfirmSuppr(false); onDeleted(); },
   });
 
@@ -442,13 +447,21 @@ function DonneesCompte({ onDeleted }) {
       <ConfirmDialog
         open={confirmSuppr}
         title="Supprimer définitivement ton compte ?"
-        message="Toutes tes données (séances, objectifs, historique) seront supprimées sans possibilité de récupération."
+        message="Toutes tes données (séances, objectifs, historique) seront supprimées sans possibilité de récupération. Saisis ton mot de passe pour confirmer."
         danger
         confirmLabel="Supprimer"
         pending={deleteMutation.isPending}
+        disabled={!mdpSuppr}
         onConfirm={() => deleteMutation.mutate()}
-        onCancel={() => setConfirmSuppr(false)}
-      />
+        onCancel={() => { setConfirmSuppr(false); setMdpSuppr(""); deleteMutation.reset(); }}
+      >
+        <input type="password" className="champ mt-3" placeholder="Mot de passe" autoComplete="current-password"
+          value={mdpSuppr} onChange={e => setMdpSuppr(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter" && mdpSuppr) deleteMutation.mutate(); }} />
+        {deleteMutation.isError && (
+          <p className="text-[13px] text-ios-red mt-2">{getErrorMessage(deleteMutation.error, "Erreur lors de la suppression")}</p>
+        )}
+      </ConfirmDialog>
     </>
   );
 }

@@ -45,6 +45,29 @@ app.add_middleware(
 )
 
 
+# En-têtes de sécurité sur toutes les réponses de l'API (données personnelles : jamais mises en cache)
+_ENTETES_SECURITE = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+    "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+}
+
+
+@app.middleware("http")
+async def _entetes_securite(request: Request, call_next):
+    reponse = await call_next(request)
+    for k, v in _ENTETES_SECURITE.items():
+        reponse.headers.setdefault(k, v)
+    if request.url.path.startswith("/api/"):
+        reponse.headers["Cache-Control"] = "no-store"
+    elif request.url.path in ("/docs", "/redoc"):
+        del reponse.headers["Content-Security-Policy"]  # la page de doc charge ses scripts depuis un CDN
+    return reponse
+
+
 @app.exception_handler(RequestValidationError)
 async def _handler_validation(request: Request, exc: RequestValidationError):
     """Le raccourci iOS n'affiche rien d'une réponse 422 : pour l'import, on renvoie 200 avec la cause."""

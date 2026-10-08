@@ -28,6 +28,26 @@ services:
       - type: rewrite
         source: /*
         destination: /index.html
+    # En-têtes de sécurité (appliqués si le service est géré par ce blueprint)
+    headers:
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: Content-Security-Policy
+        value: "frame-ancestors 'none'"
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+      - path: /*
+        name: Strict-Transport-Security
+        value: max-age=31536000; includeSubDomains
+      - path: /*
+        name: Permissions-Policy
+        value: camera=(), microphone=(), geolocation=()
     envVars:
       - key: VITE_API_URL
         sync: false

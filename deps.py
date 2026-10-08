@@ -1,6 +1,6 @@
 """
-Dépendances partagées entre les routers : hachage des mots de passe (PBKDF2)
-et authentification JWT.
+Dépendances partagées entre les routers : hachage des mots de passe (PBKDF2),
+authentification JWT, validation des identifiants et limitation des tentatives.
 """
 
 from __future__ import annotations
@@ -10,12 +10,17 @@ import hashlib
 import hmac as _hmac
 import logging
 import os
+import re
 import secrets as _secrets
-from datetime import datetime, timedelta
+import threading
+import time
+from collections import defaultdict, deque
+from datetime import datetime, timedelta, timezone
+from typing import Optional
 
-from fastapi import Depends, HTTPException, Security
+import jwt
+from fastapi import Depends, HTTPException, Request, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
 from database import obtenir_session
@@ -56,9 +61,15 @@ def _verify_password(plain: str, hashed: str) -> bool:
         return False
 
 
-def _create_token(user_id: int) -> str:
-    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    return jwt.encode({"sub": str(user_id), "exp": expire}, SECRET_KEY, algorithm=ALGORITHM)
+def _empreinte(password_hash: Optional[str]) -> str:
+    """Empreinte du mot de passe glissée dans le JWT : changer de mot de passe invalide les anciennes sessions."""
+    return _hmac.new(SECRET_KEY.encode(), (password_hash or "").encode(), hashlib.sha256).hexdigest()[:16]
+
+
+def _create_token(user: Utilisateur) -> str:
+    expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    return jwt.encode({"sub": str(user.id), "pw": _empreinte(user.password_hash), "exp": expire},
+                      SECRET_KEY, algorithm=ALGORITHM)
 
 
 def get_current_user(
@@ -68,11 +79,69 @@ def get_current_user(
     if not credentials:
         raise HTTPException(401, "Non authentifié")
     try:
-        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM],
+                             options={"require": ["sub", "exp", "pw"]})
         user_id = int(payload["sub"])
-    except (JWTError, KeyError, ValueError):
-        raise HTTPException(401, "Token invalide")
+    except (jwt.PyJWTError, KeyError, ValueError):
+        raise HTTPException(401, "Session expirée, reconnecte-toi")
     user = db.get(Utilisateur, user_id)
-    if not user:
-        raise HTTPException(401, "Utilisateur introuvable")
+    if not user or not user.password_hash or not _hmac.compare_digest(payload["pw"], _empreinte(user.password_hash)):
+        raise HTTPException(401, "Session expirée, reconnecte-toi")
     return user
+
+
+# ---------------------------------------------------------------------------
+# Validation des identifiants
+# ---------------------------------------------------------------------------
+
+_EMAIL = re.compile(r"^[^@\s]{1,64}@[^@\s]+\.[^@\s]{2,}$")
+
+
+def normaliser_email(email: str) -> str:
+    e = (email or "").strip().lower()
+    if len(e) > 254 or not _EMAIL.match(e):
+        raise HTTPException(400, "Adresse e-mail invalide")
+    return e
+
+
+def verifier_mot_de_passe_robuste(mdp: str) -> None:
+    if len(mdp or "") < 8:
+        raise HTTPException(400, "Mot de passe trop court : 8 caractères minimum")
+    if len(mdp) > 128:
+        raise HTTPException(400, "Mot de passe trop long : 128 caractères maximum")
+
+
+# ---------------------------------------------------------------------------
+# Limitation des tentatives (en mémoire : une seule instance sur Render)
+# ---------------------------------------------------------------------------
+
+_tentatives: dict[str, deque] = defaultdict(deque)
+_verrou = threading.Lock()
+
+
+def ip_client(request: Request) -> str:
+    # Derrière le proxy de Render : la dernière adresse ajoutée est celle vue par le proxy
+    fwd = request.headers.get("x-forwarded-for", "")
+    return fwd.split(",")[-1].strip() if fwd else (request.client.host if request.client else "?")
+
+
+def limiter(cle: str, maximum: int, fenetre_s: int, compter: bool = True) -> None:
+    """Lève une 429 si `cle` a déjà atteint `maximum` événements dans la fenêtre ; sinon en compte un."""
+    maintenant = time.monotonic()
+    with _verrou:
+        q = _tentatives[cle]
+        while q and maintenant - q[0] > fenetre_s:
+            q.popleft()
+        if len(q) >= maximum:
+            attente = int(fenetre_s - (maintenant - q[0])) // 60 + 1
+            raise HTTPException(429, f"Trop de tentatives : réessaie dans {attente} min")
+        if compter:
+            q.append(maintenant)
+        if len(_tentatives) > 10_000:  # purge des clés inactives
+            for k in [k for k, v in _tentatives.items() if not v]:
+                del _tentatives[k]
+
+
+def compter_echec(cle: str) -> None:
+    with _verrou:
+        _tentatives[cle].append(time.monotonic())

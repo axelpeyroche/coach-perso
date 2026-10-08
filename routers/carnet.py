@@ -600,19 +600,18 @@ def importer_activites(payload: ImportActivitesSchema, taches: BackgroundTasks,
         # Même chose pour un token invalide ou un envoi vide : le raccourci doit afficher la raison
         return {"ok": False, "message": str(e.detail)}
     except Exception as e:
-        # Le raccourci iOS n'affiche qu'un « problème est survenu » sur une erreur 500 :
-        # on renvoie la cause en clair pour qu'elle apparaisse dans la notification.
+        # Le raccourci iOS n'affiche qu'un « problème est survenu » sur une erreur 500 : message lisible,
+        # mais sans le détail de l'exception (structure interne), qui reste dans les journaux du serveur.
         db.rollback()
         _log.exception("Import raccourci en échec")
-        return {"ok": False, "message": f"Erreur serveur ({type(e).__name__}) : {str(e)[:300]}"}
+        return {"ok": False, "message": f"Erreur serveur ({type(e).__name__}) : réessaie plus tard"}
 
 
 def _importer_activites(payload: ImportActivitesSchema, db: Session, taches: Optional[BackgroundTasks] = None):
     token = (payload.token or "").strip()
     user = db.query(Utilisateur).filter(Utilisateur.import_token == token).first() if token else None
     if not user:
-        raise HTTPException(401, f"Token invalide (reçu {len(token)} caractères, commençant par « {token[:3]} ») : "
-                                 "recopie-le depuis la page Sources du carnet")
+        raise HTTPException(401, "Token invalide : recopie-le depuis la page Sources du carnet")
     tz = _fuseau(user)
     extra = payload.model_extra or {}
     lot = list(payload.activites or []) + ([payload.activite] if payload.activite else [])

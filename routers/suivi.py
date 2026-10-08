@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 import suivi_service as sv
@@ -31,10 +31,19 @@ def records(current_user: Utilisateur = Depends(get_current_user), db: Session =
 # Notifications push
 # ---------------------------------------------------------------------------
 
+def _endpoint_valide(v: str) -> str:
+    if not sv.endpoint_push_autorise(v):
+        raise ValueError("Service de notification non reconnu")
+    return v
+
+
 class AbonnementSchema(BaseModel):
     endpoint: str = Field(..., min_length=10, max_length=2000)
     p256dh: str = Field(..., min_length=10, max_length=500)
     auth: str = Field(..., min_length=4, max_length=500)
+
+    # Le serveur enverra des requêtes vers cette adresse : on n'accepte que les services push des navigateurs
+    _verif = field_validator("endpoint")(_endpoint_valide)
 
 
 class DesabonnementSchema(BaseModel):

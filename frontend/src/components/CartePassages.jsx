@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getCarteTraces } from "../api";
-import { STYLE, Bascule } from "./CarteTrace";
+import { STYLE, Bascule, chargerMaplibre } from "./CarteTrace";
 import { calculerPassages, decoderTraces } from "../passages";
 
 const SPORTS = [["course", "Course"], ["trail", "Trail"], ["velo", "Vélo"], ["marche", "Marche"], ["randonnee", "Rando"]];
@@ -123,7 +123,7 @@ export default function CartePassages() {
     if (!visible || !conteneur.current) return;
     let annule = false;
     (async () => {
-      const [{ default: maplibregl }] = await Promise.all([import("maplibre-gl"), import("maplibre-gl/dist/maplibre-gl.css")]);
+      const maplibregl = await chargerMaplibre();
       if (annule) return;
       const m = new maplibregl.Map({
         container: conteneur.current, style: STYLE, center: [2.5, 46.5], zoom: 4.5,

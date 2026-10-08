@@ -2,6 +2,17 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getTrace } from "../api";
 
+// maplibre 6 (ESM) : le worker est un fichier à part, à servir depuis nos propres assets
+export async function chargerMaplibre() {
+  const [maplibregl, { default: worker }] = await Promise.all([
+    import("maplibre-gl"),
+    import("maplibre-gl/dist/maplibre-gl-worker.mjs?url"),
+    import("maplibre-gl/dist/maplibre-gl.css"),
+  ]);
+  maplibregl.setWorkerUrl(worker);
+  return maplibregl;
+}
+
 // Fonds gratuits, sans clé : plan OSM, imagerie Esri, relief AWS (Terrarium) pour la 3D.
 export const STYLE = {
   version: 8,
@@ -97,7 +108,7 @@ export default function CarteTrace({ activiteId }) {
     if (!data?.points?.length || !conteneur.current) return;
     let annule = false;
     (async () => {
-      const [{ default: maplibregl }] = await Promise.all([import("maplibre-gl"), import("maplibre-gl/dist/maplibre-gl.css")]);
+      const maplibregl = await chargerMaplibre();
       if (annule) return;
       geo.current = preparer(data.points);
       const { coords } = geo.current;

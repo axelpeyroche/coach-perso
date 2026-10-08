@@ -12,6 +12,7 @@ import re
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from typing import Optional
+from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session
@@ -301,12 +302,29 @@ def records_recents(db: Session, user: Utilisateur, depuis: datetime) -> list[st
 # Notifications push
 # ---------------------------------------------------------------------------
 
+# Services push des navigateurs (Chrome/Android, Safari/iOS, Firefox, Edge) : le serveur ne contacte que ceux-là
+_HOTES_PUSH = ("fcm.googleapis.com", "push.apple.com", "push.services.mozilla.com", "notify.windows.com")
+
+
+def endpoint_push_autorise(endpoint: str) -> bool:
+    try:
+        u = urlparse(endpoint)
+    except ValueError:
+        return False
+    hote = (u.hostname or "").lower()
+    return (u.scheme == "https" and u.port in (None, 443) and not u.username and not u.password
+            and any(hote == h or hote.endswith("." + h) for h in _HOTES_PUSH))
+
+
 def envoyer(db: Session, user_id: int, titre: str, corps: str, url: str = "/", tag: str = "carnet") -> int:
     """Envoie une notification à tous les appareils abonnés. Retourne le nombre d'envois réussis."""
     if not push_configure():
         return 0
     n = 0
     for s in db.query(PushSubscription).filter(PushSubscription.utilisateur_id == user_id).all():
+        if not endpoint_push_autorise(s.endpoint):
+            _log.warning("Abonnement push vers un hôte non autorisé ignoré")
+            continue
         try:
             webpush(subscription_info={"endpoint": s.endpoint, "keys": {"p256dh": s.p256dh, "auth": s.auth}},
                     data=json.dumps({"title": titre, "body": corps, "url": url, "tag": tag}),

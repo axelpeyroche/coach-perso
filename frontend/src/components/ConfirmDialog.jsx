@@ -6,8 +6,8 @@ import { useVerrouDefilement } from "../navigation";
 export default function ConfirmDialog({
   open, title, message,
   confirmLabel = "Confirmer", cancelLabel = "Annuler",
-  danger = false, pending = false,
-  onConfirm, onCancel,
+  danger = false, pending = false, disabled = false,
+  onConfirm, onCancel, children,
 }) {
   useVerrouDefilement(open);
   if (!open) return null;
@@ -17,13 +17,14 @@ export default function ConfirmDialog({
         <div className="px-6 pt-6 pb-4 space-y-1.5">
           {title && <h3 className="text-[17px] font-semibold">{title}</h3>}
           {message && <p className="text-[14px] text-label whitespace-pre-line">{message}</p>}
+          {children}
         </div>
         <div className="grid grid-cols-2 gap-2.5 px-4 pb-4">
           <button onClick={onCancel} disabled={pending} className="btn-alerte bg-remplissage text-label">
             {cancelLabel}
           </button>
-          <button onClick={onConfirm} disabled={pending}
-            className={clsx("btn-alerte font-semibold", danger ? "bg-ios-red text-white" : "bg-brand text-white")}>
+          <button onClick={onConfirm} disabled={pending || disabled}
+            className={clsx("btn-alerte font-semibold disabled:opacity-50", danger ? "bg-ios-red text-white" : "bg-brand text-white")}>
             {pending ? "…" : confirmLabel}
           </button>
         </div>

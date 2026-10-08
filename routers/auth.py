@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+import os
 import secrets as _secrets
 from datetime import date
 from typing import Optional
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Request
+from pydantic import BaseModel, Field
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from database import obtenir_session
@@ -19,27 +21,44 @@ from deps import (
     _hash_password,
     _verify_password,
     _create_token,
+    compter_echec,
+    ip_client,
+    limiter,
+    normaliser_email,
+    verifier_mot_de_passe_robuste,
 )
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 class RegisterSchema(BaseModel):
-    email: str
-    password: str
-    prenom: str
-    nom: str
-    sexe: Optional[str] = None
-    date_naissance: Optional[str] = None  # "YYYY-MM-DD"
-    poids_kg: Optional[float] = None
+    email: str = Field(..., max_length=254)
+    password: str = Field(..., max_length=128)
+    prenom: str = Field(..., min_length=1, max_length=60)
+    nom: str = Field(..., min_length=1, max_length=60)
+    sexe: Optional[str] = Field(None, max_length=10)
+    date_naissance: Optional[str] = Field(None, max_length=10)  # "YYYY-MM-DD"
+    poids_kg: Optional[float] = Field(None, gt=0, lt=400)
 
 class LoginSchema(BaseModel):
-    email: str
-    password: str
+    email: str = Field(..., max_length=254)
+    password: str = Field(..., max_length=128)
+
+
+# Mettre INSCRIPTIONS_FERMEES=1 sur Render pour empêcher la création de nouveaux comptes
+INSCRIPTIONS_FERMEES = os.getenv("INSCRIPTIONS_FERMEES", "").strip().lower() in ("1", "true", "oui", "yes")
+
 
 @router.post("/api/auth/register", summary="Crée un nouveau compte")
-def register(payload: RegisterSchema, db: Session = Depends(obtenir_session)):
-    if db.query(Utilisateur).filter(Utilisateur.email == payload.email).first():
+def register(payload: RegisterSchema, request: Request, db: Session = Depends(obtenir_session)):
+    if INSCRIPTIONS_FERMEES:
+        raise HTTPException(403, "Les inscriptions sont fermées")
+    limiter(f"inscription:{ip_client(request)}", 5, 3600)
+    email = normaliser_email(payload.email)
+    verifier_mot_de_passe_robuste(payload.password)
+    if not payload.prenom.strip() or not payload.nom.strip():
+        raise HTTPException(400, "Prénom et nom obligatoires")
+    if db.query(Utilisateur).filter(func.lower(Utilisateur.email) == email).first():
         raise HTTPException(400, "Un compte existe déjà avec cet email")
     dn = None
     if payload.date_naissance:
@@ -54,10 +73,10 @@ def register(payload: RegisterSchema, db: Session = Depends(obtenir_session)):
         raise HTTPException(500, "Erreur lors de la création du compte")
     try:
         user = Utilisateur(
-            email=payload.email,
+            email=email,
             password_hash=password_hash,
-            prenom=payload.prenom,
-            nom=payload.nom,
+            prenom=payload.prenom.strip(),
+            nom=payload.nom.strip(),
             sexe=payload.sexe,
             date_naissance=dn,
             poids_kg=payload.poids_kg,
@@ -70,16 +89,23 @@ def register(payload: RegisterSchema, db: Session = Depends(obtenir_session)):
         db.rollback()
         logger.exception("Erreur base de données lors de la création du compte")
         raise HTTPException(500, "Erreur lors de la création du compte")
-    token = _create_token(user.id)
+    token = _create_token(user)
     return {"access_token": token, "token_type": "bearer", "user_id": user.id}
 
 
 @router.post("/api/auth/login", summary="Authentifie et retourne un token JWT")
-def login(payload: LoginSchema, db: Session = Depends(obtenir_session)):
-    user = db.query(Utilisateur).filter(Utilisateur.email == payload.email).first()
+def login(payload: LoginSchema, request: Request, db: Session = Depends(obtenir_session)):
+    email = (payload.email or "").strip().lower()
+    cle_email, cle_ip = f"login:{email}", f"login-ip:{ip_client(request)}"
+    # Anti force brute : 8 échecs / 15 min par compte, 30 / 15 min par adresse IP
+    limiter(cle_email, 8, 900, compter=False)
+    limiter(cle_ip, 30, 900, compter=False)
+    user = db.query(Utilisateur).filter(func.lower(Utilisateur.email) == email).first()
     if not user or not user.password_hash or not _verify_password(payload.password, user.password_hash):
+        compter_echec(cle_email)
+        compter_echec(cle_ip)
         raise HTTPException(401, "Email ou mot de passe incorrect")
-    token = _create_token(user.id)
+    token = _create_token(user)
     return {
         "access_token": token,
         "token_type": "bearer",

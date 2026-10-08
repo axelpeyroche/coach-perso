@@ -8,12 +8,13 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import text
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from carnet_service import synchroniser_physiologie
 from database import obtenir_session
-from deps import _hash_password, _verify_password, get_current_user
+from deps import (_create_token, _hash_password, _verify_password, compter_echec, get_current_user, limiter,
+                  normaliser_email, verifier_mot_de_passe_robuste)
 from models import (Activite, MesureSante, Objectif, ObjectifCourse, PoidsUtilisateur, SeancePrevue, TraceGPS,
                     Utilisateur)
 
@@ -62,11 +63,11 @@ def historique_poids(current_user: Utilisateur = Depends(get_current_user), db: 
 
 
 class ProfilInfosSchema(BaseModel):
-    prenom: Optional[str] = None
-    nom: Optional[str] = None
-    email: Optional[str] = None
-    sexe: Optional[str] = None
-    date_naissance: Optional[str] = None  # "YYYY-MM-DD" ou null pour effacer
+    prenom: Optional[str] = Field(None, min_length=1, max_length=60)
+    nom: Optional[str] = Field(None, min_length=1, max_length=60)
+    email: Optional[str] = Field(None, max_length=254)
+    sexe: Optional[str] = Field(None, max_length=10)
+    date_naissance: Optional[str] = Field(None, max_length=10)  # "YYYY-MM-DD" ou null pour effacer
     poids_kg: Optional[float] = Field(None, gt=0, lt=300)
 
 @router.patch("/api/utilisateur/infos", summary="Met à jour les informations personnelles")
@@ -80,13 +81,14 @@ def patch_utilisateur_infos(
     if payload.nom is not None:
         current_user.nom = payload.nom
     if payload.email is not None:
+        email = normaliser_email(payload.email)
         existing = db.query(Utilisateur).filter(
-            Utilisateur.email == payload.email,
+            func.lower(Utilisateur.email) == email,
             Utilisateur.id != current_user.id,
         ).first()
         if existing:
             raise HTTPException(409, "Cet email est déjà utilisé")
-        current_user.email = payload.email
+        current_user.email = email
     if payload.sexe is not None:
         current_user.sexe = payload.sexe
     if payload.poids_kg is not None:
@@ -128,8 +130,8 @@ def patch_utilisateur_photo(
 
 
 class PasswordChangeSchema(BaseModel):
-    ancien_mot_de_passe: str
-    nouveau_mot_de_passe: str = Field(min_length=8)
+    ancien_mot_de_passe: str = Field(..., max_length=128)
+    nouveau_mot_de_passe: str = Field(..., min_length=8, max_length=128)
 
 @router.patch("/api/utilisateur/password", summary="Change le mot de passe")
 def patch_password(
@@ -137,11 +139,20 @@ def patch_password(
     current_user: Utilisateur = Depends(get_current_user),
     db: Session = Depends(obtenir_session),
 ):
-    if not _verify_password(payload.ancien_mot_de_passe, current_user.password_hash):
-        raise HTTPException(400, "Mot de passe actuel incorrect")
+    _verifier_mdp_actuel(payload.ancien_mot_de_passe, current_user)
+    verifier_mot_de_passe_robuste(payload.nouveau_mot_de_passe)
     current_user.password_hash = _hash_password(payload.nouveau_mot_de_passe)
     db.commit()
-    return {"ok": True}
+    # Les autres sessions (autres appareils, jeton volé) sont invalidées ; celle-ci reçoit un nouveau jeton
+    return {"ok": True, "access_token": _create_token(current_user)}
+
+
+def _verifier_mdp_actuel(mdp: str, user: Utilisateur) -> None:
+    cle = f"mdp-actuel:{user.id}"
+    limiter(cle, 8, 900, compter=False)
+    if not user.password_hash or not _verify_password(mdp, user.password_hash):
+        compter_echec(cle)
+        raise HTTPException(400, "Mot de passe actuel incorrect")
 
 
 class FuseauHoraireSchema(BaseModel):
@@ -231,8 +242,15 @@ _PURGE_ANCIENNES_TABLES = [
 ]
 
 
+class SuppressionCompteSchema(BaseModel):
+    mot_de_passe: str = Field(..., max_length=128)
+
+
 @router.delete("/api/utilisateur", summary="Supprime définitivement le compte et toutes les données associées")
-def supprimer_compte(current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
+def supprimer_compte(payload: SuppressionCompteSchema, current_user: Utilisateur = Depends(get_current_user),
+                     db: Session = Depends(obtenir_session)):
+    # Confirmation par mot de passe : un jeton volé ne suffit pas à tout effacer
+    _verifier_mdp_actuel(payload.mot_de_passe, current_user)
     for sql in _PURGE_ANCIENNES_TABLES:
         try:
             with db.begin_nested():  # table absente (base récente) : on ignore

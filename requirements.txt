@@ -1,10 +1,12 @@
-fastapi==0.115.5
-uvicorn[standard]==0.32.1
+fastapi==0.142.4
+uvicorn[standard]==0.54.0
 sqlalchemy==2.0.36
 psycopg2-binary==2.9.10
 pydantic==2.10.3
 pydantic-core==2.27.1
-python-multipart==0.0.20
-python-jose[cryptography]==3.3.0
+python-multipart==0.0.32
+PyJWT==2.15.1
+cryptography==50.0.2
+urllib3==2.8.0
 tzdata==2024.2
-pywebpush==2.0.0
+pywebpush==2.5.0

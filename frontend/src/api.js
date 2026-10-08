@@ -43,8 +43,8 @@ export const patchFuseauHoraire = (fuseau_horaire) =>
 export const exporterDonnees = () =>
   api.get("/utilisateur/export").then((r) => r.data);
 
-export const supprimerCompte = () =>
-  api.delete("/utilisateur").then((r) => r.data);
+export const supprimerCompte = (mot_de_passe) =>
+  api.delete("/utilisateur", { data: { mot_de_passe } }).then((r) => r.data);
 
 // --- Carnet : activités ---
 export const getActivites = (params = {}) =>

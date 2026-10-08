@@ -123,6 +123,7 @@ function FormRegister({ onSwitch, onSuccess }) {
 
   async function submit(e) {
     e.preventDefault();
+    if (password.length < 8) { setErr("Mot de passe trop court : 8 caractères minimum"); return; }
     setErr(""); setLoading(true);
     try {
       const payload = {
