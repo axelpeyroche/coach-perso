@@ -124,3 +124,4 @@ export const getPush = () => api.get("/push").then((r) => r.data);
 export const abonnerPush = (abo) => api.post("/push/abonnement", abo).then((r) => r.data);
 export const desabonnerPush = (endpoint) => api.post("/push/desabonnement", { endpoint }).then((r) => r.data);
 export const testerPush = () => api.post("/push/test").then((r) => r.data);
+export const garderSeulPush = (endpoint) => api.post("/push/garder-seul", { endpoint }).then((r) => r.data);

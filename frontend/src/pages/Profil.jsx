@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "../api";
-import { exporterDonnees, exporterCarnet, supprimerCompte, getPush, abonnerPush, desabonnerPush, testerPush } from "../api";
+import { exporterDonnees, exporterCarnet, supprimerCompte, getPush, abonnerPush, desabonnerPush, testerPush, garderSeulPush } from "../api";
 import { getErrorMessage } from "../utils/errors";
 import ConfirmDialog from "../components/ConfirmDialog";
 import Page from "../components/Page";
@@ -351,8 +351,22 @@ function Notifications() {
 
   const test = useMutation({
     mutationFn: testerPush,
-    onSuccess: () => setMsg("Notification envoyée."),
+    onSuccess: () => { setMsg("Notification envoyée."); qc.invalidateQueries({ queryKey: ["push"] }); },
     onError: (e) => setMsg(getErrorMessage(e, "Échec de l'envoi")),
+  });
+
+  // Anciens abonnements (réactivations successives, ancienne installation) : on ne garde que celui-ci
+  const nettoyer = useMutation({
+    mutationFn: async () => {
+      const sub = await abonnementActuel();
+      if (!sub) throw new Error("Cet appareil n'est pas abonné : réactive les notifications.");
+      return garderSeulPush(sub.endpoint);
+    },
+    onSuccess: (r) => {
+      setMsg(r.supprimes ? `${r.supprimes} ancien${r.supprimes > 1 ? "s" : ""} abonnement${r.supprimes > 1 ? "s" : ""} supprimé${r.supprimes > 1 ? "s" : ""}.` : "Rien à nettoyer.");
+      qc.invalidateQueries({ queryKey: ["push"] });
+    },
+    onError: (e) => setMsg(e?.response ? getErrorMessage(e, "Erreur") : e.message || "Erreur"),
   });
 
   const pied = msg || (!etat?.configure
@@ -374,7 +388,12 @@ function Notifications() {
       {disponible && actif && (
         <button onClick={() => test.mutate()} disabled={test.isPending} className="ligne disabled:opacity-50">
           <span className="flex-1 text-[17px] text-brand">Envoyer une notification de test</span>
-          {etat?.appareils > 0 && <span className="text-[15px] text-label-2">{etat.appareils} appareil{etat.appareils > 1 ? "s" : ""}</span>}
+        </button>
+      )}
+      {disponible && actif && etat?.appareils > 1 && (
+        <button onClick={() => nettoyer.mutate()} disabled={nettoyer.isPending} className="ligne disabled:opacity-50">
+          <span className="flex-1 text-[17px] text-brand">Ne garder que cet appareil</span>
+          <span className="text-[15px] text-label-2">{etat.appareils} abonnements</span>
         </button>
       )}
     </Groupe>

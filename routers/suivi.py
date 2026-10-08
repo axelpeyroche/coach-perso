@@ -70,6 +70,17 @@ def desabonner(payload: DesabonnementSchema, current_user: Utilisateur = Depends
     return {"ok": True}
 
 
+@router.post("/api/push/garder-seul", summary="Supprime les autres abonnements (anciens ou doublons) et garde cet appareil")
+def garder_seul(payload: DesabonnementSchema, current_user: Utilisateur = Depends(get_current_user),
+                db: Session = Depends(obtenir_session)):
+    q = db.query(PushSubscription).filter(PushSubscription.utilisateur_id == current_user.id)
+    if not q.filter(PushSubscription.endpoint == payload.endpoint).count():
+        raise HTTPException(404, "Cet appareil n'est pas abonné : réactive les notifications d'abord")
+    n = q.filter(PushSubscription.endpoint != payload.endpoint).delete(synchronize_session=False)
+    db.commit()
+    return {"supprimes": n}
+
+
 @router.post("/api/push/test", summary="Envoie une notification de test à tous mes appareils")
 def tester(current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
     if not sv.push_configure():
