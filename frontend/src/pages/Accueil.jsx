@@ -10,6 +10,7 @@ import ModalActivite from "../components/ModalActivite";
 import FicheActivite from "../components/FicheActivite";
 import CartePassages from "../components/CartePassages";
 import { FormeTuiles } from "../components/Forme";
+import FormeJour from "../components/FormeJour";
 import { axeX, axeY, grille, curseur, InfoBulle } from "../components/graphiques";
 import { ObjectifCarte } from "./Objectifs";
 import { ProchainesSeances } from "./Plan";
@@ -53,6 +54,8 @@ export default function Accueil() {
           </div>
         </Card>
       )}
+
+      {!vide && <FormeJour />}
 
       {t && !vide && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">

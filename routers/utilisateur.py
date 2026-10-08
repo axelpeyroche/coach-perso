@@ -14,7 +14,8 @@ from sqlalchemy.orm import Session
 from carnet_service import synchroniser_physiologie
 from database import obtenir_session
 from deps import _hash_password, _verify_password, get_current_user
-from models import Activite, MesureSante, Objectif, ObjectifCourse, PoidsUtilisateur, SeancePrevue, Utilisateur
+from models import (Activite, MesureSante, Objectif, ObjectifCourse, PoidsUtilisateur, SeancePrevue, TraceGPS,
+                    Utilisateur)
 
 router = APIRouter()
 
@@ -184,8 +185,14 @@ def exporter_donnees(current_user: Utilisateur = Depends(get_current_user), db: 
     activites = db.query(Activite).filter_by(utilisateur_id=current_user.id).order_by(Activite.debut).all()
     objectifs_carnet = db.query(Objectif).filter_by(utilisateur_id=current_user.id).all()
 
+    mesures = (db.query(MesureSante).filter_by(utilisateur_id=current_user.id)
+               .order_by(MesureSante.jour, MesureSante.type).all())
+    prevues = db.query(SeancePrevue).filter_by(utilisateur_id=current_user.id).order_by(SeancePrevue.jour).all()
+    traces = db.query(TraceGPS).filter_by(utilisateur_id=current_user.id).order_by(TraceGPS.activite_id).all()
+
     profil = _dump(current_user)
-    for secret in ("password_hash", "strava_access_token", "strava_refresh_token", "intervals_cle"):
+    for secret in ("password_hash", "strava_access_token", "strava_refresh_token", "intervals_cle",
+                   "import_token", "analyse_token", "claude_token"):
         profil.pop(secret, None)
 
     return {
@@ -194,6 +201,11 @@ def exporter_donnees(current_user: Utilisateur = Depends(get_current_user), db: 
         "objectifs_course": [_dump(o) for o in objectifs],
         "activites": [_dump(a) for a in activites],
         "objectifs": [_dump(o) for o in objectifs_carnet],
+        "mesures_sante": [_dump(m) for m in mesures],
+        "seances_prevues": [_dump(p) for p in prevues],
+        "traces_gps": [_dump(t) for t in traces],  # points : JSON [[lat, lon, alt, s], …] tel que stocké
+        "exporte_le": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+        "version": 2,
     }
 
 

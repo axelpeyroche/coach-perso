@@ -1,11 +1,12 @@
-# Synchro Intervals.icu chaque nuit, même si le carnet n'est pas ouvert.
+# Synchro Intervals.icu chaque matin, même si le carnet n'est pas ouvert, puis notifications
+# du jour (forme du matin + séance conseillée, alerte VFC, records battus).
 # Secret à créer dans GitHub (Settings → Secrets and variables → Actions) :
 #   CARNET_IMPORT_TOKEN = token de synchro (Sources → Intervals.icu → Synchro nocturne → « Configurer »)
-name: Synchro nocturne Intervals.icu
+name: Synchro du matin Intervals.icu
 
 on:
   schedule:
-    - cron: "17 1 * * *"   # 01:17 UTC = 3 h 17 en été, 2 h 17 en hiver (heure de Paris)
+    - cron: "47 5 * * *"   # 05:47 UTC = 7 h 47 en été, 6 h 47 en hiver (heure de Paris) : VFC de la nuit disponible
   workflow_dispatch:        # bouton « Run workflow » pour tester
 
 jobs:
@@ -25,7 +26,7 @@ jobs:
             code=$(curl -s -o reponse.json -w "%{http_code}" --max-time 300 -X POST \
               -H "Authorization: Bearer $TOKEN" "$API/api/intervals/synchro-nuit" || echo 000)
             if [ "$code" = "200" ]; then
-              jq '{nouvelles, completees, traces, mesures, forme_recue}' reponse.json
+              jq '{nouvelles, completees, traces, mesures, forme_recue, notifications}' reponse.json
               exit 0
             fi
             echo "Essai $essai : HTTP $code — $(jq -r '.detail // empty' reponse.json 2>/dev/null)"

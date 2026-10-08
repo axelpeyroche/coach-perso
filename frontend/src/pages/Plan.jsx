@@ -39,7 +39,7 @@ export function Pastilles({ s }) {
 }
 
 function invaliderPlan(qc) {
-  ["plan", "activites"].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+  ["plan", "activites", "forme-jour"].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
 }
 
 // ── Choix manuel de l'activité réalisée ─────────────────────────────────────
@@ -286,6 +286,67 @@ function BandeauSemaine({ lundi, dimanche, courante, onPrec, onSuiv, onAujourdhu
 }
 
 // ── Page ────────────────────────────────────────────────────────────────────
+// ── Bilan prévu / réalisé par sport ────────────────────────────────────────
+// Jauge en minutes par sport (séances sautées exclues du prévu), puis les écarts
+// au plan : séances non réalisées, sautées ou faites dans un autre sport.
+function BilanSports({ seances, activites, courante }) {
+  const parSport = {};
+  const ligne = (sp) => (parSport[sp] ??= { sport: sp, prevu: 0, fait: 0 });
+  seances.filter((s) => s.statut !== "sautee").forEach((s) => { ligne(s.sport).prevu += s.duree_min ?? 0; });
+  activites.forEach((a) => { ligne(a.sport).fait += (a.duree_sec ?? 0) / 60; });
+  const lignes = Object.values(parSport).filter((l) => l.prevu || l.fait).sort((a, b) => b.prevu - a.prevu || b.fait - a.fait);
+
+  const ecarts = [
+    ...seances.filter((s) => s.statut === "manquee").map((s) => ({ s, label: "Non réalisée", cls: "text-ios-orange" })),
+    ...seances.filter((s) => s.statut === "sautee").map((s) => ({ s, label: "Sautée", cls: "text-label-2" })),
+    ...seances.filter((s) => s.statut === "realisee" && s.activite?.sport && s.activite.sport !== s.sport)
+      .map((s) => ({ s, label: `Faite en ${sportInfo(s.activite.sport).label.toLowerCase()}`, cls: "text-brand" })),
+  ];
+  if (!lignes.length) return null;
+
+  return (
+    <Card>
+      <p className="text-[13px] font-semibold text-label-2 mb-3">{courante ? "Bilan de la semaine en cours" : "Bilan de la semaine"}</p>
+      <div className="space-y-3">
+        {lignes.map((l) => {
+          const info = sportInfo(l.sport);
+          const pct = l.prevu ? Math.min(100, (l.fait / l.prevu) * 100) : 100;
+          const depasse = l.prevu && l.fait > l.prevu * 1.05;
+          return (
+            <div key={l.sport}>
+              <div className="flex items-baseline justify-between gap-2 text-[15px]">
+                <span className="truncate"><span aria-hidden className="mr-1.5">{info.emoji}</span>{info.label}</span>
+                <span className="chiffres text-label-2 shrink-0">
+                  <span className="font-semibold text-label">{l.fait ? fmtDuree(Math.round(l.fait) * 60) : "0 min"}</span>
+                  {" / "}{l.prevu ? fmtDuree(l.prevu * 60) : "hors plan"}
+                </span>
+              </div>
+              <div className="mt-1.5 h-2 rounded-full bg-remplissage overflow-hidden" role="progressbar"
+                aria-label={info.label} aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100}>
+                <div className="h-full rounded-full transition-[width] duration-500"
+                  style={{ width: `${pct}%`, background: info.couleur, opacity: l.prevu ? 1 : 0.45 }} />
+              </div>
+              {depasse && <p className="text-[12px] text-label-2 mt-1">+{fmtDuree(Math.round(l.fait - l.prevu) * 60)} au-delà du plan</p>}
+            </div>
+          );
+        })}
+      </div>
+      {ecarts.length > 0 && (
+        <div className="mt-4 pt-3 border-t-[0.5px] border-separateur space-y-1.5">
+          <p className="text-[13px] font-semibold text-label-2">Écarts au plan</p>
+          {ecarts.map(({ s, label, cls }) => (
+            <div key={`${s.id}-${label}`} className="flex items-center gap-2 text-[15px]">
+              <span aria-hidden>{sportInfo(s.sport).emoji}</span>
+              <span className="flex-1 min-w-0 truncate">{s.titre}</span>
+              <span className={`text-[13px] font-semibold shrink-0 ${cls}`}>{label}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 export default function Plan() {
   const [lundi, setLundi] = useState(() => lundiDe(new Date()));
   const [modalActivite, setModalActivite] = useState(undefined);
@@ -345,6 +406,8 @@ export default function Plan() {
           </div>
         ))}
       </div>
+
+      {!isLoading && <BilanSports seances={seances} activites={activites} courante={courante} />}
 
       {isLoading ? (
         <p className="text-[15px] text-label-2">Chargement…</p>

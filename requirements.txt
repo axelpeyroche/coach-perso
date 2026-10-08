@@ -7,3 +7,4 @@ pydantic-core==2.27.1
 python-multipart==0.0.20
 python-jose[cryptography]==3.3.0
 tzdata==2024.2
+pywebpush==2.0.0

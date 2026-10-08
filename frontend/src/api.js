@@ -116,3 +116,11 @@ export const urlApiAbsolue = () => {
   const base = api.defaults.baseURL || "/api";
   return base.startsWith("http") ? base.replace(/\/$/, "") : `${window.location.origin}${base}`;
 };
+
+// --- Suivi : forme du matin, records, notifications ---
+export const getFormeJour = () => api.get("/forme/jour").then((r) => r.data);
+export const getRecords = () => api.get("/records").then((r) => r.data);
+export const getPush = () => api.get("/push").then((r) => r.data);
+export const abonnerPush = (abo) => api.post("/push/abonnement", abo).then((r) => r.data);
+export const desabonnerPush = (endpoint) => api.post("/push/desabonnement", { endpoint }).then((r) => r.data);
+export const testerPush = () => api.post("/push/test").then((r) => r.data);

@@ -1,9 +1,9 @@
 import { useAuth } from "../AuthContext";
 import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "../api";
-import { exporterDonnees, supprimerCompte } from "../api";
+import { exporterDonnees, exporterCarnet, supprimerCompte, getPush, abonnerPush, desabonnerPush, testerPush } from "../api";
 import { getErrorMessage } from "../utils/errors";
 import ConfirmDialog from "../components/ConfirmDialog";
 import Page from "../components/Page";
@@ -284,20 +284,113 @@ function BioStat({ label, value, unit, couleur, auto, onClick }) {
 }
 
 // ── Export / suppression de compte ──────────────────────────────────────────
+const aujourdhui = () => new Date().toLocaleDateString("sv-SE"); // AAAA-MM-JJ, heure locale
+
+function telecharger(contenu, type, nom) {
+  const url = URL.createObjectURL(new Blob([contenu], { type }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = nom;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// ── Notifications push ──────────────────────────────────────────────────────
+const pushPossible = typeof window !== "undefined" && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+const estIOS = typeof navigator !== "undefined" && /iPhone|iPad|iPod/.test(navigator.userAgent);
+const installee = typeof window !== "undefined" && (window.matchMedia?.("(display-mode: standalone)").matches || navigator.standalone);
+
+function cleVersOctets(base64) {
+  const pad = "=".repeat((4 - (base64.length % 4)) % 4);
+  const brut = atob((base64 + pad).replace(/-/g, "+").replace(/_/g, "/"));
+  return Uint8Array.from(brut, (c) => c.charCodeAt(0));
+}
+
+async function abonnementActuel() {
+  if (!pushPossible) return null;
+  const reg = await navigator.serviceWorker.getRegistration();
+  return reg ? reg.pushManager.getSubscription() : null;
+}
+
+function Notifications() {
+  const qc = useQueryClient();
+  const { data: etat } = useQuery({ queryKey: ["push"], queryFn: getPush, staleTime: 60_000 });
+  const [actif, setActif] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [occupe, setOccupe] = useState(false);
+
+  useEffect(() => { abonnementActuel().then((s) => setActif(!!s)).catch(() => {}); }, []);
+
+  async function basculer(on) {
+    setMsg(""); setOccupe(true);
+    try {
+      if (on) {
+        const perm = await Notification.requestPermission();
+        if (perm !== "granted") throw new Error("Notifications refusées : autorise-les dans les réglages du téléphone.");
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.getSubscription()
+          ?? await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: cleVersOctets(etat.cle_publique) });
+        const { keys } = sub.toJSON();
+        await abonnerPush({ endpoint: sub.endpoint, p256dh: keys.p256dh, auth: keys.auth });
+        setActif(true);
+      } else {
+        const sub = await abonnementActuel();
+        if (sub) {
+          await desabonnerPush(sub.endpoint).catch(() => {});
+          await sub.unsubscribe();
+        }
+        setActif(false);
+      }
+      qc.invalidateQueries({ queryKey: ["push"] });
+    } catch (e) {
+      setMsg(e?.response ? getErrorMessage(e, "Erreur") : e.message || "Erreur");
+    } finally {
+      setOccupe(false);
+    }
+  }
+
+  const test = useMutation({
+    mutationFn: testerPush,
+    onSuccess: () => setMsg("Notification envoyée."),
+    onError: (e) => setMsg(getErrorMessage(e, "Échec de l'envoi")),
+  });
+
+  const pied = msg || (!etat?.configure
+    ? "Notifications non configurées sur le serveur (clés VAPID manquantes)."
+    : !pushPossible || (estIOS && !installee)
+    ? "Sur iPhone, ajoute d'abord le carnet à l'écran d'accueil (Partager → Sur l'écran d'accueil) puis ouvre-le depuis l'icône."
+    : "Chaque matin après la synchro : forme du jour et séance conseillée, alerte si la VFC baisse plusieurs jours, records battus.");
+
+  const disponible = etat?.configure && pushPossible;
+  return (
+    <Groupe titre="Notifications" pied={pied}>
+      <div className="ligne" style={{ "--inset": "3.75rem" }}>
+        <Picto couleur="#FF3B30"><path d="M6 8a6 6 0 1112 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.94 1.94 0 003.4 0" /></Picto>
+        <span className="flex-1 text-[17px]">Notifications du matin</span>
+        {disponible
+          ? <span className={occupe ? "opacity-50 pointer-events-none" : ""}><Interrupteur actif={actif} onChange={basculer} label="Notifications du matin" /></span>
+          : <span className="text-[15px] text-label-3">Indisponible</span>}
+      </div>
+      {disponible && actif && (
+        <button onClick={() => test.mutate()} disabled={test.isPending} className="ligne disabled:opacity-50">
+          <span className="flex-1 text-[17px] text-brand">Envoyer une notification de test</span>
+          {etat?.appareils > 0 && <span className="text-[15px] text-label-2">{etat.appareils} appareil{etat.appareils > 1 ? "s" : ""}</span>}
+        </button>
+      )}
+    </Groupe>
+  );
+}
+
 function DonneesCompte({ onDeleted }) {
   const [confirmSuppr, setConfirmSuppr] = useState(false);
 
   const exportMutation = useMutation({
     mutationFn: exporterDonnees,
-    onSuccess: (data) => {
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "coach-perso-export.json";
-      a.click();
-      URL.revokeObjectURL(url);
-    },
+    onSuccess: (data) => telecharger(JSON.stringify(data, null, 2), "application/json", `carnet-sauvegarde-${aujourdhui()}.json`),
+  });
+  const csvMutation = useMutation({
+    mutationFn: () => exporterCarnet("csv"),
+    onSuccess: (data) => telecharger(data, "text/csv;charset=utf-8", `carnet-seances-${aujourdhui()}.csv`),
   });
 
   const deleteMutation = useMutation({
@@ -305,18 +398,23 @@ function DonneesCompte({ onDeleted }) {
     onSuccess: () => { setConfirmSuppr(false); onDeleted(); },
   });
 
-  const errMsg = exportMutation.isError
-    ? getErrorMessage(exportMutation.error, "Erreur lors de l'export")
+  const errMsg = exportMutation.isError || csvMutation.isError
+    ? getErrorMessage(exportMutation.error || csvMutation.error, "Erreur lors de l'export")
     : deleteMutation.isError
     ? getErrorMessage(deleteMutation.error, "Erreur lors de la suppression du compte")
     : "";
 
   return (
     <>
-      <Groupe titre="Données du compte" pied={errMsg || null}>
+      <Groupe titre="Données du compte"
+        pied={errMsg || "Sauvegarde complète : profil, séances, mesures de santé, plans et traces GPS. Le CSV contient une ligne par séance (tableur)."}>
         <button onClick={() => exportMutation.mutate()} disabled={exportMutation.isPending} className="ligne disabled:opacity-50">
-          <span className="flex-1 text-[17px] text-brand">Exporter mes données</span>
+          <span className="flex-1 text-[17px] text-brand">Sauvegarde complète</span>
           <span className="text-[15px] text-label-2">{exportMutation.isPending ? "…" : "JSON"}</span>
+        </button>
+        <button onClick={() => csvMutation.mutate()} disabled={csvMutation.isPending} className="ligne disabled:opacity-50">
+          <span className="flex-1 text-[17px] text-brand">Exporter les séances</span>
+          <span className="text-[15px] text-label-2">{csvMutation.isPending ? "…" : "CSV"}</span>
         </button>
         <button onClick={() => setConfirmSuppr(true)} className="ligne">
           <span className="flex-1 text-[17px] text-ios-red">Supprimer mon compte</span>
@@ -415,6 +513,8 @@ export default function Profil({ dark, setDark }) {
             <Interrupteur actif={dark} onChange={() => setDark(d => !d)} label="Mode sombre" />
           </div>
         </Groupe>
+
+        <Notifications />
 
         <DonneesCompte onDeleted={logout} />
 

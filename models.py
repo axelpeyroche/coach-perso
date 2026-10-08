@@ -2,7 +2,7 @@
 Modèles SQLAlchemy ORM du carnet de suivi multi-sport.
 
 Les tables de l'ancien programme EPC (macrocycles, séances, journaux,
-évaluations, push, chat…) restent en base mais ne sont plus mappées.
+évaluations, chat…) restent en base mais ne sont plus mappées.
 """
 
 from __future__ import annotations
@@ -307,4 +307,16 @@ class Objectif(Base):
     statut: Mapped[str] = mapped_column(String(20), default="actif")  # actif | atteint | abandonne
     resultat_temps_sec: Mapped[Optional[int]] = mapped_column(Integer)
     notes: Mapped[Optional[str]] = mapped_column(Text)
+    cree_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class PushSubscription(Base):
+    """Abonnement aux notifications push d'un appareil (Web Push, clés VAPID)."""
+    __tablename__ = "push_subscriptions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    utilisateur_id: Mapped[int] = mapped_column(ForeignKey("utilisateurs.id"), nullable=False, index=True)
+    endpoint: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    p256dh: Mapped[str] = mapped_column(Text, nullable=False)
+    auth: Mapped[str] = mapped_column(Text, nullable=False)
     cree_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

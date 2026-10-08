@@ -3,7 +3,7 @@ Connexion à Intervals.icu (séances de l'Apple Watch avec tracé GPS et dénive
 
 La clé API personnelle est saisie dans la page Sources ; elle n'est jamais renvoyée au navigateur.
 La synchro se lance d'elle-même à l'ouverture de l'app (au plus une fois par quart d'heure),
-chaque nuit via GitHub Actions (route /api/intervals/synchro-nuit, token d'import), ou à la demande.
+chaque matin via GitHub Actions (suivie des notifications du jour) (route /api/intervals/synchro-nuit, token d'import), ou à la demande.
 """
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 import intervals_service as iv
+import suivi_service as sv
 from database import SessionLocal, obtenir_session
 from deps import get_current_user, http_bearer
 from models import Utilisateur
@@ -82,7 +83,16 @@ def synchro_nuit(credentials: HTTPAuthorizationCredentials = Security(http_beare
         raise HTTPException(401, "Token d'import invalide : recopie-le depuis la page Sources du carnet")
     if not user.intervals_cle:
         raise HTTPException(409, "Intervals.icu n'est pas connecté sur ce compte")
-    return _synchroniser(db, user, True)
+    res = _synchroniser(db, user, True)
+    # Synchro du matin : forme du jour, alerte VFC et records battus, envoyés en notification
+    try:
+        res["notifications"] = sv.notifications_matin(db, user)
+        db.commit()
+    except Exception:
+        db.rollback()
+        _log.exception("Notifications du matin en échec")
+        res["notifications"] = {"erreur": True}
+    return res
 
 
 def _synchroniser(db: Session, user: Utilisateur, force: bool) -> dict:

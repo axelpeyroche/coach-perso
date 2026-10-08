@@ -16,6 +16,7 @@ const StatsCarnet = lazy(() => import("./pages/StatsCarnet"));
 const Analyses = lazy(() => import("./pages/Analyses"));
 const Sources = lazy(() => import("./pages/Sources"));
 const Profil = lazy(() => import("./pages/Profil"));
+const Records = lazy(() => import("./pages/Records"));
 
 // ── SVG Icons ──────────────────────────────────────────────────────────────
 const Icon = {
@@ -345,7 +346,7 @@ function SynchroIntervals() {
       if (document.visibilityState !== "visible") return;
       synchroIntervals().then((r) => {
         if (r.nouvelles || r.completees || r.traces || r.mesures) {
-          ["activites", "stats-carnet", "objectifs", "plan", "carte-traces", "intervals", "analyses", "mesures", "profil-fc"].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+          ["activites", "stats-carnet", "objectifs", "plan", "carte-traces", "intervals", "analyses", "mesures", "profil-fc", "forme-jour", "records"].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
         }
       }).catch(() => {});
     };
@@ -353,6 +354,20 @@ function SynchroIntervals() {
     document.addEventListener("visibilitychange", lancer);
     return () => document.removeEventListener("visibilitychange", lancer);
   }, [qc]);
+  return null;
+}
+
+// Service worker : notifications push uniquement (aucune mise en cache).
+// À l'ouverture de l'app, la pastille de l'icône est effacée.
+function ServiceWorker() {
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    navigator.serviceWorker.register("/sw.js").then(async () => {
+      const sw = await navigator.serviceWorker.ready;
+      sw.active?.postMessage("clearBadge");
+      navigator.clearAppBadge?.().catch(() => {});
+    }).catch(() => {});
+  }, []);
   return null;
 }
 
@@ -381,6 +396,7 @@ export default function App() {
       <Route path="/*" element={
         <RequireAuth>
             <SynchroIntervals />
+            <ServiceWorker />
             <div className="min-h-screen flex" style={{ overflowX: "clip" }}>
 
               {/* ── Sidebar desktop ── */}
@@ -412,6 +428,7 @@ export default function App() {
                   <Route path="/objectifs"  element={<Objectifs />} />
                   <Route path="/stats"      element={<StatsCarnet />} />
                   <Route path="/analyses"   element={<Analyses />} />
+                  <Route path="/records"    element={<Records />} />
                   <Route path="/sources"    element={<Sources />} />
                   <Route path="/profil"     element={<Profil dark={dark} setDark={setDark} />} />
                   <Route path="*"           element={<Navigate to="/" replace />} />

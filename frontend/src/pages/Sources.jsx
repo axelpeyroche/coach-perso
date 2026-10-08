@@ -26,7 +26,7 @@ function Code({ children }) {
 }
 
 function invaliderCarnet(qc) {
-  ["activites", "stats-carnet", "objectifs", "mesures", "plan", "carte-traces", "analyses"].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+  ["activites", "stats-carnet", "objectifs", "mesures", "plan", "carte-traces", "analyses", "forme-jour", "records"].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
 }
 
 function telecharger(contenu, nom, type) {
