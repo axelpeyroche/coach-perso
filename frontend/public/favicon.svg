@@ -11,5 +11,5 @@
   </defs>
   <rect width="88" height="88" rx="20" fill="url(#fond)"/>
   <rect width="88" height="44" rx="20" fill="url(#reflet)"/>
-  <path transform="translate(22 22) scale(1.8333)" d="M13 2L4.5 13.5H11L10 22l8.5-11.5H12L13 2z" fill="#fff"/>
+  <path transform="translate(14 14) scale(2.5)" d="M13 2L4.5 13.5H11L10 22l8.5-11.5H12L13 2z" fill="#fff"/>
 </svg>
