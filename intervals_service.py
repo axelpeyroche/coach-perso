@@ -177,29 +177,34 @@ def resume_flux(streams: list, sport: str) -> dict:
     return res
 
 
-def synchroniser_wellness(db: Session, user: Utilisateur, depuis, jusqu_a) -> int:
+def synchroniser_wellness(db: Session, user: Utilisateur, depuis, jusqu_a) -> tuple[int, dict]:
     """Sommeil de chaque nuit ; FC repos, VFC (SDNN) et VO2max seulement pour les jours où le
-    raccourci n'a rien envoyé (ses valeurs restent la référence)."""
+    raccourci n'a rien envoyé (ses valeurs restent la référence).
+    Retourne (mesures enregistrées, {type: nombre de jours fournis par Intervals.icu})."""
     athlete = user.intervals_athlete_id or "0"
     lignes = _appel(user.intervals_cle, f"/athlete/{urllib.parse.quote(athlete)}/wellness",
                     {"oldest": depuis.isoformat(), "newest": jusqu_a.isoformat()}) or []
     deja = {(m.type, m.jour) for m in db.query(MesureSante).filter(
         MesureSante.utilisateur_id == user.id, MesureSante.jour >= depuis, MesureSante.type.in_(("fc_repos", "vfc", "vo2max")))}
     items = []
+    recus = {"fc_repos": 0, "vfc": 0, "vo2max": 0, "sommeil": 0}
     for w in lignes if isinstance(lignes, list) else []:
         try:
             jour = datetime.fromisoformat(str(w.get("id"))[:10]).date()
         except ValueError:
             continue
         if w.get("sleepSecs"):
+            recus["sommeil"] += 1
             items.append(("sommeil", jour, w["sleepSecs"] / 3600))
         for cle, t in (("restingHR", "fc_repos"), ("hrvSDNN", "vfc"), ("vo2max", "vo2max")):
-            if w.get(cle) and (t, jour) not in deja:
-                items.append((t, jour, float(w[cle])))
+            if w.get(cle):
+                recus[t] += 1
+                if (t, jour) not in deja:
+                    items.append((t, jour, float(w[cle])))
     if not items:
-        return 0
+        return 0, recus
     b = cs.importer_mesures(db, user.id, items)
-    return b["cree"] + b["maj"]
+    return b["cree"] + b["maj"], recus
 
 
 def synchroniser(db: Session, user: Utilisateur, force: bool = False) -> dict:
@@ -281,7 +286,8 @@ def synchroniser(db: Session, user: Utilisateur, force: bool = False) -> dict:
         avec_trace.add(act.id)
         bilan["traces"] += 1
     try:
-        bilan["mesures"] = synchroniser_wellness(db, user, depuis, datetime.now(tz).date())
+        bilan["mesures"], bilan["forme_recue"] = synchroniser_wellness(db, user, depuis, datetime.now(tz).date())
+        bilan["forme_jours"] = (datetime.now(tz).date() - depuis).days + 1
     except IntervalsErreur:
         _log.warning("Suivi wellness Intervals.icu indisponible", exc_info=True)
     user.intervals_derniere_synchro = maintenant

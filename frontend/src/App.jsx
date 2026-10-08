@@ -128,6 +128,8 @@ function useBarreCompacte(pathname) {
 // onglet à l'autre et relâcher ouvre l'onglet visé. La pastille de sélection
 // rejoint l'onglet choisi avec un ressort en s'étirant comme une goutte.
 // Toucher l'onglet déjà actif remonte en haut (ou revient à sa racine).
+const LENTILLE_ECHELLE_X = 1.14;   // = scale horizontal de .pastille-onglet.lentille (index.css)
+
 function BottomNav() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
@@ -169,7 +171,7 @@ function BottomNav() {
   // position sous le doigt est écrite directement dans le style, sans rendu React)
   useLayoutEffect(() => {
     if (!glisse && pastilleRef.current) {
-      pastilleRef.current.style.transform = `translateX(${Math.max(choisi, 0) * 100}%)`;
+      pastilleRef.current.style.translate = `${Math.max(choisi, 0) * 100}% 0`;
     }
   }, [glisse, choisi]);
 
@@ -186,9 +188,11 @@ function BottomNav() {
     const dessiner = () => {
       image = 0;
       const r = nav.getBoundingClientRect();
-      const w = (r.width - 8) / n;
-      const t = Math.max(0, Math.min(r.width - 8 - w, x - r.left - 4 - w / 2));
-      pastille.style.transform = `translateX(${t}px)`;
+      // La lentille est agrandie (scale en CSS) : on la garde à 2 px des bords de la barre
+      const w = pastille.offsetWidth, L = nav.clientWidth;
+      const deborde = w * (LENTILLE_ECHELLE_X - 1) / 2;
+      const t = Math.max(deborde - 2, Math.min(L - 6 - w - deborde, x - r.left - nav.clientLeft - 4 - w / 2));
+      pastille.style.translate = `${t}px 0`;
       const i = indice(r);
       if (i !== idx) { idx = i; setSous(i); }
     };
@@ -253,7 +257,12 @@ function BottomNav() {
         className={clsx("barre-onglets glass pointer-events-auto", compacte && "compacte")}>
         <div aria-hidden ref={pastilleRef}
           className={clsx("pastille-onglet", glisse && "lentille", etire && !glisse && "etire")}
-          style={{ width: `calc((100% - 8px) / ${n})`, opacity: choisi < 0 && !glisse ? 0 : 1 }} />
+          style={{
+            width: `calc((100% - 8px) / ${n})`,
+            opacity: choisi < 0 && !glisse ? 0 : 1,
+            // Sur un onglet du bord, la goutte s'étire vers l'intérieur de la barre
+            transformOrigin: glisse ? "center" : choisi === 0 ? "left center" : choisi === n - 1 ? "right center" : "center",
+          }} />
         {items.map((it, i) => (
           <Link key={it.to} to={it.to} aria-current={i === actif ? "page" : undefined}
             draggable={false}

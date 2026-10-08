@@ -272,6 +272,13 @@ function BlocIntervals() {
         <p className="text-[13px] text-label-2 chiffres">✓ {res.nouvelles} nouvelle(s) séance(s), {res.completees} complétée(s),
           {" "}{res.traces} tracé(s) ajouté(s).</p>
       )}
+      {res?.forme_recue && !res.erreur && (
+        <p className="text-[13px] text-label-2 chiffres">
+          Mesures de forme fournies par Intervals.icu sur les {res.forme_jours} derniers jours :
+          {" "}FC au repos {res.forme_recue.fc_repos} j · VFC {res.forme_recue.vfc} j · VO2max {res.forme_recue.vo2max} j
+          {" "}· sommeil {res.forme_recue.sommeil} j.
+        </p>
+      )}
       {synchro.isPending && !statut?.derniere_synchro && (
         <p className="text-[13px] text-label-2">Première synchro : récupération des 60 derniers jours, cela peut prendre une minute.</p>
       )}
