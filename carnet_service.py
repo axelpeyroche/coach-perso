@@ -952,7 +952,8 @@ def parser_csv(contenu: str) -> tuple[str, list[tuple[Optional[str], dict]]]:
     i_type = idx("activity type", "type d'activite", "sport")
     i_desc = idx("activity description", "description de l'activite", "notes")
     # Strava répète « Elapsed Time » et « Distance » : la 2e occurrence est en secondes/mètres
-    i_moving = idx("moving time", "temps de deplacement", "duree_sec")
+    i_moving = idx("moving time", "temps de deplacement", "duree de deplacement", "duree_sec")
+    i_ecoule = [k for k, n in enumerate(norm) if n in ("elapsed time", "temps ecoule")]  # secours
     i_duree_min = None if strava else idx("duree_min")
     i_dist = [k for k, n in enumerate(norm) if n in ("distance", "distance_km")]
     i_dplus = idx("elevation gain", "denivele positif", "dplus_m")
@@ -979,6 +980,8 @@ def parser_csv(contenu: str) -> tuple[str, list[tuple[Optional[str], dict]]]:
             else:
                 dist = _num(get(i_dist[0]))
         duree = _num(get(i_moving))
+        if not duree and i_ecoule:
+            duree = _num(get(i_ecoule[-1]))
         if not duree and _num(get(i_duree_min)):
             duree = _num(get(i_duree_min)) * 60
         rpe = _num(get(i_rpe))
