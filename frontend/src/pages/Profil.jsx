@@ -9,7 +9,7 @@ import ConfirmDialog from "../components/ConfirmDialog";
 import Page from "../components/Page";
 import Feuille from "../components/Feuille";
 import ModalPoids from "../components/ModalPoids";
-import { Chevron, Interrupteur } from "../components/ui";
+import { Chevron, Interrupteur, Segmente } from "../components/ui";
 
 // ── Avatar ─────────────────────────────────────────────────────────────────
 // La photo est redimensionnée dans le navigateur avant l'envoi (512 px, JPEG) : n'importe
@@ -488,7 +488,7 @@ function DonneesCompte({ onDeleted }) {
   );
 }
 
-export default function Profil({ dark, setDark }) {
+export default function Profil({ theme, setTheme }) {
   const { user, setUser, logout } = useAuth();
   const qc = useQueryClient();
   const [editInfos, setEditInfos] = useState(false);
@@ -563,8 +563,9 @@ export default function Profil({ dark, setDark }) {
         <Groupe titre="Apparence">
           <div className="ligne" style={inset}>
             <Picto couleur="#5856D6"><path d="M20 14.5A8 8 0 019.5 4a8 8 0 1010.5 10.5z" /></Picto>
-            <span className="flex-1 text-[17px]">Mode sombre</span>
-            <Interrupteur actif={dark} onChange={() => setDark(d => !d)} label="Mode sombre" />
+            <span className="flex-1 text-[17px]">Thème</span>
+            <Segmente valeur={theme} onChange={setTheme} className="w-[200px]"
+              options={[["auto", "Auto"], ["light", "Clair"], ["dark", "Sombre"]]} />
           </div>
         </Groupe>
 

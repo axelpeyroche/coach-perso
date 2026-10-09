@@ -395,15 +395,29 @@ export default function App() {
   const { pathname } = location;
   const typeNav = useNavigationType();
 
-  const [dark, setDark] = useState(() => {
-    const saved = localStorage.getItem("theme");
-    if (saved) return saved === "dark";
-    return window.matchMedia("(prefers-color-scheme: dark)").matches;
+  // Apparence : "auto" suit le réglage du système (bascule clair/sombre automatique)
+  const [theme, setTheme] = useState(() => {
+    try {
+      const saved = localStorage.getItem("theme");
+      return saved === "dark" || saved === "light" ? saved : "auto";
+    } catch { return "auto"; }
   });
+  const [systemeSombre, setSystemeSombre] = useState(() => window.matchMedia("(prefers-color-scheme: dark)").matches);
+  const dark = theme === "auto" ? systemeSombre : theme === "dark";
+
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const suivre = (e) => setSystemeSombre(e.matches);
+    mq.addEventListener("change", suivre);
+    return () => mq.removeEventListener("change", suivre);
+  }, []);
+
+  useEffect(() => {
+    try { localStorage.setItem("theme", theme); } catch { /* stockage indisponible */ }
+  }, [theme]);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
-    localStorage.setItem("theme", dark ? "dark" : "light");
     document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#000000" : "#F2F2F7");
   }, [dark]);
 
@@ -448,7 +462,7 @@ export default function App() {
                   <Route path="/analyses"   element={<Analyses />} />
                   <Route path="/records"    element={<Records />} />
                   <Route path="/sources"    element={<Sources />} />
-                  <Route path="/profil"     element={<Profil dark={dark} setDark={setDark} />} />
+                  <Route path="/profil"     element={<Profil theme={theme} setTheme={setTheme} />} />
                   <Route path="*"           element={<Navigate to="/" replace />} />
                 </Routes>
                 </div>

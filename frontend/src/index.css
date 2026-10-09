@@ -263,7 +263,7 @@
     left: 0;
     right: 0;
     z-index: 30;
-    padding-top: env(safe-area-inset-top);
+    padding-top: calc(env(safe-area-inset-top) + 6px); /* un peu sous la barre d'état : évite le flou automatique d'iOS */
     pointer-events: none;
   }
   .barre-nav > * { pointer-events: auto; }

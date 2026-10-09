@@ -35,7 +35,7 @@ function BarreNav({ action }) {
 export default function Page({ titre, sousTitre, action, children, large = false }) {
 
   return (
-    <div className={`mx-auto w-full ${large ? "max-w-6xl" : "max-w-5xl"} px-4 md:px-8 pt-[calc(env(safe-area-inset-top)+52px)] md:pt-10 pb-8 space-y-6`}>
+    <div className={`mx-auto w-full ${large ? "max-w-6xl" : "max-w-5xl"} px-4 md:px-8 pt-[calc(env(safe-area-inset-top)+58px)] md:pt-10 pb-8 space-y-6`}>
       <BarreNav action={action} />
       <header className="flex items-end justify-between gap-3">
         <div className="min-w-0">
