@@ -555,8 +555,9 @@ export default function Sources() {
       <div className="space-y-1.5">
         <h2 className="entete-liste">Importer</h2>
         <div className="space-y-3">
-          {/* Import CSV et GPX masqués : les séances et tracés arrivent par Intervals.icu (BlocFichier, BlocTraces) */}
+          {/* Import GPX masqué : les tracés arrivent par Intervals.icu (BlocTraces). Le CSV reste pour l'historique (export Strava) */}
           <BlocIntervals />
+          <BlocFichier />
         </div>
       </div>
       <div className="space-y-1.5">
