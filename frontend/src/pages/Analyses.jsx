@@ -301,8 +301,11 @@ function Vma({ v }) {
   );
 }
 
+const DISTANCES_PRED = ["5 km", "10 km", "Semi", "Marathon"];
+
 function Course({ c }) {
   const [dist, setDist] = useState("5 km");
+  const [distPred, setDistPred] = useState("10 km");
   const preds = useMemo(() => (c?.predictions ?? []).filter((p) => p["5 km"] || p["10 km"]).map((p) => ({ ...p, label: court(p.semaine) })), [c]);
   const evol = useMemo(() => (c?.evolution ?? []).map((e) => ({ ...e, label: fmtDate(`${e.mois}-01`, { month: "short", year: "2-digit" }) })), [c]);
   const derives = useMemo(() => (c?.derives ?? []).map((d) => ({ ...d, label: court(d.date) })), [c]);
@@ -359,22 +362,18 @@ function Course({ c }) {
 
       {preds.length > 1 && (
         <Graphe titre="Prédictions de course" couleur={BLEU}
-          sousTitre={dernier ? `Aujourd'hui : 5 km ${hms(dernier["5 km"])} · 10 km ${hms(dernier["10 km"])} · semi ${hms(dernier.Semi)} · marathon ${hms(dernier.Marathon)}` : null}
-          note="Estimées chaque semaine à partir de tes sorties des 90 jours précédents (formule de Riegel). Le marathon reste très optimiste sans grosses sorties longues.">
+          sousTitre={dernier?.[distPred] ? `${distPred} aujourd'hui : ${hms(dernier[distPred])}` : null}
+          note="Plus la courbe monte, plus tu vas vite. Estimée chaque semaine à partir de ta meilleure sortie des 90 jours précédents (formule de Riegel) : elle reste à plat tant que cette sortie est dans la fenêtre. Le marathon reste très optimiste sans grosses sorties longues.">
+          <Segmente className="mb-3" valeur={distPred} onChange={setDistPred} options={DISTANCES_PRED.map((d) => [d, d])} />
           <ResponsiveContainer width="100%" height={220}>
             <LineChart data={preds} margin={{ left: 0, right: 0, top: 4 }}>
               <CartesianGrid {...grille} />
               <XAxis dataKey="label" {...axeX} minTickGap={32} />
-              <YAxis yAxisId="c" {...axeY} reversed domain={["dataMin - 30", "dataMax + 30"]} width={48} tickFormatter={hms} />
-              <YAxis yAxisId="l" {...axeY} orientation="left" reversed domain={["dataMin - 120", "dataMax + 120"]} width={52} tickFormatter={hms} />
+              <YAxis {...axeY} reversed domain={[(m) => m * 0.97, (m) => m * 1.03]} width={56} tickFormatter={hms} />
               <Tooltip cursor={ligneCurseur} content={<InfoBulle format={hms} />} />
-              <Line yAxisId="c" dataKey="5 km" stroke={CYAN} strokeWidth={2} dot={false} connectNulls />
-              <Line yAxisId="c" dataKey="10 km" stroke={BLEU} strokeWidth={2} dot={false} connectNulls />
-              <Line yAxisId="l" dataKey="Semi" stroke={VIOLET} strokeWidth={2} dot={false} connectNulls />
-              <Line yAxisId="l" dataKey="Marathon" stroke={INDIGO} strokeWidth={2} strokeDasharray="5 4" dot={false} connectNulls />
+              <Line dataKey={distPred} name={distPred} stroke={BLEU} strokeWidth={2.5} dot={false} connectNulls />
             </LineChart>
           </ResponsiveContainer>
-          <Legende items={[{ label: "5 km (droite)", couleur: CYAN }, { label: "10 km (droite)", couleur: BLEU }, { label: "Semi (gauche)", couleur: VIOLET }, { label: "Marathon (gauche)", couleur: INDIGO }]} />
         </Graphe>
       )}
 
