@@ -9,7 +9,7 @@ import ConfirmDialog from "../components/ConfirmDialog";
 import Page from "../components/Page";
 import Feuille from "../components/Feuille";
 import ModalPoids from "../components/ModalPoids";
-import { Chevron, Interrupteur, Segmente } from "../components/ui";
+import { Chevron, Interrupteur, Segmente, SelecteurHeure } from "../components/ui";
 
 // ── Avatar ─────────────────────────────────────────────────────────────────
 // La photo est redimensionnée dans le navigateur avant l'envoi (512 px, JPEG) : n'importe
@@ -418,13 +418,7 @@ function Notifications() {
           : <span className="text-[15px] text-label-3">Indisponible</span>}
       </div>
       {disponible && actif && etat?.heures && (
-        <label className="ligne">
-          <span className="flex-1 text-[17px]">Heure d'envoi</span>
-          <select className="bg-transparent text-[17px] text-label-2 chiffres text-right outline-none" value={etat.heure}
-            onChange={(e) => heure.mutate(e.target.value)} aria-label="Heure de la notification du matin">
-            {etat.heures.map((h) => <option key={h} value={h}>{h.replace(/^0/, "").replace(":", " h ")}</option>)}
-          </select>
-        </label>
+        <SelecteurHeure libelle="Heure d'envoi" valeur={etat.heure} valeurs={etat.heures} onChange={(h) => heure.mutate(h)} />
       )}
       {disponible && actif && (
         <button onClick={() => test.mutate()} disabled={test.isPending} className="ligne disabled:opacity-50">
