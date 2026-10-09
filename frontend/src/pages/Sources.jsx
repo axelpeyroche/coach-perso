@@ -268,7 +268,7 @@ const dateHeure = (iso) => new Date(iso).toLocaleString("fr-FR", { weekday: "sho
 
 function BlocIntervals() {
   const qc = useQueryClient();
-  const { data: statut } = useQuery({ queryKey: ["intervals"], queryFn: getIntervals });
+  const { data: statut, isError, refetch, isFetching } = useQuery({ queryKey: ["intervals"], queryFn: getIntervals });
   const [cle, setCle] = useState("");
   const [athlete, setAthlete] = useState("");
   const [res, setRes] = useState(null);
@@ -292,7 +292,15 @@ function BlocIntervals() {
 
   return (
     <Bloc id="intervals" icone="⌚" couleur="#5E5CE626" titre="Intervals.icu" sousTitre="Séances de la montre avec tracé GPS et dénivelé">
-      {statut?.connecte ? (
+      {!statut ? (
+        // Statut pas encore reçu (réveil du serveur) : ne pas afficher le formulaire comme si rien n'était connecté
+        isError ? (
+          <div className="flex items-center gap-3">
+            <p className="flex-1 text-[13px] text-ios-red">Impossible de lire l'état de la connexion.</p>
+            <button className={btnP} disabled={isFetching} onClick={() => refetch()}>{isFetching ? "…" : "Réessayer"}</button>
+          </div>
+        ) : <p className="text-[13px] text-label-2">Vérification de la connexion…</p>
+      ) : statut.connecte ? (
         <div className="space-y-3">
           <p>✓ Connecté{statut.athlete_id ? <> (athlète <code>{statut.athlete_id}</code>)</> : null}.
             {statut.derniere_synchro && <span className="text-label-2"> Dernière synchro : {dateHeure(statut.derniere_synchro)}.</span>}</p>
