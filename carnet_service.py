@@ -1559,8 +1559,14 @@ def rapprocher_plan(db: Session, user_id: int, aujourd_hui: Optional[date] = Non
         .filter(SeancePrevue.utilisateur_id == user_id, SeancePrevue.jour >= debut, SeancePrevue.jour <= fin_semaine)
         .order_by(SeancePrevue.jour, SeancePrevue.ordre, SeancePrevue.id).all()
     )
+    # rattrapage : une activité déjà reliée mais restée sans titre prend le nom de la séance
+    liees = {p.activite_id: p.titre for p in prevues if p.activite_id and (p.titre or "").strip()}
+    if liees:
+        for a in db.query(Activite).filter(Activite.id.in_(liees), Activite.titre.is_(None)).all():
+            a.titre = liees[a.id].strip()
     a_relier = [p for p in prevues if p.activite_id is None and not p.lien_manuel and p.statut != "sautee"]
     if not a_relier:
+        db.flush()
         return 0
     acts = (
         db.query(Activite)
