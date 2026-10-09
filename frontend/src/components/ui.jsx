@@ -1,5 +1,6 @@
 import clsx from "clsx";
 import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 
 // En-tête de section façon app Santé : titre en gras et lien à droite
@@ -63,7 +64,7 @@ export function Interrupteur({ actif, onChange, label }) {
   );
 }
 
-// ── Sélecteur d'heure iOS : pastille grise, roue à deux colonnes dépliée sous la ligne ──
+// ── Sélecteur d'heure iOS : pastille grise qui ouvre une bulle avec la roue à deux colonnes ──
 const H_ROUE = 32;          // hauteur d'une ligne de la roue
 const VISIBLES = 7;         // lignes visibles (3 au-dessus, 3 en dessous)
 const MARGE_ROUE = ((VISIBLES - 1) / 2) * H_ROUE;
@@ -73,6 +74,7 @@ const RAYON_ROUE = H_ROUE / ((PAS_ROUE * Math.PI) / 180);
 function Roue({ items, index, tour, onFin, alignement }) {
   const ref = useRef(null);
   const minuterie = useRef(null);
+  const glisse = useRef(null);  // glisser à la souris (le doigt et la molette font défiler nativement)
 
   // Effet cylindre : chaque ligne pivote et s'estompe selon sa distance au centre
   const peindre = useCallback(() => {
@@ -102,23 +104,71 @@ function Roue({ items, index, tour, onFin, alignement }) {
 
   useEffect(() => () => clearTimeout(minuterie.current), []);
 
+  const borner = (i) => Math.max(0, Math.min(items.length - 1, i));
+  // Le recalage (scroll-snap) reste coupé jusqu'à l'arrêt de la roue : au relâchement du clic,
+  // Chrome recalerait sur place et annulerait le défilement animé
+  const aller = (i) => {
+    const el = ref.current;
+    const cible = borner(i) * H_ROUE;
+    if (Math.abs(el.scrollTop - cible) < 1) { el.style.scrollSnapType = ""; onFin(borner(i)); return; }
+    el.style.scrollSnapType = "none";
+    setTimeout(() => el.scrollTo({ top: cible, behavior: "smooth" }), 0);
+  };
+
+  // Ligne visée par un clic : on inverse la projection sur le cylindre
+  const ligneSous = (clientY) => {
+    const el = ref.current;
+    const r = el.getBoundingClientRect();
+    const v = Math.max(-RAYON_ROUE, Math.min(RAYON_ROUE, clientY - (r.top + r.height / 2)));
+    return Math.round(el.scrollTop / H_ROUE + (Math.asin(v / RAYON_ROUE) * 180) / Math.PI / PAS_ROUE);
+  };
+
   return (
-    <div ref={ref} className="relative overflow-y-scroll scrollbar-hide snap-y snap-mandatory overscroll-contain"
+    <div ref={ref} className="relative overflow-y-scroll scrollbar-hide snap-y snap-mandatory overscroll-contain select-none cursor-grab active:cursor-grabbing"
       style={{ height: VISIBLES * H_ROUE }}
       onScroll={() => {
         peindre();
         clearTimeout(minuterie.current);
         minuterie.current = setTimeout(() => {
-          const i = Math.max(0, Math.min(items.length - 1, Math.round(ref.current.scrollTop / H_ROUE)));
-          onFin(i);
+          if (glisse.current) return;
+          ref.current.style.scrollSnapType = "";
+          onFin(borner(Math.round(ref.current.scrollTop / H_ROUE)));
         }, 130);
+      }}
+      onPointerDown={(e) => {
+        if (e.pointerType === "touch") return;  // au doigt : défilement natif avec élan
+        e.preventDefault();
+        e.currentTarget.setPointerCapture(e.pointerId);
+        glisse.current = { y: e.clientY, top: ref.current.scrollTop, bouge: false, t: e.timeStamp, v: 0 };
+      }}
+      onPointerMove={(e) => {
+        const g = glisse.current;
+        if (!g) return;
+        const dy = e.clientY - g.y;
+        if (Math.abs(dy) > 3) g.bouge = true;
+        if (!g.bouge) return;
+        ref.current.style.scrollSnapType = "none";  // sinon le navigateur recale la roue à chaque pixel
+        const avant = ref.current.scrollTop;
+        ref.current.scrollTop = g.top - dy;
+        if (e.timeStamp > g.t) g.v = (ref.current.scrollTop - avant) / (e.timeStamp - g.t);  // élan au lâcher
+        g.t = e.timeStamp;
+      }}
+      onPointerUp={(e) => {
+        const g = glisse.current;
+        if (!g) return;
+        glisse.current = null;
+        aller(g.bouge ? Math.round((ref.current.scrollTop + g.v * 120) / H_ROUE) : ligneSous(e.clientY));
+      }}
+      onPointerCancel={() => {
+        if (!glisse.current) return;
+        glisse.current = null;
+        aller(Math.round(ref.current.scrollTop / H_ROUE));
       }}>
       <div style={{ height: MARGE_ROUE }} />
       {items.map((it, i) => (
-        <div key={it} data-i={i} className={clsx("snap-center chiffres text-[22px] leading-none flex items-center px-1 cursor-default select-none",
+        <div key={it} data-i={i} className={clsx("snap-center chiffres text-[22px] leading-none flex items-center px-1",
           alignement === "droite" ? "justify-end" : "justify-start")}
-          style={{ height: H_ROUE }}
-          onClick={() => ref.current.scrollTo({ top: i * H_ROUE, behavior: "smooth" })}>
+          style={{ height: H_ROUE }}>
           {it}
         </div>
       ))}
@@ -129,7 +179,8 @@ function Roue({ items, index, tour, onFin, alignement }) {
 
 // `valeurs` : heures autorisées « HH:MM » ; une combinaison hors liste revient à la plus proche
 export function SelecteurHeure({ libelle, valeur, valeurs, onChange }) {
-  const [ouvert, setOuvert] = useState(false);
+  const [ouvert, setOuvert] = useState(null);  // position de la bulle
+  const pastille = useRef(null);
   const [courante, setCourante] = useState(valeur);
   const [tour, setTour] = useState(0);
   useEffect(() => setCourante(valeur), [valeur]);
@@ -148,28 +199,47 @@ export function SelecteurHeure({ libelle, valeur, valeurs, onChange }) {
     if (v !== valeur) onChange(v);
   };
 
+  // Bulle ancrée sous la pastille (au-dessus si la pastille est en bas de l'écran), comme sur iOS
+  const ouvrir = () => {
+    const r = pastille.current.getBoundingClientRect();
+    const droite = Math.max(12, window.innerWidth - r.right);
+    setOuvert(r.bottom > window.innerHeight * 0.6
+      ? { bottom: window.innerHeight - r.top + 8, right: droite, origine: "bottom right" }
+      : { top: r.bottom + 8, right: droite, origine: "top right" });
+  };
+
+  useEffect(() => {
+    if (!ouvert) return;
+    const touche = (e) => e.key === "Escape" && setOuvert(null);
+    window.addEventListener("keydown", touche);
+    return () => window.removeEventListener("keydown", touche);
+  }, [ouvert]);
+
   return (
-    <>
-      <div className="ligne">
-        <span className="flex-1 text-[17px]">{libelle}</span>
-        <button type="button" aria-expanded={ouvert} onClick={() => setOuvert((o) => !o)}
-          className={clsx("bg-remplissage rounded-[8px] px-[11px] py-[6px] text-[17px] chiffres transition-colors",
-            ouvert ? "text-brand" : "text-label")}>
-          {courante}
-        </button>
-      </div>
-      {ouvert && (
-        <div className="ligne justify-center !py-2">
-          <div className="relative flex justify-center w-full max-w-[320px]">
-            <div className="absolute inset-x-2 top-1/2 -translate-y-1/2 rounded-[8px] bg-remplissage pointer-events-none"
-              style={{ height: H_ROUE }} />
-            <div className="w-[72px]"><Roue items={heures} index={Math.max(0, heures.indexOf(h))} tour={tour} alignement="droite"
-              onFin={(i) => choisir(heures[i], m)} /></div>
-            <div className="w-[72px] pl-3"><Roue items={minutes} index={Math.max(0, minutes.indexOf(m))} tour={tour}
-              onFin={(i) => choisir(h, minutes[i])} /></div>
+    <div className="ligne">
+      <span className="flex-1 text-[17px]">{libelle}</span>
+      <button ref={pastille} type="button" aria-haspopup="dialog" aria-expanded={!!ouvert} onClick={ouvrir}
+        className={clsx("bg-remplissage rounded-[8px] px-[11px] py-[6px] text-[17px] chiffres transition-colors",
+          ouvert ? "text-brand" : "text-label")}>
+        {courante}
+      </button>
+      {ouvert && createPortal(
+        <div className="fixed inset-0 z-[60]" onClick={() => setOuvert(null)}>
+          <div role="dialog" aria-label={libelle} className="menu-verre fixed !min-w-0 !py-2 px-3"
+            style={{ top: ouvert.top, bottom: ouvert.bottom, right: ouvert.right, transformOrigin: ouvert.origine }}
+            onClick={(e) => e.stopPropagation()}>
+            <div className="relative flex justify-center">
+              <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 rounded-[8px] bg-remplissage pointer-events-none"
+                style={{ height: H_ROUE }} />
+              <div className="w-[64px]"><Roue items={heures} index={Math.max(0, heures.indexOf(h))} tour={tour} alignement="droite"
+                onFin={(i) => choisir(heures[i], m)} /></div>
+              <div className="w-[64px] pl-3"><Roue items={minutes} index={Math.max(0, minutes.indexOf(m))} tour={tour}
+                onFin={(i) => choisir(h, minutes[i])} /></div>
+            </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
-    </>
+    </div>
   );
 }
