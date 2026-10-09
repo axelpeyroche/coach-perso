@@ -379,7 +379,7 @@ function Course({ c }) {
               </ResponsiveContainer>
             </div>
             {pointPred && (
-              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-1 gap-2 md:w-44 shrink-0">
+              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-2 gap-2 md:w-80 md:self-center shrink-0">
                 {DISTANCES_PRED.map(([d, km]) => (
                   <Tuile key={d} label={d} value={pointPred[d] ? hms(pointPred[d]) : "—"} sub={pointPred[d] ? `${allureKm(pointPred[d] / km)}/km` : null} />
                 ))}
