@@ -301,11 +301,12 @@ function Vma({ v }) {
   );
 }
 
-const DISTANCES_PRED = ["5 km", "10 km", "Semi", "Marathon"];
+const DISTANCES_PRED = [["5 km", 5], ["10 km", 10], ["Semi", 21.0975], ["Marathon", 42.195]];
+const allureKm = (s) => { const t = Math.round(s); return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`; };
 
 function Course({ c }) {
   const [dist, setDist] = useState("5 km");
-  const [distPred, setDistPred] = useState("10 km");
+  const [survolPred, setSurvolPred] = useState(null);  // semaine survolée (index), sinon la dernière
   const preds = useMemo(() => (c?.predictions ?? []).filter((p) => p["5 km"] || p["10 km"]).map((p) => ({ ...p, label: court(p.semaine) })), [c]);
   const evol = useMemo(() => (c?.evolution ?? []).map((e) => ({ ...e, label: fmtDate(`${e.mois}-01`, { month: "short", year: "2-digit" }) })), [c]);
   const derives = useMemo(() => (c?.derives ?? []).map((d) => ({ ...d, label: court(d.date) })), [c]);
@@ -314,7 +315,7 @@ function Course({ c }) {
   if (!c || (!Object.keys(c.records ?? {}).length && !derives.length && !foulees.length)) {
     return <Card><Vide>Pas encore de sorties course ou trail avec tracé GPS.</Vide></Card>;
   }
-  const dernier = preds[preds.length - 1];
+  const pointPred = preds[survolPred ?? preds.length - 1];
   return (
     <>
       <Card pad={false}>
@@ -362,18 +363,29 @@ function Course({ c }) {
 
       {preds.length > 1 && (
         <Graphe titre="Prédictions de course" couleur={BLEU}
-          sousTitre={dernier?.[distPred] ? `${distPred} aujourd'hui : ${hms(dernier[distPred])}` : null}
-          note="Plus la courbe monte, plus tu vas vite. Estimée chaque semaine à partir de ta meilleure sortie des 90 jours précédents (formule de Riegel) : elle reste à plat tant que cette sortie est dans la fenêtre. Le marathon reste très optimiste sans grosses sorties longues.">
-          <Segmente className="mb-3" valeur={distPred} onChange={setDistPred} options={DISTANCES_PRED.map((d) => [d, d])} />
-          <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={preds} margin={{ left: 0, right: 0, top: 4 }}>
-              <CartesianGrid {...grille} />
-              <XAxis dataKey="label" {...axeX} minTickGap={32} />
-              <YAxis {...axeY} reversed domain={[(m) => m * 0.97, (m) => m * 1.03]} width={56} tickFormatter={hms} />
-              <Tooltip cursor={ligneCurseur} content={<InfoBulle format={hms} />} />
-              <Line dataKey={distPred} name={distPred} stroke={BLEU} strokeWidth={2.5} dot={false} connectNulls />
-            </LineChart>
-          </ResponsiveContainer>
+          sousTitre={pointPred ? (survolPred == null ? "Aujourd'hui" : `Semaine du ${fmtDate(pointPred.semaine)}`) : null}
+          note="Les quatre temps viennent de ta meilleure sortie des 90 jours précédents (formule de Riegel) : ils évoluent ensemble, d'où une seule courbe. Plus elle monte, plus tu vas vite ; elle reste à plat tant que cette sortie est dans la fenêtre. Survole ou touche la courbe pour voir les temps d'une semaine. Le marathon reste très optimiste sans grosses sorties longues.">
+          <div className="flex flex-col md:flex-row gap-3">
+            <div className="flex-1 min-w-0">
+              <ResponsiveContainer width="100%" height={220}>
+                <LineChart data={preds} margin={{ left: 0, right: 8, top: 4 }}
+                  onMouseMove={(e) => setSurvolPred(e?.activeTooltipIndex ?? null)} onMouseLeave={() => setSurvolPred(null)}>
+                  <CartesianGrid {...grille} />
+                  <XAxis dataKey="label" {...axeX} minTickGap={32} />
+                  <YAxis hide reversed domain={[(m) => m * 0.97, (m) => m * 1.03]} />
+                  <Tooltip cursor={ligneCurseur} content={() => null} />
+                  <Line dataKey="10 km" stroke={BLEU} strokeWidth={2.5} dot={false} activeDot={{ r: 5, fill: BLEU, stroke: "white", strokeWidth: 2 }} connectNulls />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+            {pointPred && (
+              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-1 gap-2 md:w-44 shrink-0">
+                {DISTANCES_PRED.map(([d, km]) => (
+                  <Tuile key={d} label={d} value={pointPred[d] ? hms(pointPred[d]) : "—"} sub={pointPred[d] ? `${allureKm(pointPred[d] / km)}/km` : null} />
+                ))}
+              </div>
+            )}
+          </div>
         </Graphe>
       )}
 
