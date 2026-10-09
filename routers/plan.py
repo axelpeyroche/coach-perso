@@ -152,6 +152,8 @@ def modifier_prevue(
                                       SeancePrevue.activite_id == a.id,
                                       SeancePrevue.id != p.id).update({SeancePrevue.activite_id: None})
         p.activite_id, p.lien_manuel, p.statut = a.id, True, "prevue"
+        if (p.titre or "").strip():
+            a.titre = p.titre.strip()  # le carnet reprend le nom de la séance prévue
     db.commit()
     db.refresh(p)
     return _une(db, p)
