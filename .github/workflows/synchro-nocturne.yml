@@ -7,14 +7,31 @@ name: Synchro du matin Intervals.icu
 on:
   schedule:
     - cron: "47 5 * * *"   # 05:47 UTC = 7 h 47 en été, 6 h 47 en hiver (heure de Paris) : VFC de la nuit disponible
+    # GitHub ne garantit pas les horaires planifiés (créneaux parfois sautés) : rattrapages,
+    # ignorés si une synchro du jour a déjà réussi (pas de notification en double)
+    - cron: "23 6 * * *"
+    - cron: "7 7 * * *"
   workflow_dispatch:        # bouton « Run workflow » pour tester
+
+permissions:
+  actions: read   # lire les exécutions précédentes du jour
 
 jobs:
   synchro:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      - name: Déjà faite aujourd'hui ?
+        id: deja
+        if: github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          n=$(gh run list -R "$GITHUB_REPOSITORY" -w synchro-nocturne.yml -s success                 --created ">=$(date -u +%F)" --json databaseId --jq "map(select(.databaseId != $GITHUB_RUN_ID)) | length")
+          echo "Synchros réussies aujourd'hui : $n"
+          [ "$n" -gt 0 ] && echo "fait=1" >> "$GITHUB_OUTPUT" || true
       - name: Synchroniser
+        if: steps.deja.outputs.fait != '1'
         env:
           TOKEN: ${{ secrets.CARNET_IMPORT_TOKEN }}
           API: https://coach-perso.onrender.com
