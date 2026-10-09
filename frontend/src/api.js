@@ -145,6 +145,7 @@ export const getAnalyses = () => api.get("/analyses", { timeout: 90000 }).then((
 // --- Plan (séances prévues) ---
 export const getPlan = (depuis, jusqu_a) => api.get("/plan", { params: { depuis, jusqu_a } }).then((r) => r.data);
 export const creerPrevue = (payload) => api.post("/plan", payload).then((r) => r.data);
+export const importerPlan = (payload) => api.post("/plan/import", payload).then((r) => r.data);
 export const modifierPrevue = (id, payload) => api.patch(`/plan/${id}`, payload).then((r) => r.data);
 export const supprimerPrevue = (id) => api.delete(`/plan/${id}`).then((r) => r.data);
 export const getActivitesProches = (id) => api.get(`/plan/${id}/activites`).then((r) => r.data);

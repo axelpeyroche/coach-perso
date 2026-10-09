@@ -553,9 +553,9 @@ export default function Profil({ theme, setTheme }) {
             <span className="flex-1 text-[17px]">Sources et import</span>
             <Chevron />
           </Link>
-          <Link to="/sources#claude" className="ligne" style={inset}>
+          <Link to="/sources#ia" className="ligne" style={inset}>
             <Picto couleur="#FF9500"><path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6L5.6 18.4" /></Picto>
-            <span className="flex-1 text-[17px]">Analyse avec Claude</span>
+            <span className="flex-1 text-[17px]">Analyse avec ton IA</span>
             <Chevron />
           </Link>
         </Groupe>

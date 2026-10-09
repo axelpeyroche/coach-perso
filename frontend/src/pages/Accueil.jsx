@@ -124,11 +124,11 @@ export default function Accueil() {
             )}
           </Section>
 
-          <Link to="/sources#claude" className="card flex items-center gap-3 p-4 active:opacity-70 transition">
+          <Link to="/sources#ia" className="card flex items-center gap-3 p-4 active:opacity-70 transition">
             <span className="w-10 h-10 rounded-full bg-ios-orange/15 flex items-center justify-center text-[19px] shrink-0">✳️</span>
             <span className="flex-1 min-w-0">
-              <span className="block text-[15px] font-semibold">Analyse avec Claude</span>
-              <span className="block text-[13px] text-label-2">Partage ton carnet pour une analyse approfondie</span>
+              <span className="block text-[15px] font-semibold">Analyse avec ton IA</span>
+              <span className="block text-[13px] text-label-2">ChatGPT, Gemini, Claude… : partage ton carnet pour une analyse approfondie</span>
             </span>
             <Chevron />
           </Link>

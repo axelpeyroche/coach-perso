@@ -7,6 +7,7 @@ import Feuille from "../components/Feuille";
 import ActiviteLigne from "../components/ActiviteLigne";
 import ModalActivite from "../components/ModalActivite";
 import ConfirmDialog from "../components/ConfirmDialog";
+import ImportPlan from "../components/ImportPlan";
 import Menu, { IconesMenu } from "../components/Menu";
 import { Section, BoutonAjout } from "../components/ui";
 import {
@@ -351,6 +352,7 @@ export default function Plan() {
   const [lundi, setLundi] = useState(() => lundiDe(new Date()));
   const [modalActivite, setModalActivite] = useState(undefined);
   const [ajout, setAjout] = useState(false);
+  const [importIa, setImportIa] = useState(false);
   const depuis = iso(lundi);
   const jusqu = iso(ajouter(lundi, 6));
   const courante = depuis === iso(lundiDe(new Date()));
@@ -387,8 +389,11 @@ export default function Plan() {
   );
 
   return (
-    <Page titre="Plan" sousTitre="Préparé par Claude"
-      action={<BoutonAjout onClick={() => setAjout(true)} label="Ajouter une séance prévue" />}>
+    <Page titre="Plan" sousTitre="Séances prévues"
+      action={<span className="flex items-center gap-2">
+        <button className="btn-texte" onClick={() => setImportIa(true)}>Plan IA</button>
+        <BoutonAjout onClick={() => setAjout(true)} label="Ajouter une séance prévue" />
+      </span>}>
 
       <BandeauSemaine lundi={depuis} dimanche={jusqu} courante={courante}
         onPrec={() => setLundi(ajouter(lundi, -7))} onSuiv={() => setLundi(ajouter(lundi, 7))}
@@ -425,14 +430,18 @@ export default function Plan() {
       )}
 
       {seances.length === 0 && !isLoading && (
-        <p className="text-[13px] text-label-2 px-4 text-center">
-          Aucune séance prévue cette semaine. Demande à Claude Code de préparer ton plan : il l'envoie ici avec ton token
-          (<Link to="/sources#plan" className="text-brand">Sources → Plan avec Claude Code</Link>).
-        </p>
+        <div className="text-center space-y-3 px-4">
+          <p className="text-[13px] text-label-2">
+            Aucune séance prévue cette semaine. Fais préparer ton plan par ton IA (ChatGPT, Gemini, Claude…)
+            ou ajoute tes séances avec le bouton +.
+          </p>
+          <button className="btn-primaire btn-sm" onClick={() => setImportIa(true)}>Préparer le plan avec une IA</button>
+        </div>
       )}
 
       {modalActivite !== undefined && <ModalActivite activite={modalActivite} onClose={() => setModalActivite(undefined)} />}
       {ajout && <ModalPrevue semaine={depuis} onClose={() => setAjout(false)} />}
+      {importIa && <ImportPlan semaine={depuis} onClose={() => setImportIa(false)} />}
     </Page>
   );
 }

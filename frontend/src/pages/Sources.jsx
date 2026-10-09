@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import Card from "../components/Card";
 import Page from "../components/Page";
 import ConfirmDialog from "../components/ConfirmDialog";
@@ -9,6 +10,7 @@ import {
   getClaudeToken, regenererClaudeToken, importerTraces,
   getIntervals, connecterIntervals, deconnecterIntervals, synchroIntervals,
 } from "../api";
+import { IAS, promptAnalyse } from "../ia";
 
 function useCopie() {
   const [copie, setCopie] = useState(null);
@@ -70,6 +72,60 @@ function Option({ titre, children }) {
 const btn = "btn-gris btn-sm";
 const btnP = "btn-primaire btn-sm";
 const lienDanger = "text-[13px] text-ios-red active:opacity-50";
+
+// ── Guide Intervals.icu : compte, téléphone, Apple Santé ───────────────────
+function Etape({ n, titre, children }) {
+  return (
+    <div className="flex gap-3">
+      <span className="w-6 h-6 shrink-0 rounded-full bg-brand text-white text-[13px] font-semibold flex items-center justify-center chiffres">{n}</span>
+      <div className="flex-1 min-w-0 space-y-1">
+        <p className="text-[15px] font-semibold leading-6">{titre}</p>
+        <div className="text-[13px] text-label-2 space-y-1">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+const lienExt = "text-brand font-medium";
+
+function GuideIntervals() {
+  return (
+    <div className="space-y-4">
+      <p className="text-[13px] text-label-2">
+        Intervals.icu est un service gratuit qui récupère les séances de ta montre (avec tracé GPS, FC, allure, dénivelé)
+        et les données de forme. Le carnet va ensuite les chercher automatiquement.
+      </p>
+      <Etape n={1} titre="Crée ton compte Intervals.icu (gratuit)">
+        <p>Va sur <a className={lienExt} href="https://intervals.icu" target="_blank" rel="noreferrer">intervals.icu ↗</a>,
+          touche <em>Sign up</em> et inscris-toi par e-mail ou avec Google. Indique ton sport principal, ta FC max et ton poids
+          quand il te les demande (modifiables ensuite dans <em>Settings</em>).</p>
+      </Etape>
+      <Etape n={2} titre="iPhone + Apple Watch : installe Intervals.icu Companion">
+        <p>Télécharge l'app gratuite <a className={lienExt} href="https://apps.apple.com/app/id6739638454" target="_blank" rel="noreferrer">Intervals.icu Companion ↗</a> sur
+          l'App Store, ouvre-la et connecte-toi avec ton compte Intervals.icu.</p>
+      </Etape>
+      <Etape n={3} titre="Active la synchronisation Apple Santé">
+        <p>Dans l'app Companion, ouvre l'onglet <em>Apple Health</em> et autorise l'accès à Santé quand iOS le demande
+          (laisse tout coché : entraînements, fréquence cardiaque, VFC, sommeil, poids).</p>
+        <p>Active la synchro des entraînements <em>Apple → Intervals.icu</em> (et les tours/laps si tu veux le détail
+          des fractions).</p>
+        <p>Dans Réglages iPhone → Companion, laisse l'<em>Actualisation en arrière-plan</em> et les notifications activées.
+          iOS limite la lecture de Santé quand le téléphone est verrouillé : si une séance tarde, ouvre l'app Companion
+          quelques secondes.</p>
+      </Etape>
+      <Etape n={4} titre="Autres montres (Garmin, Coros, Polar, Suunto…)">
+        <p>Pas besoin de l'app : sur intervals.icu, va dans <em>Settings</em> → <em>Connections</em> et connecte directement ton
+          compte Garmin Connect, Coros, Polar ou Suunto. Sur Android (Samsung, Huawei, Google Fit…), l'app Health Sync
+          fait le pont (essai gratuit puis payante).</p>
+      </Etape>
+      <Etape n={5} titre="Relie Intervals.icu au carnet">
+        <p>Sur intervals.icu (version web) : <em>Settings</em> → <em>Developer Settings</em> → <em>API Key</em> → génère la clé.
+          L'identifiant d'athlète (« i » suivi de chiffres) est affiché juste au-dessus. Colle-les ci-dessous : la première
+          synchro récupère les 60 derniers jours.</p>
+      </Etape>
+    </div>
+  );
+}
 
 // ── Import fichier ──────────────────────────────────────────────────────────
 function BlocFichier() {
@@ -235,7 +291,7 @@ function BlocIntervals() {
   });
 
   return (
-    <Bloc icone="⌚" couleur="#5E5CE626" titre="Intervals.icu" sousTitre="Séances de la montre avec tracé GPS et dénivelé">
+    <Bloc id="intervals" icone="⌚" couleur="#5E5CE626" titre="Intervals.icu" sousTitre="Séances de la montre avec tracé GPS et dénivelé">
       {statut?.connecte ? (
         <div className="space-y-3">
           <p>✓ Connecté{statut.athlete_id ? <> (athlète <code>{statut.athlete_id}</code>)</> : null}.
@@ -251,16 +307,16 @@ function BlocIntervals() {
             <button className={lienDanger} onClick={() => setConfirmDeco(true)}>Déconnecter</button>
           </div>
           <SynchroNocturne />
+          <details className="tuile p-3.5">
+            <summary className="text-[15px] font-semibold cursor-pointer">Guide d'installation (compte, téléphone, Apple Santé)</summary>
+            <div className="pt-3"><GuideIntervals /></div>
+          </details>
         </div>
       ) : (
         <div className="space-y-3">
-          <Option titre="1. Sur l'iPhone">
-            <p className="text-[13px] text-label-2">Installe l'app gratuite <strong>Intervals.icu Companion</strong>, connecte-la à
-              ton compte et autorise l'accès à Santé : chaque entraînement de la montre part sur Intervals.icu avec son tracé.</p>
-          </Option>
-          <Option titre="2. Clé API">
-            <p className="text-[13px] text-label-2">Sur intervals.icu : <em>Settings</em> → <em>Developer Settings</em> → <em>API Key</em>.
-              L'identifiant d'athlète (« i » suivi de chiffres) est affiché juste au-dessus. La clé reste sur le serveur du carnet.</p>
+          <GuideIntervals />
+          <Option titre="Clé API et identifiant">
+            <p className="text-[13px] text-label-2">La clé reste sur le serveur du carnet et ne sert qu'à lire tes séances.</p>
             <input className="champ" type="password" autoComplete="off" placeholder="Clé API" value={cle} onChange={(e) => setCle(e.target.value)} />
             <input className="champ" autoComplete="off" placeholder="Identifiant d'athlète (ex. i123456)" value={athlete} onChange={(e) => setAthlete(e.target.value)} />
             <button className={btnP} disabled={cle.trim().length < 10 || connexion.isPending} onClick={() => connexion.mutate()}>
@@ -336,16 +392,8 @@ function SynchroNocturne() {
   );
 }
 
-// ── Analyse Claude ─────────────────────────────────────────────────────────
-const PROMPT_CLAUDE = (lien) => `Tu es mon coach sportif. Voici l'export complet de mon carnet d'entraînement (profil, objectifs, statistiques et toutes mes séances) : ${lien}
-
-Analyse-le en profondeur :
-1. Mon volume, ma régularité et l'évolution de ma charge (ACWR) — y a-t-il des risques ?
-2. Mes progrès (allures, efficacité cardiaque, records) et mes points faibles.
-3. Pour chaque objectif actif : suis-je dans les temps ? La prédiction est-elle réaliste ?
-4. Des recommandations concrètes pour les 4 prochaines semaines.`;
-
-function BlocClaude() {
+// ── Analyse avec n'importe quelle IA ──────────────────────────────────────
+function BlocAnalyseIA() {
   const qc = useQueryClient();
   const [copie, copier] = useCopie();
   const [confirmRegen, setConfirmRegen] = useState(false);
@@ -357,7 +405,7 @@ function BlocClaude() {
     setChargement("copie");
     try {
       const md = await exporterCarnet("md");
-      await copier(`${PROMPT_CLAUDE("(contenu ci-dessous)")}\n\n---\n\n${md}`, "tout");
+      await copier(`${promptAnalyse("(contenu ci-dessous)")}\n\n---\n\n${md}`, "tout");
     } finally { setChargement(null); }
   }
 
@@ -374,16 +422,28 @@ function BlocClaude() {
 
   return (
     <>
-      <Bloc id="claude" icone="✳️" couleur="#FF950026" titre="Analyse avec Claude" sousTitre="Avec ton abonnement claude.ai">
+      <Bloc id="ia" icone="✳️" couleur="#FF950026" titre="Analyse avec ton IA" sousTitre="ChatGPT, Gemini, Claude, Le Chat, Copilot…">
         <div className="space-y-3">
           <p className="text-[13px] text-label-2">
-            Utilise ton abonnement claude.ai (aucun coût d'API) : donne à Claude l'accès à <strong>tout</strong> ton carnet
-            de l'une de ces façons.
+            Utilise l'IA de ton choix, même en version gratuite (aucune clé ni abonnement) : donne-lui accès à <strong>tout</strong> ton
+            carnet de l'une de ces façons, puis colle le tout dans une conversation.
           </p>
+          <div className="flex flex-wrap gap-2">
+            {IAS.map((ia) => <a key={ia.id} href={ia.url} target="_blank" rel="noreferrer" className={btn}>{ia.nom} ↗</a>)}
+          </div>
+
+          <Option titre="Copier tout le contenu (recommandé)">
+            <p className="text-[13px] text-label-2">
+              Marche avec toutes les IA : copie la consigne d'analyse et l'export complet, puis colle-les dans la conversation.
+            </p>
+            <button className={btnP} disabled={chargement === "copie"} onClick={copierTout}>
+              {copie === "tout" ? "✓ Copié" : chargement === "copie" ? "…" : "Copier consigne + carnet"}
+            </button>
+          </Option>
 
           <Option titre="Lien secret en lecture seule">
             <p className="text-[13px] text-label-2">
-              Colle ce lien dans une conversation claude.ai : Claude lit la version à jour du carnet à chaque fois.
+              Pour les IA qui savent ouvrir une page web (ChatGPT, Claude…) : elles lisent la version à jour du carnet à chaque fois.
               Ajoute <code>?format=json</code> ou <code>?format=csv</code> pour d'autres formats.
             </p>
             <div className="flex gap-2 items-start">
@@ -391,27 +451,17 @@ function BlocClaude() {
               <button className={btn} disabled={!lien} onClick={() => copier(lien, "lien")}>{copie === "lien" ? "✓" : "Copier"}</button>
             </div>
             <div className="flex flex-wrap gap-2">
-              <button className={btnP} disabled={!lien} onClick={() => copier(PROMPT_CLAUDE(lien), "prompt")}>
+              <button className={btn} disabled={!lien} onClick={() => copier(promptAnalyse(lien), "prompt")}>
                 {copie === "prompt" ? "✓ Copié" : "Copier lien + consigne d'analyse"}
               </button>
-              <a href="https://claude.ai/new" target="_blank" rel="noreferrer" className={btn}>Ouvrir claude.ai ↗</a>
             </div>
             <button className={lienDanger} onClick={() => setConfirmRegen(true)}>
               Régénérer le lien (invalide l'ancien)
             </button>
           </Option>
 
-          <Option titre="Copier tout le contenu">
-            <p className="text-[13px] text-label-2">
-              Si Claude n'arrive pas à ouvrir le lien : copie l'export complet (consigne incluse) et colle-le directement.
-            </p>
-            <button className={btn} disabled={chargement === "copie"} onClick={copierTout}>
-              {copie === "tout" ? "✓ Copié" : chargement === "copie" ? "…" : "Copier tout le carnet"}
-            </button>
-          </Option>
-
           <Option titre="Fichier à joindre">
-            <p className="text-[13px] text-label-2">Télécharge un fichier et glisse-le dans la conversation (ou dans un Projet claude.ai pour l'avoir en contexte permanent).</p>
+            <p className="text-[13px] text-label-2">Télécharge un fichier et joins-le à la conversation (ou à un Projet / GPT personnalisé / Gem pour l'avoir en contexte permanent).</p>
             <div className="flex flex-wrap gap-2">
               {[["md", "Markdown"], ["csv", "CSV (tableur)"], ["json", "JSON"]].map(([f, l]) => (
                 <button key={f} className={btn} disabled={chargement === f} onClick={() => exporter(f)}>
@@ -430,7 +480,21 @@ function BlocClaude() {
   );
 }
 
-// ── Plan avec Claude Code ──────────────────────────────────────────────────
+// ── Plan avec n'importe quelle IA ──────────────────────────────────────────
+function BlocPlanIA() {
+  return (
+    <Bloc id="plan" icone="🗓️" couleur="#007AFF26" titre="Plan avec ton IA" sousTitre="Tes séances prévues, préparées par l'IA de ton choix">
+      <p className="text-[13px] text-label-2">
+        Dans l'onglet <strong>Plan</strong>, touche <strong>Plan IA</strong> : copie la consigne et ton carnet, colle-les dans
+        ChatGPT, Gemini, Claude ou une autre IA, puis recolle sa réponse. Les séances s'ajoutent à la semaine choisie
+        et, une fois réalisées, ton activité prend leur nom.
+      </p>
+      <Link to="/plan" className={btnP}>Ouvrir le Plan</Link>
+    </Bloc>
+  );
+}
+
+// ── Plan avec Claude Code (envoi automatique, option avancée) ──────────────────────────────────────────────────
 function BlocPlanClaude() {
   const qc = useQueryClient();
   const [copie, copier] = useCopie();
@@ -442,7 +506,7 @@ function BlocPlanClaude() {
 
   return (
     <>
-      <Bloc id="plan" icone="🗓️" couleur="#007AFF26" titre="Plan avec Claude Code" sousTitre="Séances prévues envoyées par Claude">
+      <Bloc id="claude-code" icone="⚙️" couleur="#8E8E9326" titre="Envoi automatique (avancé)" sousTitre="Pour Claude Code ou un script : le plan arrive sans copier-coller">
         <div className="space-y-3">
           <p className="text-[13px] text-label-2">
             Claude Code lit ton carnet et t'envoie tes séances prévues (onglet <strong>Plan</strong>) avec ce token,
@@ -472,8 +536,9 @@ function BlocPlanClaude() {
 export default function Sources() {
   useEffect(() => {
     const ancre = window.location.hash.slice(1);
-    if (ancre === "claude" || ancre === "plan") {
-      setTimeout(() => document.getElementById(ancre)?.scrollIntoView({ behavior: "smooth" }), 300);
+    const cible = { claude: "ia", intervals: "intervals" }[ancre] ?? ancre;
+    if (["ia", "plan", "claude-code", "intervals"].includes(cible)) {
+      setTimeout(() => document.getElementById(cible)?.scrollIntoView({ behavior: "smooth" }), 300);
     }
   }, []);
 
@@ -487,9 +552,10 @@ export default function Sources() {
         </div>
       </div>
       <div className="space-y-1.5">
-        <h2 className="entete-liste">Claude</h2>
+        <h2 className="entete-liste">Intelligence artificielle</h2>
         <div className="space-y-3">
-          <BlocClaude />
+          <BlocAnalyseIA />
+          <BlocPlanIA />
           <BlocPlanClaude />
         </div>
       </div>

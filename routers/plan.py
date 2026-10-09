@@ -56,6 +56,12 @@ class EnvoiPlanSchema(BaseModel):
     remplacer: Optional[PeriodeSchema] = None
 
 
+class ImportPlanSchema(BaseModel):
+    seances: list[SeancePrevueSchema] = Field(..., min_length=1, max_length=100)
+    # supprime les séances non faites des semaines importées qui ne figurent plus dans le plan collé
+    remplacer_semaines: bool = False
+
+
 class MajPrevueSchema(BaseModel):
     statut: Optional[str] = Field(None, pattern="^(prevue|sautee)$")
     commentaire: Optional[str] = None
@@ -126,6 +132,33 @@ def creer_prevue(
     p = db.query(SeancePrevue).filter(SeancePrevue.utilisateur_id == current_user.id,
                                       SeancePrevue.id_externe == item["id_externe"]).first()
     return _une(db, p)
+
+
+@router.post("/api/plan/import", summary="Importe un plan collé depuis n'importe quelle IA (ChatGPT, Gemini, Claude…)")
+def importer_plan(
+    payload: ImportPlanSchema,
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(obtenir_session),
+):
+    items = _items(db, current_user, payload.seances)
+    auj = date.today()
+    lundi_courant = auj - timedelta(days=auj.weekday())
+    vus: dict[tuple, int] = {}
+    for rang, x in enumerate(items):
+        x["jour"] = x["jour"] or lundi_courant
+        x["ordre"] = x["ordre"] or rang
+        if not x["id_externe"]:
+            # clé stable : recoller le même plan met à jour les séances au lieu de les dupliquer
+            cle = (x["jour"] - timedelta(days=x["jour"].weekday()), x["sport"])
+            vus[cle] = vus.get(cle, 0) + 1
+            x["id_externe"] = f"ia-{cle[0].isoformat()}-{cle[1]}-{vus[cle]}"
+    remplacer = None
+    if payload.remplacer_semaines:
+        lundis = [x["jour"] - timedelta(days=x["jour"].weekday()) for x in items]
+        remplacer = (min(lundis), max(lundis) + timedelta(days=6))
+    bilan = cs.enregistrer_plan(db, current_user.id, items, remplacer=remplacer)
+    db.commit()
+    return {"ok": True, **bilan}
 
 
 @router.patch("/api/plan/{prevue_id}", summary="Statut (sautée), commentaire ou rattachement à une activité")
