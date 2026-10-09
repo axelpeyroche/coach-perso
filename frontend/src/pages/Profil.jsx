@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "../api";
-import { exporterDonnees, exporterCarnet, supprimerCompte, getPush, abonnerPush, desabonnerPush, testerPush, garderSeulPush } from "../api";
+import { exporterDonnees, exporterCarnet, supprimerCompte, getPush, abonnerPush, desabonnerPush, testerPush, garderSeulPush, changerHeurePush } from "../api";
 import { getErrorMessage } from "../utils/errors";
 import ConfirmDialog from "../components/ConfirmDialog";
 import Page from "../components/Page";
@@ -395,11 +395,17 @@ function Notifications() {
     onError: (e) => setMsg(e?.response ? getErrorMessage(e, "Erreur") : e.message || "Erreur"),
   });
 
+  const heure = useMutation({
+    mutationFn: changerHeurePush,
+    onMutate: (h) => qc.setQueryData(["push"], (e) => (e ? { ...e, heure: h } : e)),
+    onError: (e) => { setMsg(getErrorMessage(e, "Erreur")); qc.invalidateQueries({ queryKey: ["push"] }); },
+  });
+
   const pied = msg || (!etat?.configure
     ? "Notifications non configurées sur le serveur (clés VAPID manquantes)."
     : !pushPossible || (estIOS && !installee)
     ? "Sur iPhone, ajoute d'abord le carnet à l'écran d'accueil (Partager → Sur l'écran d'accueil) puis ouvre-le depuis l'icône."
-    : "Chaque matin après la synchro : forme du jour et séance conseillée, alerte si la VFC baisse plusieurs jours, records battus.");
+    : `Chaque matin vers ${etat?.heure ?? "7:30"} après la synchro : forme du jour et séance conseillée, alerte si la VFC baisse plusieurs jours, records battus.`);
 
   const disponible = etat?.configure && pushPossible;
   return (
@@ -411,6 +417,15 @@ function Notifications() {
           ? <span className={occupe ? "opacity-50 pointer-events-none" : ""}><Interrupteur actif={actif} onChange={basculer} label="Notifications du matin" /></span>
           : <span className="text-[15px] text-label-3">Indisponible</span>}
       </div>
+      {disponible && actif && etat?.heures && (
+        <label className="ligne">
+          <span className="flex-1 text-[17px]">Heure d'envoi</span>
+          <select className="bg-transparent text-[17px] text-label-2 chiffres text-right outline-none" value={etat.heure}
+            onChange={(e) => heure.mutate(e.target.value)} aria-label="Heure de la notification du matin">
+            {etat.heures.map((h) => <option key={h} value={h}>{h.replace(/^0/, "").replace(":", " h ")}</option>)}
+          </select>
+        </label>
+      )}
       {disponible && actif && (
         <button onClick={() => test.mutate()} disabled={test.isPending} className="ligne disabled:opacity-50">
           <span className="flex-1 text-[17px] text-brand">Envoyer une notification de test</span>

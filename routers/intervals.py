@@ -74,7 +74,8 @@ def synchro(force: bool = Query(False), db: Session = Depends(obtenir_session),
 
 
 @router.post("/api/intervals/synchro-nuit", summary="Synchro planifiée (GitHub Actions) — auth par token d'import")
-def synchro_nuit(credentials: HTTPAuthorizationCredentials = Security(http_bearer),
+def synchro_nuit(notifier: bool = Query(False, description="Envoie la notification du matin sans attendre l'heure choisie"),
+                 credentials: HTTPAuthorizationCredentials = Security(http_bearer),
                  db: Session = Depends(obtenir_session)):
     # Token dans l'en-tête Authorization (jamais dans l'URL, qui finit dans les journaux)
     token = credentials.credentials.strip() if credentials else ""
@@ -83,10 +84,16 @@ def synchro_nuit(credentials: HTTPAuthorizationCredentials = Security(http_beare
         raise HTTPException(401, "Token d'import invalide : recopie-le depuis la page Sources du carnet")
     if not user.intervals_cle:
         raise HTTPException(409, "Intervals.icu n'est pas connecté sur ce compte")
-    res = _synchroniser(db, user, True)
-    # Synchro du matin : forme du jour, alerte VFC et records battus, envoyés en notification
+    deja = user.notif_matin_le == sv.aujourdhui(user)
+    res = _synchroniser(db, user, not deja)  # après la notification du jour : synchro limitée (1 / 15 min)
+    # Synchro du matin (tâche toutes les 30 min) : forme du jour, alerte VFC et records battus,
+    # envoyés une seule fois par jour, à partir de l'heure choisie dans le profil
+    if not notifier and not sv.notif_matin_due(user):
+        res["notifications"] = {"deja_envoyee": True} if deja else {"prevue_a": sv.heure_notif(user)}
+        return res
     try:
         res["notifications"] = sv.notifications_matin(db, user)
+        user.notif_matin_le = sv.aujourdhui(user)
         db.commit()
     except Exception:
         db.rollback()

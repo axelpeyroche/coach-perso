@@ -40,12 +40,34 @@ def push_configure() -> bool:
     return _PUSH_DISPO and bool(VAPID_PUBLIQUE and _VAPID_PRIVEE)
 
 
-def aujourdhui(user: Utilisateur) -> date:
+def _maintenant(user: Utilisateur) -> datetime:
     try:
         tz = ZoneInfo(user.fuseau_horaire or "Europe/Paris")
     except Exception:
         tz = ZoneInfo("Europe/Paris")
-    return datetime.now(tz).date()
+    return datetime.now(tz)
+
+
+def aujourdhui(user: Utilisateur) -> date:
+    return _maintenant(user).date()
+
+
+HEURE_MATIN_DEFAUT = "07:30"
+HEURES_MATIN = [f"{h:02d}:{m:02d}" for h in range(5, 12) for m in (0, 30)][1:]  # 05:30 → 11:30
+
+
+def heure_notif(user: Utilisateur) -> str:
+    return user.notif_matin_heure if user.notif_matin_heure in HEURES_MATIN else HEURE_MATIN_DEFAUT
+
+
+def notif_matin_due(user: Utilisateur) -> bool:
+    """Pas encore envoyée aujourd'hui et heure choisie atteinte (à 10 min près : la tâche
+    GitHub passe toutes les 30 min, avec parfois du retard)."""
+    now = _maintenant(user)
+    if user.notif_matin_le == now.date():
+        return False
+    h, m = map(int, heure_notif(user).split(":"))
+    return now.hour * 60 + now.minute >= h * 60 + m - 10
 
 
 # ---------------------------------------------------------------------------

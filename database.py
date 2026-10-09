@@ -79,6 +79,8 @@ def creer_tables() -> None:
         # production (Base.metadata.create_all ne les crée que sur les tables neuves).
         "CREATE INDEX IF NOT EXISTS idx_poids_utilisateurs_utilisateur_id ON poids_utilisateurs (utilisateur_id)",
         "CREATE INDEX IF NOT EXISTS idx_objectifs_course_utilisateur_id ON objectifs_course (utilisateur_id)",
+        "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS notif_matin_heure VARCHAR(5)",
+        "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS notif_matin_le DATE",
     ]
     with engine.begin() as conn:
         for stmt in _migrations:

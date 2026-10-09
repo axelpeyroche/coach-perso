@@ -102,6 +102,10 @@ class Utilisateur(Base):
     # sert à convertir les dates UTC des imports (export Strava).
     fuseau_horaire: Mapped[Optional[str]] = mapped_column(String(50))
 
+    # Notification du matin : heure souhaitée ("HH:MM", heure locale) et date du dernier envoi
+    notif_matin_heure: Mapped[Optional[str]] = mapped_column(String(5))
+    notif_matin_le: Mapped[Optional[date]] = mapped_column(Date)
+
 
 # ---------------------------------------------------------------------------
 # Historique de poids

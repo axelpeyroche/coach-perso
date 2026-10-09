@@ -53,7 +53,22 @@ class DesabonnementSchema(BaseModel):
 @router.get("/api/push", summary="Notifications : configuration du serveur et nombre d'appareils abonnés")
 def statut_push(current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
     n = db.query(PushSubscription).filter(PushSubscription.utilisateur_id == current_user.id).count()
-    return {"configure": sv.push_configure(), "cle_publique": sv.VAPID_PUBLIQUE or None, "appareils": n}
+    return {"configure": sv.push_configure(), "cle_publique": sv.VAPID_PUBLIQUE or None, "appareils": n,
+            "heure": sv.heure_notif(current_user), "heures": sv.HEURES_MATIN}
+
+
+class HeureSchema(BaseModel):
+    heure: str = Field(..., pattern=r"^\d{2}:\d{2}$")
+
+
+@router.put("/api/push/heure", summary="Heure souhaitée pour la notification du matin")
+def changer_heure(payload: HeureSchema, current_user: Utilisateur = Depends(get_current_user),
+                  db: Session = Depends(obtenir_session)):
+    if payload.heure not in sv.HEURES_MATIN:
+        raise HTTPException(422, "Heure non proposée (de 05:30 à 11:30, par demi-heure)")
+    current_user.notif_matin_heure = payload.heure
+    db.commit()
+    return {"heure": payload.heure}
 
 
 @router.post("/api/push/abonnement", summary="Abonne cet appareil aux notifications")

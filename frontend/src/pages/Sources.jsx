@@ -298,7 +298,7 @@ function BlocIntervals() {
             {statut.derniere_synchro && <span className="text-label-2"> Dernière synchro : {dateHeure(statut.derniere_synchro)}.</span>}</p>
           <p className="text-[13px] text-label-2">L'app Intervals.icu Companion envoie chaque entraînement de la montre
             sur Intervals.icu ; le carnet va ensuite les chercher via l'API d'Intervals.icu à chaque ouverture (au plus une fois
-            par quart d'heure) et chaque nuit si la synchro nocturne est activée. Chaque séance est fusionnée avec celle du carnet qui commence au même moment, sans toucher à
+            par quart d'heure) et chaque matin si la synchro du matin est activée. Chaque séance est fusionnée avec celle du carnet qui commence au même moment, sans toucher à
             son titre, et son tracé apparaît sur la carte.</p>
           <div className="flex items-center gap-3">
             <button className={btnP} disabled={synchro.isPending} onClick={() => synchro.mutate()}>
@@ -362,9 +362,9 @@ function SynchroNocturne() {
 
   return (
     <div className="tuile p-3.5 text-[13px] space-y-2">
-      <p className="text-[15px] font-semibold">Synchro nocturne</p>
-      <p className="text-label-2">Une tâche GitHub gratuite réveille le carnet chaque nuit vers 3 h pour récupérer
-        séances et mesures de forme, même si tu n'ouvres pas l'app.</p>
+      <p className="text-[15px] font-semibold">Synchro du matin</p>
+      <p className="text-label-2">Une tâche GitHub gratuite réveille le carnet chaque matin pour récupérer séances et
+        mesures de forme, même si tu n'ouvres pas l'app, puis envoie la notification à l'heure choisie dans Profil.</p>
       <button className="btn-teinte w-full" onClick={ouvrir}>{ouvert ? "Masquer" : "Configurer"}</button>
       {ouvert && token && (
         <div className="space-y-2 text-label-2">
@@ -380,7 +380,7 @@ function SynchroNocturne() {
             <li>Sur github.com, dépôt du carnet : <em>Settings</em> → <em>Secrets and variables</em> → <em>Actions</em>
               → <em>New repository secret</em>.</li>
             <li>Nom : <code>CARNET_IMPORT_TOKEN</code> · Valeur : le token ci-dessus.</li>
-            <li>Pour tester : onglet <em>Actions</em> → « Synchro nocturne Intervals.icu » → <em>Run workflow</em>.</li>
+            <li>Pour tester : onglet <em>Actions</em> → « Synchro du matin Intervals.icu » → <em>Run workflow</em>.</li>
           </ol>
         </div>
       )}

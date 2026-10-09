@@ -6,42 +6,29 @@ name: Synchro du matin Intervals.icu
 
 on:
   schedule:
-    - cron: "47 5 * * *"   # 05:47 UTC = 7 h 47 en été, 6 h 47 en hiver (heure de Paris) : VFC de la nuit disponible
-    # GitHub ne garantit pas les horaires planifiés (créneaux parfois sautés) : rattrapages,
-    # ignorés si une synchro du jour a déjà réussi (pas de notification en double)
-    - cron: "23 6 * * *"
-    - cron: "7 7 * * *"
-  workflow_dispatch:        # bouton « Run workflow » pour tester
-
-permissions:
-  actions: read   # lire les exécutions précédentes du jour
+    # Toutes les 30 min de 03:20 à 10:50 UTC (5 h 20 → 12 h 50 à Paris selon la saison) : le serveur
+    # envoie la notification une seule fois, au premier passage après l'heure choisie dans le profil
+    # (Profil → Notifications → Heure d'envoi). GitHub peut retarder ou sauter un passage : le suivant rattrape.
+    - cron: "20,50 3-10 * * *"
+  workflow_dispatch:        # bouton « Run workflow » pour tester : notification envoyée tout de suite
 
 jobs:
   synchro:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Déjà faite aujourd'hui ?
-        id: deja
-        if: github.event_name == 'schedule'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          n=$(gh run list -R "$GITHUB_REPOSITORY" -w synchro-nocturne.yml -s success                 --created ">=$(date -u +%F)" --json databaseId --jq "map(select(.databaseId != $GITHUB_RUN_ID)) | length")
-          echo "Synchros réussies aujourd'hui : $n"
-          [ "$n" -gt 0 ] && echo "fait=1" >> "$GITHUB_OUTPUT" || true
       - name: Synchroniser
-        if: steps.deja.outputs.fait != '1'
         env:
           TOKEN: ${{ secrets.CARNET_IMPORT_TOKEN }}
           API: https://coach-perso.onrender.com
+          NOTIFIER: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
           if [ -z "$TOKEN" ]; then echo "::error::Secret CARNET_IMPORT_TOKEN manquant"; exit 1; fi
           # Le serveur gratuit de Render dort : le premier appel le réveille (jusqu'à ~1 min)
           curl -s -o /dev/null --max-time 120 "$API/health" || true
           for essai in 1 2 3; do
             code=$(curl -s -o reponse.json -w "%{http_code}" --max-time 300 -X POST \
-              -H "Authorization: Bearer $TOKEN" "$API/api/intervals/synchro-nuit" || echo 000)
+              -H "Authorization: Bearer $TOKEN" "$API/api/intervals/synchro-nuit?notifier=$NOTIFIER" || echo 000)
             if [ "$code" = "200" ]; then
               jq '{nouvelles, completees, traces, mesures, forme_recue, notifications}' reponse.json
               exit 0
