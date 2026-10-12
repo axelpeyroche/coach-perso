@@ -187,6 +187,8 @@ def modifier_prevue(
         p.activite_id, p.lien_manuel, p.statut = a.id, True, "prevue"
         if (p.titre or "").strip():
             a.titre = p.titre.strip()  # le carnet reprend le nom de la séance prévue
+        if cs.famille_sport(a.sport) != cs.famille_sport(p.sport):
+            a.sport = p.sport  # et son sport (ex. « Autre » rattachée à une séance de muscu)
     db.commit()
     db.refresh(p)
     return _une(db, p)

@@ -312,7 +312,7 @@ function BilanSports({ seances, activites, courante }) {
         {lignes.map((l) => {
           const info = sportInfo(l.sport);
           const pct = l.prevu ? Math.min(100, (l.fait / l.prevu) * 100) : 100;
-          const depasse = l.prevu && l.fait > l.prevu * 1.05;
+          const depasse = !!l.prevu && l.fait > l.prevu * 1.05;  // sans `!!`, React afficherait « 0 »
           return (
             <div key={l.sport}>
               <div className="flex items-baseline justify-between gap-2 text-[15px]">
