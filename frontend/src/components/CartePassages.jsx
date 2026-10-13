@@ -136,7 +136,9 @@ export default function CartePassages() {
       });
       carte.current = m;
       m.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
-      m.addControl(new maplibregl.FullscreenControl({ container: cadre.current }), "top-right");
+      // iPhone : pas de plein écran pour un élément → « pseudo » plein écran (CSS)
+      const pseudo = !cadre.current.requestFullscreen && !cadre.current.webkitRequestFullscreen;
+      m.addControl(new maplibregl.FullscreenControl({ container: cadre.current, pseudo }), "top-right");
       m.on("load", () => {
         m.addSource("passages", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
         m.addLayer({ id: "passages-bord", type: "line", source: "passages",

@@ -503,5 +503,6 @@
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
 }
 /* Carte en plein écran (pseudo plein écran sur iPhone) : contrôles sous la barre d'état, au-dessus de la barre d'accueil */
-.carte-plein .maplibregl-ctrl-top-right { top: calc(env(safe-area-inset-top) + 8px); }
-.carte-plein .maplibregl-ctrl-bottom-right { bottom: env(safe-area-inset-bottom); }
+.maplibregl-pseudo-fullscreen { background: #000 !important; border-radius: 0 !important; }
+.maplibregl-pseudo-fullscreen .maplibregl-ctrl-top-right { top: calc(env(safe-area-inset-top) + 8px); }
+.maplibregl-pseudo-fullscreen .maplibregl-ctrl-bottom-right { bottom: env(safe-area-inset-bottom); }

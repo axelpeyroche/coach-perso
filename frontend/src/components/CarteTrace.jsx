@@ -145,7 +145,9 @@ export default function CarteTrace({ activiteId }) {
       });
       carte.current = m;
       m.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
-      const ecran = new maplibregl.FullscreenControl({ container: cadre.current });
+      // iPhone : pas de plein écran pour un élément → « pseudo » plein écran (CSS), à l'entrée comme à la sortie
+      const pseudo = !cadre.current.requestFullscreen && !cadre.current.webkitRequestFullscreen;
+      const ecran = new maplibregl.FullscreenControl({ container: cadre.current, pseudo });
       ecran.on("fullscreenstart", () => setPlein(true));
       ecran.on("fullscreenend", () => setPlein(false));
       m.addControl(ecran, "top-right");
@@ -297,7 +299,8 @@ export default function CarteTrace({ activiteId }) {
   if (isError) return null;
   return (
     <div className="space-y-1.5">
-      <div ref={cadre} className={`relative h-64 rounded-[14px] overflow-hidden bg-remplissage ${plein ? "carte-plein" : ""}`}>
+      {/* className fixe : MapLibre y ajoute lui-même « maplibregl-pseudo-fullscreen » (plein écran sur iPhone) */}
+      <div ref={cadre} className="relative h-64 rounded-[14px] overflow-hidden bg-remplissage">
         <div ref={conteneur} className="w-full h-full" />
         {isLoading && <p className="absolute inset-0 grid place-items-center text-[13px] text-label-2">Chargement du tracé…</p>}
         <div style={plein ? { top: "calc(env(safe-area-inset-top) + 8px)" } : undefined}
