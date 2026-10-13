@@ -452,7 +452,8 @@ export function ProchainesSeances() {
   const depuis = iso(lundi);
   const jusqu = iso(ajouter(lundi, 6));
   const { data } = useQuery({ queryKey: ["plan", depuis, jusqu], queryFn: () => getPlan(depuis, jusqu) });
-  const prochaines = (data?.seances ?? []).filter((s) => s.statut === "a_venir" || s.statut === "aujourdhui").slice(0, 4);
+  // Même liste que « À faire » sur la page Plan, sans plafond
+  const prochaines = (data?.seances ?? []).filter((s) => s.statut !== "realisee" && s.statut !== "sautee");
 
   return (
     <Section titre="À faire cette semaine" lien="/plan" libelleLien="Plan">
