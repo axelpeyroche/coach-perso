@@ -83,6 +83,29 @@ function cameraSurvol(m, km) {
   const zoom = (km < 25 ? 15.3 : 14.4) + Math.log2(Math.min(1, h / 700));
   return { zoom, pitch: h < 450 ? 55 : 62 };
 }
+// Distance caméra → point visé (m) à ce zoom : MapLibre place la caméra à 0,5 / tan(fov / 2) hauteurs d'écran.
+function distanceCamera(m, zoom, lat) {
+  const h = m.getContainer().clientHeight || 700;
+  const fov = (m.getVerticalFieldOfView?.() ?? 36.87) * RAD;
+  return (h / 2 / Math.tan(fov / 2)) * (40075016.686 * Math.cos(lat * RAD)) / (512 * 2 ** zoom);
+}
+// Inclinaison la plus forte (≤ `base`) pour laquelle la ligne caméra → curseur reste au-dessus du relief :
+// dans les grosses pentes, la caméra se redresse (elle monte) au lieu de traverser la montagne.
+const MARGE_RELIEF = 60;
+function pitchDegage(m, pos, alt, bearing, zoom, base) {
+  const L = distanceCamera(m, zoom, pos[1]);
+  const b = bearing * RAD, kLat = 1 / 111320, kLon = 1 / (111320 * Math.cos(pos[1] * RAD));
+  for (let p = base; p > 20; p -= 4) {
+    const D = L * Math.sin(p * RAD), H = L * Math.cos(p * RAD);
+    const libre = [0.2, 0.4, 0.6, 0.8, 1].every((f) => {
+      const x = f * D; // en arrière du curseur, côté caméra
+      const z = m.queryTerrainElevation([pos[0] - Math.sin(b) * x * kLon, pos[1] - Math.cos(b) * x * kLat]);
+      return z == null || alt + f * H >= z + MARGE_RELIEF;
+    });
+    if (libre) return p;
+  }
+  return 20;
+}
 const chrono = (s) => {
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = Math.floor(s % 60);
   return `${h ? `${h}:` : ""}${String(m).padStart(h ? 2 : 1, "0")}:${String(sec).padStart(2, "0")}`;
@@ -94,8 +117,11 @@ export default function CarteTrace({ activiteId }) {
   const cadre = useRef(null);
   const carte = useRef(null);
   const geo = useRef(null);
-  const survol = useRef({ d: 0, cap: null, alt: null, raf: 0, dernier: 0, actif: false, maj: 0 });
+  const survol = useRef({ d: 0, cap: null, alt: null, pitch: null, raf: 0, dernier: 0, actif: false, maj: 0 });
   const [lecture, setLecture] = useState(false);
+  const [vitesse, setVitesse] = useState(1); // ×1 ou ×2
+  const vitesseRef = useRef(1);
+  const [plein, setPlein] = useState(false);
   const [progres, setProgres] = useState(null); // { f, km, t } pendant un survol
   const [prete, setPrete] = useState(false);
   const [fond, setFond] = useState("satellite");
@@ -119,7 +145,10 @@ export default function CarteTrace({ activiteId }) {
       });
       carte.current = m;
       m.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
-      m.addControl(new maplibregl.FullscreenControl({ container: cadre.current }), "top-right");
+      const ecran = new maplibregl.FullscreenControl({ container: cadre.current });
+      ecran.on("fullscreenstart", () => setPlein(true));
+      ecran.on("fullscreenend", () => setPlein(false));
+      m.addControl(ecran, "top-right");
       m.on("load", () => {
         m.addSource("trace", { type: "geojson", data: { type: "Feature", geometry: { type: "LineString", coordinates: coords } } });
         m.addLayer({ id: "trace-bord", type: "line", source: "trace",
@@ -222,23 +251,33 @@ export default function CarteTrace({ activiteId }) {
     const depart = afficher(s.d);
     if (s.cap == null || s.d === 0) s.cap = cap(depart.pos, pointA(g, s.d + avance).pos);
     s.alt = null;
+    s.pitch = null;
     const boucle = (ts) => {
       if (!s.actif) return;
       const dt = Math.min(100, ts - (s.dernier || ts));
       s.dernier = ts;
-      s.d = Math.min(g.total, s.d + (g.total * dt) / duree);
+      s.d = Math.min(g.total, s.d + (g.total * dt * vitesseRef.current) / duree);
       const p = afficher(s.d);
       const c = cap(p.pos, pointA(g, s.d + avance).pos);
       s.cap += (((((c - s.cap) % 360) + 540) % 360) - 180) * Math.min(1, dt / 700); // virages lissés
       const z = altitude(p.pos);
       s.alt = s.alt == null ? z : s.alt + (z - s.alt) * Math.min(1, dt / 250); // lissé
-      m.jumpTo({ center: p.pos, elevation: s.alt, bearing: s.cap, ...cameraSurvol(m, km) });
+      // Inclinaison dégagée du relief, ici et un peu plus loin (anticipation), lissée :
+      // la caméra se redresse vite devant une pente et revient doucement ensuite.
+      const cadrage = cameraSurvol(m, km);
+      const loin = pointA(g, s.d + avance).pos;
+      const cible = Math.min(pitchDegage(m, p.pos, s.alt, s.cap, cadrage.zoom, cadrage.pitch),
+        pitchDegage(m, loin, altitude(loin), s.cap, cadrage.zoom, cadrage.pitch));
+      s.pitch = s.pitch == null ? cible : s.pitch + (cible - s.pitch) * Math.min(1, dt / (cible < s.pitch ? 300 : 1500));
+      m.jumpTo({ center: p.pos, elevation: s.alt, bearing: s.cap, zoom: cadrage.zoom, pitch: s.pitch });
       if (ts - s.maj > 120 || s.d >= g.total) { s.maj = ts; setProgres({ f: s.d / g.total, km: s.d / 1000, t: p.t }); }
       if (s.d >= g.total) { terminer(); return; }
       s.raf = requestAnimationFrame(boucle);
     };
     // Approche de la caméra, puis départ
-    m.flyTo({ center: depart.pos, elevation: altitude(depart.pos), ...cameraSurvol(m, km), bearing: s.cap, duration: s.d === 0 ? 2000 : 600, essential: true });
+    const vue0 = cameraSurvol(m, km);
+    s.pitch = pitchDegage(m, depart.pos, altitude(depart.pos), s.cap, vue0.zoom, vue0.pitch);
+    m.flyTo({ center: depart.pos, elevation: altitude(depart.pos), zoom: vue0.zoom, pitch: s.pitch, bearing: s.cap, duration: s.d === 0 ? 2000 : 600, essential: true });
     m.once("moveend", () => { if (s.actif) { s.dernier = 0; s.raf = requestAnimationFrame(boucle); } });
   }
 
@@ -258,15 +297,17 @@ export default function CarteTrace({ activiteId }) {
   if (isError) return null;
   return (
     <div className="space-y-1.5">
-      <div ref={cadre} className="relative h-64 rounded-[14px] overflow-hidden bg-remplissage">
+      <div ref={cadre} className={`relative h-64 rounded-[14px] overflow-hidden bg-remplissage ${plein ? "carte-plein" : ""}`}>
         <div ref={conteneur} className="w-full h-full" />
         {isLoading && <p className="absolute inset-0 grid place-items-center text-[13px] text-label-2">Chargement du tracé…</p>}
-        <div className={`absolute top-2 left-2 flex flex-col gap-1.5 items-start transition-opacity ${lecture ? "opacity-0 pointer-events-none" : ""}`}>
+        <div style={plein ? { top: "calc(env(safe-area-inset-top) + 8px)" } : undefined}
+          className={`absolute top-2 left-2 flex flex-col gap-1.5 items-start transition-opacity ${lecture ? "opacity-0 pointer-events-none" : ""}`}>
           <Bascule options={[["plan", "Plan"], ["satellite", "Satellite"]]} valeur={fond} onChange={setFond} />
           <Bascule options={[["2d", "2D"], ["3d", "3D"]]} valeur={vue} onChange={setVue} />
         </div>
         {prete && (
-          <div className="absolute bottom-3 left-2 flex items-center gap-2">
+          <div style={plein ? { bottom: "calc(env(safe-area-inset-bottom) + 12px)" } : undefined}
+            className="absolute bottom-3 left-2 flex items-center gap-2">
             <button type="button" onClick={() => (lecture ? pause() : jouer())}
               aria-label={lecture ? "Pause" : "Survoler le tracé"}
               className="w-9 h-9 grid place-items-center rounded-full bg-black/55 backdrop-blur text-white active:scale-95 transition">
@@ -276,6 +317,13 @@ export default function CarteTrace({ activiteId }) {
                 <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M3 1.5v11a.8.8 0 0 0 1.2.7l9-5.5a.8.8 0 0 0 0-1.4l-9-5.5A.8.8 0 0 0 3 1.5z" /></svg>
               )}
             </button>
+            {(lecture || progres) && (
+              <button type="button" onClick={() => { const v = vitesse === 1 ? 2 : 1; vitesseRef.current = v; setVitesse(v); }}
+                aria-label={`Vitesse ×${vitesse === 1 ? 2 : 1}`}
+                className={`h-9 px-3 rounded-full backdrop-blur text-[13px] font-semibold chiffres active:scale-95 transition ${vitesse === 2 ? "bg-white text-black" : "bg-black/55 text-white"}`}>
+                ×2
+              </button>
+            )}
             {progres && (
               <span className="rounded-[8px] bg-black/55 backdrop-blur px-2 py-1 text-[12px] font-semibold text-white chiffres">
                 {progres.km.toFixed(1).replace(".", ",")} km · {chrono(progres.t)}
@@ -284,7 +332,8 @@ export default function CarteTrace({ activiteId }) {
           </div>
         )}
         {prete && (
-          <div onClick={chercher} className="absolute bottom-0 inset-x-0 h-2.5 flex items-end cursor-pointer">
+          <div onClick={chercher} style={plein ? { bottom: "env(safe-area-inset-bottom)" } : undefined}
+            className="absolute bottom-0 inset-x-0 h-2.5 flex items-end cursor-pointer">
             <div className="h-[3px] w-full bg-black/30">
               <div className="h-full bg-[#FF3B30]" style={{ width: `${(progres?.f ?? 0) * 100}%` }} />
             </div>
