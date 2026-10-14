@@ -44,6 +44,22 @@ function variation(points, jours) {
   return dernier.poids - avant.poids;
 }
 
+// Repères réguliers de l'axe : 1er et 15 du mois sur une courte période, sinon début de mois (au plus ~7)
+function reperes(x0, x1) {
+  const long = x1 - x0 > 120 * JOUR;
+  const res = [];
+  const d = new Date(x0); d.setDate(1); d.setHours(12, 0, 0, 0);
+  while (d.getTime() <= x1) {
+    for (const j of long ? [1] : [1, 15]) {
+      const v = new Date(d.getFullYear(), d.getMonth(), j, 12).getTime();
+      if (v >= x0 && v <= x1) res.push(v);
+    }
+    d.setMonth(d.getMonth() + 1);
+  }
+  const pas = Math.ceil(res.length / 7);
+  return res.filter((_, i) => i % pas === 0);
+}
+
 const PERIODES = [["3m", "3 mois"], ["1a", "1 an"], ["tout", "Tout"]];
 const DUREES = { "3m": 92, "1a": 366, tout: Infinity };
 
@@ -115,9 +131,11 @@ export default function PoidsAnalyse() {
   const valeurs = serie.flatMap((p) => [p.poids, p.moy]);
   const bas = Math.floor(Math.min(...valeurs) - 0.8), haut = Math.ceil(Math.max(...valeurs) + 0.8);
   // Marge de part et d'autre : une pesée seule est centrée, pas collée au bord
-  const premier = periode === "tout" ? serie[0].t : Math.max(debut, serie[0].t);
+  // 3 mois et 1 an : toute la fenêtre est affichée, même sans pesée au début ; « Tout » part de la première pesée
+  const tout = periode === "tout";
+  const premier = tout ? serie[0].t : debut;
   const marge = Math.max((dernier.t - premier) * 0.03, 3 * JOUR);
-  const x0 = premier - marge, x1 = dernier.t + marge;
+  const x0 = tout ? premier - marge : premier, x1 = dernier.t + marge;
 
   const v4 = variation(points, 28), v13 = variation(points, 91);
   const sur = points.filter((p) => p.t >= dernier.t - 365 * JOUR);
@@ -126,7 +144,7 @@ export default function PoidsAnalyse() {
   const i = imc(dernier.poids, taille);
   // Plage de poids d'un IMC « normal » pour cette taille
   const normal = taille ? [18.5 * (taille / 100) ** 2, 25 * (taille / 100) ** 2] : null;
-  const fmtX = (v) => fmtDate(new Date(v).toISOString().slice(0, 10), x1 - x0 > 200 * JOUR ? { month: "short", year: "2-digit" } : { day: "numeric", month: "short" });
+  const fmtX = (v) => fmtDate(new Date(v).toISOString().slice(0, 10), x1 - x0 > 200 * JOUR ? { month: "short", year: "2-digit" } : x1 - x0 > 120 * JOUR ? { month: "long" } : { day: "numeric", month: "short" });
 
   return (
     <div className="grid gap-3 lg:grid-cols-3">
@@ -190,7 +208,7 @@ export default function PoidsAnalyse() {
                 <ReferenceArea y1={Math.max(normal[0], bas)} y2={Math.min(normal[1], haut)} fill={VERT} fillOpacity={0.07}
                   ifOverflow="hidden" />
               )}
-              <XAxis dataKey="t" type="number" scale="time" domain={[x0, x1]} tickFormatter={fmtX} {...axeX} minTickGap={36} allowDataOverflow />
+              <XAxis dataKey="t" type="number" scale="time" domain={[x0, x1]} ticks={reperes(x0, x1)} interval={0} tickFormatter={fmtX} {...axeX} minTickGap={36} allowDataOverflow />
               <YAxis {...axeY} domain={[bas, haut]} allowDecimals={false} tickFormatter={(v) => nombre(v, 0)} />
               <Tooltip cursor={{ stroke: GRIS, strokeOpacity: 0.3 }}
                 content={(p) => <InfoBulle {...p} label={p.label != null ? fmtDate(new Date(p.label).toISOString().slice(0, 10), { weekday: "short", day: "numeric", month: "short", year: "numeric" }) : null}
