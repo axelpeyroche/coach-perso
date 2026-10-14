@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import Card from "../components/Card";
@@ -9,6 +9,7 @@ import ModalActivite from "../components/ModalActivite";
 import ConfirmDialog from "../components/ConfirmDialog";
 import ImportPlan from "../components/ImportPlan";
 import ContenuSeance from "../components/ContenuSeance";
+import { resumeSeance } from "../seance";
 import { Section, BoutonAjout } from "../components/ui";
 import {
   getPlan, getActivites, creerPrevue, modifierPrevue, supprimerPrevue, getActivitesProches,
@@ -110,17 +111,71 @@ function DetailSeance({ s, onClose, onOuvrirActivite }) {
         </section>
       )}
 
-      {s.commentaire && (
-        <section className="space-y-1.5">
-          <h4 className="px-1 text-[13px] uppercase tracking-[0.02em] font-medium text-label-2">Commentaire</h4>
-          <p className="card px-4 py-3 text-[15px] leading-6 whitespace-pre-line">{s.commentaire}</p>
-        </section>
-      )}
-
-      {!s.description && !s.activite && !s.commentaire && !mesures.length && (
+      {!s.description && !s.activite && !mesures.length && (
         <p className="text-[15px] text-label-2 text-center">Aucun détail pour cette séance.</p>
       )}
+
+      <CommentaireSeance s={s} />
     </Feuille>
+  );
+}
+
+// ── Commentaire de l'athlète (bas de la feuille) ───────────────────────────
+// Enregistré au fil de la frappe ; conservé quand la séance est reliée à une
+// activité et lu par le coach pour le bilan de la semaine et le plan suivant.
+function CommentaireSeance({ s }) {
+  const qc = useQueryClient();
+  const [texte, setTexte] = useState(s.commentaire ?? "");
+  const [etat, setEtat] = useState(null); // null | "attente" | "ok" | "erreur"
+  const enregistre = useRef((s.commentaire ?? "").trim());
+  const minuteur = useRef(null);
+  const courant = useRef(texte);
+  courant.current = texte;
+
+  const enregistrer = async () => {
+    clearTimeout(minuteur.current);
+    const valeur = courant.current.trim();
+    if (valeur === enregistre.current) { setEtat((e) => (e === "attente" ? null : e)); return; }
+    enregistre.current = valeur;
+    try {
+      await modifierPrevue(s.id, { commentaire: valeur });
+      setEtat("ok");
+      invaliderPlan(qc);
+    } catch {
+      enregistre.current = null;
+      setEtat("erreur");
+    }
+  };
+  const enregistrerRef = useRef(enregistrer);
+  enregistrerRef.current = enregistrer;
+  // Fermeture de la feuille : on n'abandonne pas une saisie en cours
+  useEffect(() => () => { enregistrerRef.current(); }, []);
+
+  const changer = (v) => {
+    setTexte(v);
+    setEtat("attente");
+    clearTimeout(minuteur.current);
+    minuteur.current = setTimeout(() => enregistrerRef.current(), 900);
+  };
+
+  return (
+    <section className="space-y-1.5">
+      <div className="flex items-baseline justify-between gap-2 px-1">
+        <h4 className="text-[13px] uppercase tracking-[0.02em] font-medium text-label-2">Commentaire</h4>
+        <span className={`text-[12px] ${etat === "erreur" ? "text-ios-red" : "text-label-2"}`} aria-live="polite">
+          {etat === "ok" ? "Enregistré ✓" : etat === "erreur" ? "Échec de l'enregistrement" : ""}
+        </span>
+      </div>
+      <div className="card">
+        <textarea rows={3} value={texte} onChange={(e) => changer(e.target.value)} onBlur={() => enregistrerRef.current()}
+          aria-label="Commentaire sur la séance"
+          placeholder="Ressenti, charge trop lourde ou trop légère, douleur, raison d'un report…"
+          className="block w-full resize-none bg-transparent px-4 py-3 text-[15px] leading-6 outline-none placeholder:text-label-3" />
+      </div>
+      <p className="px-1 text-[12px] leading-4 text-label-2">
+        Gardé quand la séance est reliée à une activité, et pris en compte pour le bilan de la semaine et le prochain plan.
+      </p>
+    </section>
   );
 }
 
@@ -130,68 +185,71 @@ function CarteSeance({ s, onOuvrirActivite }) {
   const qc = useQueryClient();
   const [detail, setDetail] = useState(false);
   const [choix, setChoix] = useState(false);
-  const [edition, setEdition] = useState(false);
-  const [commentaire, setCommentaire] = useState(s.commentaire ?? "");
   const [confirmSuppr, setConfirmSuppr] = useState(false);
   const info = sportInfo(s.sport);
   const sautee = s.statut === "sautee";
+  const { formats, exercices } = resumeSeance(s.description);
 
   const maj = useMutation({
     mutationFn: (payload) => modifierPrevue(s.id, payload),
-    onSuccess: () => { invaliderPlan(qc); setChoix(false); setEdition(false); },
+    onSuccess: () => { invaliderPlan(qc); setChoix(false); },
   });
   const suppr = useMutation({
     mutationFn: () => supprimerPrevue(s.id),
     onSuccess: () => { invaliderPlan(qc); setConfirmSuppr(false); },
   });
 
-  const action = "btn-gris btn-sm font-medium grow md:grow-0 !px-2 md:!px-3.5 !text-[13px] md:!text-[15px]";
-  const retrait = "md:pl-[3.25rem]";
+  const action = "btn-sm font-medium !px-3 md:!px-3.5 !text-[13px] md:!text-[15px]";
+  const pastille = "inline-flex items-center h-[22px] px-2 rounded-md text-[12px] font-medium whitespace-nowrap";
+  // Exercices : 2 sur téléphone, 6 sur ordinateur, le reste en « +N »
+  const reste = (n) => exercices.length - n;
 
   return (
     <div className="ligne !items-stretch flex-col !gap-2.5 !py-3">
-      <button type="button" onClick={() => setDetail(true)} aria-label={`Voir le détail : ${s.titre}`}
-        className={`flex items-center gap-3 text-left -mx-2 px-2 py-1 rounded-xl transition-colors active:bg-remplissage md:hover:bg-remplissage/60 ${sautee ? "opacity-55" : ""}`}>
-        <span className="w-10 h-10 shrink-0 rounded-full flex items-center justify-center text-[19px]"
-          style={{ backgroundColor: `${info.couleur}26` }} aria-hidden>{s.emoji ?? info.emoji}</span>
-        <span className="flex-1 min-w-0">
-          <span className={`block text-[15px] font-semibold leading-5 truncate ${sautee ? "line-through" : ""}`}>{s.titre}</span>
-          <span className="block text-[13px] text-label-2 chiffres">
-            {s.duree_min != null ? fmtDuree(s.duree_min * 60) : "Durée non précisée"}
+      <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-4">
+        <button type="button" onClick={() => setDetail(true)} aria-label={`Voir le détail : ${s.titre}`}
+          className={`flex-1 min-w-0 flex items-center gap-3 text-left -mx-2 px-2 py-1 rounded-xl transition-colors active:bg-remplissage md:hover:bg-remplissage/60 ${sautee ? "opacity-55" : ""}`}>
+          <span className="w-10 h-10 shrink-0 self-start rounded-full flex items-center justify-center text-[19px]"
+            style={{ backgroundColor: `${info.couleur}26` }} aria-hidden>{s.emoji ?? info.emoji}</span>
+          <span className="flex-1 min-w-0">
+            <span className={`block text-[15px] font-semibold leading-5 truncate ${sautee ? "line-through" : ""}`}>{s.titre}</span>
+            <span className="flex items-center gap-1.5 text-[13px] text-label-2 chiffres">
+              {s.duree_min != null ? fmtDuree(s.duree_min * 60) : "Durée non précisée"}
+              {s.commentaire && (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinejoin="round"
+                  className="w-[13px] h-[13px]" role="img" aria-label="Commentée"><path d="M4 5h16v11H9l-5 4V5z" /></svg>
+              )}
+            </span>
+            {(formats.length > 0 || exercices.length > 0) && (
+              <span className="mt-1.5 flex flex-wrap gap-1">
+                {formats.map((f) => <span key={f} className={`${pastille} !font-semibold bg-ios-indigo/15 text-ios-indigo`}>{f}</span>)}
+                {exercices.map((e, i) => (
+                  <span key={i} className={`${pastille} bg-remplissage text-label ${i >= 6 ? "hidden" : i >= 2 ? "hidden md:inline-flex" : ""}`}>{e}</span>
+                ))}
+                {reste(2) > 0 && <span className={`${pastille} !px-1 text-label-2 md:hidden`}>+{reste(2)}</span>}
+                {reste(6) > 0 && <span className={`${pastille} !px-1 text-label-2 hidden md:inline-flex`}>+{reste(6)}</span>}
+              </span>
+            )}
           </span>
-        </span>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round"
-          className="w-[14px] h-[14px] shrink-0 text-label-3" aria-hidden><path d="M9 5l7 7-7 7" /></svg>
-      </button>
-
-      <div className={`flex gap-1.5 md:flex-wrap ${retrait}`}>
-        {sautee ? (
-          <button className={action} disabled={maj.isPending} onClick={() => maj.mutate({ statut: "prevue" })}>Rétablir</button>
-        ) : s.activite ? (
-          <button className={action} disabled={maj.isPending} onClick={() => maj.mutate({ delier: true })}>Délier</button>
-        ) : (
-          <button className={action} disabled={maj.isPending} onClick={() => maj.mutate({ statut: "sautee" })}>Sautée</button>
-        )}
-        <button className={action} onClick={() => { setCommentaire(s.commentaire ?? ""); setEdition(!edition); }}>
-          Commenter
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round"
+            className="w-[14px] h-[14px] shrink-0 text-label-3 md:hidden" aria-hidden><path d="M9 5l7 7-7 7" /></svg>
         </button>
-        <button className={action} disabled={sautee} onClick={() => setChoix(!choix)}>{s.activite ? "Changer" : "Relier"}</button>
-        <button className="btn-danger btn-sm font-medium grow md:grow-0 !px-2 md:!px-3.5 !text-[13px] md:!text-[15px]" onClick={() => setConfirmSuppr(true)}>Supprimer</button>
+
+        <div className="flex justify-end gap-1.5 shrink-0">
+          {sautee ? (
+            <button className={`btn-gris ${action}`} disabled={maj.isPending} onClick={() => maj.mutate({ statut: "prevue" })}>Rétablir</button>
+          ) : s.activite ? (
+            <button className={`btn-gris ${action}`} disabled={maj.isPending} onClick={() => maj.mutate({ delier: true })}>Délier</button>
+          ) : (
+            <button className={`btn-gris ${action}`} disabled={maj.isPending} onClick={() => maj.mutate({ statut: "sautee" })}>Sautée</button>
+          )}
+          <button className={`btn-gris ${action}`} disabled={sautee} onClick={() => setChoix(!choix)}>{s.activite ? "Changer" : "Relier"}</button>
+          <button className={`btn-danger ${action}`} onClick={() => setConfirmSuppr(true)}>Supprimer</button>
+        </div>
       </div>
 
-      {edition && (
-        <div className={`space-y-2 ${retrait}`}>
-          <textarea rows={2} className={inputCls} value={commentaire} onChange={(e) => setCommentaire(e.target.value)}
-            placeholder="Ressenti, raison d'un report, douleur…" />
-          <div className="flex gap-2">
-            <button className="btn-primaire btn-sm" disabled={maj.isPending} onClick={() => maj.mutate({ commentaire })}>Enregistrer</button>
-            <button className="btn-gris btn-sm" onClick={() => setEdition(false)}>Annuler</button>
-          </div>
-        </div>
-      )}
-
       {choix && (
-        <div className={retrait}>
+        <div className="md:pl-[3.25rem]">
           <ChoixActivite prevue={s} onClose={() => setChoix(false)} onChoix={(id) => maj.mutate({ activite_id: id })} />
         </div>
       )}

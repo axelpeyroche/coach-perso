@@ -159,3 +159,24 @@ export function analyserDescription(texte) {
   if (phases >= 2) return lireEndurance(lignes);
   return { type: "texte", texte: texte.trim() };
 }
+
+// Formats d'entraînement repérés dans le texte (pastilles de la carte)
+const FORMATS = [
+  ["EMOM", /\bEMOM\b/i],
+  ["AMRAP", /\bAMRAP\b/i],
+  ["Tabata", /\btabata\b/i],
+  ["Circuit", /\bcircuit\b/i],
+  ["Superset", /\bsuper[- ]?(?:set|séries?)\b/i],
+  ["For time", /\bfor time\b/i],
+  ["Pyramide", /\bpyramid/i],
+];
+
+// Résumé d'une séance pour sa carte : formats (EMOM, AMRAP…) et exercices à faire
+export function resumeSeance(texte) {
+  const formats = FORMATS.filter(([, re]) => re.test(texte ?? "")).map(([f]) => f);
+  const r = analyserDescription(texte);
+  const exercices = r?.type === "muscu"
+    ? r.sections.flatMap((s) => s.exercices.map((e) => e.nom.replace(/\s*\([^)]*\)/g, "").trim()))
+    : [];
+  return { formats, exercices };
+}

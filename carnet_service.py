@@ -1672,7 +1672,7 @@ def enregistrer_plan(db: Session, user_id: int, items: list[dict],
     Le statut, le rapprochement et le commentaire de l'athlète sont conservés.
     `jour` ne sert qu'à rattacher la séance à sa semaine (absent : semaine en cours).
     `remplacer=(depuis, jusqu_a)` supprime les séances de la période absentes de
-    l'envoi, sauf celles des semaines passées, réalisées ou sautées (l'historique reste).
+    l'envoi, sauf celles des semaines passées, réalisées, sautées ou commentées (l'historique reste).
     """
     auj = aujourd_hui or date.today()
     bilan = {"cree": 0, "maj": 0, "supprime": 0}
@@ -1702,7 +1702,8 @@ def enregistrer_plan(db: Session, user_id: int, items: list[dict],
         for p in (db.query(SeancePrevue)
                   .filter(SeancePrevue.utilisateur_id == user_id,
                           SeancePrevue.jour >= max(depuis, _lundi(auj)), SeancePrevue.jour <= jusqu_a).all()):
-            if p.id_externe not in envoyes and p.activite_id is None and p.statut != "sautee":
+            if (p.id_externe not in envoyes and p.activite_id is None and p.statut != "sautee"
+                    and not p.commentaire):
                 db.delete(p)
                 bilan["supprime"] += 1
     db.flush()
