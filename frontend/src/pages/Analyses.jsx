@@ -246,7 +246,6 @@ function Recuperation({ r }) {
 
 // ── Sommeil ───────────────────────────────────────────────────────────────
 // Moyennes sur la période (la dernière nuit est détaillée dans le Résumé)
-const moy = (m, unite, d = 0) => (m?.moy_28j != null ? `${nombre(m.moy_28j, d)} ${unite}` : "—");
 const moy7 = (m, unite, d = 0) => (m?.moy_7j != null ? `7 j : ${nombre(m.moy_7j, d)} ${unite}` : null);
 
 // Phases (champs personnalisés remplis par Intervals Companion), en heures. La dernière nuit est détaillée dans le Résumé.
@@ -257,6 +256,153 @@ const PHASES = [
 ];
 const aPhases = (p) => PHASES.some((f) => p[f.cle] != null);
 const hm = (h) => fmtDuree(Math.round(h * 60) * 60);
+
+// Résumé des 28 dernières nuits : une ligne de colonnes sur ordinateur, score en tête sur téléphone
+const Point = ({ couleur }) => <span aria-hidden className="w-[7px] h-[7px] rounded-full shrink-0" style={{ background: couleur }} />;
+const Lab = ({ couleur, children }) => (
+  <p className="flex items-center gap-1.5 text-[12px] text-label-2 truncate">{couleur && <Point couleur={couleur} />}{children}</p>
+);
+const Sous = ({ children }) => <p className="text-[11px] text-label-2 truncate min-h-[16px]">{children}</p>;
+const Chiffre = ({ children, unite, petit }) => (
+  <p className={clsx("font-rounded font-bold chiffres truncate", petit ? "text-[17px]" : "text-[22px] leading-7")}>
+    {children}{unite && <span className={clsx("text-label-2 ml-1", petit ? "text-[11px] font-normal" : "text-[13px] font-semibold")}>{unite}</span>}
+  </p>
+);
+
+function Courbe({ valeurs, couleur }) {
+  if (valeurs.length < 2) return <div className="h-3.5 mt-0.5" />;
+  const min = Math.min(...valeurs), et = Math.max(...valeurs) - min || 1;
+  const pts = valeurs.map((v, i) => `${(i / (valeurs.length - 1)) * 100},${12 - ((v - min) / et) * 10}`).join(" ");
+  return (
+    <svg viewBox="0 0 100 14" preserveAspectRatio="none" className="block w-full h-3.5 mt-0.5" aria-hidden>
+      <polyline fill="none" stroke={couleur} strokeWidth="1.5" vectorEffect="non-scaling-stroke" strokeLinejoin="round" points={pts} />
+    </svg>
+  );
+}
+
+function Anneau({ score, taille, texte }) {
+  const c = 2 * Math.PI * 15;
+  return (
+    <svg viewBox="0 0 36 36" style={{ width: taille, height: taille }} className="shrink-0" aria-hidden>
+      <circle cx="18" cy="18" r="15" fill="none" strokeWidth="3.5" className="stroke-remplissage" />
+      <circle cx="18" cy="18" r="15" fill="none" stroke={VIOLET} strokeWidth="3.5" strokeLinecap="round"
+        strokeDasharray={`${(Math.max(0, Math.min(score, 100)) / 100) * c} ${c}`} transform="rotate(-90 18 18)" />
+      {texte && <text x="18" y="21.5" textAnchor="middle" className="fill-label font-rounded font-bold" style={{ fontSize: 10 }}>{Math.round(score)}</text>}
+    </svg>
+  );
+}
+
+// Durée moyenne sur une échelle de 10 h, trait au repère de 7 h
+const JaugeDuree = ({ h }) => (
+  <div className="relative h-[5px] rounded-full bg-remplissage overflow-hidden mt-1.5" aria-hidden>
+    <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${Math.min(h / 10, 1) * 100}%`, background: INDIGO }} />
+    <div className="absolute inset-y-0 left-[70%] w-[1.5px] bg-label-2" />
+  </div>
+);
+
+function ResumeNuits({ s, points }) {
+  const iso = (decalage) => new Date(Date.now() - decalage * 864e5).toLocaleDateString("sv");
+  const depuis28 = iso(27);
+  const serie = (cle) => points.filter((p) => p.jour >= depuis28 && p[cle] != null).map((p) => p[cle]);
+  const parJour = Object.fromEntries(points.map((p) => [p.jour, p.sommeil]));
+  const semaine = Array.from({ length: 7 }, (_, i) => parJour[iso(6 - i)]);
+  const score = s?.score_sommeil?.derniere ? s.score_sommeil : null;
+  const scoreAnneau = score ? score.moy_28j ?? score.derniere.valeur : null;
+  const val = (v) => (v != null ? nombre(v, 0) : "—");
+  const duree = s?.moy_28j != null ? hm(s.moy_28j) : "—";
+  const avec7 = (m, unite) => `${unite}${m?.moy_7j != null ? ` · 7 j : ${nombre(m.moy_7j, 0)}` : ""}`;
+
+  return (
+    <Card pad={false} className="px-4 py-3.5 lg:px-1">
+      <div className="hidden lg:block">
+        <div className="flex items-baseline justify-between gap-3 px-3.5 pb-2">
+          <p className="text-[13px] font-semibold">🌙 Tes nuits · 28 jours</p>
+          <p className="text-[11px] text-label-2">7 j = moyenne des 7 dernières nuits</p>
+        </div>
+        <div className={clsx("grid divide-x-[0.5px] divide-separateur", score ? "grid-cols-5" : "grid-cols-4")}>
+          <div className="px-3.5 min-w-0">
+            <Lab couleur={INDIGO}>Durée</Lab>
+            <Chiffre>{duree}</Chiffre>
+            {s?.moy_28j != null && <JaugeDuree h={s.moy_28j} />}
+            <div className="mt-1"><Sous>{s?.moy_7j != null ? `7 j : ${hm(s.moy_7j)} · repère 7 h` : "repère 7 h"}</Sous></div>
+          </div>
+          <div className="px-3.5 min-w-0">
+            <Lab couleur={ORANGE}>Nuits courtes</Lab>
+            <Chiffre unite={`/ ${s?.nb_7j ?? 0}`}>{s?.nuits_courtes_7j ?? 0}</Chiffre>
+            <div className="flex gap-[3px] mt-1.5" aria-hidden>
+              {semaine.map((h, i) => (
+                <span key={i} className={clsx("flex-1 h-[5px] rounded-sm", h == null && "bg-remplissage")}
+                  style={h != null ? { background: h < 7 ? ORANGE : INDIGO } : undefined} />
+              ))}
+            </div>
+            <div className="mt-1"><Sous>moins de 7 h · 7 j</Sous></div>
+          </div>
+          <div className="px-3.5 min-w-0">
+            <Lab couleur={ROSE}>FC sommeil</Lab>
+            <Chiffre unite="bpm">{val(s?.fc_sommeil?.moy_28j)}</Chiffre>
+            <Courbe valeurs={serie("fc_sommeil")} couleur={ROSE} />
+            <Sous>{moy7(s?.fc_sommeil, "bpm")}</Sous>
+          </div>
+          <div className="px-3.5 min-w-0">
+            <Lab couleur={CYAN}>SpO2 nocturne</Lab>
+            <Chiffre unite="%">{val(s?.spo2?.moy_28j)}</Chiffre>
+            <Courbe valeurs={serie("spo2")} couleur={CYAN} />
+            <Sous>{moy7(s?.spo2, "%")}</Sous>
+          </div>
+          {score && (
+            <div className="px-3.5 min-w-0 flex items-center gap-2">
+              <Anneau score={scoreAnneau} taille={40} />
+              <div className="min-w-0">
+                <Lab couleur={VIOLET}>Score</Lab>
+                <Chiffre>{val(score.moy_28j)}</Chiffre>
+                <Sous>{moy7(score, "/100")}</Sous>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="lg:hidden">
+        <div className="flex items-center gap-3">
+          {score ? <Anneau score={scoreAnneau} taille={58} texte />
+            : <span aria-hidden className="w-[58px] h-[58px] rounded-full bg-remplissage grid place-items-center text-2xl shrink-0">🌙</span>}
+          <div className="flex-1 min-w-0">
+            <Lab>{score && "🌙 "}Tes nuits · 28 jours</Lab>
+            <Chiffre unite="par nuit">{duree}</Chiffre>
+            {s?.moy_28j != null && <JaugeDuree h={s.moy_28j} />}
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-x-3.5 gap-y-2.5 mt-3 pt-2.5 border-t-[0.5px] border-separateur">
+          <div className="min-w-0">
+            <Lab couleur={INDIGO}>7 derniers jours</Lab>
+            <Chiffre petit unite={`· ${s?.nuits_courtes_7j ?? 0} nuit${(s?.nuits_courtes_7j ?? 0) > 1 ? "s" : ""} < 7 h`}>
+              {s?.moy_7j != null ? hm(s.moy_7j) : "—"}
+            </Chiffre>
+          </div>
+          {score ? (
+            <div className="min-w-0">
+              <Lab couleur={VIOLET}>Score 7 j</Lab>
+              <Chiffre petit unite="/100">{val(score.moy_7j)}</Chiffre>
+            </div>
+          ) : (
+            <div className="min-w-0">
+              <Lab couleur={ORANGE}>Nuits mesurées 7 j</Lab>
+              <Chiffre petit>{s?.nb_7j ?? 0}</Chiffre>
+            </div>
+          )}
+          <div className="min-w-0">
+            <Lab couleur={ROSE}>FC sommeil</Lab>
+            <Chiffre petit unite={avec7(s?.fc_sommeil, "bpm")}>{val(s?.fc_sommeil?.moy_28j)}</Chiffre>
+          </div>
+          <div className="min-w-0">
+            <Lab couleur={CYAN}>SpO2</Lab>
+            <Chiffre petit unite={avec7(s?.spo2, "%")}>{val(s?.spo2?.moy_28j)}</Chiffre>
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+}
 
 function Nuits({ r }) {
   const nuits = useMemo(() => (r?.points ?? [])
@@ -278,14 +424,7 @@ function Nuits({ r }) {
   const aFc = nuits.some((p) => p.fc_sommeil != null);
   return (
     <>
-      <div className={clsx("grid gap-3 grid-cols-2", s?.score_sommeil?.derniere ? "lg:grid-cols-5" : "lg:grid-cols-4")}>
-        <Tuile label="Sommeil 28 j" value={s?.moy_28j != null ? `${nombre(s.moy_28j)} h` : "—"} sub="durée moyenne par nuit" />
-        <Tuile label="Sommeil 7 j" value={s?.moy_7j != null ? `${nombre(s.moy_7j)} h` : "—"}
-          sub={s?.nb_7j ? `${s.nuits_courtes_7j} nuit(s) < 7 h sur ${s.nb_7j}` : null} />
-        <Tuile label="FC sommeil 28 j" value={moy(s?.fc_sommeil, "bpm")} sub={moy7(s?.fc_sommeil, "bpm")} />
-        <Tuile label="SpO2 nocturne 28 j" value={moy(s?.spo2, "%")} sub={moy7(s?.spo2, "%")} />
-        {s?.score_sommeil?.derniere && <Tuile label="Score de sommeil 28 j" value={moy(s.score_sommeil, "/100")} sub={moy7(s.score_sommeil, "")} />}
-      </div>
+      <ResumeNuits s={s} points={r?.points ?? []} />
       <Graphe titre="Durée et FC de la nuit" couleur={INDIGO}
         sousTitre={`${nuits.length} dernière${nuits.length > 1 ? "s" : ""} nuit${nuits.length > 1 ? "s" : ""} · barres = durée${avecPhases ? " par phase" : ""}, ligne = FC moyenne pendant le sommeil`}
         note="Une FC nocturne plus haute que d'habitude signale souvent fatigue, stress, alcool ou maladie qui couve. Repère : 7 h de sommeil (pointillés).">
