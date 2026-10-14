@@ -9,6 +9,8 @@ import ConfirmDialog from "../components/ConfirmDialog";
 import Page from "../components/Page";
 import Feuille from "../components/Feuille";
 import ModalPoids from "../components/ModalPoids";
+import { imc } from "../components/Poids";
+import { nombre } from "../carnet";
 import { Chevron, Interrupteur, Segmente, SelecteurHeure } from "../components/ui";
 
 // ── Avatar ─────────────────────────────────────────────────────────────────
@@ -177,11 +179,13 @@ function EditInfosModal({ user, onClose, onSaved }) {
     sexe: user?.sexe || "",
     date_naissance: user?.date_naissance || "",
     poids_kg: user?.poids_kg ?? "",
+    taille_cm: user?.taille_cm ?? "",
   });
+  const qc = useQueryClient();
 
   const mutation = useMutation({
     mutationFn: (payload) => api.patch("/utilisateur/infos", payload),
-    onSuccess: async () => { await onSaved(); onClose(); },
+    onSuccess: async () => { qc.invalidateQueries({ queryKey: ["historique-poids"] }); await onSaved(); onClose(); },
   });
 
   function set(k) { return e => setForm(f => ({ ...f, [k]: e.target.value })); }
@@ -195,6 +199,8 @@ function EditInfosModal({ user, onClose, onSaved }) {
     if (form.date_naissance !== (user?.date_naissance || "")) payload.date_naissance = form.date_naissance || null;
     const newPoids = form.poids_kg !== "" ? parseFloat(form.poids_kg) : null;
     if (newPoids !== user?.poids_kg) payload.poids_kg = newPoids;
+    const newTaille = form.taille_cm !== "" ? parseFloat(form.taille_cm) : null;
+    if (newTaille !== (user?.taille_cm ?? null)) payload.taille_cm = newTaille;
     if (Object.keys(payload).length > 0) {
       mutation.mutate(payload);
     } else {
@@ -221,11 +227,12 @@ function EditInfosModal({ user, onClose, onSaved }) {
         <Field label="Poids (kg)">
           <input type="number" step="0.1" min="20" max="300" inputMode="decimal" className="champ" value={form.poids_kg} onChange={set("poids_kg")} />
         </Field>
-        <div className="col-span-2">
-          <Field label="Date de naissance">
-            <input type="date" className="champ" value={form.date_naissance || ""} onChange={set("date_naissance")} />
-          </Field>
-        </div>
+        <Field label="Taille (cm)">
+          <input type="number" step="1" min="100" max="250" inputMode="numeric" placeholder="pour l'IMC" className="champ" value={form.taille_cm} onChange={set("taille_cm")} />
+        </Field>
+        <Field label="Date de naissance">
+          <input type="date" className="champ" value={form.date_naissance || ""} onChange={set("date_naissance")} />
+        </Field>
       </div>
       {mutation.isError && <p className="text-[13px] text-ios-red text-center">{getErrorMessage(mutation.error, "Erreur — réessaie")}</p>}
       <button onClick={save} disabled={mutation.isPending} className="btn-primaire w-full">
@@ -560,6 +567,10 @@ export default function Profil({ theme, setTheme }) {
           <Row label="Âge" value={user?.age ? `${user.age} ans` : null} />
           <Row label="Sexe" value={user?.sexe === "M" ? "Homme" : user?.sexe === "F" ? "Femme" : null} />
           <Row label="Poids" value={user?.poids_kg ? `${user.poids_kg} kg` : null} />
+          <Row label="Taille" value={user?.taille_cm ? `${nombre(user.taille_cm, 0)} cm` : null} />
+          {imc(user?.poids_kg, user?.taille_cm) && (
+            <Row label="IMC" value={`${nombre(imc(user.poids_kg, user.taille_cm).valeur, 1)} · ${imc(user.poids_kg, user.taille_cm).zone.label}`} />
+          )}
           <button onClick={() => setEditInfos(true)} className="ligne">
             <span className="flex-1 text-[17px] text-brand">Modifier mes informations</span>
           </button>

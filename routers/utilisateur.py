@@ -25,6 +25,36 @@ class ProfilFCSchema(BaseModel):
     fc_max: Optional[int] = Field(None, gt=0, lt=250)
     fc_repos: Optional[int] = Field(None, gt=0, lt=150)
     poids_kg: Optional[float] = Field(None, gt=0, lt=300)
+    date: Optional[str] = Field(None, max_length=10)  # jour de la pesée "YYYY-MM-DD" (défaut : aujourd'hui)
+
+
+def _aujourdhui(user: Utilisateur) -> date:
+    try:
+        return datetime.now(ZoneInfo(user.fuseau_horaire)).date() if user.fuseau_horaire else date.today()
+    except Exception:
+        return date.today()
+
+
+def _enregistrer_poids(db: Session, user: Utilisateur, poids: float, jour_iso: Optional[str] = None) -> None:
+    """Une pesée = un point d'historique par jour (même valeur inchangée) ; une nouvelle pesée
+    le même jour remplace la précédente. Le poids du profil suit la pesée la plus récente."""
+    aujourdhui = _aujourdhui(user)
+    try:
+        jour = date.fromisoformat(jour_iso) if jour_iso else aujourdhui
+    except ValueError:
+        raise HTTPException(400, "Format date invalide, attendu YYYY-MM-DD")
+    if jour > aujourdhui:
+        raise HTTPException(400, "La date de pesée ne peut pas être dans le futur")
+    points = db.query(PoidsUtilisateur).filter(PoidsUtilisateur.utilisateur_id == user.id).all()
+    meme_jour = [p for p in points if p.enregistre_le and p.enregistre_le.date() == jour]
+    if meme_jour:
+        meme_jour[-1].poids_kg = poids
+    else:
+        quand = datetime.now() if jour == aujourdhui else datetime.combine(jour, datetime.min.time()).replace(hour=8)
+        db.add(PoidsUtilisateur(utilisateur_id=user.id, poids_kg=poids, enregistre_le=quand))
+    if not any(p.enregistre_le and p.enregistre_le.date() > jour for p in points):
+        user.poids_kg = poids
+
 
 @router.get("/api/utilisateur/profil-fc", summary="Récupère fc_max, fc_repos et poids_kg de l'utilisateur")
 def get_profil_fc(current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
@@ -36,11 +66,7 @@ def patch_profil_fc(payload: ProfilFCSchema, current_user: Utilisateur = Depends
     if payload.fc_max is not None: current_user.fc_max = payload.fc_max
     if payload.fc_repos is not None: current_user.fc_repos = payload.fc_repos
     if payload.poids_kg is not None:
-        # Nouveau relevé de poids → point d'historique (uniquement si la valeur change)
-        ancien = current_user.poids_kg
-        if ancien is None or abs(payload.poids_kg - ancien) > 0.001:
-            db.add(PoidsUtilisateur(utilisateur_id=current_user.id, poids_kg=payload.poids_kg))
-        current_user.poids_kg = payload.poids_kg
+        _enregistrer_poids(db, current_user, payload.poids_kg, payload.date)
     db.commit()
     return {"fc_max": current_user.fc_max, "fc_repos": current_user.fc_repos, "poids_kg": current_user.poids_kg}
 
@@ -59,7 +85,7 @@ def historique_poids(current_user: Utilisateur = Depends(get_current_user), db: 
     if not points and current_user.poids_kg:
         d0 = current_user.cree_le.date() if current_user.cree_le else date.today()
         points.append({"date": d0.strftime("%Y-%m-%d"), "poids": round(current_user.poids_kg, 1)})
-    return {"points": points}
+    return {"points": points, "taille_cm": current_user.taille_cm}
 
 
 class ProfilInfosSchema(BaseModel):
@@ -69,6 +95,7 @@ class ProfilInfosSchema(BaseModel):
     sexe: Optional[str] = Field(None, max_length=10)
     date_naissance: Optional[str] = Field(None, max_length=10)  # "YYYY-MM-DD" ou null pour effacer
     poids_kg: Optional[float] = Field(None, gt=0, lt=300)
+    taille_cm: Optional[float] = Field(None, ge=100, le=250)
 
 @router.patch("/api/utilisateur/infos", summary="Met à jour les informations personnelles")
 def patch_utilisateur_infos(
@@ -91,8 +118,10 @@ def patch_utilisateur_infos(
         current_user.email = email
     if payload.sexe is not None:
         current_user.sexe = payload.sexe
-    if payload.poids_kg is not None:
-        current_user.poids_kg = payload.poids_kg
+    if payload.poids_kg is not None and (current_user.poids_kg is None or abs(payload.poids_kg - current_user.poids_kg) > 0.001):
+        _enregistrer_poids(db, current_user, payload.poids_kg)
+    if "taille_cm" in payload.model_fields_set:
+        current_user.taille_cm = payload.taille_cm
     if "date_naissance" in payload.model_fields_set:
         if payload.date_naissance:
             try:

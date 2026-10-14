@@ -9,6 +9,7 @@ import Card from "../components/Card";
 import Page from "../components/Page";
 import { Section, Segmente } from "../components/ui";
 import { axeX, axeY, grille, curseur, InfoBulle, Legende, GRIS } from "../components/graphiques";
+import PoidsAnalyse from "../components/Poids";
 import { getAnalyses } from "../api";
 import { fmtAllureSec, fmtDate, fmtDuree, nombre } from "../carnet";
 
@@ -685,6 +686,7 @@ export default function Analyses() {
       <Section titre="Forme et fatigue"><FormeFatigue f={a.forme} /></Section>
       <Section titre="Récupération"><Recuperation r={a.recuperation} /></Section>
       <Section titre="Sommeil"><Nuits r={a.recuperation} /></Section>
+      <Section titre="Poids"><PoidsAnalyse /></Section>
       <Section titre="Intensité"><Zones z={a.zones} /></Section>
       <Section titre="Course à pied"><Vma v={a.vma} /><Course c={a.course} /></Section>
       <Section titre="Respect du plan"><RespectPlan p={a.plan} /></Section>

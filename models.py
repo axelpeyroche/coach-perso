@@ -94,6 +94,7 @@ class Utilisateur(Base):
     fc_max: Mapped[Optional[int]] = mapped_column(Integer, comment="FC max mesurée (bpm)")
     fc_repos: Mapped[Optional[int]] = mapped_column(Integer, comment="FC de repos (bpm)")
     poids_kg: Mapped[Optional[float]] = mapped_column(Float, comment="Poids corporel (kg)")
+    taille_cm: Mapped[Optional[float]] = mapped_column(Float, comment="Taille (cm), pour l'IMC")
 
     # Photo de profil (data URL base64, cf. absence de stockage objet dédié)
     photo_url: Mapped[Optional[str]] = mapped_column(Text)
