@@ -8,6 +8,7 @@ import { getErrorMessage } from "../utils/errors";
 import ConfirmDialog from "../components/ConfirmDialog";
 import Page from "../components/Page";
 import Feuille from "../components/Feuille";
+import { MenuChoix } from "../components/Menu";
 import ModalPoids from "../components/ModalPoids";
 import { imc } from "../components/Poids";
 import { nombre } from "../carnet";
@@ -436,14 +437,11 @@ function Notifications() {
         <SelecteurHeure libelle="Heure d'envoi" valeur={etat.heure} valeurs={etat.heures} onChange={(h) => heure.mutate(h)} />
       )}
       {disponible && actif && (
-        <label className="ligne">
+        <div className="ligne">
           <span className="flex-1 text-[17px]">Rappel de pesée</span>
-          <select value={etat?.rappel_poids_jour ?? 0} onChange={(e) => rappel.mutate(Number(e.target.value))}
-            className="bg-transparent text-[17px] text-label-2 text-right outline-none" aria-label="Jour du rappel de pesée">
-            {JOURS.map((j, i) => <option key={j} value={i}>Le {j.toLowerCase()}</option>)}
-            <option value={-1}>Désactivé</option>
-          </select>
-        </label>
+          <MenuChoix label="Jour du rappel de pesée" valeur={etat?.rappel_poids_jour ?? 0} onChange={(j) => rappel.mutate(j)}
+            options={[...JOURS.map((j, i) => ({ valeur: i, label: j })), { separateur: true }, { valeur: -1, label: "Désactivé" }]} />
+        </div>
       )}
       {disponible && actif && (
         <button onClick={() => test.mutate()} disabled={test.isPending} className="ligne disabled:opacity-50">
