@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useMesures } from "./Forme";
 import StatTile from "./StatTile";
+import Feuille from "./Feuille";
 import { fmtDate, fmtDuree, nombre } from "../carnet";
 
 // Phases de la nuit (champs personnalisés remplis par Intervals Companion), en heures.
@@ -72,7 +73,7 @@ export default function SommeilNuit() {
 
   return (
     <div className="min-w-0">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-3 h-full">
         <StatTile label="Score de sommeil" color="indigo">
           <div className="flex items-center gap-2 mt-1">
             <Anneau score={score} parts={parts.length ? parts : [{ cle: "nuit", couleur: "#5856D6", part: 1 }]} />
@@ -118,15 +119,17 @@ export default function SommeilNuit() {
       </div>
 
       {infos && (
-        <div className="card p-4 mt-3 space-y-2 text-[13px] leading-[18px] text-label-2">
-          <p>Le score mesure la nature réparatrice de ta nuit, sur 100 : Très élevé (96 à 100), Élevé (80 à 95), OK (70 à 79),
-            Bas (50 à 69), Très bas (moins de 50). La partie colorée de l'anneau correspond au score, répartie selon le temps passé dans chaque phase.</p>
-          <p>Repères chez l'adulte (part de la nuit) : profond 13 à 23 %, léger 45 à 60 %, paradoxal 20 à 25 %. Une durée en orange sort de son repère.
-            Profond : récupération physique et immunité. Paradoxal : mémoire et équilibre émotionnel. Léger : transition entre les deux.</p>
-          <p>Apple ne partage son propre score avec aucune autre app : celui-ci est calculé par Intervals Companion,
-            il peut différer de quelques points de l'app Santé, et le détail « Coucher » et « Interruptions » n'est pas disponible.</p>
-          <Link to="/analyses" className="inline-block text-brand">Voir l'évolution dans Analyses →</Link>
-        </div>
+        <Feuille titre="Score de sommeil" onClose={() => setInfos(false)}>
+          <div className="space-y-3 text-[15px] leading-[21px] text-label-2">
+            <p>Le score mesure la nature réparatrice de ta nuit, sur 100 : Très élevé (96 à 100), Élevé (80 à 95), OK (70 à 79),
+              Bas (50 à 69), Très bas (moins de 50). La partie colorée de l'anneau correspond au score, répartie selon le temps passé dans chaque phase.</p>
+            <p>Repères chez l'adulte (part de la nuit) : profond 13 à 23 %, léger 45 à 60 %, paradoxal 20 à 25 %. Une durée en orange sort de son repère.
+              Profond : récupération physique et immunité. Paradoxal : mémoire et équilibre émotionnel. Léger : transition entre les deux.</p>
+            <p>Apple ne partage son propre score avec aucune autre app : celui-ci est calculé par Intervals Companion,
+              il peut différer de quelques points de l'app Santé, et le détail « Coucher » et « Interruptions » n'est pas disponible.</p>
+            <Link to="/analyses" onClick={() => setInfos(false)} className="inline-block text-brand">Voir l'évolution dans Analyses →</Link>
+          </div>
+        </Feuille>
       )}
     </div>
   );

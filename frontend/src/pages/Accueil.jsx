@@ -57,7 +57,7 @@ export default function Accueil() {
       )}
 
       {!vide && (
-        <div className="grid gap-3 lg:grid-cols-2 lg:items-start">
+        <div className="grid gap-3 lg:grid-cols-2">
           <FormeJour />
           <SommeilNuit />
         </div>
