@@ -443,6 +443,9 @@
   @media (min-width: 768px) {
     .feuille.feuille-large { max-width: 56rem; height: auto; max-height: calc(100dvh - 64px); }
   }
+  @media (min-width: 768px) {
+    .feuille.feuille-detail { max-width: 52rem; max-height: calc(100dvh - 64px); }
+  }
   /* Barre d'outils de la feuille : ✕ en verre à gauche, validation en capsule bleue */
   .feuille-barre .btn-texte {
     @apply h-9 px-4 rounded-full bg-brand text-white text-[15px] font-semibold;

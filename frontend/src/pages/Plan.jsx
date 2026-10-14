@@ -8,6 +8,7 @@ import ActiviteLigne from "../components/ActiviteLigne";
 import ModalActivite from "../components/ModalActivite";
 import ConfirmDialog from "../components/ConfirmDialog";
 import ImportPlan from "../components/ImportPlan";
+import ContenuSeance from "../components/ContenuSeance";
 import { Section, BoutonAjout } from "../components/ui";
 import {
   getPlan, getActivites, creerPrevue, modifierPrevue, supprimerPrevue, getActivitesProches,
@@ -72,7 +73,7 @@ function DetailSeance({ s, onClose, onOuvrirActivite }) {
   ].filter(([, v]) => v);
 
   return (
-    <Feuille titre="Séance prévue" onClose={onClose}>
+    <Feuille titre="Séance prévue" onClose={onClose} classe="feuille-detail">
       <div className="flex items-center gap-3.5">
         <span className="w-14 h-14 shrink-0 rounded-full flex items-center justify-center text-[28px]"
           style={{ backgroundColor: `${info.couleur}26` }}>{s.emoji ?? info.emoji}</span>
@@ -96,12 +97,7 @@ function DetailSeance({ s, onClose, onOuvrirActivite }) {
         </div>
       )}
 
-      {s.description && (
-        <section className="space-y-1.5">
-          <h4 className="px-1 text-[13px] uppercase tracking-[0.02em] font-medium text-label-2">Contenu</h4>
-          <div className="card px-4 py-3 text-[15px] leading-6 whitespace-pre-line">{s.description}</div>
-        </section>
-      )}
+      {s.description && <ContenuSeance description={s.description} couleur={info.couleur} />}
 
       {s.activite && (
         <section className="space-y-1.5">
