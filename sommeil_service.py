@@ -34,6 +34,9 @@ _MOTS = [
     ("lit", ("au lit", "in bed", "inbed", "couche")),
     ("endormi", ("endormi", "asleep", "sommeil", "sleep", "unspecified")),
 ]
+# Identifiants de l'export Santé (export.xml) : HKCategoryValueSleepAnalysis<suffixe>
+_HK = {"inbed": "lit", "asleep": "endormi", "asleepunspecified": "endormi", "awake": "eveil",
+       "asleepcore": "essentiel", "asleepdeep": "profond", "asleeprem": "paradoxal"}
 LABELS_SCORE = [(96, "Très élevé"), (81, "Élevé"), (61, "OK"), (41, "Bas"), (0, "Très bas")]
 
 
@@ -45,6 +48,8 @@ def normaliser_phase(v) -> Optional[str]:
     s = _sans_accents(str(v or "")).lower().strip()
     if re.fullmatch(r"\d", s):
         return _CODES.get(int(s))
+    if s.startswith("hkcategoryvaluesleepanalysis"):
+        return _HK.get(s.removeprefix("hkcategoryvaluesleepanalysis"))
     for phase, mots in _MOTS:
         if any(re.search(rf"\b{m}", s) for m in mots):
             return phase
@@ -123,7 +128,9 @@ def _sessions(tranches: list[tuple[str, datetime, datetime]]) -> list[list[tuple
 
 
 def _analyser(session) -> Optional[dict]:
-    endormi = _union((d, f) for p, d, f in session if p in ENDORMI)
+    # Avec des phases (montre), un « endormi » générique d'une autre source (iPhone, appli) les recouvrirait
+    a_phases = any(p in STADES for p, _, _ in session)
+    endormi = _union((d, f) for p, d, f in session if p in (STADES if a_phases else ENDORMI))
     if not endormi:
         return None
     debut, fin = endormi[0][0], endormi[-1][1]
@@ -166,27 +173,29 @@ def enregistrer_phases(db: Session, user_id: int, tranches: list[tuple[str, date
         if j not in nuits or n["endormi_min"] > nuits[j]["endormi_min"]:
             nuits[j] = n
     enregistrees = []
+    existantes = {r.jour: r for r in db.query(NuitSommeil).filter(
+        NuitSommeil.utilisateur_id == user_id,
+        NuitSommeil.jour >= min(nuits, default=date.today()) - timedelta(days=REGULARITE_NUITS))}
     for j in sorted(nuits):
         n = nuits[j]
-        precedents = [r.endormissement for r in db.query(NuitSommeil).filter(
-            NuitSommeil.utilisateur_id == user_id, NuitSommeil.jour < j,
-            NuitSommeil.jour >= j - timedelta(days=REGULARITE_NUITS))]
+        precedents = [r.endormissement for jr, r in existantes.items()
+                      if j - timedelta(days=REGULARITE_NUITS) <= jr < j]
         duree = points_duree(n["endormi_min"] / 60)
         regul = points_regularite(n["endormissement"], precedents)
         inter = points_interruptions(n["eveil_min"], n.pop("reveils_longs"))
         # Sans historique, la régularité est remplacée par la moyenne des deux autres critères
         total = duree + inter + (regul if regul is not None else 30 * (duree + inter) / 70)
-        row = db.query(NuitSommeil).filter(NuitSommeil.utilisateur_id == user_id, NuitSommeil.jour == j).first()
+        row = existantes.get(j)
         if not row:
-            row = NuitSommeil(utilisateur_id=user_id, jour=j)
+            row = existantes[j] = NuitSommeil(utilisateur_id=user_id, jour=j)
             db.add(row)
         for k, v in n.items():
             setattr(row, k, round(v, 1) if isinstance(v, float) else v)
         row.score = int(round(total))
         row.score_duree, row.score_interruptions = round(duree, 1), round(inter, 1)
         row.score_regularite = round(regul, 1) if regul is not None else None
-        db.flush()
         enregistrees.append(row)
+    db.flush()
     cs.importer_mesures(db, user_id, [m for r in enregistrees for m in (
         ("sommeil", r.jour, r.endormi_min / 60), ("score_sommeil", r.jour, float(r.score)))])
     return {"nuits": enregistrees, "inconnus": sorted(inconnus), "recues": len(tranches),

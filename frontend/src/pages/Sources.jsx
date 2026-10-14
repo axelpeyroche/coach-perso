@@ -7,7 +7,7 @@ import ConfirmDialog from "../components/ConfirmDialog";
 import {
   importerFichierActivites, getImportToken, regenererImportToken,
   getAnalyseToken, regenererAnalyseToken, exporterCarnet, urlApiAbsolue,
-  getClaudeToken, regenererClaudeToken, importerTraces,
+  getClaudeToken, regenererClaudeToken, importerTraces, importerPhasesSommeil,
   getIntervals, connecterIntervals, deconnecterIntervals, synchroIntervals,
 } from "../api";
 import { IAS, promptAnalyse } from "../ia";
@@ -159,6 +159,71 @@ function BlocFichier() {
               : `✓ ${res.lignes} ligne(s) lue(s) (${res.source}) : ${res.cree} ajoutée(s), ${res.maj + res.fusion} mise(s) à jour, ${res.inchange} inchangée(s)`}
           </p>
         ) : <p className="text-[13px] text-ios-red">{String(res.msg)}</p>)}
+      </div>
+    </Bloc>
+  );
+}
+
+// ── Sommeil (export Santé) ─────────────────────────────────────────────────
+// Raccourcis ne peut pas lire l'analyse du sommeil sur tous les iPhone : l'export complet de Santé
+// contient les phases de chaque nuit. Le fichier est lu ici et seules les tranches de sommeil partent.
+function BlocSommeil() {
+  const qc = useQueryClient();
+  const input = useRef(null);
+  const [etat, setEtat] = useState(null); // { etape, progres, res, erreur }
+
+  async function importer(f) {
+    try {
+      setEtat({ etape: "lecture", progres: 0 });
+      const { lireSommeilExport } = await import("../sommeilExport");
+      const tranches = await lireSommeilExport(f, { progres: (p) => setEtat({ etape: "lecture", progres: p }) });
+      if (!tranches.length) throw new Error("Aucune donnée de sommeil sur les 13 derniers mois dans cet export.");
+      setEtat({ etape: "envoi", progres: 1 });
+      const res = await importerPhasesSommeil(tranches);
+      setEtat({ res });
+      invaliderCarnet(qc);
+    } catch (e) {
+      setEtat({ erreur: e?.response?.data?.detail?.toString?.() ?? e?.message ?? "Import impossible" });
+    }
+  }
+
+  const enCours = etat?.etape != null;
+  const jour = (d) => new Date(d).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" });
+  return (
+    <Bloc id="sommeil" icone="🌙" couleur="#5856D626" titre="Phases de sommeil" sousTitre="Export Apple Santé : phases et score de chaque nuit">
+      <div className="space-y-3">
+        <Etape n={1} titre="Exporte tes données Santé">
+          <p>Sur l'iPhone : app <strong>Santé</strong> → ta photo en haut à droite → <em>Exporter toutes les données de santé</em>{" "}
+            → <em>Exporter</em>. Patiente (une à quelques minutes), puis <em>Enregistrer dans Fichiers</em>.</p>
+        </Etape>
+        <Etape n={2} titre="Choisis le fichier export.zip ici">
+          <p>Il est lu dans ton navigateur : seules les tranches de sommeil des 13 derniers mois sont envoyées au carnet,
+            le reste de tes données de santé ne quitte pas le téléphone.</p>
+        </Etape>
+        <p className="text-[13px] text-label-2">Le carnet reconstitue chaque nuit (profond, essentiel, paradoxal, réveils) et calcule
+          le score sur 100 façon Apple. Refais l'export quand tu veux mettre à jour : les nuits déjà présentes sont recalculées, sans doublon.</p>
+        <input ref={input} type="file" accept=".zip,.xml,application/zip,text/xml,application/xml" className="hidden"
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) importer(f); e.target.value = ""; }} />
+        <button className="btn-primaire w-full" disabled={enCours} onClick={() => input.current?.click()}>
+          {etat?.etape === "lecture" ? `Lecture de l'export… ${Math.round(100 * etat.progres)} %`
+            : etat?.etape === "envoi" ? "Envoi des nuits…" : "Choisir export.zip"}
+        </button>
+        {etat?.etape === "lecture" && (
+          <div className="h-1.5 rounded-full bg-remplissage overflow-hidden">
+            <div className="h-full bg-brand transition-all" style={{ width: `${100 * etat.progres}%` }} />
+          </div>
+        )}
+        {etat?.res && (
+          <div className="text-[13px] space-y-1">
+            <p className="text-ios-green">
+              ✓ {etat.res.nuits} nuit(s){etat.res.premiere && ` du ${jour(etat.res.premiere)} au ${jour(etat.res.derniere)}`},
+              {" "}{etat.res.avec_phases} avec les phases détaillées
+            </p>
+            <p className="text-label-2">{etat.res.message}</p>
+            {etat.res.nuits > 0 && <Link to="/analyses" className={lienExt}>Voir mes nuits dans Analyses →</Link>}
+          </div>
+        )}
+        {etat?.erreur && <p className="text-[13px] text-ios-red">{etat.erreur}</p>}
       </div>
     </Bloc>
   );
@@ -545,7 +610,7 @@ export default function Sources() {
   useEffect(() => {
     const ancre = window.location.hash.slice(1);
     const cible = { claude: "ia", intervals: "intervals" }[ancre] ?? ancre;
-    if (["ia", "plan", "claude-code", "intervals"].includes(cible)) {
+    if (["ia", "plan", "claude-code", "intervals", "sommeil"].includes(cible)) {
       setTimeout(() => document.getElementById(cible)?.scrollIntoView({ behavior: "smooth" }), 300);
     }
   }, []);
@@ -557,6 +622,7 @@ export default function Sources() {
         <div className="space-y-3">
           {/* Import GPX masqué : les tracés arrivent par Intervals.icu (BlocTraces). Le CSV reste pour l'historique (export Strava) */}
           <BlocIntervals />
+          <BlocSommeil />
           <BlocFichier />
         </div>
       </div>

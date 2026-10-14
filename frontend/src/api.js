@@ -114,6 +114,10 @@ export const importerFichierActivites = (fichier) => {
   }).then((r) => r.data);
 };
 
+// Phases de sommeil lues dans l'export Apple Santé : [[libellé, début, fin], …]
+export const importerPhasesSommeil = (tranches) =>
+  api.post("/sommeil/phases", { tranches }, { timeout: 120000 }).then((r) => r.data);
+
 // Tracés GPS : [{ debut, points: [[lat, lon, altitude|null, secondes depuis le début], …] }]
 export const importerTraces = (traces) =>
   api.post("/activites/traces", { traces }, { timeout: 120000 }).then((r) => r.data);

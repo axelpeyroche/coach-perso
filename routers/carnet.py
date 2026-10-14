@@ -687,6 +687,34 @@ def _importer_activites(payload: ImportActivitesSchema, db: Session, taches: Opt
             "message": " · ".join(morceaux)}
 
 
+class PhasesSommeilSchema(BaseModel):
+    # [libellé, début, fin] : extraits de l'export Santé par le navigateur
+    tranches: list[list[str]] = Field(..., max_length=100_000)
+
+
+@router.post("/api/sommeil/phases", summary="Phases de sommeil extraites de l'export Apple Santé")
+def importer_phases_sommeil(payload: PhasesSommeilSchema, current_user: Utilisateur = Depends(get_current_user),
+                            db: Session = Depends(obtenir_session)):
+    tz = _fuseau(current_user)
+    tranches = []
+    for t in payload.tranches:
+        if len(t) != 3:
+            continue
+        try:
+            tranches.append((t[0][:80], _date_import(t[1], tz), _date_import(t[2], tz)))
+        except HTTPException:
+            continue
+    if not tranches:
+        raise HTTPException(400, "Aucune tranche de sommeil lisible dans cet export")
+    res = sommeil_service.enregistrer_phases(db, current_user.id, tranches)
+    db.commit()
+    nuits = res["nuits"]
+    return {"ok": True, "nuits": len(nuits), "avec_phases": sum(1 for n in nuits if n.profond_min is not None),
+            "premiere": nuits[0].jour.isoformat() if nuits else None,
+            "derniere": nuits[-1].jour.isoformat() if nuits else None,
+            "inconnus": res["inconnus"], "message": sommeil_service.resume(res)}
+
+
 @router.post("/api/activites/import-fichier", summary="Import CSV (export Strava activities.csv ou CSV du carnet)")
 async def importer_fichier(
     fichier: UploadFile = File(...),

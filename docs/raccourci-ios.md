@@ -114,6 +114,8 @@ Un entraînement reçu prend la place de la séance reconstituée au même momen
 
 Apple ne partage pas son score de sommeil avec les autres applications, et Intervals.icu ne reçoit pas les phases. Ce raccourci envoie les tranches de la nuit (profond, essentiel, paradoxal, éveillé) : le carnet reconstitue chaque nuit et calcule le score avec la méthode d'Apple (durée /50, régularité de l'heure d'endormissement sur les 13 nuits précédentes /30, réveils /20).
 
+> **Si « Analyse du sommeil » n'apparaît pas** dans les types proposés (sur certains iPhone, Raccourcis n'offre que le symptôme « Changements du sommeil », qui ne contient pas les phases), passe par l'export Santé : app **Santé** → ta photo → **Exporter toutes les données de santé** → **Enregistrer dans Fichiers**, puis dans le carnet **Sources → Phases de sommeil → Choisir export.zip**. Le fichier est lu dans le navigateur et seules les tranches de sommeil des 13 derniers mois sont envoyées. Refais l'export de temps en temps (chaque semaine, par exemple) pour mettre à jour.
+
 1. **Texte** (token) puis **Définir la variable** `Token`, comme les autres.
 2. **Rechercher des échantillons de santé** : type **Analyse du sommeil** ; filtre **Date de début est dans les 2 derniers jours** ; **Grouper par : aucun** ; limite désactivée.
 3. **Définir la variable** `Sommeil`.

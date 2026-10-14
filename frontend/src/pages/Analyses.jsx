@@ -419,7 +419,7 @@ function Nuits({ r }) {
           ) : <Vide>Pas de SpO2 transmise pour ces nuits.</Vide>}
         </Graphe>
         {!detail.length && <Graphe titre="Score de sommeil" couleur={VIOLET} sousTitre={score.length ? "sur 100" : "non fourni par ta montre"}
-          note="Les phases et le score viennent du raccourci « Carnet – Sommeil » (Intervals.icu ne les transmet pas).">
+          note="Les phases et le score viennent de l'export Apple Santé (Sources → Phases de sommeil) : Intervals.icu ne les transmet pas.">
           {score.length ? (
             <ResponsiveContainer width="100%" height={180}>
               <BarChart data={score} margin={{ left: 0, right: 0, top: 4 }}>
@@ -430,7 +430,7 @@ function Nuits({ r }) {
                 <Bar dataKey="score_sommeil" name="Score" fill={VIOLET} radius={[3, 3, 0, 0]} maxBarSize={10} />
               </BarChart>
             </ResponsiveContainer>
-          ) : <Vide>Apple Watch ne transmet pas de score à Intervals.icu. Ajoute le raccourci « Carnet – Sommeil » : le carnet calculera ton score et affichera tes phases.</Vide>}
+          ) : <Vide>Apple Watch ne transmet pas de score à Intervals.icu. Importe ton export Santé (Sources → <a href="/sources#sommeil" className="text-brand font-medium">Phases de sommeil</a>) : le carnet calculera ton score et affichera tes phases.</Vide>}
         </Graphe>}
       </div>
     </>
