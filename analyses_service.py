@@ -1132,19 +1132,33 @@ def _signaux_nuit(mesures: dict[str, dict[date, float]], auj: date, jours: int =
 # Pas quotidiens
 # ---------------------------------------------------------------------------
 
-def _pas(mesures: dict[str, dict[date, float]], auj: date, jours: int = 90) -> dict:
-    pas = mesures.get("pas", {})
-    moy = lambda n: _r(_moy([v for d, v in pas.items() if auj - timedelta(days=n) < d <= auj]), 0)
+def _pas(pas: dict[date, float], auj: date, jours: int = 365) -> dict:
+    """Pas quotidiens : 1 an de points journaliers (avec moyenne 7 j), puis moyennes
+    par semaine et par mois sur tout l'historique pour les vues longues."""
+    pas = {d: v for d, v in pas.items() if d <= auj}
+    moy = lambda n: _r(_moy([v for d, v in pas.items() if auj - timedelta(days=n) < d]), 0)
     points = []
     for k in range(jours - 1, -1, -1):
         j = auj - timedelta(days=k)
         fen = [pas[d] for d in pas if j - timedelta(days=6) <= d <= j]
         points.append({"jour": j.isoformat(), "pas": pas.get(j), "moy7": _r(_moy(fen), 0)})
-    der = max((d for d in pas if d <= auj), default=None)
+    # Points journaliers seulement à partir de la première mesure
+    premier = min(pas, default=None)
+    points = [p for p in points if premier and p["jour"] >= premier.isoformat()]
+    semaines: dict[date, list] = defaultdict(list)
+    mois: dict[str, list] = defaultdict(list)
+    for d, v in pas.items():
+        semaines[d - timedelta(days=d.weekday())].append(v)
+        mois[d.strftime("%Y-%m")].append(v)
+    der = max(pas, default=None)
     return {"points": points if any(p["pas"] for p in points) else [],
+            "semaines": [{"jour": d.isoformat(), "pas": _r(_moy(v), 0), "jours": len(v)} for d, v in sorted(semaines.items())],
+            "mois": [{"jour": f"{m}-01", "pas": _r(_moy(v), 0), "jours": len(v)} for m, v in sorted(mois.items())],
+            "premier": premier.isoformat() if premier else None,
             "derniere": {"jour": der.isoformat(), "pas": round(pas[der])} if der else None,
-            "moy_7j": moy(7), "moy_28j": moy(28), "moy_90j": moy(90),
-            "jours_10k_28j": sum(1 for d, v in pas.items() if auj - timedelta(days=28) < d <= auj and v >= 10000)}
+            "moy_7j": moy(7), "moy_28j": moy(28), "moy_90j": moy(90), "moy_365j": moy(365),
+            "moy_tout": _r(_moy(list(pas.values())), 0),
+            "jours_10k_28j": sum(1 for d, v in pas.items() if auj - timedelta(days=28) < d and v >= 10000)}
 
 
 # ---------------------------------------------------------------------------
@@ -1186,7 +1200,8 @@ def calculer_analyses(db: Session, user: Utilisateur, aujourd_hui: Optional[date
         "denivele": _denivele(acts, auj),
         "sommeil": _sommeil(mesures, user, auj),
         "signaux_nuit": _signaux_nuit(mesures, auj),
-        "pas": _pas(mesures, auj),
+        "pas": _pas({m.jour: m.valeur for m in db.query(MesureSante.jour, MesureSante.valeur).filter(
+            MesureSante.utilisateur_id == user.id, MesureSante.type == "pas")}, auj),
     }
 
 

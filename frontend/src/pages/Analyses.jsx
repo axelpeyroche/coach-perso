@@ -628,10 +628,31 @@ function SignauxNuit({ s }) {
 }
 
 // ── Pas quotidiens ─────────────────────────────────────────────────────────
+// 3 mois : jour par jour ; 1 an : moyenne par semaine ; tout : par semaine jusqu'à 2 ans, puis par mois
+const PERIODES_PAS = [["3m", "3 mois"], ["1a", "1 an"], ["tout", "Tout"]];
+
 function Pas({ p }) {
-  const data = useMemo(() => (p?.points ?? []).map((x) => ({ ...x, label: court(x.jour) })), [p]);
+  const [periode, setPeriode] = useState("3m");
   const milliers = (v) => (v == null ? "—" : nombre(Math.round(v), 0));
-  if (!data.length) {
+  const vue = useMemo(() => {
+    if (!p?.points?.length) return null;
+    if (periode === "3m") {
+      return { data: p.points.slice(-90).map((x) => ({ ...x, label: court(x.jour) })), pas: "jour",
+        moyenne: p.moy_90j, labelMoy: "Moyenne 90 j", sousTitre: "90 jours · ligne = moyenne 7 jours" };
+    }
+    const fmt = (x, opts) => ({ ...x, label: new Date(x.jour).toLocaleDateString("fr-FR", opts) });
+    if (periode === "1a") {
+      return { data: p.semaines.slice(-52).map((x) => fmt(x, { day: "numeric", month: "short" })), pas: "semaine",
+        moyenne: p.moy_365j, labelMoy: "Moyenne 1 an", sousTitre: "12 mois · moyenne par semaine" };
+    }
+    const parMois = p.semaines.length > 104;
+    const debutTxt = p.premier ? new Date(p.premier).toLocaleDateString("fr-FR", { month: "long", year: "numeric" }) : "";
+    return { data: (parMois ? p.mois : p.semaines).map((x) => fmt(x, { month: "short", year: "2-digit" })),
+      pas: parMois ? "mois" : "semaine", moyenne: p.moy_tout, labelMoy: "Moyenne totale",
+      sousTitre: `Depuis ${debutTxt} · moyenne par ${parMois ? "mois" : "semaine"}` };
+  }, [p, periode]);
+
+  if (!vue) {
     return (
       <Graphe titre="Pas quotidiens" couleur={VERT}
         note="Dans l'app Santé : Partage › Apps › Intervals Companion, autorise « Pas ». Puis, dans Intervals Companion, active la synchro des pas : ils arrivent avec le reste à la synchro du matin.">
@@ -639,24 +660,32 @@ function Pas({ p }) {
       </Graphe>
     );
   }
+  const jour = vue.pas === "jour";
+  // Graduations rondes : tous les 5 000 pas (2 500 si les valeurs restent basses)
+  const max = Math.max(10000, ...vue.data.map((x) => x.pas ?? 0));
+  const palier = max > 12000 ? 5000 : 2500;
+  const ticks = Array.from({ length: Math.ceil(max / palier) + 1 }, (_, i) => i * palier);
   return (
-    <Graphe titre="Pas quotidiens" couleur={VERT} sousTitre="90 jours · ligne = moyenne 7 jours"
+    <Graphe titre="Pas quotidiens" couleur={VERT} sousTitre={vue.sousTitre}
       note="L'activité hors entraînement compte dans la fatigue : une journée à 20 000 pas la veille d'une séance dure se ressent.">
+      <Segmente className="mb-3" valeur={periode} onChange={setPeriode} options={PERIODES_PAS} />
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
         <Tuile label="Dernier jour" value={milliers(p.derniere?.pas)} sub={p.derniere ? court(p.derniere.jour) : null} />
         <Tuile label="Moyenne 7 j" value={milliers(p.moy_7j)} sub={p.moy_28j != null ? `28 j : ${milliers(p.moy_28j)}` : null} />
-        <Tuile label="Moyenne 90 j" value={milliers(p.moy_90j)} />
+        <Tuile label={vue.labelMoy} value={milliers(vue.moyenne)} />
         <Tuile label="Jours ≥ 10 000" value={`${p.jours_10k_28j ?? 0}`} sub="sur 28 jours" />
       </div>
       <ResponsiveContainer width="100%" height={180}>
-        <ComposedChart data={data} margin={{ left: 0, right: 0, top: 4 }}>
+        <ComposedChart data={vue.data} margin={{ left: 0, right: 0, top: 4 }}>
           <CartesianGrid {...grille} />
           <XAxis dataKey="label" {...axeX} minTickGap={32} />
-          <YAxis {...axeY} width={36} tickFormatter={(v) => `${nombre(v / 1000, 0)}k`} />
-          <Tooltip cursor={curseur} content={<InfoBulle format={(v) => `${milliers(v)} pas`} />} />
+          <YAxis {...axeY} width={36} ticks={ticks} domain={[0, ticks[ticks.length - 1]]}
+            tickFormatter={(v) => `${nombre(v / 1000, v % 1000 ? 1 : 0)}k`} />
+          <Tooltip cursor={curseur} content={<InfoBulle format={(v) => `${milliers(v)} pas${jour ? "" : " / jour"}`} />} />
           <ReferenceLine y={10000} stroke={GRIS} strokeDasharray="4 4" />
-          <Bar dataKey="pas" name="Pas" fill={VERT} fillOpacity={0.45} radius={[2, 2, 0, 0]} maxBarSize={8} />
-          <Line dataKey="moy7" name="Moyenne 7 j" stroke={VERT} strokeWidth={2.5} dot={false} connectNulls />
+          <Bar dataKey="pas" name={{ jour: "Pas", semaine: "Moyenne de la semaine", mois: "Moyenne du mois" }[vue.pas]}
+            fill={VERT} fillOpacity={jour ? 0.45 : 0.7} radius={[2, 2, 0, 0]} maxBarSize={jour ? 8 : 14} />
+          {jour && <Line dataKey="moy7" name="Moyenne 7 j" stroke={VERT} strokeWidth={2.5} dot={false} connectNulls />}
         </ComposedChart>
       </ResponsiveContainer>
     </Graphe>
