@@ -29,7 +29,7 @@ function Anneau({ score, parts }) {
   const rempli = (c * Math.min(score ?? 100, 100)) / 100;
   let debut = 0;
   return (
-    <div className="relative w-[60px] h-[60px] md:w-[68px] md:h-[68px] shrink-0">
+    <div className="relative w-[60px] h-[60px] md:w-[68px] md:h-[68px] lg:w-[108px] lg:h-[108px] shrink-0">
       <svg viewBox="0 0 120 120" className="w-full h-full -rotate-90" aria-hidden>
         <circle cx="60" cy="60" r={r} fill="none" stroke="currentColor" strokeWidth="16" className="text-remplissage" />
         {parts.map((p) => {
@@ -42,7 +42,7 @@ function Anneau({ score, parts }) {
           return el;
         })}
       </svg>
-      <span className="absolute inset-0 flex items-center justify-center font-rounded text-[20px] font-bold tracking-[-0.02em] chiffres">
+      <span className="absolute inset-0 flex items-center justify-center font-rounded text-[20px] lg:text-[30px] font-bold tracking-[-0.02em] chiffres">
         {score != null ? Math.round(score) : "—"}
       </span>
     </div>
@@ -75,45 +75,47 @@ export default function SommeilNuit() {
     <div className="min-w-0">
       <div className="grid grid-cols-2 gap-3 h-full">
         <StatTile label="Score de sommeil" color="indigo">
-          <div className="flex items-center gap-2 mt-1">
+          <div className="flex-1 flex items-center gap-2 mt-1 lg:flex-col lg:justify-center lg:gap-2">
             <Anneau score={score} parts={parts.length ? parts : [{ cle: "nuit", couleur: "#5856D6", part: 1 }]} />
-            <div className="min-w-0">
-              <p className="font-rounded text-[18px] md:text-[20px] leading-6 font-bold tracking-[-0.02em] truncate">{score != null ? niveau(score) : "—"}</p>
+            <div className="min-w-0 lg:text-center">
+              <p className="font-rounded text-[18px] md:text-[20px] lg:text-[22px] leading-6 lg:leading-7 font-bold tracking-[-0.02em] truncate">{score != null ? niveau(score) : "—"}</p>
               <p className="text-[12px] text-label-2 truncate">{fmtDate(jour, { weekday: "short", day: "numeric", month: "short" })}</p>
             </div>
           </div>
           <button onClick={() => setInfos((v) => !v)} aria-expanded={infos} aria-label="À propos du score de sommeil"
-            className="mt-auto pt-1 self-start text-[12px] text-label-2 truncate">
+            className="pt-1 self-start text-[12px] text-label-2 truncate">
             {score != null ? "Intervals Companion" : "score non reçu"} · <span className="text-brand">ⓘ</span>
           </button>
         </StatTile>
 
         <StatTile label="Nuit" color="indigo">
-          <p className="font-rounded text-[22px] md:text-[26px] leading-8 font-bold tracking-[-0.02em] chiffres truncate">{duree != null ? hm(duree) : "—"}</p>
-          <p className="text-[12px] text-label-2 truncate">
+          <p className="font-rounded text-[22px] md:text-[26px] lg:text-[30px] leading-8 lg:leading-9 font-bold tracking-[-0.02em] chiffres truncate">{duree != null ? hm(duree) : "—"}</p>
+          <p className="text-[12px] lg:text-[13px] text-label-2 truncate">
             {[ecartMoy == null ? null : Math.abs(ecartMoy) < 5 ? "= moy. 28 j" : `${ecartMoy > 0 ? "+" : "−"}${hm(Math.abs(ecartMoy) / 60)} / 28 j`,
               fc != null ? `FC ${nombre(fc, 0)}` : null].filter(Boolean).join(" · ")}
           </p>
           {phases.length > 0 && (
-            <>
-              <div className="flex h-1.5 gap-0.5 rounded-full overflow-hidden mt-1" aria-hidden>
+            <div className="mt-auto pt-2 lg:pt-3">
+              <div className="flex h-1.5 lg:h-2 gap-0.5 rounded-full overflow-hidden" aria-hidden>
                 {phases.map((f) => <span key={f.cle} style={{ width: `${(100 * f.h) / totalPhases}%`, background: f.couleur }} />)}
               </div>
-              <ul className="text-[12px] leading-[17px] mt-0.5">
+              <ul className="text-[12px] leading-[17px] lg:text-[14px] lg:leading-[30px] mt-0.5 lg:mt-2">
                 {phases.map((f) => {
                   const pct = (100 * f.h) / totalPhases;
                   const hors = pct < f.repere[0] || pct > f.repere[1];
                   return (
                     <li key={f.cle} className="flex justify-between gap-1">
                       <span className="flex items-center gap-1 truncate">
-                        <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: f.couleur }} aria-hidden />{f.label}
+                        <span className="w-1.5 h-1.5 lg:w-2 lg:h-2 rounded-full shrink-0" style={{ background: f.couleur }} aria-hidden />{f.label}
                       </span>
-                      <span className={hors ? "text-ios-orange chiffres" : "chiffres"} title={`${Math.round(pct)} % · repère ${f.repere[0]} à ${f.repere[1]} %`}>{hm(f.h)}</span>
+                      <span className={hors ? "text-ios-orange chiffres" : "chiffres"} title={`${Math.round(pct)} % · repère ${f.repere[0]} à ${f.repere[1]} %`}>
+                        {hm(f.h)}<span className="hidden lg:inline text-label-2"> · {Math.round(pct)} %</span>
+                      </span>
                     </li>
                   );
                 })}
               </ul>
-            </>
+            </div>
           )}
         </StatTile>
       </div>
