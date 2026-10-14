@@ -54,7 +54,8 @@ class DesabonnementSchema(BaseModel):
 def statut_push(current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
     n = db.query(PushSubscription).filter(PushSubscription.utilisateur_id == current_user.id).count()
     return {"configure": sv.push_configure(), "cle_publique": sv.VAPID_PUBLIQUE or None, "appareils": n,
-            "heure": sv.heure_notif(current_user), "heures": sv.HEURES_MATIN}
+            "heure": sv.heure_notif(current_user), "heures": sv.HEURES_MATIN,
+            "rappel_poids_jour": current_user.rappel_poids_jour if current_user.rappel_poids_jour is not None else 0}
 
 
 class HeureSchema(BaseModel):
@@ -69,6 +70,18 @@ def changer_heure(payload: HeureSchema, current_user: Utilisateur = Depends(get_
     current_user.notif_matin_heure = payload.heure
     db.commit()
     return {"heure": payload.heure}
+
+
+class RappelPoidsSchema(BaseModel):
+    jour: int = Field(..., ge=-1, le=6, description="0 = lundi … 6 = dimanche, -1 = désactivé")
+
+
+@router.put("/api/push/rappel-poids", summary="Jour du rappel hebdomadaire de pesée")
+def changer_rappel_poids(payload: RappelPoidsSchema, current_user: Utilisateur = Depends(get_current_user),
+                         db: Session = Depends(obtenir_session)):
+    current_user.rappel_poids_jour = payload.jour
+    db.commit()
+    return {"rappel_poids_jour": payload.jour}
 
 
 @router.post("/api/push/abonnement", summary="Abonne cet appareil aux notifications")

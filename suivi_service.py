@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 
 import analyses_service as an
 import carnet_service as cs
-from models import Activite, PushSubscription, SeancePrevue, Utilisateur
+from models import Activite, PoidsUtilisateur, PushSubscription, SeancePrevue, Utilisateur
 
 _log = logging.getLogger(__name__)
 
@@ -367,6 +367,19 @@ def envoyer(db: Session, user_id: int, titre: str, corps: str, url: str = "/", t
     return n
 
 
+JOURS_SEMAINE = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
+
+
+def rappel_poids_du(db: Session, user: Utilisateur) -> bool:
+    """Jour de pesée choisi et aucun poids saisi depuis 6 jours."""
+    jour = user.rappel_poids_jour if user.rappel_poids_jour is not None else 0
+    if not 0 <= jour <= 6 or aujourdhui(user).weekday() != jour:
+        return False
+    return not db.query(PoidsUtilisateur.id).filter(
+        PoidsUtilisateur.utilisateur_id == user.id,
+        PoidsUtilisateur.enregistre_le >= datetime.utcnow() - timedelta(days=6)).first()
+
+
 def notifications_matin(db: Session, user: Utilisateur, depuis: Optional[datetime] = None) -> dict:
     """Après la synchro du matin : forme du jour + séance conseillée, alerte VFC, records battus."""
     if not push_configure() or not db.query(PushSubscription.id).filter(
@@ -388,4 +401,9 @@ def notifications_matin(db: Session, user: Utilisateur, depuis: Optional[datetim
     if recs:
         envoyees += envoyer(db, user.id, "Nouveau record 🎉" if len(recs) == 1 else f"{len(recs)} nouveaux records 🎉",
                             " · ".join(recs), "/records", "record")
-    return {"envoyees": envoyees, "statut": f["statut"], "records": len(recs)}
+    poids = rappel_poids_du(db, user)
+    if poids:
+        envoyees += envoyer(db, user.id, "Pense à te peser ⚖️",
+                            "Pèse-toi ce matin, à jeun, et note ton poids dans le carnet : "
+                            "il sert au suivi poids / efficacité des Analyses.", "/profil?poids=1", "poids")
+    return {"envoyees": envoyees, "statut": f["statut"], "records": len(recs), "rappel_poids": poids}

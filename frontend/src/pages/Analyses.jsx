@@ -185,7 +185,6 @@ function Recuperation({ r }) {
     ...p, label: court(p.jour),
     bande: p.vfc_bas != null && p.vfc_haut != null ? [p.vfc_bas, p.vfc_haut] : null,
   })), [r]);
-  const sommeil = useMemo(() => data.filter((p) => p.sommeil != null).slice(-60), [data]);
   if (!data.some((p) => p.vfc != null || p.fc_repos != null || p.sommeil != null)) {
     return <Card><Vide>Pas encore de VFC, de FC au repos ni de sommeil enregistrés.</Vide></Card>;
   }
@@ -228,8 +227,7 @@ function Recuperation({ r }) {
           </Graphe>
         </div>
       </div>
-      <div className="grid gap-3 lg:grid-cols-2">
-        <Graphe titre="FC au repos" couleur={ROSE} sousTitre="90 jours">
+      <Graphe titre="FC au repos" couleur={ROSE} sousTitre="90 jours">
           <ResponsiveContainer width="100%" height={180}>
             <LineChart data={data} margin={{ left: 0, right: 0, top: 4 }}>
               <CartesianGrid {...grille} />
@@ -240,20 +238,82 @@ function Recuperation({ r }) {
               <Line dataKey="fc_repos" name="FC repos" stroke={ROSE} strokeWidth={2} dot={false} connectNulls />
             </LineChart>
           </ResponsiveContainer>
-        </Graphe>
-        <Graphe titre="Sommeil" couleur={INDIGO} sousTitre="60 dernières nuits">
-          {sommeil.length ? (
+      </Graphe>
+    </>
+  );
+}
+
+// ── Sommeil ───────────────────────────────────────────────────────────────
+const valeur = (m, unite, d = 0) => (m?.derniere ? `${nombre(m.derniere.valeur, d)} ${unite}` : "—");
+const moy28 = (m, unite, d = 0) => (m?.moy_28j != null ? `moy. 28 j : ${nombre(m.moy_28j, d)} ${unite}` : null);
+
+function Nuits({ r }) {
+  const nuits = useMemo(() => (r?.points ?? [])
+    .filter((p) => p.sommeil != null || p.fc_sommeil != null)
+    .slice(-60)
+    .map((p) => ({ ...p, label: court(p.jour) })), [r]);
+  const s = r?.sommeil;
+  if (!nuits.length) {
+    return <Card><Vide>Pas encore de nuit enregistrée : garde ta montre la nuit, le sommeil arrive par Intervals.icu à la synchro du matin.</Vide></Card>;
+  }
+  const spo2 = nuits.filter((p) => p.spo2 != null);
+  const score = nuits.filter((p) => p.score_sommeil != null);
+  const aFc = nuits.some((p) => p.fc_sommeil != null);
+  return (
+    <>
+      <div className={clsx("grid gap-3 grid-cols-2", s?.score_sommeil?.derniere ? "lg:grid-cols-5" : "lg:grid-cols-4")}>
+        <Tuile label="Dernière nuit" value={s?.derniere ? `${nombre(s.derniere.heures)} h` : "—"} sub={s?.derniere ? court(s.derniere.jour) : null} />
+        <Tuile label="Sommeil 7 j" value={s?.moy_7j != null ? `${nombre(s.moy_7j)} h` : "—"}
+          sub={s?.nb_7j ? `${s.nuits_courtes_7j} nuit(s) < 7 h sur ${s.nb_7j}` : null} />
+        <Tuile label="FC pendant le sommeil" value={valeur(s?.fc_sommeil, "bpm")} sub={moy28(s?.fc_sommeil, "bpm")} />
+        <Tuile label="SpO2 nocturne" value={valeur(s?.spo2, "%")} sub={moy28(s?.spo2, "%")} />
+        {s?.score_sommeil?.derniere && <Tuile label="Score de sommeil" value={valeur(s.score_sommeil, "/100")} sub={moy28(s.score_sommeil, "")} />}
+      </div>
+      <Graphe titre="Durée et FC de la nuit" couleur={INDIGO}
+        sousTitre={`${nuits.length} dernière${nuits.length > 1 ? "s" : ""} nuit${nuits.length > 1 ? "s" : ""} · barres = durée, ligne = FC moyenne pendant le sommeil`}
+        note="Une FC nocturne plus haute que d'habitude signale souvent fatigue, stress, alcool ou maladie qui couve. Repère : 7 h de sommeil (pointillés).">
+        <ResponsiveContainer width="100%" height={220}>
+          <ComposedChart data={nuits} margin={{ left: 0, right: 0, top: 4 }}>
+            <CartesianGrid {...grille} />
+            <XAxis dataKey="label" {...axeX} minTickGap={32} />
+            <YAxis yAxisId="h" {...axeY} domain={[0, (m) => Math.max(10, Math.ceil(m))]} allowDecimals={false} />
+            {aFc && <YAxis yAxisId="fc" orientation="right" {...axeY} domain={["dataMin - 3", "dataMax + 3"]} />}
+            <Tooltip cursor={curseur} content={<InfoBulle format={(v, p) => (p.dataKey === "sommeil" ? `${nombre(v)} h` : `${nombre(v, 0)} bpm`)} />} />
+            <ReferenceLine yAxisId="h" y={7} stroke={GRIS} strokeDasharray="4 4" />
+            <Bar yAxisId="h" dataKey="sommeil" name="Sommeil" fill={INDIGO} fillOpacity={0.8} radius={[3, 3, 0, 0]} maxBarSize={10} />
+            {aFc && <Line yAxisId="fc" dataKey="fc_sommeil" name="FC sommeil" stroke={ROSE} strokeWidth={2} dot={{ r: 2, strokeWidth: 0, fill: ROSE }} connectNulls />}
+          </ComposedChart>
+        </ResponsiveContainer>
+      </Graphe>
+      <div className="grid gap-3 lg:grid-cols-2">
+        <Graphe titre="SpO2 nocturne" couleur={CYAN} sousTitre="saturation moyenne en oxygène pendant la nuit"
+          note="Normalement entre 95 et 100 %. Des nuits régulièrement sous 93 % méritent d'en parler à un médecin.">
+          {spo2.length ? (
             <ResponsiveContainer width="100%" height={180}>
-              <BarChart data={sommeil} margin={{ left: 0, right: 0, top: 4 }}>
+              <LineChart data={spo2} margin={{ left: 0, right: 0, top: 4 }}>
                 <CartesianGrid {...grille} />
                 <XAxis dataKey="label" {...axeX} minTickGap={32} />
-                <YAxis {...axeY} domain={[0, "dataMax + 1"]} />
-                <Tooltip cursor={curseur} content={<InfoBulle format={(v) => `${nombre(v)} h`} />} />
-                <ReferenceLine y={7} stroke={GRIS} strokeDasharray="4 4" />
-                <Bar dataKey="sommeil" name="Sommeil" fill={INDIGO} radius={[3, 3, 0, 0]} maxBarSize={8} />
+                <YAxis {...axeY} domain={[(min) => Math.min(Math.floor(min) - 1, 94), 100]} />
+                <Tooltip cursor={ligneCurseur} content={<InfoBulle format={(v) => `${nombre(v, 0)} %`} />} />
+                <ReferenceLine y={95} stroke={GRIS} strokeDasharray="4 4" />
+                <Line dataKey="spo2" name="SpO2" stroke={CYAN} strokeWidth={2} dot={{ r: 2, strokeWidth: 0, fill: CYAN }} connectNulls />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : <Vide>Pas de SpO2 transmise pour ces nuits.</Vide>}
+        </Graphe>
+        <Graphe titre="Score de sommeil" couleur={VIOLET} sousTitre={score.length ? "sur 100" : "non fourni par ta montre"}
+          note="Les phases (léger, profond, paradoxal) ne sont pas transmises par Intervals.icu, et Apple Santé n'y envoie pas de score : seules la durée, la FC, la SpO2 et la respiration arrivent.">
+          {score.length ? (
+            <ResponsiveContainer width="100%" height={180}>
+              <BarChart data={score} margin={{ left: 0, right: 0, top: 4 }}>
+                <CartesianGrid {...grille} />
+                <XAxis dataKey="label" {...axeX} minTickGap={32} />
+                <YAxis {...axeY} domain={[0, 100]} />
+                <Tooltip cursor={curseur} content={<InfoBulle format={(v) => `${nombre(v, 0)} / 100`} />} />
+                <Bar dataKey="score_sommeil" name="Score" fill={VIOLET} radius={[3, 3, 0, 0]} maxBarSize={10} />
               </BarChart>
             </ResponsiveContainer>
-          ) : <Vide>Le sommeil arrive par Intervals.icu à la prochaine synchro.</Vide>}
+          ) : <Vide>Ta montre ne transmet pas de score à Intervals.icu (c'est le cas d'Apple Watch). Il apparaîtra ici si une autre source en fournit un.</Vide>}
         </Graphe>
       </div>
     </>
@@ -603,6 +663,7 @@ export default function Analyses() {
     <Page titre="Analyses" large sousTitre="Forme, récupération, performance">
       <Section titre="Forme et fatigue"><FormeFatigue f={a.forme} /></Section>
       <Section titre="Récupération"><Recuperation r={a.recuperation} /></Section>
+      <Section titre="Sommeil"><Nuits r={a.recuperation} /></Section>
       <Section titre="Intensité"><Zones z={a.zones} /></Section>
       <Section titre="Course à pied"><Vma v={a.vma} /><Course c={a.course} /></Section>
       <Section titre="Respect du plan"><RespectPlan p={a.plan} /></Section>

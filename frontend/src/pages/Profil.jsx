@@ -1,9 +1,9 @@
 import { useAuth } from "../AuthContext";
 import { useState, useEffect, useRef } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "../api";
-import { exporterDonnees, exporterCarnet, supprimerCompte, getPush, abonnerPush, desabonnerPush, testerPush, garderSeulPush, changerHeurePush } from "../api";
+import { exporterDonnees, exporterCarnet, supprimerCompte, getPush, abonnerPush, desabonnerPush, testerPush, garderSeulPush, changerHeurePush, changerRappelPoids } from "../api";
 import { getErrorMessage } from "../utils/errors";
 import ConfirmDialog from "../components/ConfirmDialog";
 import Page from "../components/Page";
@@ -338,6 +338,8 @@ async function abonnementActuel() {
   return reg ? reg.pushManager.getSubscription() : null;
 }
 
+const JOURS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
+
 function Notifications() {
   const qc = useQueryClient();
   const { data: etat } = useQuery({ queryKey: ["push"], queryFn: getPush, staleTime: 60_000 });
@@ -401,11 +403,17 @@ function Notifications() {
     onError: (e) => { setMsg(getErrorMessage(e, "Erreur")); qc.invalidateQueries({ queryKey: ["push"] }); },
   });
 
+  const rappel = useMutation({
+    mutationFn: changerRappelPoids,
+    onMutate: (j) => qc.setQueryData(["push"], (e) => (e ? { ...e, rappel_poids_jour: j } : e)),
+    onError: (e) => { setMsg(getErrorMessage(e, "Erreur")); qc.invalidateQueries({ queryKey: ["push"] }); },
+  });
+
   const pied = msg || (!etat?.configure
     ? "Notifications non configurées sur le serveur (clés VAPID manquantes)."
     : !pushPossible || (estIOS && !installee)
     ? "Sur iPhone, ajoute d'abord le carnet à l'écran d'accueil (Partager → Sur l'écran d'accueil) puis ouvre-le depuis l'icône."
-    : `Chaque matin vers ${etat?.heure ?? "7:30"} après la synchro : forme du jour et séance conseillée, alerte si la VFC baisse plusieurs jours, records battus.`);
+    : `Chaque matin vers ${etat?.heure ?? "7:30"} après la synchro : forme du jour et séance conseillée, alerte si la VFC baisse plusieurs jours, records battus${etat?.rappel_poids_jour >= 0 ? `, et le ${JOURS[etat.rappel_poids_jour].toLowerCase()} un rappel pour te peser si tu ne l'as pas fait dans la semaine` : ""}.`);
 
   const disponible = etat?.configure && pushPossible;
   return (
@@ -419,6 +427,16 @@ function Notifications() {
       </div>
       {disponible && actif && etat?.heures && (
         <SelecteurHeure libelle="Heure d'envoi" valeur={etat.heure} valeurs={etat.heures} onChange={(h) => heure.mutate(h)} />
+      )}
+      {disponible && actif && (
+        <label className="ligne">
+          <span className="flex-1 text-[17px]">Rappel de pesée</span>
+          <select value={etat?.rappel_poids_jour ?? 0} onChange={(e) => rappel.mutate(Number(e.target.value))}
+            className="bg-transparent text-[17px] text-label-2 text-right outline-none" aria-label="Jour du rappel de pesée">
+            {JOURS.map((j, i) => <option key={j} value={i}>Le {j.toLowerCase()}</option>)}
+            <option value={-1}>Désactivé</option>
+          </select>
+        </label>
       )}
       {disponible && actif && (
         <button onClick={() => test.mutate()} disabled={test.isPending} className="ligne disabled:opacity-50">
@@ -503,6 +521,14 @@ export default function Profil({ theme, setTheme }) {
   const [editInfos, setEditInfos] = useState(false);
   const [editPwd, setEditPwd] = useState(false);
   const [editPoids, setEditPoids] = useState(false);
+  // Lien du rappel de pesée (/profil?poids=1) : ouvre directement la saisie
+  const [params, setParams] = useSearchParams();
+  useEffect(() => {
+    if (params.get("poids")) {
+      setEditPoids(true);
+      setParams({}, { replace: true });
+    }
+  }, [params, setParams]);
 
   const initials = [user?.prenom?.[0], user?.nom?.[0]].filter(Boolean).join("").toUpperCase() || "?";
 

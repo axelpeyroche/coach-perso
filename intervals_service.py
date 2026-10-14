@@ -178,7 +178,7 @@ def resume_flux(streams: list, sport: str) -> dict:
 
 
 def synchroniser_wellness(db: Session, user: Utilisateur, depuis, jusqu_a) -> tuple[int, dict]:
-    """Sommeil de chaque nuit ; FC repos, VFC (SDNN) et VO2max seulement pour les jours où le
+    """Sommeil de chaque nuit (durée, FC moyenne, score si la montre en fournit, SpO2, respiration) ; FC repos, VFC (SDNN) et VO2max seulement pour les jours où le
     raccourci n'a rien envoyé (ses valeurs restent la référence).
     Retourne (mesures enregistrées, {type: nombre de jours fournis par Intervals.icu})."""
     athlete = user.intervals_athlete_id or "0"
@@ -187,7 +187,7 @@ def synchroniser_wellness(db: Session, user: Utilisateur, depuis, jusqu_a) -> tu
     deja = {(m.type, m.jour) for m in db.query(MesureSante).filter(
         MesureSante.utilisateur_id == user.id, MesureSante.jour >= depuis, MesureSante.type.in_(("fc_repos", "vfc", "vo2max")))}
     items = []
-    recus = {"fc_repos": 0, "vfc": 0, "vo2max": 0, "sommeil": 0}
+    recus = {"fc_repos": 0, "vfc": 0, "vo2max": 0, "sommeil": 0, "fc_sommeil": 0, "score_sommeil": 0, "spo2": 0}
     for w in lignes if isinstance(lignes, list) else []:
         try:
             jour = datetime.fromisoformat(str(w.get("id"))[:10]).date()
@@ -196,6 +196,12 @@ def synchroniser_wellness(db: Session, user: Utilisateur, depuis, jusqu_a) -> tu
         if w.get("sleepSecs"):
             recus["sommeil"] += 1
             items.append(("sommeil", jour, w["sleepSecs"] / 3600))
+        # Les phases (profond, paradoxal…) ne sont pas transmises par Intervals.icu
+        for cle, t in (("avgSleepingHR", "fc_sommeil"), ("sleepScore", "score_sommeil"),
+                       ("spO2", "spo2"), ("respiration", "respiration")):
+            if w.get(cle):
+                recus[t] = recus.get(t, 0) + 1
+                items.append((t, jour, float(w[cle])))
         for cle, t in (("restingHR", "fc_repos"), ("hrvSDNN", "vfc"), ("vo2max", "vo2max")):
             if w.get(cle):
                 recus[t] += 1

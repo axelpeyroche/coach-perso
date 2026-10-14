@@ -1018,12 +1018,21 @@ MESURES = {
     "vfc":      {"label": "VFC (SDNN)",  "unite": "ms",  "min": 5,  "max": 300},
     "vo2max":   {"label": "VO2max",      "unite": "ml/kg/min", "min": 15, "max": 95},
     "sommeil":  {"label": "Sommeil",     "unite": "h",   "min": 1,  "max": 16},
+    # Nuit, via Intervals.icu (montre → Santé → Intervals)
+    "fc_sommeil":    {"label": "FC pendant le sommeil", "unite": "bpm", "min": 25, "max": 120},
+    "score_sommeil": {"label": "Score de sommeil", "unite": "/100", "min": 1, "max": 100},
+    "spo2":          {"label": "SpO2 nocturne", "unite": "%", "min": 70, "max": 100},
+    "respiration":   {"label": "Fréquence respiratoire", "unite": "/min", "min": 4, "max": 40},
 }
 _ALIAS_MESURES = {
     "fc_repos": "fc_repos", "fcrepos": "fc_repos", "restingheartrate": "fc_repos", "fc_au_repos": "fc_repos",
     "vfc": "vfc", "hrv": "vfc", "heartratevariabilitysdnn": "vfc", "variabilite": "vfc",
     "vo2max": "vo2max", "vo2": "vo2max",
     "sommeil": "sommeil", "sleep": "sommeil", "sommeil_h": "sommeil", "sleephours": "sommeil",
+    "fc_sommeil": "fc_sommeil", "avgsleepinghr": "fc_sommeil",
+    "score_sommeil": "score_sommeil", "sleepscore": "score_sommeil",
+    "spo2": "spo2", "oxygensaturation": "spo2",
+    "respiration": "respiration", "respiratoryrate": "respiration",
 }
 
 

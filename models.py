@@ -105,6 +105,8 @@ class Utilisateur(Base):
     # Notification du matin : heure souhaitée ("HH:MM", heure locale) et date du dernier envoi
     notif_matin_heure: Mapped[Optional[str]] = mapped_column(String(5))
     notif_matin_le: Mapped[Optional[date]] = mapped_column(Date)
+    # Rappel de pesée : jour de la semaine (0 = lundi … 6 = dimanche), -1 = désactivé
+    rappel_poids_jour: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
 
 # ---------------------------------------------------------------------------
@@ -134,7 +136,7 @@ class MesureSante(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     utilisateur_id: Mapped[int] = mapped_column(ForeignKey("utilisateurs.id"), nullable=False, index=True)
-    type: Mapped[str] = mapped_column(String(20), nullable=False)  # fc_repos | vfc | vo2max
+    type: Mapped[str] = mapped_column(String(20), nullable=False)  # voir carnet_service.MESURES
     jour: Mapped[date] = mapped_column(Date, nullable=False)
     valeur: Mapped[float] = mapped_column(Float, nullable=False)
 

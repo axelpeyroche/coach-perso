@@ -171,6 +171,7 @@ def _statut(score: Optional[float]) -> Optional[str]:
 
 def _recuperation(mesures: dict[str, dict[date, float]], auj: date, jours: int = 90) -> dict:
     vfc, fcr, som = mesures.get("vfc", {}), mesures.get("fc_repos", {}), mesures.get("sommeil", {})
+    nuit = {t: mesures.get(t, {}) for t in ("fc_sommeil", "score_sommeil", "spo2", "respiration")}
 
     def reference(serie: dict[date, float], j: date):
         vals = [v for d, v in serie.items() if j - timedelta(days=REF_RECUP_JOURS) <= d < j]
@@ -182,7 +183,8 @@ def _recuperation(mesures: dict[str, dict[date, float]], auj: date, jours: int =
     pts = []
     for k in range(jours - 1, -1, -1):
         j = auj - timedelta(days=k)
-        p = {"jour": j.isoformat(), "vfc": vfc.get(j), "fc_repos": fcr.get(j), "sommeil": som.get(j)}
+        p = {"jour": j.isoformat(), "vfc": vfc.get(j), "fc_repos": fcr.get(j), "sommeil": som.get(j),
+             **{t: serie.get(j) for t, serie in nuit.items()}}
         fen7 = [vfc[d] for d in vfc if j - timedelta(days=6) <= d <= j]
         p["vfc_moy7"] = _r(_moy(fen7))
         zs = []
@@ -205,6 +207,12 @@ def _recuperation(mesures: dict[str, dict[date, float]], auj: date, jours: int =
     nuits = [som[d] for d in som if d > auj - timedelta(days=7)]
     nuits28 = [som[d] for d in som if d > auj - timedelta(days=28)]
     derniere_nuit = max(som) if som else None
+
+    def resume(serie: dict[date, float]) -> dict:
+        d = max(serie) if serie else None
+        return {"derniere": {"jour": d.isoformat(), "valeur": serie[d]} if d else None,
+                "moy_7j": _r(_moy([v for j, v in serie.items() if j > auj - timedelta(days=7)])),
+                "moy_28j": _r(_moy([v for j, v in serie.items() if j > auj - timedelta(days=28)]))}
     return {
         "points": pts,
         "actuel": {"jour": actuel["jour"], "score": actuel["score"], "statut": actuel["statut"],
@@ -214,6 +222,7 @@ def _recuperation(mesures: dict[str, dict[date, float]], auj: date, jours: int =
             "derniere": {"jour": derniere_nuit.isoformat(), "heures": som[derniere_nuit]} if derniere_nuit else None,
             "moy_7j": _r(_moy(nuits), 2), "moy_28j": _r(_moy(nuits28), 2),
             "nuits_courtes_7j": sum(1 for h in nuits if h < 7), "nb_7j": len(nuits),
+            **{t: resume(serie) for t, serie in nuit.items()},
         },
     }
 
@@ -642,6 +651,7 @@ def _correlations(acts: list[Activite], mesures: dict[str, dict[date, float]], f
     debut = auj - timedelta(days=365)
     charges = charges_quotidiennes(acts)
     vfc, fcr, som = mesures.get("vfc", {}), mesures.get("fc_repos", {}), mesures.get("sommeil", {})
+    fcs = mesures.get("fc_sommeil", {})
     atl = {date.fromisoformat(p["jour"]): p["atl"] for p in forme}
     jours = [debut + timedelta(days=i) for i in range((auj - debut).days + 1)]
 
@@ -667,6 +677,10 @@ def _correlations(acts: list[Activite], mesures: dict[str, dict[date, float]], f
         _correlation("sommeil_vfc", "Sommeil → VFC", "Sommeil (h)", "VFC (ms)",
                      [(fmt(j), som.get(j), vfc.get(j)) for j in jours], 1,
                      "Mieux dormir favorise une VFC plus haute, signe d'une bonne récupération."),
+        _correlation("fc_sommeil_charge", "Charge de la veille → FC pendant le sommeil", "Charge de la veille (min×RPE)",
+                     "FC sommeil (bpm)",
+                     [(fmt(j), charges.get(j - timedelta(days=1), 0.0), fcs.get(j)) for j in jours if j in fcs], 1,
+                     "Après une grosse journée, le cœur reste souvent plus rapide la nuit suivante."),
         _correlation("fc_repos_atl", "Fatigue (ATL) → FC au repos", "Fatigue ATL", "FC repos (bpm)",
                      [(fmt(j), atl.get(j - timedelta(days=1)), fcr.get(j)) for j in jours], 1,
                      "Une fatigue accumulée fait souvent monter la FC au repos."),

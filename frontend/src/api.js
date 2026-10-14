@@ -173,4 +173,5 @@ export const abonnerPush = (abo) => api.post("/push/abonnement", abo).then((r) =
 export const desabonnerPush = (endpoint) => api.post("/push/desabonnement", { endpoint }).then((r) => r.data);
 export const testerPush = () => api.post("/push/test").then((r) => r.data);
 export const changerHeurePush = (heure) => api.put("/push/heure", { heure }).then((r) => r.data);
+export const changerRappelPoids = (jour) => api.put("/push/rappel-poids", { jour }).then((r) => r.data);
 export const garderSeulPush = (endpoint) => api.post("/push/garder-seul", { endpoint }).then((r) => r.data);

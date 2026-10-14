@@ -81,6 +81,7 @@ def creer_tables() -> None:
         "CREATE INDEX IF NOT EXISTS idx_objectifs_course_utilisateur_id ON objectifs_course (utilisateur_id)",
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS notif_matin_heure VARCHAR(5)",
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS notif_matin_le DATE",
+        "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS rappel_poids_jour INTEGER NOT NULL DEFAULT 0",
         # Séance « Autre » rattachée à la main à une séance prévue : elle prend le sport du plan
         "UPDATE activites SET sport = p.sport FROM seances_prevues p "
         "WHERE p.activite_id = activites.id AND p.lien_manuel AND activites.sport = 'autre' AND p.sport <> 'autre'",
