@@ -102,6 +102,7 @@ class ProfilInfosSchema(BaseModel):
     date_naissance: Optional[str] = Field(None, max_length=10)  # "YYYY-MM-DD" ou null pour effacer
     poids_kg: Optional[float] = Field(None, gt=0, lt=300)
     taille_cm: Optional[float] = Field(None, ge=100, le=250)
+    besoin_sommeil_h: Optional[float] = Field(None, ge=5, le=11)
 
 @router.patch("/api/utilisateur/infos", summary="Met à jour les informations personnelles")
 def patch_utilisateur_infos(
@@ -128,6 +129,8 @@ def patch_utilisateur_infos(
         _enregistrer_poids(db, current_user, payload.poids_kg)
     if "taille_cm" in payload.model_fields_set:
         current_user.taille_cm = payload.taille_cm
+    if "besoin_sommeil_h" in payload.model_fields_set:
+        current_user.besoin_sommeil_h = payload.besoin_sommeil_h
     if "date_naissance" in payload.model_fields_set:
         if payload.date_naissance:
             try:

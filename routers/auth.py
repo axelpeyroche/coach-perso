@@ -132,6 +132,7 @@ def me(current_user: Utilisateur = Depends(get_current_user), db: Session = Depe
         "age": age,
         "poids_kg": current_user.poids_kg,
         "taille_cm": current_user.taille_cm,
+        "besoin_sommeil_h": current_user.besoin_sommeil_h,
         "photo_url": current_user.photo_url,
         "fuseau_horaire": current_user.fuseau_horaire,
         "fc_max": current_user.fc_max,

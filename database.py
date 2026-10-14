@@ -83,6 +83,7 @@ def creer_tables() -> None:
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS notif_matin_le DATE",
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS rappel_poids_jour INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS taille_cm FLOAT",
+        "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS besoin_sommeil_h FLOAT",
         # Séance « Autre » rattachée à la main à une séance prévue : elle prend le sport du plan
         "UPDATE activites SET sport = p.sport FROM seances_prevues p "
         "WHERE p.activite_id = activites.id AND p.lien_manuel AND activites.sport = 'autre' AND p.sport <> 'autre'",

@@ -1,8 +1,8 @@
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   BarChart, Bar, LineChart, Line, ComposedChart, Area, ScatterChart, Scatter, ZAxis,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Cell,
 } from "recharts";
 import clsx from "clsx";
 import Card from "../components/Card";
@@ -10,8 +10,8 @@ import Page from "../components/Page";
 import { Section, Segmente } from "../components/ui";
 import { axeX, axeY, grille, curseur, InfoBulle, Legende, GRIS } from "../components/graphiques";
 import PoidsAnalyse from "../components/Poids";
-import { getAnalyses } from "../api";
-import { fmtAllureSec, fmtDate, fmtDuree, nombre } from "../carnet";
+import api, { getAnalyses } from "../api";
+import { fmtAllureSec, fmtDate, fmtDuree, nombre, sportInfo } from "../carnet";
 
 const BLEU = "#007AFF";
 const ORANGE = "#FF9500";
@@ -46,9 +46,9 @@ const RECUP = {
   rouge: { cls: "bg-ios-red/15 text-ios-red", label: "Fatigué", couleur: ROUGE },
 };
 
-function Graphe({ titre, couleur, sousTitre, action, children, note }) {
+function Graphe({ titre, couleur, sousTitre, action, children, note, className }) {
   return (
-    <Card>
+    <Card className={className}>
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="min-w-0">
           <p className="text-[13px] font-semibold" style={{ color: couleur }}>{titre}</p>
@@ -97,7 +97,7 @@ function FormeFatigue({ f }) {
         </p>
       </Card>
       <div className="lg:col-span-2 min-w-0">
-        <Graphe titre="Forme, fatigue, fraîcheur" couleur={BLEU} sousTitre="Moyennes exponentielles 42 j / 7 j de la charge"
+        <Graphe className="h-full" titre="Forme, fatigue, fraîcheur" couleur={BLEU} sousTitre="Moyennes exponentielles 42 j / 7 j de la charge"
           action={<Segmente valeur={periode} onChange={setPeriode} options={[[90, "3 m"], [180, "6 m"], [365, "1 an"]]} />}>
           <ResponsiveContainer width="100%" height={240}>
             <ComposedChart data={data} margin={{ left: 0, right: 0, top: 4 }}>
@@ -159,7 +159,7 @@ function Zones({ z }) {
         <p className="text-[12px] text-label-3 mt-3">4 dernières semaines · {nombre(b4.couvert_min / 60)} h avec FC sur {nombre(b4.total_min / 60)} h.</p>
       </Card>
       <div className="lg:col-span-2 min-w-0">
-        <Graphe titre="Temps par zone" couleur={VERT} sousTitre="% du temps hebdomadaire · 26 semaines">
+        <Graphe className="h-full" titre="Temps par zone" couleur={VERT} sousTitre="% du temps hebdomadaire · 26 semaines">
           <ResponsiveContainer width="100%" height={240}>
             <BarChart data={data} margin={{ left: 0, right: 0, top: 4 }}>
               <CartesianGrid {...grille} />
@@ -213,7 +213,7 @@ function Recuperation({ r }) {
           <p className="text-[12px] text-label-3 mt-3">Écart à ta moyenne des 60 jours précédents (en écarts-types) : VFC haute et FC repos basse = bien récupéré.</p>
         </Card>
         <div className="lg:col-span-2 min-w-0">
-          <Graphe titre="Variabilité cardiaque" couleur={VIOLET} sousTitre="90 jours · bande = ta normale (réf. ± 1 écart-type)">
+          <Graphe className="h-full" titre="Variabilité cardiaque" couleur={VIOLET} sousTitre="90 jours · bande = ta normale (réf. ± 1 écart-type)">
             <ResponsiveContainer width="100%" height={240}>
               <ComposedChart data={data} margin={{ left: 0, right: 0, top: 4 }}>
                 <CartesianGrid {...grille} />
@@ -392,9 +392,8 @@ function Course({ c }) {
   const preds = useMemo(() => (c?.predictions ?? []).filter((p) => p["5 km"] || p["10 km"]).map((p) => ({ ...p, label: court(p.semaine) })), [c]);
   const evol = useMemo(() => (c?.evolution ?? []).map((e) => ({ ...e, label: fmtDate(`${e.mois}-01`, { month: "short", year: "2-digit" }) })), [c]);
   const derives = useMemo(() => (c?.derives ?? []).map((d) => ({ ...d, label: court(d.date) })), [c]);
-  const foulees = useMemo(() => (c?.foulees ?? []).map((f) => ({ ...f, label: court(f.date) })), [c]);
   const labels = c?.distances ?? ["1 km", "5 km", "10 km", "Semi"];
-  if (!c || (!Object.keys(c.records ?? {}).length && !derives.length && !foulees.length)) {
+  if (!c || (!Object.keys(c.records ?? {}).length && !derives.length && !c.durabilites?.length)) {
     return <Card><Vide>Pas encore de sorties course ou trail avec tracé GPS.</Vide></Card>;
   }
   const pointPred = preds[survolPred ?? preds.length - 1];
@@ -488,25 +487,490 @@ function Course({ c }) {
           ) : <Vide>Calculée à partir du flux de FC d'Intervals.icu sur les sorties d'au moins 40 min.</Vide>}
         </Graphe>
 
-        <Graphe titre="Cadence et foulée" couleur={CYAN} sousTitre="Par sortie">
-          {foulees.length ? (
-            <>
-              <ResponsiveContainer width="100%" height={200}>
-                <LineChart data={foulees} margin={{ left: 0, right: 0, top: 4 }}>
-                  <CartesianGrid {...grille} />
-                  <XAxis dataKey="label" {...axeX} minTickGap={24} />
-                  <YAxis yAxisId="c" {...axeY} domain={["dataMin - 5", "dataMax + 5"]} />
-                  <YAxis yAxisId="f" {...axeY} orientation="left" domain={["dataMin - 0.05", "dataMax + 0.05"]} tickFormatter={(v) => nombre(v, 2)} />
-                  <Tooltip cursor={ligneCurseur} content={<InfoBulle format={(v, p) => (p.dataKey === "foulee_m" ? `${nombre(v, 2)} m` : `${nombre(v, 0)} pas/min`)} />} />
-                  <Line yAxisId="c" dataKey="cadence" name="Cadence" stroke={CYAN} strokeWidth={2} dot={{ r: 1.5, strokeWidth: 0, fill: CYAN }} connectNulls />
-                  <Line yAxisId="f" dataKey="foulee_m" name="Foulée" stroke={ORANGE} strokeWidth={2} dot={{ r: 1.5, strokeWidth: 0, fill: ORANGE }} connectNulls />
-                </LineChart>
-              </ResponsiveContainer>
-              <Legende items={[{ label: "Cadence pas/min (droite)", couleur: CYAN }, { label: "Foulée m (gauche)", couleur: ORANGE }]} />
-            </>
-          ) : <Vide>Il faut le nombre de pas des sorties (cadence mesurée par la montre).</Vide>}
+        <Durabilite d={c.durabilites} />
+      </div>
+    </>
+  );
+}
+
+// ── Axe du temps (points par sortie + médianes mensuelles sur le même graphique) ──
+const ts = (iso) => new Date(`${iso.slice(0, 10)}T12:00`).getTime();
+const moisCourt = (m) => fmtDate(`${m}-01`, { month: "short", year: "2-digit" });
+const axeTemps = {
+  type: "number", dataKey: "t", scale: "time", domain: ["dataMin", "dataMax"], minTickGap: 32,
+  tickFormatter: (t) => new Date(t).toLocaleDateString("fr-FR", { month: "short" }),
+};
+// L'axe numérique passe un horodatage en libellé : on affiche celui de la ligne survolée
+const InfoBulleT = (props) => <InfoBulle {...props} label={props.payload?.[0]?.payload?.label} />;
+const enTemps = (pts, cle, mois, cleMois) => [
+  ...pts.map((p) => ({ ...p, t: ts(p.date), label: p.titre ? `${fmtDate(p.date)} · ${p.titre}` : fmtDate(p.date) })),
+  ...mois.map((m) => ({ t: ts(`${m.mois}-15`), label: `Médiane de ${fmtDate(`${m.mois}-01`, { month: "long", year: "numeric" })}`, [cleMois]: m[cle] })),
+].sort((a, b) => a.t - b.t);
+
+function Variation({ recent, ancien, sens = 1, dec = 0, unite = "" }) {
+  if (recent == null || ancien == null || recent === ancien) return null;
+  const d = recent - ancien;
+  const bon = sens === 0 ? null : d * sens > 0;
+  return (
+    <span className={clsx("font-semibold", bon == null ? "text-label-2" : bon ? "text-ios-green" : "text-ios-red")}>
+      {d > 0 ? "▲" : "▼"} {nombre(Math.abs(d), dec)}{unite && ` ${unite}`}
+    </span>
+  );
+}
+
+// ── Monotonie et contrainte (Foster) ──────────────────────────────────────
+const MONOTONIE = {
+  varie: { cls: "bg-ios-green/15 text-ios-green", label: "Semaine variée" },
+  surveiller: { cls: "bg-ios-orange/15 text-ios-orange", label: "À surveiller" },
+  uniforme: { cls: "bg-ios-red/15 text-ios-red", label: "Trop uniforme" },
+};
+
+function Monotonie({ m }) {
+  const data = useMemo(() => (m?.semaines ?? []).map((s) => ({ ...s, label: court(s.semaine) })), [m]);
+  const a = m?.actuel;
+  if (!data.length && !a) return null;
+  const niv = a?.niveau ? MONOTONIE[a.niveau] : null;
+  return (
+    <div className="grid gap-3 lg:grid-cols-3">
+      <Card>
+        <p className="text-[13px] font-semibold text-label-2">Monotonie · 7 derniers jours</p>
+        <p className="font-rounded text-[34px] leading-10 font-bold chiffres mt-1">{a?.monotonie != null ? nombre(a.monotonie, 1) : "—"}</p>
+        {niv && <span className={clsx("badge text-[12px]", niv.cls)}>{niv.label}</span>}
+        <div className="grid grid-cols-2 gap-2 mt-3">
+          <Tuile label="Charge 7 j" value={a ? nombre(a.charge, 0) : "—"} />
+          <Tuile label="Contrainte" value={a?.contrainte != null ? nombre(a.contrainte, 0) : "—"}
+            sub={a?.contrainte_pct != null ? `${signe(a.contrainte_pct)} % vs 12 sem.` : null} />
+        </div>
+        <p className="text-[12px] text-label-3 mt-3">
+          Monotonie = charge moyenne du jour ÷ son écart-type sur la semaine. Au-dessus de 2, les jours se ressemblent trop :
+          alterne vraies journées faciles (ou repos) et séances dures. Contrainte = charge × monotonie : un pic au-dessus de ta normale précède souvent maladie ou blessure.
+        </p>
+      </Card>
+      <div className="lg:col-span-2 min-w-0">
+        <Graphe className="h-full" titre="Contrainte et monotonie" couleur={ORANGE} sousTitre="Par semaine complète · 26 semaines">
+          <ResponsiveContainer width="100%" height={240}>
+            <ComposedChart data={data} margin={{ left: 0, right: 0, top: 4 }}>
+              <CartesianGrid {...grille} />
+              <XAxis dataKey="label" {...axeX} minTickGap={24} />
+              <YAxis yAxisId="c" {...axeY} width={44} />
+              <YAxis yAxisId="m" orientation="right" {...axeY} domain={[0, (x) => Math.max(3, Math.ceil(x))]} width={28} />
+              <Tooltip cursor={curseur} content={<InfoBulle format={(v, p) => nombre(v, p.dataKey === "monotonie" ? 1 : 0)} />} />
+              <ReferenceLine yAxisId="m" y={2} stroke={ROUGE} strokeDasharray="4 4" />
+              <Bar yAxisId="c" dataKey="contrainte" name="Contrainte" fill={ORANGE} fillOpacity={0.75} radius={[3, 3, 0, 0]} maxBarSize={14} />
+              <Line yAxisId="m" dataKey="monotonie" name="Monotonie" stroke={VIOLET} strokeWidth={2.5} dot={{ r: 2, strokeWidth: 0, fill: VIOLET }} connectNulls />
+            </ComposedChart>
+          </ResponsiveContainer>
+          <Legende items={[{ label: "Contrainte (gauche)", couleur: ORANGE }, { label: "Monotonie (droite, seuil 2)", couleur: VIOLET }]} />
         </Graphe>
       </div>
+    </div>
+  );
+}
+
+// ── Signaux de la nuit (respiration, SpO2) ─────────────────────────────────
+const SIGNAUX = {
+  respiration: { label: "Respiration", unite: "/min", couleur: CYAN, dec: 1 },
+  spo2: { label: "SpO2", unite: "%", couleur: BLEU, dec: 1 },
+};
+
+function SignauxNuit({ s }) {
+  const [cle, setCle] = useState("respiration");
+  const data = useMemo(() => (s?.points ?? []).map((p) => ({ ...p, label: court(p.jour) })), [s]);
+  const a = s?.actuel;
+  const info = SIGNAUX[cle];
+  const aDonnees = data.some((p) => p[cle] != null);
+  if (!a && !data.some((p) => p.respiration != null || p.spo2 != null)) {
+    return (
+      <Graphe titre="Signaux de la nuit" couleur={CYAN}>
+        <Vide>La fréquence respiratoire et la SpO2 de la nuit arrivent par Intervals Companion : active-les dans l'app pour qu'elles soient comparées à ta normale chaque matin.</Vide>
+      </Graphe>
+    );
+  }
+  return (
+    <Graphe titre="Signaux de la nuit" couleur={a?.alerte ? ROUGE : CYAN}
+      sousTitre={a?.jour ? `Nuit du ${fmtDate(a.jour, { weekday: "long", day: "numeric", month: "long" })}` : "Pas de mesure ces deux dernières nuits"}
+      action={a ? (
+        <span className={clsx("badge text-[11px] shrink-0", a.alerte ? "bg-ios-red/15 text-ios-red" : "bg-ios-green/15 text-ios-green")}>
+          {a.alerte ? "Inhabituelle" : "Normale"}
+        </span>
+      ) : null}
+      note={`Comparés à tes 28 nuits précédentes. Une respiration plus rapide d'au moins 1 /min ou une SpO2 en baisse de 2 points (ou sous 93 %) annoncent souvent une infection qui couve, avant même les symptômes. ${s.nuits_alerte_60j} nuit(s) inhabituelle(s) sur 60 jours.`}>
+      {a?.message && <p className={clsx("rounded-xl px-3 py-2 text-[13px] leading-[18px] mb-3", a.alerte ? "bg-ios-red/[0.12] text-ios-red" : "bg-remplissage text-label-2")}>{a.message}</p>}
+      {a?.signaux?.length > 0 && (
+        <div className="grid grid-cols-2 gap-2 mb-3">
+          {a.signaux.map((x) => (
+            <Tuile key={x.type} label={x.label}
+              value={<span className={x.alerte ? "text-ios-red" : undefined}>{nombre(x.valeur, SIGNAUX[x.type]?.dec ?? 1)} {x.unite}</span>}
+              sub={x.ref != null ? `normale ${nombre(x.ref, SIGNAUX[x.type]?.dec ?? 1)} · ${signe(x.ecart, 1)}` : "référence en construction"} />
+          ))}
+        </div>
+      )}
+      <Segmente className="mb-3" valeur={cle} onChange={setCle} options={Object.entries(SIGNAUX).map(([k, v]) => [k, v.label])} />
+      {aDonnees ? (
+        <ResponsiveContainer width="100%" height={180}>
+          <LineChart data={data} margin={{ left: 0, right: 0, top: 6 }}>
+            <CartesianGrid {...grille} />
+            <XAxis dataKey="label" {...axeX} minTickGap={32} />
+            <YAxis {...axeY} domain={["dataMin - 1", "dataMax + 1"]} width={32} tickFormatter={(v) => nombre(v, 0)} />
+            <Tooltip cursor={ligneCurseur} content={<InfoBulle format={(v) => `${nombre(v, 1)} ${info.unite}`} />} />
+            <Line dataKey={`${cle}_ref`} name="Ta normale" stroke={GRIS} strokeDasharray="4 4" dot={false} connectNulls />
+            <Line dataKey={cle} name={info.label} stroke={info.couleur} strokeWidth={2} connectNulls isAnimationActive={false}
+              dot={(p) => (p.value == null ? <g key={p.key} /> : (
+                <circle key={p.key} cx={p.cx} cy={p.cy} r={p.payload.alerte ? 4 : 1.5} fill={p.payload.alerte ? ROUGE : info.couleur}
+                  stroke={p.payload.alerte ? "white" : "none"} strokeWidth={1.5} />
+              ))} />
+          </LineChart>
+        </ResponsiveContainer>
+      ) : <Vide>Pas de {info.label.toLowerCase()} transmise pour ces nuits.</Vide>}
+      <Legende items={[{ label: info.label, couleur: info.couleur }, { label: "Ta normale", couleur: GRIS }, { label: "Nuit inhabituelle", couleur: ROUGE }]} />
+    </Graphe>
+  );
+}
+
+// ── Pas quotidiens ─────────────────────────────────────────────────────────
+function Pas({ p }) {
+  const data = useMemo(() => (p?.points ?? []).map((x) => ({ ...x, label: court(x.jour) })), [p]);
+  const milliers = (v) => (v == null ? "—" : nombre(Math.round(v), 0));
+  if (!data.length) {
+    return (
+      <Graphe titre="Pas quotidiens" couleur={VERT}
+        note="Dans l'app Santé : Partage › Apps › Intervals Companion, autorise « Pas ». Puis, dans Intervals Companion, active la synchro des pas : ils arrivent avec le reste à la synchro du matin.">
+        <Vide>Aucun nombre de pas reçu pour l'instant.</Vide>
+      </Graphe>
+    );
+  }
+  return (
+    <Graphe titre="Pas quotidiens" couleur={VERT} sousTitre="90 jours · ligne = moyenne 7 jours"
+      note="L'activité hors entraînement compte dans la fatigue : une journée à 20 000 pas la veille d'une séance dure se ressent.">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
+        <Tuile label="Dernier jour" value={milliers(p.derniere?.pas)} sub={p.derniere ? court(p.derniere.jour) : null} />
+        <Tuile label="Moyenne 7 j" value={milliers(p.moy_7j)} sub={p.moy_28j != null ? `28 j : ${milliers(p.moy_28j)}` : null} />
+        <Tuile label="Moyenne 90 j" value={milliers(p.moy_90j)} />
+        <Tuile label="Jours ≥ 10 000" value={`${p.jours_10k_28j ?? 0}`} sub="sur 28 jours" />
+      </div>
+      <ResponsiveContainer width="100%" height={180}>
+        <ComposedChart data={data} margin={{ left: 0, right: 0, top: 4 }}>
+          <CartesianGrid {...grille} />
+          <XAxis dataKey="label" {...axeX} minTickGap={32} />
+          <YAxis {...axeY} width={36} tickFormatter={(v) => `${nombre(v / 1000, 0)}k`} />
+          <Tooltip cursor={curseur} content={<InfoBulle format={(v) => `${milliers(v)} pas`} />} />
+          <ReferenceLine y={10000} stroke={GRIS} strokeDasharray="4 4" />
+          <Bar dataKey="pas" name="Pas" fill={VERT} fillOpacity={0.45} radius={[2, 2, 0, 0]} maxBarSize={8} />
+          <Line dataKey="moy7" name="Moyenne 7 j" stroke={VERT} strokeWidth={2.5} dot={false} connectNulls />
+        </ComposedChart>
+      </ResponsiveContainer>
+    </Graphe>
+  );
+}
+
+// ── Sommeil : dette et régularité ─────────────────────────────────────────
+const BESOINS = [[7, "7 h"], [7.5, "7 h 30"], [8, "8 h"], [8.5, "8 h 30"], [9, "9 h"]];
+
+function DetteSommeil({ s }) {
+  const qc = useQueryClient();
+  const changer = useMutation({
+    mutationFn: (besoin_sommeil_h) => api.patch("/utilisateur/infos", { besoin_sommeil_h }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["analyses"] }),
+  });
+  const data = useMemo(() => (s?.points ?? []).map((p) => ({ ...p, label: court(p.jour) })), [s]);
+  if (!s || !data.length) return null;
+  const besoin = changer.isPending ? changer.variables : s.besoin_h;
+  const reg = s.regularite_min;
+  const verdictReg = reg == null ? null : reg <= 30 ? "régulier" : reg <= 60 ? "assez variable" : "irrégulier";
+  const e = s.effet_vfc;
+  const dette = (v) => (v == null ? "—" : v <= 0 ? "Aucune" : hm(v));
+  return (
+    <div className="grid gap-3 lg:grid-cols-3">
+      <Card>
+        <p className="text-[13px] font-semibold text-label-2">Dette de sommeil · 7 nuits</p>
+        <p className={clsx("font-rounded text-[34px] leading-10 font-bold chiffres mt-1", s.dette_7j > 5 ? "text-ios-red" : s.dette_7j > 2 ? "text-ios-orange" : "text-ios-green")}>
+          {dette(s.dette_7j)}
+        </p>
+        <p className="text-[12px] text-label-2">{s.nuits_7j} nuit(s) mesurée(s) · besoin {hm(s.besoin_h)} par nuit</p>
+        <div className="grid grid-cols-2 gap-2 mt-3">
+          <Tuile label="Dette 14 nuits" value={dette(s.dette_14j)} sub={s.nuits_14j ? `${s.nuits_14j} nuits mesurées` : null} />
+          <Tuile label="Régularité" value={reg != null ? `± ${nombre(reg, 0)} min` : "—"} sub={verdictReg ? `durée ${verdictReg}` : "il faut 7 nuits"} />
+        </div>
+        {e && e.ecart_pct != null && (
+          <p className="text-[13px] text-label-2 mt-3">
+            Après une nuit courte (moins de {hm(s.besoin_h - 1)}), ta VFC est en moyenne à <b className="chiffres text-label">{nombre(e.vfc_courtes, 0)} ms</b> contre{" "}
+            <b className="chiffres text-label">{nombre(e.vfc_normales, 0)} ms</b> après une nuit complète ({signe(e.ecart_pct)} %, {e.n_courtes} et {e.n_normales} nuits).
+          </p>
+        )}
+        <p className="text-[13px] font-semibold text-label-2 mt-4 mb-2">Ton besoin de sommeil</p>
+        <div className="overflow-x-auto scrollbar-hide">
+          <Segmente valeur={besoin} onChange={(v) => v !== s.besoin_h && changer.mutate(v)} options={BESOINS} />
+        </div>
+        {changer.isError && <p className="text-[12px] text-ios-red mt-2">Enregistrement impossible, réessaie.</p>}
+      </Card>
+      <div className="lg:col-span-2 min-w-0">
+        <Graphe className="h-full" titre="Durée des nuits et dette" couleur={INDIGO} sousTitre="60 jours · barres = nuit, ligne = dette cumulée sur 7 nuits"
+          note="La dette additionne ce qui manque chaque nuit par rapport à ton besoin, sur les 7 dernières nuits (une nuit plus longue la rembourse en partie). Au-delà de 5 h, vigilance et récupération baissent nettement.">
+          <ResponsiveContainer width="100%" height={240}>
+            <ComposedChart data={data} margin={{ left: 0, right: 0, top: 4 }}>
+              <CartesianGrid {...grille} />
+              <XAxis dataKey="label" {...axeX} minTickGap={32} />
+              <YAxis yAxisId="h" {...axeY} domain={[0, (m) => Math.max(10, Math.ceil(m))]} allowDecimals={false} width={28} />
+              <YAxis yAxisId="d" orientation="right" {...axeY} width={28} allowDecimals={false} />
+              <Tooltip cursor={curseur} content={<InfoBulle format={(v) => hm(v)} />} />
+              <ReferenceLine yAxisId="h" y={s.besoin_h} stroke={GRIS} strokeDasharray="4 4" />
+              <Bar yAxisId="h" dataKey="heures" name="Nuit" radius={[2, 2, 0, 0]} maxBarSize={10}>
+                {data.map((p) => <Cell key={p.jour} fill={p.heures != null && p.heures < s.besoin_h - 1 ? ORANGE : INDIGO} fillOpacity={0.8} />)}
+              </Bar>
+              <Line yAxisId="d" dataKey="dette_7j" name="Dette 7 nuits" stroke={ROUGE} strokeWidth={2} dot={false} connectNulls />
+            </ComposedChart>
+          </ResponsiveContainer>
+          <Legende items={[{ label: "Nuit", couleur: INDIGO }, { label: `Nuit courte (< ${hm(s.besoin_h - 1)})`, couleur: ORANGE }, { label: "Dette 7 nuits (droite)", couleur: ROUGE }]} />
+        </Graphe>
+      </div>
+    </div>
+  );
+}
+
+// ── Courbe des meilleurs efforts et allure critique ────────────────────────
+function EffortsDuree({ e }) {
+  const data = useMemo(() => (e?.courbe ?? []).map((c) => ({
+    label: c.label, actuel: c.actuel?.allure_sec_km ?? null,
+    an_dernier: c.an_dernier?.allure_sec_km ?? null, record: c.record?.allure_sec_km ?? null,
+  })), [e]);
+  const hist = useMemo(() => (e?.historique ?? []).filter((h) => h.allure_sec_km != null).map((h) => ({ ...h, label: moisCourt(h.mois) })), [e]);
+  if (!data.some((d) => d.record != null)) return null;
+  const vc = e.vc, vca = e.vc_an_dernier;
+  const allure = (s) => (s == null ? "—" : `${allureKm(s)}/km`);
+  return (
+    <div className="grid gap-3 lg:grid-cols-3">
+      <Card>
+        <p className="text-[13px] font-semibold text-label-2">Allure critique · 90 jours</p>
+        <p className="font-rounded text-[34px] leading-10 font-bold chiffres mt-1">{vc ? allure(vc.allure_sec_km) : "—"}</p>
+        <p className="text-[12px] text-label-2">{vc ? `${nombre(vc.vitesse_ms * 3.6, 1)} km/h · calculée sur ${vc.n} durées` : "Il faut des efforts soutenus de 3 à 20 min."}</p>
+        <div className="grid grid-cols-2 gap-2 mt-3">
+          <Tuile label="Réserve D′" value={vc ? `${nombre(vc.dprime_m, 0)} m` : "—"} sub="au-dessus de l'allure critique" />
+          <Tuile label="Il y a un an" value={vca ? allure(vca.allure_sec_km) : "—"}
+            sub={vc && vca ? <Variation recent={-vc.allure_sec_km} ancien={-vca.allure_sec_km} unite="s/km" /> : "pas d'historique"} />
+        </div>
+        {hist.length > 1 && (
+          <div className="mt-3">
+            <p className="text-[12px] text-label-2 mb-1">Évolution (90 j glissants, fin de mois)</p>
+            <ResponsiveContainer width="100%" height={90}>
+              <LineChart data={hist} margin={{ left: 0, right: 0, top: 4 }}>
+                <XAxis dataKey="label" {...axeX} minTickGap={24} />
+                <YAxis hide reversed domain={["dataMin - 5", "dataMax + 5"]} />
+                <Tooltip cursor={ligneCurseur} content={<InfoBulle format={allure} />} />
+                <Line dataKey="allure_sec_km" name="Allure critique" stroke={ORANGE} strokeWidth={2} dot={{ r: 2, strokeWidth: 0, fill: ORANGE }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+        <p className="text-[12px] text-label-3 mt-3">
+          L'allure critique est l'allure tenable environ 30 à 40 min : c'est ton seuil, la frontière entre effort contrôlé et effort qui s'emballe.
+          D′ est la distance que tu peux courir plus vite avant d'être à bout.
+        </p>
+      </Card>
+      <div className="lg:col-span-2 min-w-0">
+        <Graphe className="h-full" titre="Courbe des meilleurs efforts" couleur={ORANGE} sousTitre="Meilleure allure tenue sur chaque durée (passages GPS)"
+          note="Une courbe actuelle proche du record sur les durées longues traduit une bonne endurance ; un écart sur les durées courtes, un manque de vitesse.">
+          <ResponsiveContainer width="100%" height={240}>
+            <LineChart data={data} margin={{ left: 0, right: 8, top: 4 }}>
+              <CartesianGrid {...grille} />
+              <XAxis dataKey="label" {...axeX} interval={0} />
+              <YAxis {...axeY} reversed domain={["dataMin - 10", "dataMax + 10"]} width={40} tickFormatter={allureKm} />
+              <Tooltip cursor={ligneCurseur} content={<InfoBulle format={allure} />} />
+              {vc && <ReferenceLine y={vc.allure_sec_km} stroke={ORANGE} strokeOpacity={0.5} strokeDasharray="4 4" />}
+              <Line dataKey="record" name="Record" stroke={GRIS} strokeWidth={1.5} strokeDasharray="4 3" dot={{ r: 2, strokeWidth: 0, fill: GRIS }} connectNulls />
+              <Line dataKey="an_dernier" name="Il y a un an" stroke={CYAN} strokeWidth={1.5} dot={{ r: 2, strokeWidth: 0, fill: CYAN }} connectNulls />
+              <Line dataKey="actuel" name="90 derniers jours" stroke={ORANGE} strokeWidth={3} dot={{ r: 3, strokeWidth: 0, fill: ORANGE }} connectNulls />
+            </LineChart>
+          </ResponsiveContainer>
+          <Legende items={[{ label: "90 derniers jours", couleur: ORANGE }, { label: "Il y a un an", couleur: CYAN }, { label: "Record", couleur: GRIS }]} />
+        </Graphe>
+      </div>
+    </div>
+  );
+}
+
+// ── Efficacité aérobie ────────────────────────────────────────────────────
+function Efficacite({ ef }) {
+  const data = useMemo(() => enTemps(ef?.points ?? [], "ef", ef?.mois ?? [], "ef_mois"), [ef]);
+  const n = ef?.points?.length ?? 0;
+  if (!n) {
+    return <Graphe titre="Efficacité aérobie" couleur={VERT}><Vide>Il faut des sorties d'endurance facile (20 min et plus, avec la FC) pour la suivre.</Vide></Graphe>;
+  }
+  return (
+    <Graphe titre="Efficacité aérobie" couleur={VERT} sousTitre={`Mètres par minute pour un battement · ${n} sorties faciles`}
+      note="Vitesse ÷ FC sur tes sorties en endurance (sur le plat). Si elle monte, tu cours plus vite pour le même effort cardiaque : ta base aérobie progresse. Chaleur, fatigue et dénivelé la font baisser ponctuellement, d'où la médiane mensuelle.">
+      <div className="grid grid-cols-3 gap-2 mb-3">
+        <Tuile label="6 dernières sem." value={ef.recent != null ? nombre(ef.recent, 2) : "—"} />
+        <Tuile label="Il y a 3-4 mois" value={ef.ancien != null ? nombre(ef.ancien, 2) : "—"} />
+        <Tuile label="Tendance" value={ef.tendance_pct != null ? <span className={ef.tendance_pct >= 0 ? "text-ios-green" : "text-ios-red"}>{signe(ef.tendance_pct, 1)} %</span> : "—"}
+          sub={ef.tendance_pct == null ? "pas assez de sorties" : null} />
+      </div>
+      <ResponsiveContainer width="100%" height={220}>
+        <ComposedChart data={data} margin={{ left: 0, right: 8, top: 4 }}>
+          <CartesianGrid {...grille} />
+          <XAxis {...axeX} {...axeTemps} />
+          <YAxis {...axeY} domain={["dataMin - 0.05", "dataMax + 0.05"]} width={36} tickFormatter={(v) => nombre(v, 2)} />
+          <Tooltip cursor={ligneCurseur} content={<InfoBulleT format={(v) => nombre(v, 2)} />} />
+          <Line dataKey="ef" name="Sortie" stroke="none" isAnimationActive={false} dot={{ r: 3, strokeWidth: 0, fill: VERT, fillOpacity: 0.45 }} activeDot={{ r: 5 }} />
+          <Line dataKey="ef_mois" name="Médiane du mois" stroke={VERT} strokeWidth={2.5} dot={false} connectNulls />
+        </ComposedChart>
+      </ResponsiveContainer>
+      <Legende items={[{ label: "Sortie facile", couleur: VERT }, { label: "Médiane du mois", couleur: VERT }]} />
+    </Graphe>
+  );
+}
+
+// ── Durabilité (sorties longues) ──────────────────────────────────────────
+const couleurDurab = (v) => (v < 3 ? VERT : v < 5 ? ORANGE : ROUGE);
+
+function Durabilite({ d }) {
+  const data = useMemo(() => (d ?? []).map((x) => ({ ...x, label: court(x.date) })), [d]);
+  const moyRecente = data.length ? data.slice(-5).reduce((t, x) => t + x.durabilite_pct, 0) / Math.min(5, data.length) : null;
+  return (
+    <Graphe titre="Durabilité" couleur={VIOLET}
+      sousTitre={moyRecente != null ? `Sorties de 1 h 15 et plus · 5 dernières : ${signe(moyRecente, 1)} %` : "Sorties de 1 h 15 et plus"}
+      note="Perte d'efficacité (vitesse / FC) entre le premier et le dernier quart de la sortie. Sous 3 % : le moteur tient la distance ; au-delà de 5 %, l'endurance lâche en fin de sortie (alimentation, hydratation, volume de base).">
+      {data.length ? (
+        <ResponsiveContainer width="100%" height={200}>
+          <BarChart data={data} margin={{ left: 0, right: 0, top: 4 }}>
+            <CartesianGrid {...grille} />
+            <XAxis dataKey="label" {...axeX} minTickGap={24} />
+            <YAxis {...axeY} unit="%" width={36} />
+            <Tooltip cursor={curseur} content={({ active, payload }) => {
+              if (!active || !payload?.length) return null;
+              const x = payload[0].payload;
+              return (
+                <div className="glass rounded-xl px-3 py-2 text-[12px] max-w-[220px]">
+                  <p className="text-label-2">{fmtDate(x.date)}</p>
+                  {x.titre && <p className="font-semibold truncate">{x.titre}</p>}
+                  <p className="chiffres mt-1">Durabilité : <b style={{ color: couleurDurab(x.durabilite_pct) }}>{signe(x.durabilite_pct, 1)} %</b></p>
+                  <p className="chiffres text-label-2">{fmtDuree(x.duree_min * 60)} · {nombre(x.distance_km, 1)} km{x.dplus_m ? ` · ${nombre(x.dplus_m, 0)} m D+` : ""}</p>
+                </div>
+              );
+            }} />
+            <ReferenceLine y={5} stroke={ROUGE} strokeDasharray="4 4" />
+            <ReferenceLine y={0} stroke={GRIS} strokeOpacity={0.5} />
+            <Bar dataKey="durabilite_pct" name="Durabilité" radius={[3, 3, 3, 3]} maxBarSize={14}>
+              {data.map((x) => <Cell key={`${x.activite_id}-${x.date}`} fill={couleurDurab(x.durabilite_pct)} fillOpacity={0.85} />)}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      ) : <Vide>Calculée à la synchro sur les sorties à pied d'au moins 1 h 15 avec la FC.</Vide>}
+    </Graphe>
+  );
+}
+
+// ── Foulée dans le temps ──────────────────────────────────────────────────
+const COURTS_FOULEE = {
+  cadence: "Cadence", foulee_m: "Foulée", oscillation_cm: "Oscillation",
+  contact_sol_ms: "Contact", ratio_vertical_pct: "Ratio vert.", puissance_moy_w: "Puissance",
+};
+
+function Foulee({ f }) {
+  const metriques = f?.metriques ?? [];
+  const [cle, setCle] = useState(null);
+  const m = metriques.find((x) => x.cle === cle) ?? metriques[0];
+  const data = useMemo(() => {
+    if (!m) return [];
+    const pts = (f.points ?? []).filter((p) => p[m.cle] != null)
+      .map((p) => ({ ...p, [p.comparable ? "v" : "v_autre"]: p[m.cle] }));
+    return enTemps(pts, m.cle, (f.mois ?? []).filter((x) => x[m.cle] != null), "v_mois");
+  }, [f, m]);
+  if (!m) {
+    return <Graphe titre="Foulée" couleur={CYAN}><Vide>Il faut la cadence ou la dynamique de course mesurée par la montre.</Vide></Graphe>;
+  }
+  const fmt = (v) => `${nombre(v, m.dec)} ${m.unite}`;
+  return (
+    <Graphe titre="Foulée dans le temps" couleur={CYAN}
+      sousTitre={f.allure_ref_sec ? `Sorties autour de ton allure habituelle (${allureKm(f.allure_ref_sec)}/km ± 25 s) · ${f.n_comparables} sorties` : null}
+      note="Seules les sorties à allure comparable comptent dans la médiane (points pleins) : à vitesse égale, une cadence qui monte, un temps de contact et une oscillation qui baissent traduisent une foulée plus économique. Les points pâles sont les autres sorties.">
+      <div className="overflow-x-auto scrollbar-hide -mx-4 px-4 mb-3">
+        <Segmente valeur={m.cle} onChange={setCle} options={metriques.map((x) => [x.cle, COURTS_FOULEE[x.cle] ?? x.label])} />
+      </div>
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-2">
+        <p className="text-[13px] text-label-2">{m.label} · 8 dernières semaines</p>
+        <p className="chiffres">
+          <span className="font-rounded text-[22px] font-bold">{m.recent != null ? nombre(m.recent, m.dec) : "—"}</span>
+          <span className="text-[13px] font-semibold text-label-2 ml-0.5">{m.unite}</span>
+          <span className="text-[13px] ml-2">
+            <Variation recent={m.recent} ancien={m.ancien} sens={m.sens} dec={m.dec} unite={m.unite} />
+          </span>
+        </p>
+        {m.ancien != null && <p className="text-[12px] text-label-2">contre {fmt(m.ancien)} les 6 mois d'avant</p>}
+      </div>
+      <ResponsiveContainer width="100%" height={220}>
+        <ComposedChart data={data} margin={{ left: 0, right: 8, top: 4 }}>
+          <CartesianGrid {...grille} />
+          <XAxis {...axeX} {...axeTemps} />
+          <YAxis {...axeY} domain={["auto", "auto"]} width={40} tickFormatter={(v) => nombre(v, m.dec)} />
+          <Tooltip cursor={ligneCurseur} content={<InfoBulleT format={fmt} />} />
+          <Line dataKey="v_autre" name="Autre allure" stroke="none" isAnimationActive={false} dot={{ r: 2, strokeWidth: 0, fill: GRIS, fillOpacity: 0.35 }} activeDot={{ r: 4 }} />
+          <Line dataKey="v" name="Allure comparable" stroke="none" isAnimationActive={false} dot={{ r: 3, strokeWidth: 0, fill: CYAN, fillOpacity: 0.6 }} activeDot={{ r: 5 }} />
+          <Line dataKey="v_mois" name="Médiane du mois" stroke={CYAN} strokeWidth={2.5} dot={false} connectNulls />
+        </ComposedChart>
+      </ResponsiveContainer>
+      <Legende items={[{ label: "Allure comparable", couleur: CYAN }, { label: "Autre allure", couleur: GRIS }, { label: "Médiane du mois", couleur: CYAN }]} />
+    </Graphe>
+  );
+}
+
+// ── Dénivelé ──────────────────────────────────────────────────────────────
+function Denivele({ d }) {
+  const data = useMemo(() => (d?.semaines ?? []).map((s) => ({ ...s, label: court(s.semaine) })), [d]);
+  if (!data.some((s) => s.km > 0)) return null;
+  const b = d.bilan_4s, av = d.bilan_4s_avant;
+  const vams = [...(d.vams ?? [])].reverse().slice(0, 5);
+  return (
+    <>
+      <div className="grid gap-3 lg:grid-cols-3">
+        <Card>
+          <p className="text-[13px] font-semibold text-label-2">Dénivelé · 4 dernières semaines</p>
+          <p className="font-rounded text-[34px] leading-10 font-bold chiffres mt-1">{nombre(b.dplus, 0)} m</p>
+          <p className="text-[13px] text-label-2">
+            <Variation recent={b.dplus} ancien={av?.dplus} sens={0} unite="m" /> {av ? "vs les 4 semaines d'avant" : ""}
+          </p>
+          <div className="grid grid-cols-2 gap-2 mt-3">
+            <Tuile label="Pente moyenne" value={`${nombre(b.m_par_km, 0)} m/km`} sub={av ? `avant : ${nombre(av.m_par_km, 0)} m/km` : null} />
+            <Tuile label="Km-effort" value={nombre(b.km_effort, 0)} sub={`${nombre(b.km, 0)} km + D+ / 100`} />
+            <Tuile label="VAM 90 j" value={d.vam_90j ? `${nombre(d.vam_90j, 0)} m/h` : "—"} sub={d.vam_max_90j ? `meilleure : ${nombre(d.vam_max_90j, 0)} m/h` : "pas de montée"} />
+            <Tuile label="Km 4 sem." value={`${nombre(b.km, 0)} km`} sub={av ? `avant : ${nombre(av.km, 0)} km` : null} />
+          </div>
+          <p className="text-[12px] text-label-3 mt-3">
+            Km-effort = km + D+ / 100 : 100 m de montée coûtent à peu près 1 km de plat. VAM = mètres gravis par heure sur les vraies montées (pente ≥ 5 %, au moins 50 m).
+          </p>
+        </Card>
+        <div className="lg:col-span-2 min-w-0">
+          <Graphe className="h-full" titre="Volume et dénivelé" couleur={VERT} sousTitre="Course, trail et randonnée · par semaine">
+            <ResponsiveContainer width="100%" height={240}>
+              <ComposedChart data={data} margin={{ left: 0, right: 0, top: 4 }}>
+                <CartesianGrid {...grille} />
+                <XAxis dataKey="label" {...axeX} minTickGap={24} />
+                <YAxis yAxisId="m" {...axeY} width={44} />
+                <YAxis yAxisId="km" orientation="right" {...axeY} width={32} />
+                <Tooltip cursor={curseur} content={<InfoBulle format={(v, p) => (p.dataKey === "dplus" ? `${nombre(v, 0)} m` : `${nombre(v, 1)} km`)} />} />
+                <Bar yAxisId="m" dataKey="dplus" name="D+" fill={VERT} fillOpacity={0.6} radius={[3, 3, 0, 0]} maxBarSize={14} />
+                <Line yAxisId="km" dataKey="km" name="Km" stroke={BLEU} strokeWidth={2} dot={false} />
+                <Line yAxisId="km" dataKey="km_effort" name="Km-effort" stroke={BLEU} strokeWidth={1.5} strokeDasharray="4 3" dot={false} />
+              </ComposedChart>
+            </ResponsiveContainer>
+            <Legende items={[{ label: "D+ m (gauche)", couleur: VERT }, { label: "Km et km-effort en pointillés (droite)", couleur: BLEU }]} />
+          </Graphe>
+        </div>
+      </div>
+      {vams.length > 0 && (
+        <Card pad={false} className="py-1">
+          <p className="px-4 pt-3 pb-1 text-[13px] font-semibold text-label-2">Dernières montées · vitesse ascensionnelle</p>
+          {vams.map((v) => (
+            <div key={`${v.activite_id}-${v.date}`} className="ligne">
+              <span className="text-xl" aria-hidden>{sportInfo(v.sport).emoji}</span>
+              <span className="flex-1 min-w-0">
+                <span className="block text-[15px] truncate">{v.titre || sportInfo(v.sport).label}</span>
+                <span className="block text-[12px] text-label-2 chiffres">{fmtDate(v.date)} · montée de {nombre(v.montee_m, 0)} m · {nombre(v.dplus_m, 0)} m D+ sur la sortie</span>
+              </span>
+              <span className="text-[15px] font-semibold chiffres shrink-0">{nombre(v.vam, 0)} m/h</span>
+            </div>
+          ))}
+        </Card>
+      )}
     </>
   );
 }
@@ -529,7 +993,7 @@ function RespectPlan({ p }) {
       </div>
       <div className="grid gap-3 lg:grid-cols-3">
         <div className="lg:col-span-2 min-w-0">
-          <Graphe titre="Séances par semaine" couleur={VERT} sousTitre="Réalisées, sautées, manquées">
+          <Graphe className="h-full" titre="Séances par semaine" couleur={VERT} sousTitre="Réalisées, sautées, manquées">
             <ResponsiveContainer width="100%" height={220}>
               <ComposedChart data={data} margin={{ left: 0, right: 0, top: 4 }}>
                 <CartesianGrid {...grille} />
@@ -593,7 +1057,7 @@ function Annuel({ y }) {
   return (
     <div className="grid gap-3 lg:grid-cols-3">
       <div className="lg:col-span-2 min-w-0">
-        <Graphe titre="Cumul depuis le 1er janvier" couleur={BLEU} sousTitre="Par semaine de l'année">
+        <Graphe className="h-full" titre="Cumul depuis le 1er janvier" couleur={BLEU} sousTitre="Par semaine de l'année">
           <div className="overflow-x-auto scrollbar-hide -mx-4 px-4 mb-3">
             <Segmente valeur={m} onChange={setM} options={METRIQUES.map(([k, l]) => [k, l])} />
           </div>
@@ -683,12 +1147,27 @@ export default function Analyses() {
 
   return (
     <Page titre="Analyses" large sousTitre="Forme, récupération, performance">
-      <Section titre="Forme et fatigue"><FormeFatigue f={a.forme} /></Section>
-      <Section titre="Récupération"><Recuperation r={a.recuperation} /></Section>
-      <Section titre="Sommeil"><Nuits r={a.recuperation} /></Section>
+      <Section titre="Forme et fatigue"><FormeFatigue f={a.forme} /><Monotonie m={a.monotonie} /></Section>
+      <Section titre="Récupération">
+        <Recuperation r={a.recuperation} />
+        <div className="grid gap-3 lg:grid-cols-2">
+          <SignauxNuit s={a.signaux_nuit} />
+          <Pas p={a.pas} />
+        </div>
+      </Section>
+      <Section titre="Sommeil"><DetteSommeil s={a.sommeil} /><Nuits r={a.recuperation} /></Section>
       <Section titre="Poids"><PoidsAnalyse /></Section>
       <Section titre="Intensité"><Zones z={a.zones} /></Section>
-      <Section titre="Course à pied"><Vma v={a.vma} /><Course c={a.course} /></Section>
+      <Section titre="Course à pied">
+        <Vma v={a.vma} />
+        <EffortsDuree e={a.efforts_duree} />
+        <Course c={a.course} />
+        <div className="grid gap-3 lg:grid-cols-2">
+          <Efficacite ef={a.efficacite} />
+          <Foulee f={a.foulee} />
+        </div>
+      </Section>
+      <Section titre="Dénivelé"><Denivele d={a.denivele} /></Section>
       <Section titre="Respect du plan"><RespectPlan p={a.plan} /></Section>
       <Section titre="Année par année"><Annuel y={a.annuel} /></Section>
       <Section titre="Corrélations">

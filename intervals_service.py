@@ -34,7 +34,7 @@ FENETRE_JOURS = 14          # séances relues à chaque synchro (l'iPhone peut e
 PREMIERE_FENETRE_JOURS = 60
 INTERVALLE_MIN = timedelta(minutes=15)  # pas plus d'une synchro automatique par quart d'heure
 PAS_TRACE_M = 10            # comme les GPX importés : un point tous les 10 m
-VERSION_ANALYSE = 2         # zones de FC, dérive cardiaque, puissance, foulée, oscillation, contact, pas
+VERSION_ANALYSE = 3         # zones de FC, dérive cardiaque, durabilité, puissance, foulée, oscillation, contact, ratio vertical, pas
 
 
 class IntervalsErreur(Exception):
@@ -132,6 +132,8 @@ def analyse_fc(streams: list, user: Utilisateur, sport: str, duree_sec: Optional
         res["zones_fc"] = cs._zones_fc(pts, poids, user.fc_max, user.fc_repos)
     if sport in cs.SPORTS_PIED and dist and (duree_sec or 0) >= an.DERIVE_MIN_MIN * 60:
         res["derive_fc"] = an.derive_cardiaque(temps, fc, dist)
+    if sport in cs.SPORTS_PIED and dist and (duree_sec or 0) >= an.DURABILITE_MIN_MIN * 60:
+        res["durabilite_pct"] = an.durabilite(temps, fc, dist)
     return res
 
 
@@ -168,6 +170,8 @@ def resume_flux(streams: list, sport: str) -> dict:
             res["puissance_max_w"] = round(max(v for v, _ in pts), 2)
         elif cle in ("foulee", "oscillation", "contact"):
             res[{"foulee": "foulee_m", "oscillation": "oscillation_cm", "contact": "contact_sol_ms"}[cle]] = round(moy, 2)
+        elif cle == "ratio_vertical" and 2 <= moy <= 20:
+            res["ratio_vertical_pct"] = round(moy, 2)
         elif cle == "cadence" and sport in cs.SPORTS_PIED:
             res["pas"] = round(sum(v * p for v, p in pts) / 60)
         elif cle == "fc":
@@ -178,7 +182,8 @@ def resume_flux(streams: list, sport: str) -> dict:
 
 
 def synchroniser_wellness(db: Session, user: Utilisateur, depuis, jusqu_a) -> tuple[int, dict]:
-    """Sommeil de chaque nuit (durée, phases et score via Intervals Companion, FC moyenne, SpO2, respiration) ; FC repos, VFC (SDNN) et VO2max seulement pour les jours où le
+    """Sommeil de chaque nuit (durée, phases et score via Intervals Companion, FC moyenne, SpO2, respiration),
+    pas de la journée ; FC repos, VFC (SDNN) et VO2max seulement pour les jours où le
     raccourci n'a rien envoyé (ses valeurs restent la référence).
     Retourne (mesures enregistrées, {type: nombre de jours fournis par Intervals.icu})."""
     athlete = user.intervals_athlete_id or "0"
@@ -203,7 +208,7 @@ def synchroniser_wellness(db: Session, user: Utilisateur, depuis, jusqu_a) -> tu
                 recus[t] = recus.get(t, 0) + 1
                 items.append((t, jour, champs[cle] / 3600))
         for cle, t in (("avgSleepingHR", "fc_sommeil"), ("sleepScore", "score_sommeil"),
-                       ("spO2", "spo2"), ("respiration", "respiration")):
+                       ("spO2", "spo2"), ("respiration", "respiration"), ("steps", "pas")):
             if w.get(cle):
                 recus[t] = recus.get(t, 0) + 1
                 items.append((t, jour, float(w[cle])))
@@ -278,7 +283,8 @@ def synchroniser(db: Session, user: Utilisateur, force: bool = False) -> dict:
             analyse = analyse_fc(streams, user, act.sport, act.duree_sec)
             # Les valeurs déjà présentes (raccourci, export Santé, saisie) restent
             cs.fusionner_details(act, {"zones_fc": analyse.get("zones_fc"), **resume_flux(streams, act.sport)})
-            cs.fusionner_details(act, {"derive_fc": analyse.get("derive_fc"), "analyse_iv": VERSION_ANALYSE}, ecraser=True)
+            cs.fusionner_details(act, {"derive_fc": analyse.get("derive_fc"), "durabilite_pct": analyse.get("durabilite_pct"),
+                                       "analyse_iv": VERSION_ANALYSE}, ecraser=True)
             bilan["analyses"] += 1
         if not besoin_trace:
             continue

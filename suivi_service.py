@@ -161,6 +161,7 @@ def forme_du_jour(db: Session, user: Utilisateur, auj: Optional[date] = None) ->
         and frais.get("fc_ref") is not None else None,
         "derniere_mesure": dernier["jour"] if dernier else None,
         "vfc_basse_jours": _alerte_vfc(pts),
+        "alertes_nuit": an.alertes_nuit(mesures, auj),
         "historique": [{"jour": p["jour"], "statut": p["statut"]} for p in pts[-7:]],
         "seances_restantes": [{"id": p.id, "titre": p.titre, "sport": p.sport, "duree_min": p.duree_min,
                                "rpe_cible": p.rpe_cible} for p in restantes],
@@ -397,6 +398,12 @@ def notifications_matin(db: Session, user: Utilisateur, depuis: Optional[datetim
         envoyees += envoyer(db, user.id, "VFC en baisse",
                             f"Ta VFC est sous ta normale depuis {f['vfc_basse_jours']} mesures d'affilée : "
                             "fatigue, stress ou maladie qui couve. Lève le pied quelques jours.", "/stats", "vfc")
+    nuit = f["alertes_nuit"]
+    if nuit and nuit["alerte"]:
+        details = ", ".join(f"{s['label']} {s['valeur']:g}{s['unite']} (normale {s['ref']:g})"
+                            for s in nuit["signaux"] if s["alerte"] and s["ref"] is not None)
+        envoyees += envoyer(db, user.id, "Nuit inhabituelle",
+                            f"{nuit['message']}." + (f" {details}." if details else ""), "/", "nuit")
     recs = records_recents(db, user, depuis or datetime.utcnow() - timedelta(hours=26))
     if recs:
         envoyees += envoyer(db, user.id, "Nouveau record 🎉" if len(recs) == 1 else f"{len(recs)} nouveaux records 🎉",

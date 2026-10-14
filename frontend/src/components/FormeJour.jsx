@@ -81,6 +81,14 @@ export default function FormeJour() {
         </p>
       )}
 
+      {f.alertes_nuit?.alerte && (
+        <Link to="/analyses" className="ml-6 block rounded-xl bg-ios-red/[0.12] px-3 py-2 text-[13px] leading-[18px] text-ios-red active:opacity-60">
+          <span className="font-semibold">Nuit inhabituelle</span> · {f.alertes_nuit.signaux.filter((x) => x.alerte)
+            .map((x) => `${x.label.toLowerCase()} ${nombre(x.valeur, 1)} ${x.unite} (normale ${nombre(x.ref, 1)})`).join(", ")}
+          <span className="block mt-0.5">{f.alertes_nuit.message}</span>
+        </Link>
+      )}
+
       {n && f.conseil && !f.seance_faite_aujourdhui && (
         <Link to="/plan" className={clsx("ml-6 flex items-center gap-3 rounded-xl px-3 py-2.5 transition active:opacity-60", n.teinte)}>
           <span className="text-xl" aria-hidden>{suggestion ? sportInfo(suggestion.sport).emoji : "🛌"}</span>

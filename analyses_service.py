@@ -29,7 +29,12 @@ REF_RECUP_MIN = 10       # mesures nécessaires pour établir la référence per
 DERIVE_MIN_MIN = 40      # durée minimale d'une sortie pour mesurer la dérive cardiaque
 CORREL_MIN = 8           # points minimum pour calculer une corrélation
 EFFORTS = [("1 km", 1000), ("5 km", 5000), ("10 km", 10000), ("Semi", 21097.5)]
-VERSION_EFFORTS = 1
+DUREES_EFFORTS = [1, 3, 5, 10, 20, 30, 60]    # minutes : meilleure distance couverte sur chaque durée
+DUREES_CS = (3, 5, 10, 20)                    # durées retenues pour l'allure critique
+VERSION_EFFORTS = 2
+SPORTS_EFFORTS = cs.SPORTS_PIED | {"randonnee"}
+DURABILITE_MIN_MIN = 75  # durée minimale d'une sortie pour mesurer la durabilité
+BESOIN_SOMMEIL_H = 8.0
 ALLURE_MIN_PLAUSIBLE = 150   # s/km : plus rapide = saut GPS, pas un effort réel
 PREDICTIONS = [("5 km", 5.0), ("10 km", 10.0), ("Semi", 21.0975), ("Marathon", 42.195)]
 
@@ -232,9 +237,11 @@ def _recuperation(mesures: dict[str, dict[date, float]], auj: date, jours: int =
 # Course à pied : meilleurs efforts, dérive cardiaque, prédictions, cadence
 # ---------------------------------------------------------------------------
 
-def meilleurs_efforts(points: list[list]) -> dict[str, int]:
-    """Meilleur temps sur chaque distance par fenêtre glissante sur le tracé
-    ([[lat, lon, alt, secondes], …]). Le temps est ramené à la distance exacte."""
+def meilleurs_efforts(points: list[list]) -> dict:
+    """Meilleur temps sur chaque distance et meilleure distance sur chaque durée, par fenêtre
+    glissante sur le tracé ([[lat, lon, alt, secondes], …]), plus la vitesse ascensionnelle
+    (VAM) des montées. Le temps est ramené à la distance exacte."""
+    points = [p for p in points if len(p) >= 4 and isinstance(p[3], (int, float))]
     if len(points) < 2:
         return {}
     cumul, temps = [0.0], [points[0][3]]
@@ -256,12 +263,51 @@ def meilleurs_efforts(points: list[list]) -> dict[str, int]:
                     meilleur = t
         if meilleur:
             res[label] = int(round(meilleur))
+
+    # Meilleure distance sur chaque durée (fenêtre de temps glissante)
+    vmax = 1000 / ALLURE_MIN_PLAUSIBLE
+    duree = temps[-1] - temps[0]
+    par_duree = {}
+    for m in DUREES_EFFORTS:
+        d_s = m * 60
+        if duree < d_s:
+            continue
+        meilleur, i = None, 0
+        for j in range(1, len(temps)):
+            while i + 1 < j and temps[j] - temps[i + 1] >= d_s:
+                i += 1
+            dt = temps[j] - temps[i]
+            if dt >= d_s:
+                dist = (cumul[j] - cumul[i]) * d_s / dt
+                if dist / d_s <= vmax and (meilleur is None or dist > meilleur):
+                    meilleur = dist
+        if meilleur:
+            par_duree[str(m)] = int(round(meilleur))
+    if par_duree:
+        res["d"] = par_duree
+
+    # VAM : tronçons de ~200 m dont la pente dépasse 5 %
+    gain = t_montee = 0.0
+    k = 0
+    for j in range(1, len(points)):
+        if cumul[j] - cumul[k] < 200:
+            continue
+        a0, a1 = points[k][2], points[j][2]
+        if isinstance(a0, (int, float)) and isinstance(a1, (int, float)):
+            dz = a1 - a0
+            if dz / (cumul[j] - cumul[k]) >= 0.05 and temps[j] > temps[k]:
+                gain += dz
+                t_montee += temps[j] - temps[k]
+        k = j
+    if gain >= 50 and t_montee > 0:
+        res["vam"] = int(round(gain / t_montee * 3600))
+        res["montee_m"] = int(round(gain))
     return res
 
 
 def maj_efforts(db: Session, user_id: int, acts: list[Activite]) -> int:
     """Calcule (une fois par tracé) les meilleurs efforts des séances de course. Retourne le nombre calculé."""
-    pied = {a.id: a for a in acts if a.sport in cs.SPORTS_PIED}
+    pied = {a.id: a for a in acts if a.sport in SPORTS_EFFORTS}
     if not pied:
         return 0
     traces = dict(db.query(TraceGPS.activite_id, TraceGPS.id)
@@ -306,6 +352,30 @@ def derive_cardiaque(temps: list, fc: list, distance: list, echauffement_s: int 
     return round((ef1 - ef2) / ef1 * 100, 1)
 
 
+def durabilite(temps: list, fc: list, distance: list, echauffement_s: int = 600) -> Optional[float]:
+    """Perte d'efficacité (m par battement) entre le 1er et le dernier quart d'une sortie longue,
+    échauffement exclu, en %. Proche de 0 = endurance solide ; > 5 % = le moteur s'use."""
+    idx = [i for i in range(min(len(temps), len(fc), len(distance)))
+           if temps[i] is not None and fc[i] and distance[i] is not None and temps[i] >= echauffement_s]
+    if len(idx) < 40:
+        return None
+    t0, t1 = temps[idx[0]], temps[idx[-1]]
+    if t1 - t0 < 40 * 60:
+        return None
+    q = (t1 - t0) / 4
+
+    def ef(sel):
+        if len(sel) < 5:
+            return None
+        d, t, f = distance[sel[-1]] - distance[sel[0]], temps[sel[-1]] - temps[sel[0]], _moy(fc[i] for i in sel)
+        return d / t / f if d > 0 and t > 0 and f else None
+    e1 = ef([i for i in idx if temps[i] <= t0 + q])
+    e4 = ef([i for i in idx if temps[i] >= t1 - q])
+    if not e1 or not e4:
+        return None
+    return round((e1 - e4) / e1 * 100, 1)
+
+
 def _course(acts: list[Activite], auj: date) -> dict:
     pied = [a for a in acts if a.sport in cs.SPORTS_PIED]
 
@@ -338,6 +408,17 @@ def _course(acts: list[Activite], auj: date) -> dict:
             derives.append({"date": a.debut.date().isoformat(), "derive_pct": d, "duree_min": round(a.duree_sec / 60),
                             "activite_id": a.id, "titre": a.titre, "sport": a.sport})
 
+    # Durabilité des sorties longues (1er quart contre dernier quart, calculée à la synchro Intervals)
+    durabilites = []
+    for a in pied:
+        det = cs._details_dict(a)
+        if det.get("durabilite_pct") is not None:
+            al = cs.allure_sec_km(a)
+            durabilites.append({"date": a.debut.date().isoformat(), "durabilite_pct": det["durabilite_pct"],
+                                "derive_pct": det.get("derive_fc"), "duree_min": round((a.duree_sec or 0) / 60),
+                                "distance_km": _r(a.distance_km), "allure_sec_km": round(al) if al else None,
+                                "dplus_m": a.dplus_m, "activite_id": a.id, "titre": a.titre, "sport": a.sport})
+
     # Prédictions : chaque semaine, à partir des 90 jours précédents
     predictions = []
     for k in range(51, -1, -1):
@@ -365,7 +446,7 @@ def _course(acts: list[Activite], auj: date) -> dict:
                             "allure_sec_km": round(al) if al else None, "activite_id": a.id})
     return {"records": records, "top": {k: v[:5] for k, v in top.items()}, "evolution": evolution,
             "distances": [l for l, _ in EFFORTS], "derives": derives[-60:], "predictions": predictions,
-            "foulees": foulees[-120:]}
+            "foulees": foulees[-120:], "durabilites": durabilites[-40:]}
 
 
 # ---------------------------------------------------------------------------
@@ -696,6 +777,377 @@ def _correlations(acts: list[Activite], mesures: dict[str, dict[date, float]], f
 
 
 # ---------------------------------------------------------------------------
+# Courbe des meilleurs efforts par durée et allure critique
+# ---------------------------------------------------------------------------
+
+def _allure(dist_m: float, duree_s: float) -> Optional[int]:
+    return round(duree_s / (dist_m / 1000)) if dist_m else None
+
+
+def vitesse_critique(meilleurs: dict[int, float]) -> Optional[dict]:
+    """Modèle distance = VC × t + D' (Monod) ajusté sur les meilleures distances de 3 à 20 min.
+    VC ≈ allure tenable environ 30 à 40 min ; D' = réserve anaérobie (m) au-dessus de cette allure."""
+    pts = [(m * 60, meilleurs[m]) for m in DUREES_CS if meilleurs.get(m)]
+    if len(pts) < 3:
+        return None
+    n = len(pts)
+    mt, md = sum(t for t, _ in pts) / n, sum(d for _, d in pts) / n
+    stt = sum((t - mt) ** 2 for t, _ in pts)
+    if not stt:
+        return None
+    vc = sum((t - mt) * (d - md) for t, d in pts) / stt
+    dp = md - vc * mt
+    if vc <= 0 or not 0 < dp < 600:
+        return None
+    return {"vitesse_ms": round(vc, 3), "allure_sec_km": round(1000 / vc), "dprime_m": round(dp), "n": n}
+
+
+def _efforts_duree(acts: list[Activite], auj: date) -> dict:
+    pts: list[tuple[date, int, float, Activite]] = []
+    for a in acts:
+        if a.sport not in cs.SPORTS_PIED:
+            continue
+        d = (cs._details_dict(a).get("efforts") or {}).get("d") or {}
+        for m, metres in d.items():
+            if str(m).isdigit() and metres:
+                pts.append((a.debut.date(), int(m), float(metres), a))
+
+    def meilleurs(debut: date, fin: date) -> dict[int, tuple[float, date, Activite]]:
+        out = {}
+        for j, m, metres, a in pts:
+            if debut < j <= fin and (m not in out or metres > out[m][0]):
+                out[m] = (metres, j, a)
+        return out
+
+    def fiche(m, e):
+        if not e:
+            return None
+        metres, j, a = e
+        return {"metres": round(metres), "allure_sec_km": _allure(metres, m * 60),
+                "vitesse_kmh": round(metres / (m * 60) * 3.6, 1), "date": j.isoformat(),
+                "activite_id": a.id, "titre": a.titre}
+
+    actuels = meilleurs(auj - timedelta(days=90), auj)
+    an_dernier = meilleurs(auj - timedelta(days=455), auj - timedelta(days=365))
+    records = meilleurs(date.min, auj)
+    courbe = [{"minutes": m, "label": f"{m} min" if m < 60 else "1 h",
+               "actuel": fiche(m, actuels.get(m)), "an_dernier": fiche(m, an_dernier.get(m)),
+               "record": fiche(m, records.get(m))}
+              for m in DUREES_EFFORTS if m in records]
+
+    vc = vitesse_critique({m: e[0] for m, e in actuels.items()})
+    vc_an = vitesse_critique({m: e[0] for m, e in an_dernier.items()})
+    historique = []
+    fins = [auj]
+    for _ in range(11):
+        fins.append(fins[-1].replace(day=1) - timedelta(days=1))
+    for fin in reversed(fins):
+        v = vitesse_critique({m: e[0] for m, e in meilleurs(fin - timedelta(days=90), fin).items()})
+        historique.append({"mois": fin.strftime("%Y-%m"), "allure_sec_km": v and v["allure_sec_km"],
+                           "dprime_m": v and v["dprime_m"]})
+    return {"courbe": courbe, "vc": vc, "vc_an_dernier": vc_an,
+            "historique": historique if any(h["allure_sec_km"] for h in historique) else []}
+
+
+# ---------------------------------------------------------------------------
+# Efficacité aérobie des sorties d'endurance
+# ---------------------------------------------------------------------------
+
+def _efficacite(acts: list[Activite], user: Utilisateur, mesures: dict[str, dict[date, float]], auj: date) -> dict:
+    """Mètres parcourus par battement cardiaque sur les sorties faciles et peu vallonnées :
+    une hausse au fil des mois = le moteur aérobie progresse."""
+    fc_max = user.fc_max
+    fc_rep = user.fc_repos or (median(mesures["fc_repos"].values()) if mesures.get("fc_repos") else None)
+    debut = auj - timedelta(days=365)
+    points = []
+    for a in acts:
+        if (a.sport != "course" or a.debut.date() <= debut or not a.fc_moyenne_bpm or not a.distance_km
+                or not a.duree_sec or a.duree_sec < 20 * 60 or (a.dplus_m or 0) / a.distance_km >= 15):
+            continue
+        al = cs.allure_sec_km(a)
+        if not al or al < ALLURE_MIN_PLAUSIBLE:
+            continue
+        zones = cs._details_dict(a).get("zones_fc")
+        tot = sum(float(z.get("min_passees") or 0) for z in zones) if isinstance(zones, list) and len(zones) == 5 else 0
+        if tot:
+            if (float(zones[0].get("min_passees") or 0) + float(zones[1].get("min_passees") or 0)) / tot < 0.7:
+                continue
+        elif fc_max and fc_rep and fc_max > fc_rep:
+            if (a.fc_moyenne_bpm - fc_rep) / (fc_max - fc_rep) > 0.75:
+                continue
+        points.append({"date": a.debut.date().isoformat(), "ef": round(1000 / al * 60 / a.fc_moyenne_bpm, 3),
+                       "allure_sec_km": round(al), "fc": round(a.fc_moyenne_bpm), "duree_min": round(a.duree_sec / 60),
+                       "activite_id": a.id, "titre": a.titre})
+    par_mois: dict[str, list[float]] = defaultdict(list)
+    for p in points:
+        par_mois[p["date"][:7]].append(p["ef"])
+    mois = [{"mois": m, "ef": round(median(v), 3), "n": len(v)} for m, v in sorted(par_mois.items())]
+
+    def med(de: date, a: date):
+        xs = [p["ef"] for p in points if de < date.fromisoformat(p["date"]) <= a]
+        return median(xs) if len(xs) >= 3 else None
+    recent, ancien = med(auj - timedelta(days=42), auj), med(auj - timedelta(days=132), auj - timedelta(days=90))
+    return {"points": points, "mois": mois, "recent": _r(recent, 3), "ancien": _r(ancien, 3),
+            "tendance_pct": _r((recent - ancien) / ancien * 100) if recent and ancien else None}
+
+
+# ---------------------------------------------------------------------------
+# Monotonie et contrainte (Foster)
+# ---------------------------------------------------------------------------
+
+def _monotonie(acts: list[Activite], auj: date, semaines: int = 26) -> dict:
+    """Monotonie = charge moyenne du jour / écart type sur 7 jours ; contrainte = charge de la semaine × monotonie.
+    Des semaines uniformes (monotonie > 2) et chargées exposent au surmenage et aux maladies."""
+    charges = charges_quotidiennes(acts)
+
+    def calcul(jours: list[date]) -> tuple[float, Optional[float], Optional[float]]:
+        c = [charges.get(j, 0.0) for j in jours]
+        total = sum(c)
+        if not total:
+            return 0.0, None, None
+        sd = pstdev(c)
+        mono = min(mean(c) / sd, 5.0) if sd else 5.0
+        return total, round(mono, 2), round(total * mono)
+
+    lundi = cs._lundi(auj)
+    lignes = []
+    for k in range(semaines, 0, -1):
+        w = lundi - timedelta(weeks=k)
+        total, mono, contrainte = calcul([w + timedelta(days=i) for i in range(7)])
+        lignes.append({"semaine": w.isoformat(), "charge": round(total), "monotonie": mono, "contrainte": contrainte})
+    total, mono, contrainte = calcul([auj - timedelta(days=i) for i in range(6, -1, -1)])
+    refs = [l["contrainte"] for l in lignes[-12:] if l["contrainte"]]
+    ref = mean(refs) if refs else None
+    niveau = None if mono is None else "varie" if mono < 1.5 else "surveiller" if mono <= 2 else "uniforme"
+    return {"semaines": lignes,
+            "actuel": {"charge": round(total), "monotonie": mono, "contrainte": contrainte, "niveau": niveau,
+                       "contrainte_ref": round(ref) if ref else None,
+                       "contrainte_pct": round((contrainte - ref) / ref * 100) if contrainte and ref else None}}
+
+
+# ---------------------------------------------------------------------------
+# Foulée dans le temps (à allure comparable)
+# ---------------------------------------------------------------------------
+
+METRIQUES_FOULEE = [
+    # clé, libellé, unité, décimales, sens (1 = une hausse est bon signe, -1 = une baisse l'est)
+    ("cadence", "Cadence", "pas/min", 0, 1),
+    ("foulee_m", "Longueur de foulée", "m", 2, 1),
+    ("oscillation_cm", "Oscillation verticale", "cm", 1, -1),
+    ("contact_sol_ms", "Temps de contact", "ms", 0, -1),
+    ("ratio_vertical_pct", "Ratio vertical", "%", 1, -1),
+    ("puissance_moy_w", "Puissance", "W", 0, 0),
+]
+ECART_ALLURE_FOULEE = 25   # s/km autour de l'allure habituelle
+
+
+def _foulee(acts: list[Activite], auj: date) -> dict:
+    debut = auj - timedelta(days=365)
+    runs = []
+    for a in acts:
+        if a.sport != "course" or a.debut.date() <= debut:
+            continue
+        det = cs._details_dict(a)
+        al = cs.allure_sec_km(a)
+        cad = det["pas"] / (a.duree_sec / 60) if det.get("pas") and a.duree_sec else None
+        v = {"cadence": cad if cad and 120 <= cad <= 230 else None}
+        for cle in ("foulee_m", "oscillation_cm", "contact_sol_ms", "ratio_vertical_pct", "puissance_moy_w"):
+            x = det.get(cle)
+            v[cle] = float(x) if isinstance(x, (int, float)) and x > 0 else None
+        if v["ratio_vertical_pct"] is None and v["oscillation_cm"] and v["foulee_m"]:
+            v["ratio_vertical_pct"] = v["oscillation_cm"] / (v["foulee_m"] * 100) * 100
+        if not al or al < ALLURE_MIN_PLAUSIBLE or not any(x is not None for x in v.values()):
+            continue
+        runs.append((a, al, v))
+    if not runs:
+        return {"metriques": [], "mois": [], "points": [], "allure_ref_sec": None, "n_comparables": 0}
+    ref = median(al for _, al, _ in runs)
+    comparables = [(a, al, v) for a, al, v in runs if abs(al - ref) <= ECART_ALLURE_FOULEE]
+
+    def med(cle, de: date, a_: date):
+        xs = [v[cle] for a, _, v in comparables if de < a.debut.date() <= a_ and v[cle] is not None]
+        return median(xs) if len(xs) >= 2 else None
+    metriques = []
+    for cle, label, unite, dec, sens in METRIQUES_FOULEE:
+        if not any(v[cle] is not None for _, _, v in comparables):
+            continue
+        recent = med(cle, auj - timedelta(days=56), auj)
+        ancien = med(cle, auj - timedelta(days=236), auj - timedelta(days=56))
+        metriques.append({"cle": cle, "label": label, "unite": unite, "dec": dec, "sens": sens,
+                          "recent": _r(recent, dec), "ancien": _r(ancien, dec)})
+    par_mois: dict[str, list] = defaultdict(list)
+    for a, _, v in comparables:
+        par_mois[a.debut.strftime("%Y-%m")].append(v)
+    mois = []
+    for m, vs in sorted(par_mois.items()):
+        ligne = {"mois": m, "n": len(vs)}
+        for cle, _, _, dec, _ in METRIQUES_FOULEE:
+            xs = [v[cle] for v in vs if v[cle] is not None]
+            ligne[cle] = round(median(xs), dec) if xs else None
+        mois.append(ligne)
+    points = [{"date": a.debut.date().isoformat(), "allure_sec_km": round(al),
+               "comparable": abs(al - ref) <= ECART_ALLURE_FOULEE, "activite_id": a.id, "titre": a.titre,
+               **{cle: _r(v[cle], dec) for cle, _, _, dec, _ in METRIQUES_FOULEE}} for a, al, v in runs]
+    return {"metriques": metriques, "mois": mois, "points": points[-200:], "allure_ref_sec": round(ref),
+            "n_comparables": len(comparables)}
+
+
+# ---------------------------------------------------------------------------
+# Dénivelé : volume hebdomadaire, km-effort, vitesse ascensionnelle
+# ---------------------------------------------------------------------------
+
+def _denivele(acts: list[Activite], auj: date, semaines: int = 26) -> dict:
+    lundi0 = cs._lundi(auj) - timedelta(weeks=semaines - 1)
+    par_sem = {lundi0 + timedelta(weeks=i): {"km": 0.0, "dplus": 0.0} for i in range(semaines)}
+    vams = []
+    for a in acts:
+        if a.sport not in SPORTS_EFFORTS:
+            continue
+        w = cs._lundi(a.debut.date())
+        if w in par_sem:
+            par_sem[w]["km"] += a.distance_km or 0
+            par_sem[w]["dplus"] += a.dplus_m or 0
+        eff = cs._details_dict(a).get("efforts") or {}
+        if eff.get("vam") and (a.dplus_m or 0) >= 100 and a.debut.date() > auj - timedelta(days=365):
+            vams.append({"date": a.debut.date().isoformat(), "vam": eff["vam"], "montee_m": eff.get("montee_m"),
+                         "dplus_m": a.dplus_m, "sport": a.sport, "activite_id": a.id, "titre": a.titre})
+    lignes = [{"semaine": w.isoformat(), "km": round(s["km"], 1), "dplus": round(s["dplus"]),
+               "km_effort": round(s["km"] + s["dplus"] / 100, 1),
+               "m_par_km": round(s["dplus"] / s["km"]) if s["km"] >= 1 else None} for w, s in par_sem.items()]
+
+    def bilan(sel):
+        km, dp = sum(l["km"] for l in sel), sum(l["dplus"] for l in sel)
+        return {"km": round(km, 1), "dplus": round(dp), "km_effort": round(km + dp / 100, 1),
+                "m_par_km": round(dp / km) if km >= 1 else None}
+    debut90 = (auj - timedelta(days=90)).isoformat()
+    recentes = [v["vam"] for v in vams if v["date"] > debut90 and v["sport"] != "randonnee"]
+    return {"semaines": lignes, "bilan_4s": bilan(lignes[-4:]), "bilan_4s_avant": bilan(lignes[-8:-4]),
+            "vams": vams[-80:], "vam_90j": round(median(recentes)) if recentes else None,
+            "vam_max_90j": max(recentes) if recentes else None}
+
+
+# ---------------------------------------------------------------------------
+# Sommeil : dette, régularité, effet des nuits courtes sur la VFC
+# ---------------------------------------------------------------------------
+
+def _sommeil(mesures: dict[str, dict[date, float]], user: Utilisateur, auj: date) -> dict:
+    besoin = user.besoin_sommeil_h or BESOIN_SOMMEIL_H
+    som, vfc = mesures.get("sommeil", {}), mesures.get("vfc", {})
+
+    def dette(fin: date, jours: int) -> tuple[Optional[float], int]:
+        """Heures manquantes par rapport au besoin (les grasses matinées en rattrapent une partie)."""
+        nuits = [som[d] for d in som if fin - timedelta(days=jours) < d <= fin]
+        return (round(max(0.0, sum(besoin - h for h in nuits)), 2) if nuits else None), len(nuits)
+    d7, n7 = dette(auj, 7)
+    d14, n14 = dette(auj, 14)
+    recentes = [som[d] for d in sorted(som) if auj - timedelta(days=14) < d <= auj]
+    regularite = round(pstdev(recentes) * 60) if len(recentes) >= 5 else None
+
+    an = auj - timedelta(days=365)
+    courtes = [vfc[d] for d, h in som.items() if d in vfc and d > an and h < besoin - 1]
+    normales = [vfc[d] for d, h in som.items() if d in vfc and d > an and h >= besoin - 0.25]
+    effet = None
+    if len(courtes) >= 4 and len(normales) >= 4:
+        mc, mn = mean(courtes), mean(normales)
+        effet = {"vfc_courtes": round(mc), "vfc_normales": round(mn), "ecart_pct": round((mc - mn) / mn * 100),
+                 "n_courtes": len(courtes), "n_normales": len(normales)}
+    points = []
+    for k in range(59, -1, -1):
+        j = auj - timedelta(days=k)
+        points.append({"jour": j.isoformat(), "heures": _r(som.get(j), 2), "dette_7j": dette(j, 7)[0]})
+    return {"besoin_h": besoin, "dette_7j": d7, "nuits_7j": n7, "dette_14j": d14, "nuits_14j": n14,
+            "regularite_min": regularite, "nuits_regularite": len(recentes), "effet_vfc": effet,
+            "points": points if any(p["heures"] for p in points) else []}
+
+
+# ---------------------------------------------------------------------------
+# Signaux d'alerte de la nuit : respiration et SpO2 inhabituelles
+# ---------------------------------------------------------------------------
+
+SIGNAUX_NUIT = {
+    "respiration": {"label": "Respiration", "unite": "/min"},
+    "spo2": {"label": "SpO2", "unite": "%"},
+}
+
+
+def _reference_nuit(serie: dict[date, float], j: date) -> Optional[float]:
+    vals = [v for d, v in serie.items() if j - timedelta(days=28) <= d < j]
+    return mean(vals) if len(vals) >= 7 else None
+
+
+def _signaux(mesures: dict[str, dict[date, float]], j: date) -> list[dict]:
+    out = []
+    for t, meta in SIGNAUX_NUIT.items():
+        serie = mesures.get(t, {})
+        v = serie.get(j)
+        if v is None:
+            continue
+        ref = _reference_nuit(serie, j)
+        if t == "respiration":
+            alerte = ref is not None and v - ref >= 1.0
+        else:
+            alerte = v < 93 or (ref is not None and v <= ref - 2)
+        out.append({"type": t, **meta, "valeur": round(v, 1), "ref": _r(ref),
+                    "ecart": _r(v - ref) if ref is not None else None, "alerte": alerte})
+    return out
+
+
+def alertes_nuit(mesures: dict[str, dict[date, float]], auj: date) -> Optional[dict]:
+    """Dernière nuit (2 jours max) comparée aux 28 nuits précédentes. Une respiration qui monte
+    d'au moins 1 /min ou une SpO2 qui baisse de 2 points précèdent souvent une infection."""
+    jours = [d for t in SIGNAUX_NUIT for d in mesures.get(t, {}) if auj - timedelta(days=2) <= d <= auj]
+    if not jours:
+        return None
+    j = max(jours)
+    signaux = _signaux(mesures, j)
+    consecutives, d = 0, j
+    while any(s["alerte"] for s in _signaux(mesures, d)):
+        consecutives += 1
+        d -= timedelta(days=1)
+    if not any(s["alerte"] for s in signaux):
+        message = "Respiration et oxygénation habituelles cette nuit"
+    elif consecutives >= 2:
+        message = f"{consecutives} nuits inhabituelles de suite : possible infection ou grosse fatigue, allège"
+    else:
+        message = "Nuit inhabituelle : guette les signes (gorge, fièvre) et reste prudent"
+    return {"jour": j.isoformat(), "signaux": signaux, "alerte": consecutives > 0,
+            "nuits_consecutives": consecutives, "message": message}
+
+
+def _signaux_nuit(mesures: dict[str, dict[date, float]], auj: date, jours: int = 60) -> dict:
+    points = []
+    for k in range(jours - 1, -1, -1):
+        j = auj - timedelta(days=k)
+        p = {"jour": j.isoformat(), "alerte": False}
+        for s in _signaux(mesures, j):
+            p[s["type"]], p[s["type"] + "_ref"] = s["valeur"], s["ref"]
+            p["alerte"] = p["alerte"] or s["alerte"]
+        points.append(p)
+    return {"actuel": alertes_nuit(mesures, auj),
+            "points": points if any(len(p) > 2 for p in points) else [],
+            "nuits_alerte_60j": sum(1 for p in points if p["alerte"])}
+
+
+# ---------------------------------------------------------------------------
+# Pas quotidiens
+# ---------------------------------------------------------------------------
+
+def _pas(mesures: dict[str, dict[date, float]], auj: date, jours: int = 90) -> dict:
+    pas = mesures.get("pas", {})
+    moy = lambda n: _r(_moy([v for d, v in pas.items() if auj - timedelta(days=n) < d <= auj]), 0)
+    points = []
+    for k in range(jours - 1, -1, -1):
+        j = auj - timedelta(days=k)
+        fen = [pas[d] for d in pas if j - timedelta(days=6) <= d <= j]
+        points.append({"jour": j.isoformat(), "pas": pas.get(j), "moy7": _r(_moy(fen), 0)})
+    der = max((d for d in pas if d <= auj), default=None)
+    return {"points": points if any(p["pas"] for p in points) else [],
+            "derniere": {"jour": der.isoformat(), "pas": round(pas[der])} if der else None,
+            "moy_7j": moy(7), "moy_28j": moy(28), "moy_90j": moy(90),
+            "jours_10k_28j": sum(1 for d, v in pas.items() if auj - timedelta(days=28) < d <= auj and v >= 10000)}
+
+
+# ---------------------------------------------------------------------------
 # Assemblage
 # ---------------------------------------------------------------------------
 
@@ -727,6 +1179,14 @@ def calculer_analyses(db: Session, user: Utilisateur, aujourd_hui: Optional[date
         "plan": _respect_plan(db, user.id, auj),
         "annuel": _annuel(acts, auj),
         "correlations": _correlations(acts, mesures, serie_complete, poids, auj),
+        "efforts_duree": _efforts_duree(acts, auj),
+        "efficacite": _efficacite(acts, user, mesures, auj),
+        "monotonie": _monotonie(acts, auj),
+        "foulee": _foulee(acts, auj),
+        "denivele": _denivele(acts, auj),
+        "sommeil": _sommeil(mesures, user, auj),
+        "signaux_nuit": _signaux_nuit(mesures, auj),
+        "pas": _pas(mesures, auj),
     }
 
 
@@ -747,4 +1207,12 @@ def resume(analyses: dict) -> dict:
         "derives_recentes": c["derives"][-5:],
         "vma": analyses["vma"]["actuelle"] and {"estimee": analyses["vma"]["actuelle"]["vma"],
                                                 "dernier_test": analyses["vma"]["dernier_test"]},
+        "allure_critique": analyses["efforts_duree"]["vc"],
+        "efficacite_aerobie": {k: analyses["efficacite"][k] for k in ("recent", "ancien", "tendance_pct")},
+        "monotonie": analyses["monotonie"]["actuel"],
+        "durabilite_recente": c["durabilites"][-5:],
+        "denivele_4s": analyses["denivele"]["bilan_4s"],
+        "dette_sommeil": {k: analyses["sommeil"][k] for k in ("besoin_h", "dette_7j", "dette_14j", "regularite_min")},
+        "signaux_nuit": analyses["signaux_nuit"]["actuel"],
+        "pas": {k: analyses["pas"][k] for k in ("moy_7j", "moy_28j")},
     }
