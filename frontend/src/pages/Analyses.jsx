@@ -10,7 +10,7 @@ import Page from "../components/Page";
 import { Section, Segmente } from "../components/ui";
 import { axeX, axeY, grille, curseur, InfoBulle, Legende, GRIS } from "../components/graphiques";
 import { getAnalyses } from "../api";
-import { fmtAllureSec, fmtDate, nombre } from "../carnet";
+import { fmtAllureSec, fmtDate, fmtDuree, nombre } from "../carnet";
 
 const BLEU = "#007AFF";
 const ORANGE = "#FF9500";
@@ -247,11 +247,55 @@ function Recuperation({ r }) {
 const valeur = (m, unite, d = 0) => (m?.derniere ? `${nombre(m.derniere.valeur, d)} ${unite}` : "—");
 const moy28 = (m, unite, d = 0) => (m?.moy_28j != null ? `moy. 28 j : ${nombre(m.moy_28j, d)} ${unite}` : null);
 
+// Phases (champs personnalisés remplis par Intervals Companion), en heures. Repères : part de la nuit chez l'adulte.
+const PHASES = [
+  { cle: "sommeil_profond", label: "Profond", couleur: INDIGO, repere: "13 à 23 %" },
+  { cle: "sommeil_leger", label: "Léger", couleur: BLEU, repere: "45 à 60 %" },
+  { cle: "sommeil_paradoxal", label: "Paradoxal", couleur: CYAN, repere: "20 à 25 %" },
+];
+const aPhases = (p) => PHASES.some((f) => p[f.cle] != null);
+const hm = (h) => fmtDuree(Math.round(h * 60) * 60);
+
+function PhasesNuit({ nuit }) {
+  const total = PHASES.reduce((t, f) => t + (nuit[f.cle] ?? 0), 0);
+  return (
+    <Card>
+      <div className="flex items-baseline justify-between gap-2">
+        <p className="font-semibold">Phases de la dernière nuit</p>
+        <p className="text-[13px] text-label-2">{fmtDate(nuit.jour, { weekday: "short", day: "numeric", month: "short" })} · {hm(total)} endormi</p>
+      </div>
+      <div className="mt-3 flex h-3 rounded-full overflow-hidden bg-remplissage">
+        {PHASES.map((f) => nuit[f.cle] ? <div key={f.cle} style={{ width: `${(100 * nuit[f.cle]) / total}%`, background: f.couleur }} /> : null)}
+      </div>
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        {PHASES.map((f) => (
+          <div key={f.cle}>
+            <p className="text-[13px] text-label-2 flex items-center gap-1.5">
+              <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: f.couleur }} />{f.label}
+            </p>
+            <p className="font-semibold tabular-nums">{nuit[f.cle] != null ? hm(nuit[f.cle]) : "—"}</p>
+            <p className="text-[12px] text-label-2">
+              {nuit[f.cle] != null && total ? `${Math.round((100 * nuit[f.cle]) / total)} %` : ""} · repère {f.repere}
+            </p>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
 function Nuits({ r }) {
   const nuits = useMemo(() => (r?.points ?? [])
-    .filter((p) => p.sommeil != null || p.fc_sommeil != null)
+    .filter((p) => p.sommeil != null || p.fc_sommeil != null || aPhases(p))
     .slice(-60)
-    .map((p) => ({ ...p, label: court(p.jour) })), [r]);
+    .map((p) => {
+      if (!aPhases(p)) return { ...p, label: court(p.jour), duree: p.sommeil };
+      // Temps de sommeil non classé dans une phase (écart entre la durée et la somme des phases)
+      const reste = (p.sommeil ?? 0) - PHASES.reduce((t, f) => t + (p[f.cle] ?? 0), 0);
+      return { ...p, label: court(p.jour), sommeil_autre: reste > 0.05 ? reste : null };
+    }), [r]);
+  const avecPhases = nuits.some(aPhases);
+  const derniereAvecPhases = [...nuits].reverse().find(aPhases);
   const s = r?.sommeil;
   if (!nuits.length) {
     return <Card><Vide>Pas encore de nuit enregistrée : garde ta montre la nuit, le sommeil arrive par Intervals.icu à la synchro du matin.</Vide></Card>;
@@ -269,18 +313,24 @@ function Nuits({ r }) {
         <Tuile label="SpO2 nocturne" value={valeur(s?.spo2, "%")} sub={moy28(s?.spo2, "%")} />
         {s?.score_sommeil?.derniere && <Tuile label="Score de sommeil" value={valeur(s.score_sommeil, "/100")} sub={moy28(s.score_sommeil, "")} />}
       </div>
+      {derniereAvecPhases && <PhasesNuit nuit={derniereAvecPhases} />}
       <Graphe titre="Durée et FC de la nuit" couleur={INDIGO}
-        sousTitre={`${nuits.length} dernière${nuits.length > 1 ? "s" : ""} nuit${nuits.length > 1 ? "s" : ""} · barres = durée, ligne = FC moyenne pendant le sommeil`}
+        sousTitre={`${nuits.length} dernière${nuits.length > 1 ? "s" : ""} nuit${nuits.length > 1 ? "s" : ""} · barres = durée${avecPhases ? " par phase" : ""}, ligne = FC moyenne pendant le sommeil`}
         note="Une FC nocturne plus haute que d'habitude signale souvent fatigue, stress, alcool ou maladie qui couve. Repère : 7 h de sommeil (pointillés).">
+        {avecPhases && <Legende items={[...PHASES.map((f) => ({ label: f.label, couleur: f.couleur })), { label: "Sans phase", couleur: GRIS }]} />}
         <ResponsiveContainer width="100%" height={220}>
           <ComposedChart data={nuits} margin={{ left: 0, right: 0, top: 4 }}>
             <CartesianGrid {...grille} />
             <XAxis dataKey="label" {...axeX} minTickGap={32} />
             <YAxis yAxisId="h" {...axeY} domain={[0, (m) => Math.max(10, Math.ceil(m))]} allowDecimals={false} />
             {aFc && <YAxis yAxisId="fc" orientation="right" {...axeY} domain={["dataMin - 3", "dataMax + 3"]} />}
-            <Tooltip cursor={curseur} content={<InfoBulle format={(v, p) => (p.dataKey === "sommeil" ? `${nombre(v)} h` : `${nombre(v, 0)} bpm`)} />} />
+            <Tooltip cursor={curseur} content={<InfoBulle format={(v, p) => (p.dataKey === "fc_sommeil" ? `${nombre(v, 0)} bpm` : hm(v))} />} />
             <ReferenceLine yAxisId="h" y={7} stroke={GRIS} strokeDasharray="4 4" />
-            <Bar yAxisId="h" dataKey="sommeil" name="Sommeil" fill={INDIGO} fillOpacity={0.8} radius={[3, 3, 0, 0]} maxBarSize={10} />
+            <Bar yAxisId="h" dataKey="duree" name={avecPhases ? "Sans phase" : "Sommeil"} stackId="n" fill={avecPhases ? GRIS : INDIGO} fillOpacity={0.8} maxBarSize={10} />
+            {avecPhases && PHASES.map((f) => (
+              <Bar key={f.cle} yAxisId="h" dataKey={f.cle} name={f.label} stackId="n" fill={f.couleur} maxBarSize={10} />
+            ))}
+            {avecPhases && <Bar yAxisId="h" dataKey="sommeil_autre" name="Sans phase" stackId="n" fill={GRIS} maxBarSize={10} />}
             {aFc && <Line yAxisId="fc" dataKey="fc_sommeil" name="FC sommeil" stroke={ROSE} strokeWidth={2} dot={{ r: 2, strokeWidth: 0, fill: ROSE }} connectNulls />}
           </ComposedChart>
         </ResponsiveContainer>
@@ -301,8 +351,8 @@ function Nuits({ r }) {
             </ResponsiveContainer>
           ) : <Vide>Pas de SpO2 transmise pour ces nuits.</Vide>}
         </Graphe>
-        <Graphe titre="Score de sommeil" couleur={VIOLET} sousTitre={score.length ? "sur 100" : "non fourni par ta montre"}
-          note="Les phases (léger, profond, paradoxal) ne sont pas transmises par Intervals.icu, et Apple Santé n'y envoie pas de score : seules la durée, la FC, la SpO2 et la respiration arrivent.">
+        <Graphe titre="Score de sommeil" couleur={VIOLET} sousTitre={score.length ? "sur 100, calculé par Intervals Companion" : "pas encore reçu"}
+          note="Apple ne partage son propre score avec aucune autre app : celui-ci est calculé par Intervals Companion à partir de la nuit, il peut donc différer de quelques points de celui de l'app Santé.">
           {score.length ? (
             <ResponsiveContainer width="100%" height={180}>
               <BarChart data={score} margin={{ left: 0, right: 0, top: 4 }}>
@@ -313,7 +363,7 @@ function Nuits({ r }) {
                 <Bar dataKey="score_sommeil" name="Score" fill={VIOLET} radius={[3, 3, 0, 0]} maxBarSize={10} />
               </BarChart>
             </ResponsiveContainer>
-          ) : <Vide>Ta montre ne transmet pas de score à Intervals.icu (c'est le cas d'Apple Watch). Il apparaîtra ici si une autre source en fournit un.</Vide>}
+          ) : <Vide>Active « Sleep score » dans l'app Intervals Companion : le score arrivera à la synchro suivante.</Vide>}
         </Graphe>
       </div>
     </>

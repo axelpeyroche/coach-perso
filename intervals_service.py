@@ -178,7 +178,7 @@ def resume_flux(streams: list, sport: str) -> dict:
 
 
 def synchroniser_wellness(db: Session, user: Utilisateur, depuis, jusqu_a) -> tuple[int, dict]:
-    """Sommeil de chaque nuit (durée, FC moyenne, score si la montre en fournit, SpO2, respiration) ; FC repos, VFC (SDNN) et VO2max seulement pour les jours où le
+    """Sommeil de chaque nuit (durée, phases et score via Intervals Companion, FC moyenne, SpO2, respiration) ; FC repos, VFC (SDNN) et VO2max seulement pour les jours où le
     raccourci n'a rien envoyé (ses valeurs restent la référence).
     Retourne (mesures enregistrées, {type: nombre de jours fournis par Intervals.icu})."""
     athlete = user.intervals_athlete_id or "0"
@@ -196,7 +196,12 @@ def synchroniser_wellness(db: Session, user: Utilisateur, depuis, jusqu_a) -> tu
         if w.get("sleepSecs"):
             recus["sommeil"] += 1
             items.append(("sommeil", jour, w["sleepSecs"] / 3600))
-        # Les phases (profond, paradoxal…) ne sont pas transmises par Intervals.icu
+        # Phases : champs personnalisés DeepSleep / LightSleep / REMSleep (secondes) remplis par Intervals Companion
+        champs = {k.lower(): v for k, v in w.items()}
+        for cle, t in (("deepsleep", "sommeil_profond"), ("lightsleep", "sommeil_leger"), ("remsleep", "sommeil_paradoxal")):
+            if isinstance(champs.get(cle), (int, float)) and champs[cle] > 0:
+                recus[t] = recus.get(t, 0) + 1
+                items.append((t, jour, champs[cle] / 3600))
         for cle, t in (("avgSleepingHR", "fc_sommeil"), ("sleepScore", "score_sommeil"),
                        ("spO2", "spo2"), ("respiration", "respiration")):
             if w.get(cle):

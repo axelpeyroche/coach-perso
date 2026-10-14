@@ -171,7 +171,8 @@ def _statut(score: Optional[float]) -> Optional[str]:
 
 def _recuperation(mesures: dict[str, dict[date, float]], auj: date, jours: int = 90) -> dict:
     vfc, fcr, som = mesures.get("vfc", {}), mesures.get("fc_repos", {}), mesures.get("sommeil", {})
-    nuit = {t: mesures.get(t, {}) for t in ("fc_sommeil", "score_sommeil", "spo2", "respiration")}
+    nuit = {t: mesures.get(t, {}) for t in ("fc_sommeil", "score_sommeil", "spo2", "respiration",
+                                             "sommeil_profond", "sommeil_leger", "sommeil_paradoxal")}
 
     def reference(serie: dict[date, float], j: date):
         vals = [v for d, v in serie.items() if j - timedelta(days=REF_RECUP_JOURS) <= d < j]
