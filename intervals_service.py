@@ -21,6 +21,7 @@ from datetime import datetime, timedelta
 from typing import Optional
 from zoneinfo import ZoneInfo
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 import analyses_service as an
@@ -181,10 +182,11 @@ def resume_flux(streams: list, sport: str) -> dict:
     return res
 
 
-def synchroniser_wellness(db: Session, user: Utilisateur, depuis, jusqu_a) -> tuple[int, dict]:
+def synchroniser_wellness(db: Session, user: Utilisateur, depuis, jusqu_a, completer: bool = False) -> tuple[int, dict]:
     """Sommeil de chaque nuit (durée, phases et score via Intervals Companion, FC moyenne, SpO2, respiration),
     pas de la journée ; FC repos, VFC (SDNN) et VO2max seulement pour les jours où le
     raccourci n'a rien envoyé (ses valeurs restent la référence).
+    completer=True : n'ajoute que les jours absents du carnet, sans modifier aucune valeur existante.
     Retourne (mesures enregistrées, {type: nombre de jours fournis par Intervals.icu})."""
     athlete = user.intervals_athlete_id or "0"
     lignes = _appel(user.intervals_cle, f"/athlete/{urllib.parse.quote(athlete)}/wellness",
@@ -217,10 +219,43 @@ def synchroniser_wellness(db: Session, user: Utilisateur, depuis, jusqu_a) -> tu
                 recus[t] += 1
                 if (t, jour) not in deja:
                     items.append((t, jour, float(w[cle])))
+    if completer:
+        presents = {(m.type, m.jour) for m in db.query(MesureSante.type, MesureSante.jour).filter(
+            MesureSante.utilisateur_id == user.id, MesureSante.jour >= depuis, MesureSante.jour <= jusqu_a)}
+        items = [it for it in items if (cs.normaliser_mesure(it[0]), it[1]) not in presents]
     if not items:
         return 0, recus
     b = cs.importer_mesures(db, user.id, items)
     return b["cree"] + b["maj"], recus
+
+
+def importer_historique_wellness(db: Session, user: Utilisateur, annees_max: int = 15) -> dict:
+    """Remonte l'historique wellness (pas, sommeil, VFC, FC repos, SpO2…) au-delà de la fenêtre de synchro,
+    année par année, jusqu'à deux années vides. N'ajoute que les jours manquants.
+    Retourne {mesures, du, par_type}."""
+    tz = ZoneInfo(user.fuseau_horaire or "Europe/Paris")
+    fin = (datetime.now(tz) - timedelta(days=PREMIERE_FENETRE_JOURS - 5)).date()
+    total, par_type, plus_ancien, vides = 0, {}, None, 0
+    for _ in range(annees_max):
+        debut = fin - timedelta(days=365)
+        n, recus = synchroniser_wellness(db, user, debut, fin, completer=True)
+        db.flush()
+        total += n
+        fournis = sum(recus.values())
+        for t, k in recus.items():
+            par_type[t] = par_type.get(t, 0) + k
+        if fournis:
+            plus_ancien, vides = debut, 0
+        else:
+            vides += 1
+            if vides >= 2:
+                break
+        fin = debut - timedelta(days=1)
+    if plus_ancien:
+        premier = db.query(func.min(MesureSante.jour)).filter(MesureSante.utilisateur_id == user.id).scalar()
+        plus_ancien = premier or plus_ancien
+    return {"mesures": total, "du": plus_ancien.isoformat() if plus_ancien else None,
+            "par_type": {t: k for t, k in par_type.items() if k}}
 
 
 def synchroniser(db: Session, user: Utilisateur, force: bool = False) -> dict:

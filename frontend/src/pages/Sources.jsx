@@ -9,7 +9,7 @@ import {
   getAnalyseToken, regenererAnalyseToken, exporterCarnet, urlApiAbsolue,
   getClaudeToken, regenererClaudeToken, importerTraces,
   getNuitsImportees, effacerNuitsImportees,
-  getIntervals, connecterIntervals, deconnecterIntervals, synchroIntervals,
+  getIntervals, connecterIntervals, deconnecterIntervals, synchroIntervals, historiqueIntervals,
 } from "../api";
 import { IAS, promptAnalyse } from "../ia";
 
@@ -308,6 +308,10 @@ function BlocIntervals() {
     onSuccess: (r) => { setRes(r); qc.setQueryData(["intervals"], r); invaliderCarnet(qc); },
     onError: erreur,
   });
+  const historique = useMutation({
+    mutationFn: historiqueIntervals,
+    onSuccess: () => invaliderCarnet(qc),
+  });
   const connexion = useMutation({
     mutationFn: () => connecterIntervals(cle.trim(), athlete.trim() || null),
     onSuccess: (r) => { qc.setQueryData(["intervals"], r); setCle(""); setAthlete(""); setRes(null); synchro.mutate(); },
@@ -341,6 +345,25 @@ function BlocIntervals() {
               {synchro.isPending ? "Synchro en cours…" : "Synchroniser maintenant"}
             </button>
             <button className={lienDanger} onClick={() => setConfirmDeco(true)}>Déconnecter</button>
+          </div>
+          <div className="tuile p-3.5 space-y-2">
+            <p className="text-[15px] font-semibold">Historique de forme</p>
+            <p className="text-[13px] text-label-2">La synchro relit les 60 derniers jours. Pour les analyses sur le long terme,
+              récupère une fois tout l'historique d'Intervals.icu (pas, sommeil, VFC, FC au repos, SpO2…) : seuls les jours
+              absents du carnet sont ajoutés, rien n'est remplacé.</p>
+            <button className={btnP} disabled={historique.isPending} onClick={() => historique.mutate()}>
+              {historique.isPending ? "Récupération… (jusqu'à une minute)" : "Récupérer tout l'historique"}
+            </button>
+            {historique.data && (
+              <p className="text-[13px] text-label-2 chiffres">
+                ✓ {historique.data.mesures} mesure(s) ajoutée(s)
+                {historique.data.du ? ` · données depuis le ${new Date(historique.data.du).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}` : ""}
+                {historique.data.par_type?.pas ? ` · ${historique.data.par_type.pas} jours de pas` : ""}.
+              </p>
+            )}
+            {historique.isError && (
+              <p className="text-[13px] text-ios-red">{historique.error?.response?.data?.detail?.toString?.() ?? "Intervals.icu ne répond pas, réessaie plus tard."}</p>
+            )}
           </div>
           <SynchroNocturne />
           <details className="tuile p-3.5">

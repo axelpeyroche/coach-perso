@@ -73,6 +73,19 @@ def synchro(force: bool = Query(False), db: Session = Depends(obtenir_session),
     return _synchroniser(db, current_user, force)
 
 
+@router.post("/api/intervals/historique", summary="Récupérer l'historique de forme (pas, sommeil, VFC…) au-delà de 60 jours")
+def historique(db: Session = Depends(obtenir_session), current_user: Utilisateur = Depends(get_current_user)):
+    if not current_user.intervals_cle:
+        raise HTTPException(409, "Intervals.icu n'est pas connecté")
+    try:
+        res = iv.importer_historique_wellness(db, current_user)
+        db.commit()
+    except iv.IntervalsErreur as e:
+        db.rollback()
+        raise HTTPException(502, str(e))
+    return res
+
+
 @router.post("/api/intervals/synchro-nuit", summary="Synchro planifiée (GitHub Actions) — auth par token d'import")
 def synchro_nuit(notifier: bool = Query(False, description="Envoie la notification du matin sans attendre l'heure choisie"),
                  credentials: HTTPAuthorizationCredentials = Security(http_bearer),
