@@ -56,8 +56,12 @@ export default function Accueil() {
         </Card>
       )}
 
-      {!vide && <FormeJour />}
-      {!vide && <SommeilNuit />}
+      {!vide && (
+        <div className="grid gap-3 lg:grid-cols-2 lg:items-start">
+          <FormeJour />
+          <SommeilNuit />
+        </div>
+      )}
 
       {t && !vide && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
