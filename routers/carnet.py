@@ -636,7 +636,13 @@ def _importer_activites(payload: ImportActivitesSchema, db: Session, taches: Opt
     ech = _echantillons(extra, tz)
     phases = _phases(extra, tz)
     if not lot and not items_mesures and not ech and not phases:
-        recus = ", ".join(f"{k} ({len(_liste(v))})" for k, v in extra.items()) or "aucun"
+        if any(k.startswith("phases_") for k in extra):
+            # Message court : la notification iOS coupe au-delà de deux lignes
+            vals, debs, fins = (_liste(extra.get(f"phases_{k}")) for k in ("valeurs", "debuts", "fins"))
+            ex = lambda l: f"« {str(l[0])[:30]} »" if l else "rien"
+            raise HTTPException(400, f"Sommeil : {len(vals)} valeur(s), {len(debs)} début(s), {len(fins)} fin(s). "
+                                     f"Valeur {ex(vals)}, début {ex(debs)}, fin {ex(fins)}")
+        recus =", ".join(f"{k} ({len(_liste(v))})" for k, v in extra.items()) or "aucun"
         exemple = next((str(_liste(v)[0])[:40] for k, v in extra.items() if k.endswith("_dates") and _liste(v)), None)
         raise HTTPException(400, "Aucune activité ni mesure exploitable. Champs reçus : " + recus
                             + (f". Exemple de date reçue : « {exemple} »" if exemple else ""))
