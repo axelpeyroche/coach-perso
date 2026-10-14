@@ -141,6 +141,31 @@ class MesureSante(Base):
     valeur: Mapped[float] = mapped_column(Float, nullable=False)
 
 
+class NuitSommeil(Base):
+    """Une nuit reconstituée à partir des phases Apple Santé (raccourci iOS) : durées
+    par phase, réveils et score sur 100 calculé par le carnet (méthode du score Apple)."""
+    __tablename__ = "nuits_sommeil"
+    __table_args__ = (
+        UniqueConstraint("utilisateur_id", "jour", name="uq_nuit_sommeil_jour"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    utilisateur_id: Mapped[int] = mapped_column(ForeignKey("utilisateurs.id"), nullable=False, index=True)
+    jour: Mapped[date] = mapped_column(Date, nullable=False)  # jour du réveil
+    endormissement: Mapped[datetime] = mapped_column(DateTime, nullable=False)  # heure locale
+    reveil: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    endormi_min: Mapped[float] = mapped_column(Float, nullable=False)
+    profond_min: Mapped[Optional[float]] = mapped_column(Float)
+    paradoxal_min: Mapped[Optional[float]] = mapped_column(Float)
+    essentiel_min: Mapped[Optional[float]] = mapped_column(Float)
+    eveil_min: Mapped[float] = mapped_column(Float, default=0)
+    reveils: Mapped[int] = mapped_column(Integer, default=0)
+    score: Mapped[Optional[int]] = mapped_column(Integer)
+    score_duree: Mapped[Optional[float]] = mapped_column(Float)
+    score_regularite: Mapped[Optional[float]] = mapped_column(Float)
+    score_interruptions: Mapped[Optional[float]] = mapped_column(Float)
+
+
 class EchantillonSante(Base):
     """
     Échantillon brut reçu du raccourci iOS (FC, énergie, distance, minutes d'exercice…),

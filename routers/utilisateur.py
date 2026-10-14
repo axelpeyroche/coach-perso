@@ -15,7 +15,7 @@ from carnet_service import synchroniser_physiologie
 from database import obtenir_session
 from deps import (_create_token, _hash_password, _verify_password, compter_echec, get_current_user, limiter,
                   normaliser_email, verifier_mot_de_passe_robuste)
-from models import (Activite, MesureSante, Objectif, ObjectifCourse, PoidsUtilisateur, SeancePrevue, TraceGPS,
+from models import (Activite, MesureSante, NuitSommeil, Objectif, ObjectifCourse, PoidsUtilisateur, SeancePrevue, TraceGPS,
                     Utilisateur)
 
 router = APIRouter()
@@ -198,6 +198,7 @@ def exporter_donnees(current_user: Utilisateur = Depends(get_current_user), db: 
 
     mesures = (db.query(MesureSante).filter_by(utilisateur_id=current_user.id)
                .order_by(MesureSante.jour, MesureSante.type).all())
+    nuits = db.query(NuitSommeil).filter_by(utilisateur_id=current_user.id).order_by(NuitSommeil.jour).all()
     prevues = db.query(SeancePrevue).filter_by(utilisateur_id=current_user.id).order_by(SeancePrevue.jour).all()
     traces = db.query(TraceGPS).filter_by(utilisateur_id=current_user.id).order_by(TraceGPS.activite_id).all()
 
@@ -213,6 +214,7 @@ def exporter_donnees(current_user: Utilisateur = Depends(get_current_user), db: 
         "activites": [_dump(a) for a in activites],
         "objectifs": [_dump(o) for o in objectifs_carnet],
         "mesures_sante": [_dump(m) for m in mesures],
+        "nuits_sommeil": [_dump(n) for n in nuits],
         "seances_prevues": [_dump(p) for p in prevues],
         "traces_gps": [_dump(t) for t in traces],  # points : JSON [[lat, lon, alt, s], …] tel que stocké
         "exporte_le": datetime.utcnow().isoformat(timespec="seconds") + "Z",
@@ -259,6 +261,7 @@ def supprimer_compte(payload: SuppressionCompteSchema, current_user: Utilisateur
             pass
     db.query(PoidsUtilisateur).filter_by(utilisateur_id=current_user.id).delete()
     db.query(MesureSante).filter_by(utilisateur_id=current_user.id).delete()
+    db.query(NuitSommeil).filter_by(utilisateur_id=current_user.id).delete()
     db.query(SeancePrevue).filter_by(utilisateur_id=current_user.id).delete()
     db.query(ObjectifCourse).filter_by(utilisateur_id=current_user.id).delete()
     db.query(Activite).filter_by(utilisateur_id=current_user.id).delete()

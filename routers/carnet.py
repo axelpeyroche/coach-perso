@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 import analyses_service as an
 import carnet_service as cs
+import sommeil_service
 from database import obtenir_session
 from deps import get_current_user
 from models import Activite, CacheCarte, Objectif, ObjectifCourse, TraceGPS, Utilisateur
@@ -591,6 +592,18 @@ def _echantillons(extra: dict, tz: ZoneInfo) -> dict[str, list[tuple[datetime, f
     return ech
 
 
+def _phases(extra: dict, tz: ZoneInfo) -> list[tuple[str, datetime, datetime]]:
+    """Analyse du sommeil de Santé : listes parallèles `phases_valeurs` / `_debuts` / `_fins`."""
+    tranches = []
+    for v, d, f in zip(_liste(extra.get("phases_valeurs")), _liste(extra.get("phases_debuts")),
+                       _liste(extra.get("phases_fins"))):
+        try:
+            tranches.append((str(v), _date_import(d, tz), _date_import(f, tz)))
+        except HTTPException:
+            continue
+    return tranches
+
+
 @router.post("/api/activites/import", summary="Import d'activités (raccourci iOS / script) — auth par token d'import")
 def importer_activites(payload: ImportActivitesSchema, taches: BackgroundTasks,
                        db: Session = Depends(obtenir_session)):
@@ -621,7 +634,8 @@ def _importer_activites(payload: ImportActivitesSchema, db: Session, taches: Opt
     items_mesures = [(m.type, _date_import(m.date, tz).date(), _nombre_unite(m.valeur)[0])
                      for m in payload.mesures or []] + _mesures_a_plat(extra, tz)
     ech = _echantillons(extra, tz)
-    if not lot and not items_mesures and not ech:
+    phases = _phases(extra, tz)
+    if not lot and not items_mesures and not ech and not phases:
         recus = ", ".join(f"{k} ({len(_liste(v))})" for k, v in extra.items()) or "aucun"
         exemple = next((str(_liste(v)[0])[:40] for k, v in extra.items() if k.endswith("_dates") and _liste(v)), None)
         raise HTTPException(400, "Aucune activité ni mesure exploitable. Champs reçus : " + recus
@@ -643,6 +657,7 @@ def _importer_activites(payload: ImportActivitesSchema, db: Session, taches: Opt
     detectees = cs.detecter_seances(db, user, ech) if ech else 0
     completees = cs.enrichir_activites(db, user, ech) if ech else 0  # FC, zones… des séances reçues aussi
     cs.rattacher_traces(db, user.id)  # tracés importés avant que la séance n'existe
+    sommeil = sommeil_service.enregistrer_phases(db, user.id, phases) if phases else None
     db.commit()
     if taches is not None and user.intervals_cle:
         from routers.intervals import synchro_en_arriere_plan
@@ -659,8 +674,10 @@ def _importer_activites(payload: ImportActivitesSchema, db: Session, taches: Opt
         morceaux.append(f"{recus} échantillon(s) reçu(s)")
     if recus or completees:
         morceaux.append(f"{completees} séance(s) complétée(s) (FC, puissance, effort…)")
+    if sommeil:
+        morceaux.append(sommeil_service.resume(sommeil))
     return {"ok": True, **bilan, "mesures": mesures, "seances_detectees": detectees,
-            "seances_completees": completees,
+            "seances_completees": completees, "nuits": len(sommeil["nuits"]) if sommeil else 0,
             "message": " · ".join(morceaux)}
 
 

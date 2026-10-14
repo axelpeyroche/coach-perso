@@ -20,6 +20,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 import carnet_service as cs
+import sommeil_service
 from models import Activite, MesureSante, Objectif, PoidsUtilisateur, SeancePrevue, TraceGPS, Utilisateur
 
 CTL_JOURS = 42   # forme de fond (charge chronique)
@@ -647,11 +648,13 @@ def _correlation(cle, titre, x_label, y_label, paires, attendu: int, explication
 
 
 def _correlations(acts: list[Activite], mesures: dict[str, dict[date, float]], forme: list[dict],
-                  poids: list[PoidsUtilisateur], auj: date) -> list[dict]:
+                  poids: list[PoidsUtilisateur], auj: date, nuits: Optional[list[dict]] = None) -> list[dict]:
     debut = auj - timedelta(days=365)
     charges = charges_quotidiennes(acts)
     vfc, fcr, som = mesures.get("vfc", {}), mesures.get("fc_repos", {}), mesures.get("sommeil", {})
     fcs = mesures.get("fc_sommeil", {})
+    profond = {date.fromisoformat(n["jour"]): n["profond_min"] / 60 for n in nuits or [] if n["profond_min"]}
+    score = mesures.get("score_sommeil", {})
     atl = {date.fromisoformat(p["jour"]): p["atl"] for p in forme}
     jours = [debut + timedelta(days=i) for i in range((auj - debut).days + 1)]
 
@@ -677,6 +680,16 @@ def _correlations(acts: list[Activite], mesures: dict[str, dict[date, float]], f
         _correlation("sommeil_vfc", "Sommeil → VFC", "Sommeil (h)", "VFC (ms)",
                      [(fmt(j), som.get(j), vfc.get(j)) for j in jours], 1,
                      "Mieux dormir favorise une VFC plus haute, signe d'une bonne récupération."),
+        _correlation("profond_vfc", "Sommeil profond → VFC", "Sommeil profond (h)", "VFC (ms)",
+                     [(fmt(j), profond.get(j), vfc.get(j)) for j in jours if j in profond], 1,
+                     "Le sommeil profond est la phase de récupération physique : plus il dure, plus la VFC monte souvent."),
+        _correlation("score_sommeil_vfc", "Score de sommeil → VFC", "Score de sommeil (/100)", "VFC (ms)",
+                     [(fmt(j), score.get(j), vfc.get(j)) for j in jours if j in score], 1,
+                     "Une nuit longue, régulière et peu interrompue va souvent avec une meilleure récupération."),
+        _correlation("charge_profond", "Charge de la veille → sommeil profond", "Charge de la veille (min×RPE)",
+                     "Sommeil profond (h)",
+                     [(fmt(j), charges.get(j - timedelta(days=1), 0.0), profond.get(j)) for j in jours if j in profond], 1,
+                     "Après un gros effort, le corps réclame souvent davantage de sommeil profond."),
         _correlation("fc_sommeil_charge", "Charge de la veille → FC pendant le sommeil", "Charge de la veille (min×RPE)",
                      "FC sommeil (bpm)",
                      [(fmt(j), charges.get(j - timedelta(days=1), 0.0), fcs.get(j)) for j in jours if j in fcs], 1,
@@ -716,16 +729,19 @@ def calculer_analyses(db: Session, user: Utilisateur, aujourd_hui: Optional[date
     poids = db.query(PoidsUtilisateur).filter(PoidsUtilisateur.utilisateur_id == user.id).all()
     forme = _forme_fatigue(acts, objectifs, auj)
     serie_complete = courbe_forme(charges_quotidiennes(acts), auj)
+    nuits = sommeil_service.nuits_recentes(db, user.id, auj - timedelta(days=365))
+    recuperation = _recuperation(mesures, auj)
+    recuperation["nuits"] = [n for n in nuits if n["jour"] >= (auj - timedelta(days=59)).isoformat()]
     return {
         "genere_le": datetime.utcnow().isoformat(timespec="seconds") + "Z",
         "forme": forme,
         "zones": _zones_hebdo(acts, user, auj),
-        "recuperation": _recuperation(mesures, auj),
+        "recuperation": recuperation,
         "course": _course(acts, auj),
         "vma": _vma(db, user, acts, mesures, auj),
         "plan": _respect_plan(db, user.id, auj),
         "annuel": _annuel(acts, auj),
-        "correlations": _correlations(acts, mesures, serie_complete, poids, auj),
+        "correlations": _correlations(acts, mesures, serie_complete, poids, auj, nuits),
     }
 
 

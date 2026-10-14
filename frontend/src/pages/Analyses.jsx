@@ -247,12 +247,127 @@ function Recuperation({ r }) {
 const valeur = (m, unite, d = 0) => (m?.derniere ? `${nombre(m.derniere.valeur, d)} ${unite}` : "—");
 const moy28 = (m, unite, d = 0) => (m?.moy_28j != null ? `moy. 28 j : ${nombre(m.moy_28j, d)} ${unite}` : null);
 
+const hm = (min) => (min == null ? "—" : `${Math.floor(min / 60)} h ${String(Math.round(min % 60)).padStart(2, "0")}`);
+const heure = (iso) => iso?.slice(11, 16).replace(":", " h ");
+const LABEL_COUL = { "Très élevé": VERT, "Élevé": VERT, OK: BLEU, Bas: ORANGE, "Très bas": ROUGE };
+const PHASES = [
+  ["profond", "Profond", INDIGO], ["essentiel", "Essentiel", BLEU], ["paradoxal", "Paradoxal", CYAN], ["eveil", "Éveillé", ORANGE],
+];
+// Repères habituels chez l'adulte (part du temps endormi)
+const NORMES = { profond: [13, 23], paradoxal: [20, 25] };
+
+function Barre({ label, valeur, max, couleur }) {
+  return (
+    <div>
+      <div className="flex justify-between text-[13px]"><span className="text-label-2">{label}</span>
+        <span className="chiffres font-semibold">{valeur == null ? "—" : `${nombre(valeur, 0)} / ${max}`}</span></div>
+      <div className="h-1.5 rounded-full bg-remplissage mt-1 overflow-hidden">
+        <div className="h-full rounded-full" style={{ width: `${Math.min(100, ((valeur ?? 0) / max) * 100)}%`, background: couleur }} />
+      </div>
+    </div>
+  );
+}
+
+function ScoreNuit({ n }) {
+  const coul = LABEL_COUL[n.label] ?? GRIS;
+  return (
+    <Graphe titre="Score de la dernière nuit" couleur={VIOLET}
+      sousTitre={`${court(n.jour)} · endormi ${heure(n.endormissement)}, réveil ${heure(n.reveil)}`}
+      note={n.score_regularite == null
+        ? "Régularité provisoire : il faut quelques nuits d'historique pour comparer ton heure d'endormissement."
+        : "Calculé comme Apple : durée (50), régularité de l'endormissement sur 2 semaines (30), réveils (20)."}>
+      <div className="flex items-center gap-5">
+        <div className="shrink-0 text-center">
+          <p className="font-rounded text-[44px] leading-none font-bold chiffres" style={{ color: coul }}>{n.score}</p>
+          <p className="text-[13px] font-semibold mt-1" style={{ color: coul }}>{n.label}</p>
+        </div>
+        <div className="flex-1 min-w-0 space-y-2">
+          <Barre label={`Durée · ${hm(n.endormi_min)}`} valeur={n.score_duree} max={50} couleur={INDIGO} />
+          <Barre label="Régularité" valeur={n.score_regularite} max={30} couleur={BLEU} />
+          <Barre label={`Réveils · ${n.reveils} (${nombre(n.eveil_min, 0)} min)`} valeur={n.score_interruptions} max={20} couleur={ORANGE} />
+        </div>
+      </div>
+    </Graphe>
+  );
+}
+
+function Phases({ nuits }) {
+  const avecPhases = nuits.filter((n) => n.profond_min != null);
+  const data = avecPhases.map((n) => ({
+    label: court(n.jour), profond: n.profond_min / 60, essentiel: n.essentiel_min / 60,
+    paradoxal: n.paradoxal_min / 60, eveil: n.eveil_min / 60,
+  }));
+  const recentes = avecPhases.slice(-7);
+  const part = (k) => (100 * recentes.reduce((t, n) => t + n[`${k}_min`], 0)) / recentes.reduce((t, n) => t + n.endormi_min, 0);
+  const scores = nuits.map((n) => ({ label: court(n.jour), score: n.score }));
+  return (
+    <>
+      {data.length > 0 && (
+        <Graphe titre="Phases de sommeil" couleur={INDIGO} sousTitre={`${data.length} nuit${data.length > 1 ? "s" : ""} · heures par phase`}
+          note="Le sommeil profond répare le corps (muscles, immunité) ; le paradoxal consolide la mémoire et l'apprentissage des gestes.">
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={data} margin={{ left: 0, right: 0, top: 4 }}>
+              <CartesianGrid {...grille} />
+              <XAxis dataKey="label" {...axeX} minTickGap={32} />
+              <YAxis {...axeY} allowDecimals={false} />
+              <Tooltip cursor={curseur} content={<InfoBulle format={(v) => hm(v * 60)} />} />
+              {PHASES.map(([k, nom, c], i) => (
+                <Bar key={k} dataKey={k} name={nom} stackId="p" fill={c}
+                  radius={i === PHASES.length - 1 ? [3, 3, 0, 0] : 0} maxBarSize={14} />
+              ))}
+            </BarChart>
+          </ResponsiveContainer>
+          <Legende items={PHASES.map(([, nom, c]) => ({ label: nom, couleur: c }))} />
+        </Graphe>
+      )}
+      <div className="grid gap-3 lg:grid-cols-2">
+        {recentes.length > 0 && (
+          <Graphe titre={`Répartition sur ${recentes.length} nuit${recentes.length > 1 ? "s" : ""}`} couleur={CYAN} sousTitre="part du temps endormi">
+            <div className="space-y-4">
+              {[["profond", "Profond", INDIGO], ["paradoxal", "Paradoxal", CYAN]].map(([k, nom, c]) => {
+                const v = part(k), [bas, haut] = NORMES[k];
+                const ok = v >= bas && v <= haut;
+                return (
+                  <div key={k}>
+                    <div className="flex justify-between text-[15px]">
+                      <span>{nom}</span>
+                      <span className="chiffres font-semibold" style={{ color: ok ? VERT : ORANGE }}>{nombre(v, 0)} %</span>
+                    </div>
+                    <p className="text-[12px] text-label-2">repère habituel : {bas}–{haut} % {ok ? "· dans la norme" : v < bas ? "· un peu bas" : "· au-dessus"}</p>
+                    <div className="relative h-2 rounded-full bg-remplissage mt-1.5">
+                      <div className="absolute h-full rounded-full opacity-30" style={{ left: `${bas * 2}%`, width: `${(haut - bas) * 2}%`, background: VERT }} />
+                      <div className="absolute -top-0.5 h-3 w-1 rounded-full" style={{ left: `${Math.min(98, v * 2)}%`, background: c }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </Graphe>
+        )}
+        <Graphe titre="Évolution du score" couleur={VIOLET} sousTitre="sur 100 · « Élevé » au-dessus des pointillés">
+          <ResponsiveContainer width="100%" height={180}>
+            <LineChart data={scores} margin={{ left: 0, right: 0, top: 4 }}>
+              <CartesianGrid {...grille} />
+              <XAxis dataKey="label" {...axeX} minTickGap={32} />
+              <YAxis {...axeY} domain={[0, 100]} />
+              <Tooltip cursor={ligneCurseur} content={<InfoBulle format={(v) => `${nombre(v, 0)} / 100`} />} />
+              <ReferenceLine y={80} stroke={GRIS} strokeDasharray="4 4" />
+              <Line dataKey="score" name="Score" stroke={VIOLET} strokeWidth={2} dot={{ r: 2, strokeWidth: 0, fill: VIOLET }} connectNulls />
+            </LineChart>
+          </ResponsiveContainer>
+        </Graphe>
+      </div>
+    </>
+  );
+}
+
 function Nuits({ r }) {
   const nuits = useMemo(() => (r?.points ?? [])
     .filter((p) => p.sommeil != null || p.fc_sommeil != null)
     .slice(-60)
     .map((p) => ({ ...p, label: court(p.jour) })), [r]);
   const s = r?.sommeil;
+  const detail = r?.nuits ?? [];
   if (!nuits.length) {
     return <Card><Vide>Pas encore de nuit enregistrée : garde ta montre la nuit, le sommeil arrive par Intervals.icu à la synchro du matin.</Vide></Card>;
   }
@@ -269,6 +384,8 @@ function Nuits({ r }) {
         <Tuile label="SpO2 nocturne" value={valeur(s?.spo2, "%")} sub={moy28(s?.spo2, "%")} />
         {s?.score_sommeil?.derniere && <Tuile label="Score de sommeil" value={valeur(s.score_sommeil, "/100")} sub={moy28(s.score_sommeil, "")} />}
       </div>
+      {detail.length > 0 && <ScoreNuit n={detail[detail.length - 1]} />}
+      {detail.length > 0 && <Phases nuits={detail} />}
       <Graphe titre="Durée et FC de la nuit" couleur={INDIGO}
         sousTitre={`${nuits.length} dernière${nuits.length > 1 ? "s" : ""} nuit${nuits.length > 1 ? "s" : ""} · barres = durée, ligne = FC moyenne pendant le sommeil`}
         note="Une FC nocturne plus haute que d'habitude signale souvent fatigue, stress, alcool ou maladie qui couve. Repère : 7 h de sommeil (pointillés).">
@@ -285,7 +402,7 @@ function Nuits({ r }) {
           </ComposedChart>
         </ResponsiveContainer>
       </Graphe>
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className={clsx("grid gap-3", !detail.length && "lg:grid-cols-2")}>
         <Graphe titre="SpO2 nocturne" couleur={CYAN} sousTitre="saturation moyenne en oxygène pendant la nuit"
           note="Normalement entre 95 et 100 %. Des nuits régulièrement sous 93 % méritent d'en parler à un médecin.">
           {spo2.length ? (
@@ -301,8 +418,8 @@ function Nuits({ r }) {
             </ResponsiveContainer>
           ) : <Vide>Pas de SpO2 transmise pour ces nuits.</Vide>}
         </Graphe>
-        <Graphe titre="Score de sommeil" couleur={VIOLET} sousTitre={score.length ? "sur 100" : "non fourni par ta montre"}
-          note="Les phases (léger, profond, paradoxal) ne sont pas transmises par Intervals.icu, et Apple Santé n'y envoie pas de score : seules la durée, la FC, la SpO2 et la respiration arrivent.">
+        {!detail.length && <Graphe titre="Score de sommeil" couleur={VIOLET} sousTitre={score.length ? "sur 100" : "non fourni par ta montre"}
+          note="Les phases et le score viennent du raccourci « Carnet – Sommeil » (Intervals.icu ne les transmet pas).">
           {score.length ? (
             <ResponsiveContainer width="100%" height={180}>
               <BarChart data={score} margin={{ left: 0, right: 0, top: 4 }}>
@@ -313,8 +430,8 @@ function Nuits({ r }) {
                 <Bar dataKey="score_sommeil" name="Score" fill={VIOLET} radius={[3, 3, 0, 0]} maxBarSize={10} />
               </BarChart>
             </ResponsiveContainer>
-          ) : <Vide>Ta montre ne transmet pas de score à Intervals.icu (c'est le cas d'Apple Watch). Il apparaîtra ici si une autre source en fournit un.</Vide>}
-        </Graphe>
+          ) : <Vide>Apple Watch ne transmet pas de score à Intervals.icu. Ajoute le raccourci « Carnet – Sommeil » : le carnet calculera ton score et affichera tes phases.</Vide>}
+        </Graphe>}
       </div>
     </>
   );
