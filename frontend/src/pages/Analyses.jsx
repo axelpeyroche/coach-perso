@@ -244,45 +244,18 @@ function Recuperation({ r }) {
 }
 
 // ── Sommeil ───────────────────────────────────────────────────────────────
-const valeur = (m, unite, d = 0) => (m?.derniere ? `${nombre(m.derniere.valeur, d)} ${unite}` : "—");
-const moy28 = (m, unite, d = 0) => (m?.moy_28j != null ? `moy. 28 j : ${nombre(m.moy_28j, d)} ${unite}` : null);
+// Moyennes sur la période (la dernière nuit est détaillée dans le Résumé)
+const moy = (m, unite, d = 0) => (m?.moy_28j != null ? `${nombre(m.moy_28j, d)} ${unite}` : "—");
+const moy7 = (m, unite, d = 0) => (m?.moy_7j != null ? `7 j : ${nombre(m.moy_7j, d)} ${unite}` : null);
 
-// Phases (champs personnalisés remplis par Intervals Companion), en heures. Repères : part de la nuit chez l'adulte.
+// Phases (champs personnalisés remplis par Intervals Companion), en heures. La dernière nuit est détaillée dans le Résumé.
 const PHASES = [
-  { cle: "sommeil_profond", label: "Profond", couleur: INDIGO, repere: "13 à 23 %" },
-  { cle: "sommeil_leger", label: "Léger", couleur: BLEU, repere: "45 à 60 %" },
-  { cle: "sommeil_paradoxal", label: "Paradoxal", couleur: CYAN, repere: "20 à 25 %" },
+  { cle: "sommeil_profond", label: "Profond", couleur: INDIGO },
+  { cle: "sommeil_leger", label: "Léger", couleur: BLEU },
+  { cle: "sommeil_paradoxal", label: "Paradoxal", couleur: CYAN },
 ];
 const aPhases = (p) => PHASES.some((f) => p[f.cle] != null);
 const hm = (h) => fmtDuree(Math.round(h * 60) * 60);
-
-function PhasesNuit({ nuit }) {
-  const total = PHASES.reduce((t, f) => t + (nuit[f.cle] ?? 0), 0);
-  return (
-    <Card>
-      <div className="flex items-baseline justify-between gap-2">
-        <p className="font-semibold">Phases de la dernière nuit</p>
-        <p className="text-[13px] text-label-2">{fmtDate(nuit.jour, { weekday: "short", day: "numeric", month: "short" })} · {hm(total)} endormi</p>
-      </div>
-      <div className="mt-3 flex h-3 rounded-full overflow-hidden bg-remplissage">
-        {PHASES.map((f) => nuit[f.cle] ? <div key={f.cle} style={{ width: `${(100 * nuit[f.cle]) / total}%`, background: f.couleur }} /> : null)}
-      </div>
-      <div className="mt-3 grid grid-cols-3 gap-2">
-        {PHASES.map((f) => (
-          <div key={f.cle}>
-            <p className="text-[13px] text-label-2 flex items-center gap-1.5">
-              <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ background: f.couleur }} />{f.label}
-            </p>
-            <p className="font-semibold tabular-nums">{nuit[f.cle] != null ? hm(nuit[f.cle]) : "—"}</p>
-            <p className="text-[12px] text-label-2">
-              {nuit[f.cle] != null && total ? `${Math.round((100 * nuit[f.cle]) / total)} %` : ""} · repère {f.repere}
-            </p>
-          </div>
-        ))}
-      </div>
-    </Card>
-  );
-}
 
 function Nuits({ r }) {
   const nuits = useMemo(() => (r?.points ?? [])
@@ -295,7 +268,6 @@ function Nuits({ r }) {
       return { ...p, label: court(p.jour), sommeil_autre: reste > 0.05 ? reste : null };
     }), [r]);
   const avecPhases = nuits.some(aPhases);
-  const derniereAvecPhases = [...nuits].reverse().find(aPhases);
   const s = r?.sommeil;
   if (!nuits.length) {
     return <Card><Vide>Pas encore de nuit enregistrée : garde ta montre la nuit, le sommeil arrive par Intervals.icu à la synchro du matin.</Vide></Card>;
@@ -306,14 +278,13 @@ function Nuits({ r }) {
   return (
     <>
       <div className={clsx("grid gap-3 grid-cols-2", s?.score_sommeil?.derniere ? "lg:grid-cols-5" : "lg:grid-cols-4")}>
-        <Tuile label="Dernière nuit" value={s?.derniere ? `${nombre(s.derniere.heures)} h` : "—"} sub={s?.derniere ? court(s.derniere.jour) : null} />
+        <Tuile label="Sommeil 28 j" value={s?.moy_28j != null ? `${nombre(s.moy_28j)} h` : "—"} sub="durée moyenne par nuit" />
         <Tuile label="Sommeil 7 j" value={s?.moy_7j != null ? `${nombre(s.moy_7j)} h` : "—"}
           sub={s?.nb_7j ? `${s.nuits_courtes_7j} nuit(s) < 7 h sur ${s.nb_7j}` : null} />
-        <Tuile label="FC pendant le sommeil" value={valeur(s?.fc_sommeil, "bpm")} sub={moy28(s?.fc_sommeil, "bpm")} />
-        <Tuile label="SpO2 nocturne" value={valeur(s?.spo2, "%")} sub={moy28(s?.spo2, "%")} />
-        {s?.score_sommeil?.derniere && <Tuile label="Score de sommeil" value={valeur(s.score_sommeil, "/100")} sub={moy28(s.score_sommeil, "")} />}
+        <Tuile label="FC sommeil 28 j" value={moy(s?.fc_sommeil, "bpm")} sub={moy7(s?.fc_sommeil, "bpm")} />
+        <Tuile label="SpO2 nocturne 28 j" value={moy(s?.spo2, "%")} sub={moy7(s?.spo2, "%")} />
+        {s?.score_sommeil?.derniere && <Tuile label="Score de sommeil 28 j" value={moy(s.score_sommeil, "/100")} sub={moy7(s.score_sommeil, "")} />}
       </div>
-      {derniereAvecPhases && <PhasesNuit nuit={derniereAvecPhases} />}
       <Graphe titre="Durée et FC de la nuit" couleur={INDIGO}
         sousTitre={`${nuits.length} dernière${nuits.length > 1 ? "s" : ""} nuit${nuits.length > 1 ? "s" : ""} · barres = durée${avecPhases ? " par phase" : ""}, ligne = FC moyenne pendant le sommeil`}
         note="Une FC nocturne plus haute que d'habitude signale souvent fatigue, stress, alcool ou maladie qui couve. Repère : 7 h de sommeil (pointillés).">

@@ -11,6 +11,7 @@ import FicheActivite from "../components/FicheActivite";
 import CartePassages from "../components/CartePassages";
 import { FormeTuiles } from "../components/Forme";
 import FormeJour from "../components/FormeJour";
+import SommeilNuit from "../components/SommeilNuit";
 import { axeX, axeY, grille, curseur, InfoBulle } from "../components/graphiques";
 import { ObjectifCarte } from "./Objectifs";
 import { ProchainesSeances } from "./Plan";
@@ -56,6 +57,7 @@ export default function Accueil() {
       )}
 
       {!vide && <FormeJour />}
+      {!vide && <SommeilNuit />}
 
       {t && !vide && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
