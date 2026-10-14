@@ -8,7 +8,6 @@ import ActiviteLigne from "../components/ActiviteLigne";
 import ModalActivite from "../components/ModalActivite";
 import ConfirmDialog from "../components/ConfirmDialog";
 import ImportPlan from "../components/ImportPlan";
-import Menu, { IconesMenu } from "../components/Menu";
 import { Section, BoutonAjout } from "../components/ui";
 import {
   getPlan, getActivites, creerPrevue, modifierPrevue, supprimerPrevue, getActivitesProches,
@@ -61,16 +60,85 @@ function ChoixActivite({ prevue, onChoix, onClose }) {
   );
 }
 
+// ── Détail d'une séance prévue (feuille ouverte au toucher de la carte) ───────
+function DetailSeance({ s, onClose, onOuvrirActivite }) {
+  const info = sportInfo(s.sport);
+  const statut = STATUTS[s.statut] ?? STATUTS.a_venir;
+  const mesures = [
+    ["Durée", s.duree_min != null ? fmtDuree(s.duree_min * 60) : null],
+    ["Distance", s.distance_km != null ? `${nombre(s.distance_km)} km` : null],
+    ["Dénivelé", s.dplus_m ? `${s.dplus_m} m` : null],
+    ["RPE cible", s.rpe_cible != null ? nombre(s.rpe_cible) : null],
+  ].filter(([, v]) => v);
+
+  return (
+    <Feuille titre="Séance prévue" onClose={onClose}>
+      <div className="flex items-center gap-3.5">
+        <span className="w-14 h-14 shrink-0 rounded-full flex items-center justify-center text-[28px]"
+          style={{ backgroundColor: `${info.couleur}26` }}>{s.emoji ?? info.emoji}</span>
+        <div className="min-w-0">
+          <p className="text-[20px] font-bold leading-6">{s.titre}</p>
+          <p className="mt-1 flex items-center gap-2 text-[13px] text-label-2">
+            {info.label}<span className={`badge ${statut.cls}`}>{statut.label}</span>
+          </p>
+        </div>
+      </div>
+
+      {mesures.length > 0 && (
+        <div className={`card grid divide-x-[0.5px] divide-separateur py-3`}
+          style={{ gridTemplateColumns: `repeat(${mesures.length}, minmax(0, 1fr))` }}>
+          {mesures.map(([l, v]) => (
+            <div key={l} className="px-2 text-center">
+              <p className="text-[12px] font-semibold text-label-2">{l}</p>
+              <p className="font-rounded text-[19px] font-bold tracking-[-0.02em] chiffres">{v}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {s.description && (
+        <section className="space-y-1.5">
+          <h4 className="px-1 text-[13px] uppercase tracking-[0.02em] font-medium text-label-2">Contenu</h4>
+          <div className="card px-4 py-3 text-[15px] leading-6 whitespace-pre-line">{s.description}</div>
+        </section>
+      )}
+
+      {s.activite && (
+        <section className="space-y-1.5">
+          <h4 className="px-1 text-[13px] uppercase tracking-[0.02em] font-medium text-ios-green">
+            ✓ Réalisée{s.lien_manuel ? " · lien manuel" : ""}
+          </h4>
+          <div className="card py-0.5">
+            <ActiviteLigne a={s.activite} onClick={() => { onClose(); onOuvrirActivite(s.activite); }} />
+          </div>
+        </section>
+      )}
+
+      {s.commentaire && (
+        <section className="space-y-1.5">
+          <h4 className="px-1 text-[13px] uppercase tracking-[0.02em] font-medium text-label-2">Commentaire</h4>
+          <p className="card px-4 py-3 text-[15px] leading-6 whitespace-pre-line">{s.commentaire}</p>
+        </section>
+      )}
+
+      {!s.description && !s.activite && !s.commentaire && !mesures.length && (
+        <p className="text-[15px] text-label-2 text-center">Aucun détail pour cette séance.</p>
+      )}
+    </Feuille>
+  );
+}
+
 // ── Séance prévue (ligne de la liste de la semaine) ────────────────────────
+// Sport, intitulé et durée estimée ; le reste s'affiche dans la feuille de détail.
 function CarteSeance({ s, onOuvrirActivite }) {
   const qc = useQueryClient();
-  const [ouvert, setOuvert] = useState(false);
+  const [detail, setDetail] = useState(false);
   const [choix, setChoix] = useState(false);
   const [edition, setEdition] = useState(false);
   const [commentaire, setCommentaire] = useState(s.commentaire ?? "");
   const [confirmSuppr, setConfirmSuppr] = useState(false);
   const info = sportInfo(s.sport);
-  const statut = STATUTS[s.statut] ?? STATUTS.a_venir;
+  const sautee = s.statut === "sautee";
 
   const maj = useMutation({
     mutationFn: (payload) => modifierPrevue(s.id, payload),
@@ -81,63 +149,39 @@ function CarteSeance({ s, onOuvrirActivite }) {
     onSuccess: () => { invaliderPlan(qc); setConfirmSuppr(false); },
   });
 
-  const action = "btn-gris btn-sm font-medium";
-  const retrait = "pl-[3.25rem]";
+  const action = "btn-gris btn-sm font-medium grow md:grow-0 !px-2 md:!px-3.5 !text-[13px] md:!text-[15px]";
+  const retrait = "md:pl-[3.25rem]";
 
   return (
-    <div className={`ligne !items-stretch flex-col !gap-2.5 !py-3.5 ${s.statut === "sautee" ? "opacity-55" : ""}`}>
-      <div className="flex items-start gap-3">
+    <div className="ligne !items-stretch flex-col !gap-2.5 !py-3">
+      <button type="button" onClick={() => setDetail(true)} aria-label={`Voir le détail : ${s.titre}`}
+        className={`flex items-center gap-3 text-left -mx-2 px-2 py-1 rounded-xl transition-colors active:bg-remplissage md:hover:bg-remplissage/60 ${sautee ? "opacity-55" : ""}`}>
         <span className="w-10 h-10 shrink-0 rounded-full flex items-center justify-center text-[19px]"
-          style={{ backgroundColor: `${info.couleur}26` }}>{s.emoji ?? info.emoji}</span>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-2">
-            <p className={`text-[15px] font-semibold leading-5 ${s.statut === "sautee" ? "line-through" : ""}`}>{s.titre}</p>
-            <div className="flex items-center gap-1 shrink-0 -mt-1 md:mt-0">
-              <span className={`badge ${statut.cls}`}>{statut.label}</span>
-              <Menu className="md:hidden -mr-1" items={[
-                { label: s.commentaire ? "Modifier le commentaire" : "Commenter", icone: IconesMenu.commenter,
-                  onClick: () => { setCommentaire(s.commentaire ?? ""); setEdition(true); } },
-                s.statut !== "sautee" && { label: s.activite ? "Changer d'activité" : "Relier une activité", icone: IconesMenu.relier,
-                  onClick: () => setChoix(true) },
-                s.activite && { label: "Délier l'activité", icone: IconesMenu.delier, disabled: maj.isPending,
-                  onClick: () => maj.mutate({ delier: true }) },
-                s.statut === "sautee"
-                  ? { label: "Rétablir", icone: IconesMenu.retablir, disabled: maj.isPending, onClick: () => maj.mutate({ statut: "prevue" }) }
-                  : !s.activite && { label: "Marquer comme sautée", icone: IconesMenu.sauter, disabled: maj.isPending, onClick: () => maj.mutate({ statut: "sautee" }) },
-                { separateur: true },
-                { label: "Supprimer", icone: IconesMenu.supprimer, danger: true, onClick: () => setConfirmSuppr(true) },
-              ]} />
-            </div>
-          </div>
-          <Pastilles s={s} />
-        </div>
+          style={{ backgroundColor: `${info.couleur}26` }} aria-hidden>{s.emoji ?? info.emoji}</span>
+        <span className="flex-1 min-w-0">
+          <span className={`block text-[15px] font-semibold leading-5 truncate ${sautee ? "line-through" : ""}`}>{s.titre}</span>
+          <span className="block text-[13px] text-label-2 chiffres">
+            {s.duree_min != null ? fmtDuree(s.duree_min * 60) : "Durée non précisée"}
+          </span>
+        </span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round"
+          className="w-[14px] h-[14px] shrink-0 text-label-3" aria-hidden><path d="M9 5l7 7-7 7" /></svg>
+      </button>
+
+      <div className={`flex gap-1.5 md:flex-wrap ${retrait}`}>
+        {sautee ? (
+          <button className={action} disabled={maj.isPending} onClick={() => maj.mutate({ statut: "prevue" })}>Rétablir</button>
+        ) : s.activite ? (
+          <button className={action} disabled={maj.isPending} onClick={() => maj.mutate({ delier: true })}>Délier</button>
+        ) : (
+          <button className={action} disabled={maj.isPending} onClick={() => maj.mutate({ statut: "sautee" })}>Sautée</button>
+        )}
+        <button className={action} onClick={() => { setCommentaire(s.commentaire ?? ""); setEdition(!edition); }}>
+          Commenter
+        </button>
+        <button className={action} disabled={sautee} onClick={() => setChoix(!choix)}>{s.activite ? "Changer" : "Relier"}</button>
+        <button className="btn-danger btn-sm font-medium grow md:grow-0 !px-2 md:!px-3.5 !text-[13px] md:!text-[15px]" onClick={() => setConfirmSuppr(true)}>Supprimer</button>
       </div>
-
-      {s.description && (
-        <div className={retrait}>
-          <p className={`text-[14px] leading-5 whitespace-pre-line ${ouvert ? "" : "line-clamp-2"}`}>{s.description}</p>
-          {s.description.length > 120 && (
-            <button className="btn-texte text-[13px] mt-0.5" onClick={() => setOuvert(!ouvert)}>
-              {ouvert ? "Réduire" : "Plus"}
-            </button>
-          )}
-        </div>
-      )}
-
-      {s.activite && (
-        <div className={retrait}>
-          <div className="tuile py-1">
-            <p className="px-4 pt-2 text-[12px] font-semibold text-ios-green">
-              ✓ Réalisé {s.lien_manuel ? "(lien manuel)" : ""}
-            </p>
-            <ActiviteLigne a={s.activite} onClick={() => onOuvrirActivite(s.activite)} />
-          </div>
-        </div>
-      )}
-
-      {s.commentaire && !edition && (
-        <p className={`${retrait} text-[13px] text-label-2`}>💬 {s.commentaire}</p>
-      )}
 
       {edition && (
         <div className={`space-y-2 ${retrait}`}>
@@ -156,21 +200,7 @@ function CarteSeance({ s, onOuvrirActivite }) {
         </div>
       )}
 
-      <div className={`hidden md:flex gap-1.5 flex-wrap ${retrait}`}>
-        {s.statut === "sautee" ? (
-          <button className={action} disabled={maj.isPending} onClick={() => maj.mutate({ statut: "prevue" })}>Rétablir</button>
-        ) : !s.activite && (
-          <button className={action} disabled={maj.isPending} onClick={() => maj.mutate({ statut: "sautee" })}>Sautée</button>
-        )}
-        <button className={action} onClick={() => { setCommentaire(s.commentaire ?? ""); setEdition(true); }}>
-          {s.commentaire ? "Commentaire" : "Commenter"}
-        </button>
-        {s.statut !== "sautee" && (
-          <button className={action} onClick={() => setChoix(!choix)}>{s.activite ? "Changer d'activité" : "Relier une activité"}</button>
-        )}
-        {s.activite && <button className={action} disabled={maj.isPending} onClick={() => maj.mutate({ delier: true })}>Délier</button>}
-        <button className="btn-danger btn-sm font-medium" onClick={() => setConfirmSuppr(true)}>Supprimer</button>
-      </div>
+      {detail && <DetailSeance s={s} onClose={() => setDetail(false)} onOuvrirActivite={onOuvrirActivite} />}
 
       <ConfirmDialog open={confirmSuppr} title="Supprimer cette séance prévue ?" danger pending={suppr.isPending}
         message={`« ${s.titre} » sera retirée du plan de la semaine.`}
