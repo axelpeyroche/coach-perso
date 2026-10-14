@@ -46,6 +46,12 @@ def _enregistrer_poids(db: Session, user: Utilisateur, poids: float, jour_iso: O
     if jour > aujourdhui:
         raise HTTPException(400, "La date de pesée ne peut pas être dans le futur")
     points = db.query(PoidsUtilisateur).filter(PoidsUtilisateur.utilisateur_id == user.id).all()
+    # Poids saisi avant l'historique : on le conserve comme point de départ (daté de la création
+    # du compte, comme l'affichait la courbe) avant d'enregistrer la nouvelle pesée.
+    if not points and user.poids_kg and user.cree_le and user.cree_le.date() < jour:
+        depart = PoidsUtilisateur(utilisateur_id=user.id, poids_kg=user.poids_kg, enregistre_le=user.cree_le)
+        db.add(depart)
+        points = [depart]
     meme_jour = [p for p in points if p.enregistre_le and p.enregistre_le.date() == jour]
     if meme_jour:
         meme_jour[-1].poids_kg = poids

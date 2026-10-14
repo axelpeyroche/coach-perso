@@ -75,7 +75,7 @@ function JaugeImc({ valeur }) {
 export default function PoidsAnalyse() {
   const { user } = useAuth();
   const { data } = useQuery({ queryKey: ["historique-poids"], queryFn: getHistoriquePoids });
-  const [periode, setPeriode] = useState("3m");
+  const [choix, setChoix] = useState(null); // null = période choisie selon le nombre de pesées
   const [saisie, setSaisie] = useState(false);
 
   const points = useMemo(() => {
@@ -105,6 +105,8 @@ export default function PoidsAnalyse() {
   }
 
   const dernier = points.at(-1);
+  // Par défaut, la plus courte période qui contient au moins 4 pesées
+  const periode = choix ?? (PERIODES.map(([v]) => v).find((v) => points.filter((p) => p.t >= dernier.t - DUREES[v] * JOUR).length >= 4) ?? "tout");
   const debut = dernier.t - DUREES[periode] * JOUR;
   const visibles = points.filter((p) => p.t >= debut);
   // Toujours un point de départ sur la période : la dernière pesée avant, pour ne pas couper la courbe
@@ -112,8 +114,10 @@ export default function PoidsAnalyse() {
   const serie = avant && periode !== "tout" ? [avant, ...visibles] : visibles;
   const valeurs = serie.flatMap((p) => [p.poids, p.moy]);
   const bas = Math.floor(Math.min(...valeurs) - 0.8), haut = Math.ceil(Math.max(...valeurs) + 0.8);
-  const x0 = periode === "tout" ? serie[0].t : Math.max(debut, serie[0].t);
-  const x1 = Math.max(dernier.t, x0 + 7 * JOUR);
+  // Marge de part et d'autre : une pesée seule est centrée, pas collée au bord
+  const premier = periode === "tout" ? serie[0].t : Math.max(debut, serie[0].t);
+  const marge = Math.max((dernier.t - premier) * 0.03, 3 * JOUR);
+  const x0 = premier - marge, x1 = dernier.t + marge;
 
   const v4 = variation(points, 28), v13 = variation(points, 91);
   const sur = points.filter((p) => p.t >= dernier.t - 365 * JOUR);
@@ -171,7 +175,7 @@ export default function PoidsAnalyse() {
               <p className="text-[13px] font-semibold" style={{ color: VIOLET }}>Évolution du poids</p>
               <p className="text-[13px] text-label-2">{visibles.length} pesée{visibles.length > 1 ? "s" : ""} · trait plein = moyenne 4 sem.</p>
             </div>
-            <Segmente valeur={periode} onChange={setPeriode} options={PERIODES} />
+            <Segmente valeur={periode} onChange={setChoix} options={PERIODES} />
           </div>
           <ResponsiveContainer width="100%" height={280}>
             <ComposedChart data={serie} margin={{ left: 0, right: 0, top: 6 }}>
