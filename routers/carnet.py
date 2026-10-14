@@ -20,7 +20,6 @@ from sqlalchemy.orm import Session
 
 import analyses_service as an
 import carnet_service as cs
-import sommeil_service
 from database import obtenir_session
 from deps import get_current_user
 from models import Activite, CacheCarte, Objectif, ObjectifCourse, TraceGPS, Utilisateur
@@ -592,18 +591,6 @@ def _echantillons(extra: dict, tz: ZoneInfo) -> dict[str, list[tuple[datetime, f
     return ech
 
 
-def _phases(extra: dict, tz: ZoneInfo) -> list[tuple[str, datetime, datetime]]:
-    """Analyse du sommeil de Santé : listes parallèles `phases_valeurs` / `_debuts` / `_fins`."""
-    tranches = []
-    for v, d, f in zip(_liste(extra.get("phases_valeurs")), _liste(extra.get("phases_debuts")),
-                       _liste(extra.get("phases_fins"))):
-        try:
-            tranches.append((str(v), _date_import(d, tz), _date_import(f, tz)))
-        except HTTPException:
-            continue
-    return tranches
-
-
 @router.post("/api/activites/import", summary="Import d'activités (raccourci iOS / script) — auth par token d'import")
 def importer_activites(payload: ImportActivitesSchema, taches: BackgroundTasks,
                        db: Session = Depends(obtenir_session)):
@@ -634,15 +621,8 @@ def _importer_activites(payload: ImportActivitesSchema, db: Session, taches: Opt
     items_mesures = [(m.type, _date_import(m.date, tz).date(), _nombre_unite(m.valeur)[0])
                      for m in payload.mesures or []] + _mesures_a_plat(extra, tz)
     ech = _echantillons(extra, tz)
-    phases = _phases(extra, tz)
-    if not lot and not items_mesures and not ech and not phases:
-        if any(k.startswith("phases_") for k in extra):
-            # Message court : la notification iOS coupe au-delà de deux lignes
-            vals, debs, fins = (_liste(extra.get(f"phases_{k}")) for k in ("valeurs", "debuts", "fins"))
-            ex = lambda l: f"« {str(l[0])[:30]} »" if l else "rien"
-            raise HTTPException(400, f"Sommeil : {len(vals)} valeur(s), {len(debs)} début(s), {len(fins)} fin(s). "
-                                     f"Valeur {ex(vals)}, début {ex(debs)}, fin {ex(fins)}")
-        recus =", ".join(f"{k} ({len(_liste(v))})" for k, v in extra.items()) or "aucun"
+    if not lot and not items_mesures and not ech:
+        recus = ", ".join(f"{k} ({len(_liste(v))})" for k, v in extra.items()) or "aucun"
         exemple = next((str(_liste(v)[0])[:40] for k, v in extra.items() if k.endswith("_dates") and _liste(v)), None)
         raise HTTPException(400, "Aucune activité ni mesure exploitable. Champs reçus : " + recus
                             + (f". Exemple de date reçue : « {exemple} »" if exemple else ""))
@@ -663,7 +643,6 @@ def _importer_activites(payload: ImportActivitesSchema, db: Session, taches: Opt
     detectees = cs.detecter_seances(db, user, ech) if ech else 0
     completees = cs.enrichir_activites(db, user, ech) if ech else 0  # FC, zones… des séances reçues aussi
     cs.rattacher_traces(db, user.id)  # tracés importés avant que la séance n'existe
-    sommeil = sommeil_service.enregistrer_phases(db, user.id, phases) if phases else None
     db.commit()
     if taches is not None and user.intervals_cle:
         from routers.intervals import synchro_en_arriere_plan
@@ -680,39 +659,9 @@ def _importer_activites(payload: ImportActivitesSchema, db: Session, taches: Opt
         morceaux.append(f"{recus} échantillon(s) reçu(s)")
     if recus or completees:
         morceaux.append(f"{completees} séance(s) complétée(s) (FC, puissance, effort…)")
-    if sommeil:
-        morceaux.append(sommeil_service.resume(sommeil))
     return {"ok": True, **bilan, "mesures": mesures, "seances_detectees": detectees,
-            "seances_completees": completees, "nuits": len(sommeil["nuits"]) if sommeil else 0,
+            "seances_completees": completees,
             "message": " · ".join(morceaux)}
-
-
-class PhasesSommeilSchema(BaseModel):
-    # [libellé, début, fin] : extraits de l'export Santé par le navigateur
-    tranches: list[list[str]] = Field(..., max_length=100_000)
-
-
-@router.post("/api/sommeil/phases", summary="Phases de sommeil extraites de l'export Apple Santé")
-def importer_phases_sommeil(payload: PhasesSommeilSchema, current_user: Utilisateur = Depends(get_current_user),
-                            db: Session = Depends(obtenir_session)):
-    tz = _fuseau(current_user)
-    tranches = []
-    for t in payload.tranches:
-        if len(t) != 3:
-            continue
-        try:
-            tranches.append((t[0][:80], _date_import(t[1], tz), _date_import(t[2], tz)))
-        except HTTPException:
-            continue
-    if not tranches:
-        raise HTTPException(400, "Aucune tranche de sommeil lisible dans cet export")
-    res = sommeil_service.enregistrer_phases(db, current_user.id, tranches)
-    db.commit()
-    nuits = res["nuits"]
-    return {"ok": True, "nuits": len(nuits), "avec_phases": sum(1 for n in nuits if n.profond_min is not None),
-            "premiere": nuits[0].jour.isoformat() if nuits else None,
-            "derniere": nuits[-1].jour.isoformat() if nuits else None,
-            "inconnus": res["inconnus"], "message": sommeil_service.resume(res)}
 
 
 @router.post("/api/activites/import-fichier", summary="Import CSV (export Strava activities.csv ou CSV du carnet)")

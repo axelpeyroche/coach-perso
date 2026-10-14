@@ -20,7 +20,7 @@ import intervals_service as iv
 import suivi_service as sv
 from database import SessionLocal, obtenir_session
 from deps import get_current_user, http_bearer
-from models import Utilisateur
+from models import MesureSante, NuitSommeil, Utilisateur
 
 router = APIRouter()
 _log = logging.getLogger(__name__)
@@ -130,3 +130,32 @@ def synchro_en_arriere_plan(user_id: int) -> None:
         _log.exception("Synchro Intervals.icu en arrière-plan en échec")
     finally:
         db.close()
+
+
+# ── Nuits importées par l'ancien raccourci / l'export Santé (fonction retirée) ──
+# Leur durée et leur score maison avaient remplacé ceux d'Intervals.icu : l'utilisateur peut les effacer,
+# puis le sommeil de ces jours est relu sur Intervals.icu.
+@router.get("/api/sommeil/nuits-importees", summary="Nombre de nuits importées hors Intervals.icu")
+def nuits_importees(current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
+    jours = [j for (j,) in db.query(NuitSommeil.jour).filter(NuitSommeil.utilisateur_id == current_user.id)]
+    return {"nuits": len(jours), "du": min(jours).isoformat() if jours else None,
+            "au": max(jours).isoformat() if jours else None}
+
+
+@router.delete("/api/sommeil/nuits-importees", summary="Efface les nuits importées et relit le sommeil sur Intervals.icu")
+def effacer_nuits_importees(current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
+    jours = [j for (j,) in db.query(NuitSommeil.jour).filter(NuitSommeil.utilisateur_id == current_user.id)]
+    if not jours:
+        return {"nuits": 0, "mesures": 0}
+    effacees = db.query(MesureSante).filter(
+        MesureSante.utilisateur_id == current_user.id, MesureSante.type.in_(("sommeil", "score_sommeil")),
+        MesureSante.jour.in_(jours)).delete(synchronize_session=False)
+    db.query(NuitSommeil).filter(NuitSommeil.utilisateur_id == current_user.id).delete(synchronize_session=False)
+    relues = 0
+    if current_user.intervals_cle:
+        try:
+            relues, _ = iv.synchroniser_wellness(db, current_user, min(jours), max(jours))
+        except iv.IntervalsErreur:
+            _log.warning("Sommeil non relu sur Intervals.icu après effacement des nuits importées")
+    db.commit()
+    return {"nuits": len(jours), "mesures": effacees, "relues": relues}

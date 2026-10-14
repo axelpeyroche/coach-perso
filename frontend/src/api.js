@@ -114,10 +114,6 @@ export const importerFichierActivites = (fichier) => {
   }).then((r) => r.data);
 };
 
-// Phases de sommeil lues dans l'export Apple Santé : [[libellé, début, fin], …]
-export const importerPhasesSommeil = (tranches) =>
-  api.post("/sommeil/phases", { tranches }, { timeout: 120000 }).then((r) => r.data);
-
 // Tracés GPS : [{ debut, points: [[lat, lon, altitude|null, secondes depuis le début], …] }]
 export const importerTraces = (traces) =>
   api.post("/activites/traces", { traces }, { timeout: 120000 }).then((r) => r.data);
@@ -128,6 +124,9 @@ export const getCarteTraces = () => api.get("/traces/carte", { timeout: 90000 })
 // --- Intervals.icu (séances de la montre avec tracé GPS) ---
 export const getIntervals = () => api.get("/intervals").then((r) => r.data);
 export const connecterIntervals = (cle, athlete_id) => api.put("/intervals", { cle, athlete_id }).then((r) => r.data);
+// Nuits importées par l'ancien raccourci Sommeil / l'export Santé : à effacer pour revenir à Intervals.icu
+export const getNuitsImportees = () => api.get("/sommeil/nuits-importees").then((r) => r.data);
+export const effacerNuitsImportees = () => api.delete("/sommeil/nuits-importees", { timeout: 120000 }).then((r) => r.data);
 export const deconnecterIntervals = () => api.delete("/intervals").then((r) => r.data);
 export const synchroIntervals = (force = false) =>
   api.post("/intervals/synchro", null, { params: { force }, timeout: 180000 }).then((r) => r.data);

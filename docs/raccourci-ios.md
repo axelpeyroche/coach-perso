@@ -5,7 +5,7 @@ Le carnet reçoit chaque jour les données Santé de l'iPhone et de la montre :
 - les minutes d'exercice, à partir desquelles il reconstitue les séances ;
 - la FC, l'énergie, les distances et les métriques de course, qu'il rattache à chaque séance.
 
-**Pourquoi plusieurs raccourcis.** Un raccourci unique plante (« Un problème est survenu ») dès que le volume total d'échantillons devient trop grand. Chaque raccourci envoie donc une partie des données, et un raccourci **Master** les lance à la suite. Le carnet garde les échantillons reçus pendant 21 jours : une séance est détectée puis complétée avec l'ensemble, quel que soit l'ordre d'arrivée. Renvoyer les mêmes données ne crée aucun doublon.
+**Pourquoi cinq raccourcis.** Un raccourci unique plante (« Un problème est survenu ») dès que le volume total d'échantillons devient trop grand. Chaque raccourci envoie donc une partie des données, et un raccourci **Master** les lance à la suite. Le carnet garde les échantillons reçus pendant 21 jours : une séance est détectée puis complétée avec l'ensemble, quel que soit l'ordre d'arrivée. Renvoyer les mêmes données ne crée aucun doublon.
 
 | Raccourci | Contenu | Période | Groupage |
 |---|---|---|---|
@@ -13,8 +13,7 @@ Le carnet reçoit chaque jour les données Santé de l'iPhone et de la montre :
 | **Carnet – Énergie** | Énergie active | 1 jour | par minute |
 | **Carnet – Distances** | Distance (marche et course), Distance à vélo | 1 jour | par minute |
 | **Carnet – Base** | Minutes d'exercice, métriques de course ; FC au repos, VFC, VO2max | 1 jour ; 7 jours pour les mesures | aucun |
-| **Carnet – Sommeil** | Analyse du sommeil (phases) | 2 jours | **aucun** |
-| **Carnet – Master** | Lance les autres, Base en dernier | — | — |
+| **Carnet – Master** | Lance les quatre autres, Base en dernier | — | — |
 
 > **Ajouter une action** : touche la barre « Rechercher des actions » en bas et tape son nom.
 > **Insérer une variable** : touche un champ, puis choisis la variable dans la barre au-dessus du clavier (ou « Sélectionner une variable »).
@@ -110,37 +109,12 @@ Si l'action **Obtenir l'activité physique** renvoie les entraînements, ajoute-
 
 Un entraînement reçu prend la place de la séance reconstituée au même moment : le vrai sport (muscu, yoga…) remplace « Séance à préciser ». Il est ensuite complété avec la FC, les zones et les métriques de course. Une liste qui n'a pas une ligne par entraînement (distance absente pour la muscu, par exemple) est ignorée.
 
-## Carnet – Sommeil
-
-Apple ne partage pas son score de sommeil avec les autres applications, et Intervals.icu ne reçoit pas les phases. Ce raccourci envoie les tranches de la nuit (profond, essentiel, paradoxal, éveillé) : le carnet reconstitue chaque nuit et calcule le score avec la méthode d'Apple (durée /50, régularité de l'heure d'endormissement sur les 13 nuits précédentes /30, réveils /20).
-
-> **Si « Analyse du sommeil » n'apparaît pas** dans les types proposés (sur certains iPhone, Raccourcis n'offre que le symptôme « Changements du sommeil », qui ne contient pas les phases), passe par l'export Santé : app **Santé** → ta photo → **Exporter toutes les données de santé** → **Enregistrer dans Fichiers**, puis dans le carnet **Sources → Phases de sommeil → Choisir export.zip**. Le fichier est lu dans le navigateur et seules les tranches de sommeil des 13 derniers mois sont envoyées. Refais l'export de temps en temps (chaque semaine, par exemple) pour mettre à jour.
-
-1. **Texte** (token) puis **Définir la variable** `Token`, comme les autres.
-2. **Rechercher des échantillons de santé** : type **Analyse du sommeil** ; filtre **Date de début est dans les 2 derniers jours** ; **Grouper par : aucun** ; limite désactivée.
-3. **Définir la variable** `Sommeil`.
-4. **Obtenir le contenu de l'URL** (même URL, POST, JSON), avec quatre champs Texte :
-
-| Clé | Contenu |
-|---|---|
-| `token` | variable *Token* |
-| `phases_valeurs` | *Sommeil* → propriété **Valeur** |
-| `phases_debuts` | *Sommeil* → **Date de début** → format **ISO 8601** |
-| `phases_fins` | *Sommeil* → **Date de fin** → format **ISO 8601** |
-
-5. **Afficher une notification** avec *Contenu de l'URL*. Réponse attendue :
-`2 nuit(s) · dernière : 7 h 12 de sommeil, score 84/100 (profond 1 h 05, paradoxal 1 h 40)`.
-
-Le carnet comprend les libellés en français (Profond, Essentiel, Paradoxal, Éveillé, Au lit, Endormi) comme en anglais (Deep, Core, REM, Awake, In Bed, Asleep). S'il en reçoit un qu'il ne connaît pas, la réponse l'indique (« libellés ignorés : … ») : transmets-le pour qu'il soit ajouté. Les siestes (moins de 2 h) sont ignorées ; une nuit renvoyée remplace la précédente, sans doublon. La durée et le score de ces nuits priment sur ceux d'Intervals.icu.
-
-**Le Master s'exécute à 22 h, avant la nuit** : ajoute plutôt une seconde automatisation **Réveil → Au réveil** (ou une heure fixe, 9 h par exemple) qui lance **Carnet – Sommeil**. Le filtre de 2 jours rattrape une matinée manquée.
-
 ---
 
 ## Carnet – Master
 
 1. Nouveau raccourci, nommé **Carnet – Master**.
-2. Quatre actions **Exécuter le raccourci**, dans cet ordre (Carnet – Sommeil a sa propre automatisation du matin, voir plus haut) :
+2. Quatre actions **Exécuter le raccourci**, dans cet ordre :
    ```
    Exécuter Carnet – FC
    Exécuter Carnet – Énergie
@@ -194,8 +168,6 @@ iOS bloque l'accès à Santé quand l'iPhone est verrouillé : si l'automatisati
 | `Requête refusée : …` | Champ mal construit : le message indique lequel. |
 | `Aucune activité ni mesure exploitable. Champs reçus : …` | Aucune donnée sur la période, clés mal orthographiées, ou FC groupée par minute (rejetée). |
 | Aucune séance détectée | Vérifie `exercice_valeurs` / `exercice_dates` dans **Carnet – Base**, et que Base passe bien en dernier. |
-| `aucune nuit reconstituée : libellés non reconnus …` | Le carnet ne connaît pas ces noms de phases : transmets-les. Vérifie aussi que la propriété est bien **Valeur**. |
-| Régularité « — » sous le score | Normal les premiers jours : la régularité se compare aux nuits précédentes déjà reçues. |
 | FC absente d'une séance | Vérifie que **Carnet – FC** n'a pas de « Grouper par ». |
 | Rien ne se passe à l'automatisation | Raccourcis → Automatisation : vérifie « Exécuter immédiatement ». |
 

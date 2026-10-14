@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session
 
 import analyses_service as an
 import carnet_service as cs
-from models import Activite, MesureSante, NuitSommeil, TraceGPS, Utilisateur
+from models import Activite, MesureSante, TraceGPS, Utilisateur
 
 _log = logging.getLogger(__name__)
 
@@ -186,9 +186,6 @@ def synchroniser_wellness(db: Session, user: Utilisateur, depuis, jusqu_a) -> tu
                     {"oldest": depuis.isoformat(), "newest": jusqu_a.isoformat()}) or []
     deja = {(m.type, m.jour) for m in db.query(MesureSante).filter(
         MesureSante.utilisateur_id == user.id, MesureSante.jour >= depuis, MesureSante.type.in_(("fc_repos", "vfc", "vo2max")))}
-    # Nuits reconstituées par le raccourci (phases de Santé) : leur durée et leur score priment
-    nuits = {n.jour for n in db.query(NuitSommeil.jour).filter(
-        NuitSommeil.utilisateur_id == user.id, NuitSommeil.jour >= depuis)}
     items = []
     recus = {"fc_repos": 0, "vfc": 0, "vo2max": 0, "sommeil": 0, "fc_sommeil": 0, "score_sommeil": 0, "spo2": 0}
     for w in lignes if isinstance(lignes, list) else []:
@@ -198,15 +195,13 @@ def synchroniser_wellness(db: Session, user: Utilisateur, depuis, jusqu_a) -> tu
             continue
         if w.get("sleepSecs"):
             recus["sommeil"] += 1
-            if jour not in nuits:
-                items.append(("sommeil", jour, w["sleepSecs"] / 3600))
+            items.append(("sommeil", jour, w["sleepSecs"] / 3600))
         # Les phases (profond, paradoxal…) ne sont pas transmises par Intervals.icu
         for cle, t in (("avgSleepingHR", "fc_sommeil"), ("sleepScore", "score_sommeil"),
                        ("spO2", "spo2"), ("respiration", "respiration")):
             if w.get(cle):
                 recus[t] = recus.get(t, 0) + 1
-                if not (t == "score_sommeil" and jour in nuits):
-                    items.append((t, jour, float(w[cle])))
+                items.append((t, jour, float(w[cle])))
         for cle, t in (("restingHR", "fc_repos"), ("hrvSDNN", "vfc"), ("vo2max", "vo2max")):
             if w.get(cle):
                 recus[t] += 1

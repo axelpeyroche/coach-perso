@@ -142,8 +142,8 @@ class MesureSante(Base):
 
 
 class NuitSommeil(Base):
-    """Une nuit reconstituée à partir des phases Apple Santé (raccourci iOS) : durées
-    par phase, réveils et score sur 100 calculé par le carnet (méthode du score Apple)."""
+    """Nuit importée par l'ancien raccourci « Carnet – Sommeil » ou l'export Santé (fonction retirée) :
+    conservée pour l'export du compte et l'effacement depuis Sources (/api/sommeil/nuits-importees)."""
     __tablename__ = "nuits_sommeil"
     __table_args__ = (
         UniqueConstraint("utilisateur_id", "jour", name="uq_nuit_sommeil_jour"),
