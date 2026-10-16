@@ -15,7 +15,7 @@ from collections import defaultdict
 from datetime import date, datetime, timedelta
 from typing import Iterable, Optional
 
-from sqlalchemy import text
+from sqlalchemy import or_, text
 from sqlalchemy.orm import Session
 
 from models import Activite, EchantillonSante, MesureSante, Objectif, SeancePrevue, TraceGPS, Utilisateur
@@ -1361,6 +1361,7 @@ def rattacher_traces(db: Session, user_id: int) -> int:
     libres = (db.query(TraceGPS).filter(TraceGPS.utilisateur_id == user_id, TraceGPS.activite_id.is_(None))
               .order_by(TraceGPS.debut).all())
     if not libres:
+        aligner_dplus_traces(db, user_id)
         return 0
     prises = {i for (i,) in db.query(TraceGPS.activite_id)
               .filter(TraceGPS.utilisateur_id == user_id, TraceGPS.activite_id.isnot(None))}
@@ -1385,6 +1386,27 @@ def rattacher_traces(db: Session, user_id: int) -> int:
         fusionner_details(a, {"trace": True})
         n += 1
     db.flush()
+    aligner_dplus_traces(db, user_id)
+    return n
+
+
+def aligner_dplus_traces(db: Session, user_id: int) -> int:
+    """Le D+ d'une séance qui a un tracé est celui du tracé : le chiffre de la source
+    (Intervals, export Santé) est souvent filtré ou lissé et sous-estime le dénivelé.
+    Un D+ corrigé à la main est gardé. Retourne le nombre de séances corrigées."""
+    lignes = (db.query(Activite, TraceGPS.dplus_m)
+              .join(TraceGPS, TraceGPS.activite_id == Activite.id)
+              .filter(Activite.utilisateur_id == user_id, TraceGPS.dplus_m.isnot(None),
+                      or_(Activite.dplus_m.is_(None), Activite.dplus_m != TraceGPS.dplus_m))
+              .all())
+    n = 0
+    for a, dplus in lignes:
+        if _details_dict(a).get("dplus_manuel"):
+            continue
+        a.dplus_m = dplus
+        n += 1
+    if n:
+        db.flush()
     return n
 
 

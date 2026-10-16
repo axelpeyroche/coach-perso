@@ -332,8 +332,8 @@ def synchroniser(db: Session, user: Utilisateur, force: bool = False) -> dict:
             t.activite_id = act.id  # rattachement direct : on sait à quelle séance il appartient
             if not act.distance_km and t.distance_km:
                 act.distance_km = t.distance_km
-            if act.dplus_m is None and t.dplus_m is not None:
-                act.dplus_m = t.dplus_m
+            if t.dplus_m is not None and not cs._details_dict(act).get("dplus_manuel"):
+                act.dplus_m = t.dplus_m  # D+ du tracé, plus juste que celui d'Intervals
             cs.fusionner_details(act, {"trace": True})
         avec_trace.add(act.id)
         bilan["traces"] += 1
@@ -342,6 +342,7 @@ def synchroniser(db: Session, user: Utilisateur, force: bool = False) -> dict:
         bilan["forme_jours"] = (datetime.now(tz).date() - depuis).days + 1
     except IntervalsErreur:
         _log.warning("Suivi wellness Intervals.icu indisponible", exc_info=True)
+    bilan["dplus_corriges"] = cs.aligner_dplus_traces(db, user.id)
     user.intervals_derniere_synchro = maintenant
     db.flush()
     return bilan

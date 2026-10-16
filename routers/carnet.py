@@ -111,10 +111,18 @@ def _appliquer(a: Activite, p: ActiviteSchema, db: Session, user: Utilisateur) -
     if isinstance(data.get("details"), dict) and p.rpe is not None:
         data["details"].pop("rpe_source", None)  # RPE confirmé par l'utilisateur
     if isinstance(data.get("details"), (dict, list)):
-        import json
         data["details"] = json.dumps(data["details"], ensure_ascii=False)
+    dplus_avant = a.dplus_m
     for k, v in data.items():
         setattr(a, k, v)
+    if p.dplus_m != dplus_avant:
+        # D+ saisi à la main : le tracé ne l'écrase plus ; effacé : le tracé le recalcule
+        det = cs._details_dict(a)
+        if p.dplus_m is None:
+            det.pop("dplus_manuel", None)
+        else:
+            det["dplus_manuel"] = True
+        a.details = json.dumps(det, ensure_ascii=False) if det else None
 
 
 @router.get("/api/carnet/sports", summary="Liste des sports du carnet")
