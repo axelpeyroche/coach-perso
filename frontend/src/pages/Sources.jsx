@@ -392,7 +392,14 @@ function BlocIntervals() {
         <p className="text-[13px] text-label-2 chiffres">
           Mesures de forme fournies par Intervals.icu sur les {res.forme_jours} derniers jours :
           {" "}FC au repos {res.forme_recue.fc_repos} j · VFC {res.forme_recue.vfc} j · VO2max {res.forme_recue.vo2max} j
-          {" "}· sommeil {res.forme_recue.sommeil} j.
+          {" "}· sommeil {res.forme_recue.sommeil} j · phases {res.forme_recue.sommeil_profond ?? 0} j
+          {" "}· éveil {res.forme_recue.sommeil_eveil ?? 0} j.
+          {res.forme_recue.champs_sommeil && Object.keys(res.forme_recue.champs_sommeil).length > 0 && (
+            <span className="block mt-0.5">
+              Champs de sommeil remplis dans Intervals :{" "}
+              {Object.entries(res.forme_recue.champs_sommeil).map(([k, n]) => `${k} (${n} j)`).join(", ")}.
+            </span>
+          )}
         </p>
       )}
       {synchro.isPending && !statut?.derniere_synchro && (

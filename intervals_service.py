@@ -195,6 +195,7 @@ def synchroniser_wellness(db: Session, user: Utilisateur, depuis, jusqu_a, compl
         MesureSante.utilisateur_id == user.id, MesureSante.jour >= depuis, MesureSante.type.in_(("fc_repos", "vfc", "vo2max")))}
     items = []
     recus = {"fc_repos": 0, "vfc": 0, "vo2max": 0, "sommeil": 0, "fc_sommeil": 0, "score_sommeil": 0, "spo2": 0}
+    vus_sommeil: dict[str, int] = {}
     for w in lignes if isinstance(lignes, list) else []:
         try:
             jour = datetime.fromisoformat(str(w.get("id"))[:10]).date()
@@ -206,6 +207,10 @@ def synchroniser_wellness(db: Session, user: Utilisateur, depuis, jusqu_a, compl
         # Phases : champs personnalisés DeepSleep / LightSleep / REMSleep et temps éveillé (« Awake Time »),
         # en secondes, remplis par Intervals Companion
         champs = {k.lower().replace("_", ""): v for k, v in w.items()}
+        # Diagnostic : champs de sommeil remplis tels qu'Intervals les nomme (ex. un code de champ perso inattendu)
+        for k, v in w.items():
+            if v not in (None, 0, "") and ("sleep" in k.lower() or "awake" in k.lower()):
+                vus_sommeil[k] = vus_sommeil.get(k, 0) + 1
         eveil = next((c for c in ("awaketime", "awake", "awakesleep", "awakesecs") if c in champs), "awaketime")
         for cle, t in (("deepsleep", "sommeil_profond"), ("lightsleep", "sommeil_leger"), ("remsleep", "sommeil_paradoxal"),
                        (eveil, "sommeil_eveil")):
@@ -222,6 +227,7 @@ def synchroniser_wellness(db: Session, user: Utilisateur, depuis, jusqu_a, compl
                 recus[t] += 1
                 if (t, jour) not in deja:
                     items.append((t, jour, float(w[cle])))
+    recus["champs_sommeil"] = vus_sommeil
     if completer:
         presents = {(m.type, m.jour) for m in db.query(MesureSante.type, MesureSante.jour).filter(
             MesureSante.utilisateur_id == user.id, MesureSante.jour >= depuis, MesureSante.jour <= jusqu_a)}
@@ -242,6 +248,7 @@ def importer_historique_wellness(db: Session, user: Utilisateur, annees_max: int
     for _ in range(annees_max):
         debut = fin - timedelta(days=365)
         n, recus = synchroniser_wellness(db, user, debut, fin, completer=True)
+        recus.pop("champs_sommeil", None)
         db.flush()
         total += n
         fournis = sum(recus.values())
