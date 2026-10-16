@@ -203,9 +203,12 @@ def synchroniser_wellness(db: Session, user: Utilisateur, depuis, jusqu_a, compl
         if w.get("sleepSecs"):
             recus["sommeil"] += 1
             items.append(("sommeil", jour, w["sleepSecs"] / 3600))
-        # Phases : champs personnalisés DeepSleep / LightSleep / REMSleep (secondes) remplis par Intervals Companion
-        champs = {k.lower(): v for k, v in w.items()}
-        for cle, t in (("deepsleep", "sommeil_profond"), ("lightsleep", "sommeil_leger"), ("remsleep", "sommeil_paradoxal")):
+        # Phases : champs personnalisés DeepSleep / LightSleep / REMSleep et temps éveillé (« Awake Time »),
+        # en secondes, remplis par Intervals Companion
+        champs = {k.lower().replace("_", ""): v for k, v in w.items()}
+        eveil = next((c for c in ("awaketime", "awake", "awakesleep", "awakesecs") if c in champs), "awaketime")
+        for cle, t in (("deepsleep", "sommeil_profond"), ("lightsleep", "sommeil_leger"), ("remsleep", "sommeil_paradoxal"),
+                       (eveil, "sommeil_eveil")):
             if isinstance(champs.get(cle), (int, float)) and champs[cle] > 0:
                 recus[t] = recus.get(t, 0) + 1
                 items.append((t, jour, champs[cle] / 3600))

@@ -1027,6 +1027,7 @@ MESURES = {
     "sommeil_profond":   {"label": "Sommeil profond", "unite": "h", "min": 0.01, "max": 16},
     "sommeil_leger":     {"label": "Sommeil léger", "unite": "h", "min": 0.01, "max": 16},
     "sommeil_paradoxal": {"label": "Sommeil paradoxal", "unite": "h", "min": 0.01, "max": 16},
+    "sommeil_eveil":     {"label": "Éveillé pendant la nuit", "unite": "h", "min": 0.01, "max": 16},
     # Pas de la journée (Santé → Intervals Companion → champ wellness « steps »)
     "pas":               {"label": "Pas", "unite": "pas", "min": 1, "max": 100000},
 }
@@ -1042,6 +1043,7 @@ _ALIAS_MESURES = {
     "sommeil_profond": "sommeil_profond", "deepsleep": "sommeil_profond",
     "sommeil_leger": "sommeil_leger", "lightsleep": "sommeil_leger",
     "sommeil_paradoxal": "sommeil_paradoxal", "remsleep": "sommeil_paradoxal",
+    "sommeil_eveil": "sommeil_eveil", "awaketime": "sommeil_eveil", "awake": "sommeil_eveil", "awakesleep": "sommeil_eveil",
     "pas": "pas", "steps": "pas", "stepcount": "pas", "nombre_de_pas": "pas",
 }
 
@@ -1065,11 +1067,12 @@ def importer_mesures(db: Session, user_id: int, items: Iterable[tuple[str, date,
             .filter(MesureSante.utilisateur_id == user_id, MesureSante.type == t, MesureSante.jour == jour)
             .first()
         )
+        valeur = round(valeur, 3 if MESURES[t]["unite"] == "h" else 1)  # durées : à la minute près
         if m:
-            m.valeur = round(valeur, 1)
+            m.valeur = valeur
             bilan["maj"] += 1
         else:
-            m = MesureSante(utilisateur_id=user_id, type=t, jour=jour, valeur=round(valeur, 1))
+            m = MesureSante(utilisateur_id=user_id, type=t, jour=jour, valeur=valeur)
             db.add(m)
             bilan["cree"] += 1
         vus[(t, jour)] = m

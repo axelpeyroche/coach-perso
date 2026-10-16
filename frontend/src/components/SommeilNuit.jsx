@@ -12,6 +12,8 @@ export const PHASES = [
   { cle: "sommeil_leger", label: "Léger", couleur: "#007AFF", repere: [45, 60] },
   { cle: "sommeil_paradoxal", label: "Paradoxal", couleur: "#32ADE6", repere: [20, 25] },
 ];
+// Temps éveillé pendant la nuit (champ « Awake Time » d'Intervals Companion) : hors des phases
+export const EVEIL = { cle: "sommeil_eveil", label: "Éveillé", couleur: "#FF7A6B" };
 export const hm = (h) => fmtDuree(Math.round(h * 60) * 60).replace(/^(\d+)h(\d+)$/, "$1 h $2");
 
 // Niveaux de l'app Santé
@@ -54,7 +56,7 @@ export default function SommeilNuit() {
   const { data } = useMesures();
   const [infos, setInfos] = useState(false);
   if (!data) return null;
-  const derniers = ["sommeil", "score_sommeil", ...PHASES.map((f) => f.cle)]
+  const derniers = ["sommeil", "score_sommeil", ...PHASES.map((f) => f.cle), EVEIL.cle]
     .map((t) => data[t]?.derniere?.jour).filter(Boolean).sort();
   const jour = derniers.at(-1);
   // Seulement la nuit récente (3 jours) : l'historique est dans Analyses
@@ -68,6 +70,7 @@ export default function SommeilNuit() {
   const parts = phases.map((f) => ({ ...f, part: f.h / totalPhases }));
   const moy = data.sommeil?.moy_28j;
   const fc = du("fc_sommeil");
+  const eveil = du(EVEIL.cle);
 
   const ecartMoy = moy != null && duree != null ? Math.round((duree - moy) * 60) : null;
 
@@ -114,6 +117,14 @@ export default function SommeilNuit() {
                     </li>
                   );
                 })}
+                {eveil != null && (
+                  <li className="flex justify-between gap-1" title="Temps éveillé entre l'endormissement et le réveil">
+                    <span className="flex items-center gap-1 truncate">
+                      <span className="w-1.5 h-1.5 lg:w-2 lg:h-2 rounded-full shrink-0" style={{ background: EVEIL.couleur }} aria-hidden />{EVEIL.label}
+                    </span>
+                    <span className="chiffres">{hm(eveil)}</span>
+                  </li>
+                )}
               </ul>
             </div>
           )}
@@ -128,7 +139,8 @@ export default function SommeilNuit() {
             <p>Repères chez l'adulte (part de la nuit) : profond 13 à 23 %, léger 45 à 60 %, paradoxal 20 à 25 %. Une durée en orange sort de son repère.
               Profond : récupération physique et immunité. Paradoxal : mémoire et équilibre émotionnel. Léger : transition entre les deux.</p>
             <p>Apple ne partage son propre score avec aucune autre app : celui-ci est calculé par Intervals Companion,
-              il peut différer de quelques points de l'app Santé, et le détail « Coucher » et « Interruptions » n'est pas disponible.</p>
+              il peut différer de quelques points de l'app Santé, et le détail « Coucher » et « Interruptions » n'est pas disponible.
+              Le temps « Éveillé » (champ « Awake Time » de Companion) n'est pas compté dans les phases ni dans la durée de la nuit.</p>
             <Link to="/analyses" onClick={() => setInfos(false)} className="inline-block text-brand">Voir l'évolution dans Analyses →</Link>
           </div>
         </Feuille>
