@@ -20,6 +20,13 @@ import { getActivites, getObjectifs, getStatsCarnet } from "../api";
 import { nombre } from "../carnet";
 import { Section, BoutonAjout, Chevron } from "../components/ui";
 
+// Lundi de la semaine en cours (heure locale), au format AAAA-MM-JJ
+function lundiCourant() {
+  const d = new Date();
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 const ZONE_COULEUR = { "sous-charge": "blue", optimale: "green", vigilance: "orange", risque: "red" };
 
 export default function Accueil() {
@@ -27,7 +34,11 @@ export default function Accueil() {
   const [modal, setModal] = useState(undefined);
   const [fiche, setFiche] = useState(null);
   const { data: stats } = useQuery({ queryKey: ["stats-carnet", ""], queryFn: () => getStatsCarnet() });
-  const { data: liste } = useQuery({ queryKey: ["activites", { recentes: true }], queryFn: () => getActivites({ limit: 6 }) });
+  const lundi = lundiCourant();
+  const { data: liste } = useQuery({
+    queryKey: ["activites", { semaine: lundi }],
+    queryFn: () => getActivites({ depuis: lundi, limit: 100 }),
+  });
   const { data: objectifs = [] } = useQuery({ queryKey: ["objectifs"], queryFn: getObjectifs });
 
   const actifs = objectifs.filter((o) => o.statut === "actif").slice(0, 2);
@@ -88,7 +99,7 @@ export default function Accueil() {
               {!liste ? (
                 <p className="p-4 text-[15px] text-label-2">Chargement…</p>
               ) : liste.activites.length === 0 ? (
-                <p className="p-4 text-[15px] text-label-2">Aucune activité.</p>
+                <p className="p-4 text-[15px] text-label-2">Aucune activité cette semaine.</p>
               ) : (
                 <div className="py-1">
                   {liste.activites.map((a) => <ActiviteLigne key={a.id} a={a} onClick={() => setFiche(a)} />)}
