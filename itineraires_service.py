@@ -92,12 +92,11 @@ def _traduire(msg: Optional[str]) -> Optional[str]:
     return msg
 
 
-def _corps(points: list[list[float]], profil: str, eviter_routes: bool, sport: str = "") -> dict:
-    corps = {"coordinates": points, "elevation": True, "instructions": False,
-             "extra_info": ["waytype", "surface"], "options": {}}
-    if profil in PIED and (eviter_routes or sport in _BITUME):
-        corps["options"]["profile_params"] = {"weightings": {"quiet": 1, "green": 1}}
-    return corps
+def _corps(points: list[list[float]]) -> dict:
+    # Pas de pondération « quiet » / « green » : elle prive ORS de son calcul rapide et les
+    # boucles dépassent alors le délai. Le bitume est écarté au classement (_ecart).
+    return {"coordinates": points, "elevation": True, "instructions": False,
+            "extra_info": ["waytype", "surface"], "options": {}}
 
 
 def _lire(feature: dict) -> Optional[dict]:
@@ -152,8 +151,8 @@ def _dist(a: list, b: list) -> float:
     return 6371000 * math.hypot(x, math.radians(b[1] - a[1]))
 
 
-def _ecart(r: dict, distance_km: Optional[float], dplus_m: Optional[int], sport: str = "") -> float:
-    e = _BITUME.get(sport, 0) * (r.get("repartition") or {}).get("bitume", 0) / 100
+def _ecart(r: dict, distance_km: Optional[float], dplus_m: Optional[int], bitume: float = 0) -> float:
+    e = bitume * (r.get("repartition") or {}).get("bitume", 0) / 100
     if distance_km:
         e += abs(r["distance_km"] - distance_km) / distance_km
     if dplus_m is not None:
@@ -173,21 +172,23 @@ def proposer(sport: str, depart: list[float], arrivee: Optional[list[float]], di
         raise ItineraireErreur("Clé OpenRouteService absente : ajoute ORS_API_KEY dans les variables d'environnement de Render.")
     profil = PROFILS.get(sport, PROFILS["course"])[1 if sentiers else 0]
     a = [depart[1], depart[0]]  # ORS : [lon, lat]
+    # Poids du bitume au classement : imposé pour trail / rando / VTT, demandé par « Éviter les routes »
+    bitume = max(_BITUME.get(sport, 0), 1.5 if eviter_routes else 0)
 
     if arrivee:
-        corps = _corps([a, [arrivee[1], arrivee[0]]], profil, eviter_routes, sport)
+        corps = _corps([a, [arrivee[1], arrivee[0]]])
         corps["alternative_routes"] = {"target_count": 3, "weight_factor": 1.4 + 0.3 * min(essai, 3), "share_factor": 0.6}
         res = [r for r in map(_lire, _appel(profil, corps).get("features", [])) if r]
         if not res:
             raise ItineraireErreur("Aucun itinéraire trouvé entre ces deux points.")
-        res.sort(key=lambda r: _ecart(r, None, dplus_m, sport))
+        res.sort(key=lambda r: _ecart(r, None, dplus_m, bitume))
         return {"profil": profil, "propositions": res, "calculs": 1}
 
     if not distance_km:
         raise ItineraireErreur("Indique la distance de la boucle.")
 
     def boucle(longueur_km: float, graine: int) -> Optional[dict]:
-        corps = _corps([a], profil, eviter_routes, sport)
+        corps = _corps([a])
         corps["options"]["round_trip"] = {"length": round(longueur_km * 1000), "points": 3 + graine % 3, "seed": graine}
         try:
             f = _appel(profil, corps).get("features", [])
@@ -214,7 +215,7 @@ def proposer(sport: str, depart: list[float], arrivee: Optional[list[float]], di
     rapport = median(r["distance_km"] / (vise * f) for r, f in paires)
     _RAPPORT[profil] = round(min(2.0, max(0.5, 0.5 * _RAPPORT.get(profil, 1.0) + 0.5 * rapport)), 3)
 
-    toutes.sort(key=lambda r: _ecart(r, distance_km, dplus_m, sport))
+    toutes.sort(key=lambda r: _ecart(r, distance_km, dplus_m, bitume))
     gardees: list[dict] = []
     for r in toutes:
         if _differente(r, gardees):
