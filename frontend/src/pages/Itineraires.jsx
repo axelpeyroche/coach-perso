@@ -258,11 +258,7 @@ function LegendePente() {
   );
 }
 
-const lireModeProfil = () => {
-  try { return localStorage.getItem("itineraires-profil") === "pente" ? "pente" : "terrain"; } catch { return "terrain"; }
-};
-
-function Profil({ points, couleur, hauteur = 26, detail = false, terrains, mode = "terrain", setMode, curseur = null, onCurseur }) {
+function Profil({ points, couleur, hauteur = 26, detail = false, terrains, curseur = null, onCurseur }) {
   const prof = useMemo(() => profil(points), [points]);
   // Largeur réelle en pixels : les pointillés et traits doubles gardent leurs proportions
   const boite = useRef(null);
@@ -288,11 +284,10 @@ function Profil({ points, couleur, hauteur = 26, detail = false, terrains, mode 
   // Kilomètres BRouter recalés sur la distance du profil
   const k = terrains?.length ? total / (terrains.at(-1)[1] || total) : 1;
   const pente = useMemo(() => (detail ? T.pentes(prof) : null), [detail, prof]);
-  const enPente = detail && mode === "pente";
 
-  // Découpe de la courbe par terrain
+  // Découpe de la courbe par terrain (le trait)
   const troncons = useMemo(() => {
-    if (!detail || enPente || !terrains?.length) return [];
+    if (!detail || !terrains?.length) return [];
     const res = [];
     let i = 0;
     for (const [a, b, t] of terrains) {
@@ -303,11 +298,11 @@ function Profil({ points, couleur, hauteur = 26, detail = false, terrains, mode 
       if (morceau.length >= 2) res.push({ a, b, t, d: `M${chemin(morceau)}` });
     }
     return res;
-  }, [detail, enPente, terrains, L, H, points]);
+  }, [detail, terrains, L, H, points]);
 
-  // Découpe par classe de pente
+  // Découpe par classe de pente (le remplissage sous la courbe)
   const zones = useMemo(() => {
-    if (!enPente) return [];
+    if (!detail) return [];
     const res = [];
     for (let j = 0; j < pts.length - 1; j++) {
       const c = T.classePente(pente[pts[j][3]]);
@@ -315,7 +310,7 @@ function Profil({ points, couleur, hauteur = 26, detail = false, terrains, mode 
       else res.push({ c, pts: [pts[j], pts[j + 1]] });
     }
     return res;
-  }, [enPente, pente, L, H, points]);
+  }, [detail, pente, L, H, points]);
 
   // Curseur : le doigt (ou la souris) sur le profil donne le point le plus proche
   const indice = (clientX) => {
@@ -342,26 +337,18 @@ function Profil({ points, couleur, hauteur = 26, detail = false, terrains, mode 
       <div {...gestes} className={onCurseur ? "cursor-crosshair select-none" : undefined}>
         <svg viewBox={`0 0 ${L} ${H}`} className="w-full block overflow-visible" style={{ height: H }}
           role={detail ? "img" : undefined} aria-hidden={detail ? undefined : true}
-          aria-label={detail ? `Profil d'altitude ${enPente ? "et pentes" : "et terrain"} le long du parcours` : undefined}>
-          {enPente ? zones.map((z, j) => {
-            const col = T.PENTES[z.c][2];
-            return (
-              <g key={j}>
-                <path d={`M${z.pts[0][1].toFixed(1)},${H} L${chemin(z.pts)} L${z.pts.at(-1)[1].toFixed(1)},${H} Z`} fill={col} fillOpacity={0.2} />
-                <path d={`M${chemin(z.pts)}`} fill="none" stroke={col} strokeWidth={2} strokeLinejoin="round" />
-              </g>
-            );
-          }) : (
-            <>
-              <path d={`M0,${H} L${ligne} L${L},${H} Z`} fill={couleur} fillOpacity={0.15} />
-              {troncons.length ? troncons.map(({ a, b, t, d }, j) => (
+          aria-label={detail ? "Profil d'altitude le long du parcours : pentes en couleur, terrain sur la courbe" : undefined}>
+          {/* Remplissage : couleur de la pente ; trait : motif du terrain */}
+          {zones.length ? zones.map((z, j) => (
+            <path key={j} d={`M${z.pts[0][1].toFixed(1)},${H} L${chemin(z.pts)} L${z.pts.at(-1)[1].toFixed(1)},${H} Z`}
+              fill={T.PENTES[z.c][2]} fillOpacity={0.28} />
+          )) : <path d={`M0,${H} L${ligne} L${L},${H} Z`} fill={couleur} fillOpacity={0.15} />}
+          {troncons.length ? troncons.map(({ a, b, t, d }, j) => (
                 <g key={j}>
                   <title>{`${TERRAINS[t]?.[0] ?? t} · ${km(a)} → ${km(b)} km`}</title>
                   <Trait type={t} d={d} />
                 </g>
-              )) : <path d={`M${ligne}`} fill="none" stroke={couleur} strokeWidth={1.6} />}
-            </>
-          )}
+              )) : <path d={`M${ligne}`} fill="none" stroke={detail ? "currentColor" : couleur} strokeWidth={1.6} className={detail ? "text-label-2" : undefined} />}
           {c != null && (
             <g className="text-label" pointerEvents="none">
               <line x1={cx} x2={cx} y1={0} y2={H} stroke="currentColor" strokeOpacity={0.45} strokeWidth={1} />
@@ -384,18 +371,9 @@ function Profil({ points, couleur, hauteur = 26, detail = false, terrains, mode 
         </p>
       )}
       {detail && (
-        <div className="mt-1 flex items-center justify-between gap-2">
-          {enPente ? <LegendePente /> : troncons.length > 0 ? <LegendeTerrain terrains={terrains} /> : <span />}
-          {setMode && (
-            <div className="flex shrink-0 rounded-[8px] bg-remplissage p-0.5 text-[11px] font-semibold" role="group" aria-label="Couleurs du profil">
-              {[["terrain", "Terrain"], ["pente", "Pente"]].map(([v, l]) => (
-                <button type="button" key={v} aria-pressed={mode === v} onClick={() => setMode(v)}
-                  className={`px-2 py-0.5 rounded-[6px] transition ${mode === v ? "bg-surface text-label shadow-sm" : "text-label-2"}`}>
-                  {l}
-                </button>
-              ))}
-            </div>
-          )}
+        <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-0.5">
+          {troncons.length > 0 && <LegendeTerrain terrains={terrains} />}
+          <LegendePente />
         </div>
       )}
     </div>
@@ -811,7 +789,7 @@ function ChampNom({ nom, onValider, onAnnuler }) {
 }
 
 function Proposition({ r, i, choisie, onChoisir, sport, distance, dplus, boucle, allure, enRetouche,
-  modeProfil, setModeProfil, curseur, onCurseur, onModifier, onEnregistrer, enregistrement, renommage,
+  curseur, onCurseur, onModifier, onEnregistrer, enregistrement, renommage,
   onRenommer, onNommer, onSupprimer }) {
   const couleur = COULEURS[i % COULEURS.length];
   const sel = i === choisie;
@@ -856,7 +834,7 @@ function Proposition({ r, i, choisie, onChoisir, sport, distance, dplus, boucle,
       <div className="pl-6">
         {sel ? (
           <Profil points={r.points} couleur={couleur} hauteur={78} detail terrains={r.terrains}
-            mode={modeProfil} setMode={setModeProfil} curseur={curseur} onCurseur={onCurseur} />
+            curseur={curseur} onCurseur={onCurseur} />
         ) : (
           <button type="button" onClick={() => onChoisir(i)} className="block w-full text-left" aria-hidden tabIndex={-1}>
             <Profil points={r.points} couleur={couleur} hauteur={26} />
@@ -919,7 +897,6 @@ export default function Itineraires() {
   const [vue, setVue] = useState("recherche"); // téléphone : « recherche » puis « resultats »
   const [edition, setEdition] = useState(null);
   const [curseur, setCurseur] = useState(null);
-  const [modeProfil, setModeProfilBrut] = useState(lireModeProfil);
   const [renommage, setRenommage] = useState(null);
   const [aSupprimer, setASupprimer] = useState(null);
   const [erreurFavori, setErreurFavori] = useState(null);
@@ -932,11 +909,6 @@ export default function Itineraires() {
   const { data: statut } = useQuery({ queryKey: ["itineraires"], queryFn: getItineraires, staleTime: 300_000 });
   const { data: allures } = useQuery({ queryKey: ["itineraires-allures"], queryFn: getAlluresItineraire, staleTime: 600_000 });
   const { data: favoris } = useQuery({ queryKey: ["itineraires-favoris"], queryFn: getFavorisItineraire, staleTime: 60_000 });
-
-  const setModeProfil = (v) => {
-    setModeProfilBrut(v);
-    try { localStorage.setItem("itineraires-profil", v); } catch { /* stockage indisponible */ }
-  };
 
   const changerSport = (s) => {
     setSport(s);
@@ -1300,7 +1272,6 @@ export default function Itineraires() {
                     <Proposition key={`${resultat.id}-${i}`} r={r} i={i} choisie={choisie} onChoisir={choisir}
                       sport={resultat.sport} distance={resultat.distance} dplus={resultat.dplus} boucle={resultat.boucle}
                       allure={allure} enRetouche={edition?.i === i}
-                      modeProfil={modeProfil} setModeProfil={setModeProfil}
                       curseur={i === choisie ? curseur : null} onCurseur={setCurseur}
                       onModifier={() => commencer(i)}
                       onEnregistrer={() => enregistrer.mutate({ i, r })}
