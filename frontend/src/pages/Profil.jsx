@@ -597,6 +597,11 @@ export default function Profil({ theme, setTheme }) {
             <span className="flex-1 text-[17px]">Sources et import</span>
             <Chevron />
           </Link>
+          <Link to="/itineraires" className="ligne" style={inset}>
+            <Picto couleur="#1D9E75"><circle cx="6" cy="18" r="2.5" /><path d="M8.5 18H16a3.5 3.5 0 000-7H8a3.5 3.5 0 010-7h7.5" /></Picto>
+            <span className="flex-1 text-[17px]">Itinéraires</span>
+            <Chevron />
+          </Link>
           <Link to="/sources#ia" className="ligne" style={inset}>
             <Picto couleur="#FF9500"><path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6L5.6 18.4" /></Picto>
             <span className="flex-1 text-[17px]">Analyse avec ton IA</span>

@@ -6,7 +6,7 @@ import react from "@vitejs/plugin-react";
 function csp(apiUrl) {
   let api = "https://coach-perso.onrender.com";
   try { if (apiUrl) api = new URL(apiUrl).origin; } catch { /* URL relative : même origine */ }
-  const tuiles = "https://tile.openstreetmap.org https://server.arcgisonline.com https://s3.amazonaws.com";
+  const tuiles = "https://tile.openstreetmap.org https://server.arcgisonline.com https://s3.amazonaws.com https://*.tile.opentopomap.org https://data.geopf.fr";
   const regles = [
     "default-src 'self'",
     "script-src 'self'",

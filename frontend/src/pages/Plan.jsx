@@ -63,6 +63,9 @@ function ChoixActivite({ prevue, onChoix, onClose }) {
 }
 
 // ── Détail d'une séance prévue (feuille ouverte au toucher de la carte) ───────
+// Sports pour lesquels la page Itinéraires sait proposer un parcours
+const ITINERAIRE = { course: 1, trail: 1, randonnee: 1, marche: 1, velo: 1 };
+
 function DetailSeance({ s, onClose, onOuvrirActivite }) {
   const info = sportInfo(s.sport);
   const statut = STATUTS[s.statut] ?? STATUTS.a_venir;
@@ -113,6 +116,13 @@ function DetailSeance({ s, onClose, onOuvrirActivite }) {
 
       {!s.description && !s.activite && !mesures.length && (
         <p className="text-[15px] text-label-2 text-center">Aucun détail pour cette séance.</p>
+      )}
+
+      {ITINERAIRE[s.sport] && s.statut !== "realisee" && !s.activite && (
+        <Link onClick={onClose} className="btn-teinte w-full"
+          to={`/itineraires?${new URLSearchParams(Object.entries({ sport: s.sport, distance: s.distance_km ?? "", dplus: s.dplus_m ?? "" }).filter(([, v]) => v !== ""))}`}>
+          Proposer un parcours
+        </Link>
       )}
 
       <CommentaireSeance s={s} />
@@ -475,6 +485,7 @@ export default function Plan() {
   return (
     <Page titre="Plan" sousTitre="Séances prévues"
       action={<span className="flex items-center gap-2">
+        <Link to="/itineraires" className="btn-texte" aria-label="Itinéraires">Itinéraires</Link>
         <button className="btn-texte" onClick={() => setImportIa(true)}>Plan IA</button>
         <BoutonAjout onClick={() => setAjout(true)} label="Ajouter une séance prévue" />
       </span>}>

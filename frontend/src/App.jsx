@@ -17,6 +17,7 @@ const Analyses = lazy(() => import("./pages/Analyses"));
 const Sources = lazy(() => import("./pages/Sources"));
 const Profil = lazy(() => import("./pages/Profil"));
 const Records = lazy(() => import("./pages/Records"));
+const Itineraires = lazy(() => import("./pages/Itineraires"));
 
 // ── SVG Icons ──────────────────────────────────────────────────────────────
 const Icon = {
@@ -59,6 +60,13 @@ const Icon = {
       <path d="M15 6h5v5" />
     </svg>
   ),
+  Itineraires: ({ c = "w-5 h-5", f = "none" }) => (
+    <svg viewBox="0 0 24 24" fillOpacity={0.16} stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className={c} fill={f}>
+      <circle cx="6" cy="18" r="2.5" />
+      <path d="M8.5 18H16a3.5 3.5 0 000-7H8a3.5 3.5 0 010-7h7.5" />
+      <path d="M19 4l-3.5-2.5M19 4l-3.5 2.5" fill="none" />
+    </svg>
+  ),
   Profil: ({ c = "w-5 h-5", f = "none" }) => (
     <svg viewBox="0 0 24 24" fillOpacity={0.16} stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" className={c} fill={f}>
       <circle cx="12" cy="8" r="4" />
@@ -77,6 +85,7 @@ const NAV = [
   { to: "/objectifs", label: "Objectifs", IconC: Icon.Objectifs, mobileHide: true },
   { to: "/stats",     label: "Stats",     IconC: Icon.Stats },
   { to: "/analyses",  label: "Analyses",  IconC: Icon.Analyses, mobileHide: true },
+  { to: "/itineraires", label: "Itinéraires", IconC: Icon.Itineraires, mobileHide: true },
   { to: "/sources",   label: "Sources",   IconC: Icon.Sources, mobileHide: true },
   { to: "/profil",    label: "Profil",    IconC: Icon.Profil },
 ];
@@ -462,6 +471,7 @@ export default function App() {
                   <Route path="/analyses"   element={<Analyses />} />
                   <Route path="/records"    element={<Records />} />
                   <Route path="/sources"    element={<Sources />} />
+                  <Route path="/itineraires" element={<Itineraires />} />
                   <Route path="/profil"     element={<Profil theme={theme} setTheme={setTheme} />} />
                   <Route path="*"           element={<Navigate to="/" replace />} />
                 </Routes>

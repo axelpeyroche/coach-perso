@@ -122,6 +122,8 @@ export const getFlux = (id) => api.get(`/activites/${id}/flux`).then((r) => r.da
 export const getCarteTraces = () => api.get("/traces/carte", { timeout: 90000 }).then((r) => r.data);
 
 // --- Intervals.icu (séances de la montre avec tracé GPS) ---
+export const getItineraires = () => api.get("/itineraires").then((r) => r.data);
+export const proposerItineraires = (d) => api.post("/itineraires", d, { timeout: 90000 }).then((r) => r.data);
 export const getIntervals = () => api.get("/intervals").then((r) => r.data);
 export const connecterIntervals = (cle, athlete_id) => api.put("/intervals", { cle, athlete_id }).then((r) => r.data);
 // Nuits importées par l'ancien raccourci Sommeil / l'export Santé : à effacer pour revenir à Intervals.icu
