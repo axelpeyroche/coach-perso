@@ -10,6 +10,7 @@ distance et au D+ visés.
 from __future__ import annotations
 
 import json
+import math
 import logging
 import os
 import time
@@ -36,8 +37,13 @@ PROFILS = {
     "vtt":       ("cycling-mountain", "cycling-mountain"),
 }
 
-# Types de voie ORS (extra « waytype ») → route / chemin / sentier
-_ROUTE, _CHEMIN, _SENTIER = {1, 2, 3}, {5, 6}, {4, 7, 8}
+# Types de voie ORS (extra « waytype ») : 1-3 routes et rues, 4 path, 5 track, 6 piste cyclable,
+# 7 footway, 8 marches. Revêtements ORS (extra « surface ») goudronnés ou pavés :
+_ROUTE, _SENTIER = {1, 2, 3}, {4, 7, 8}
+_REVETU = {1, 3, 4, 5, 6, 14, 18}
+
+# Poids de la part de bitume dans le classement : un trail se court sur les chemins
+_BITUME = {"trail": 2.0, "randonnee": 1.2, "vtt": 1.2}
 
 
 # Longueurs demandées autour de la cible, et rapport longueur obtenue / demandée appris par profil
@@ -86,10 +92,10 @@ def _traduire(msg: Optional[str]) -> Optional[str]:
     return msg
 
 
-def _corps(points: list[list[float]], profil: str, eviter_routes: bool) -> dict:
+def _corps(points: list[list[float]], profil: str, eviter_routes: bool, sport: str = "") -> dict:
     corps = {"coordinates": points, "elevation": True, "instructions": False,
-             "extra_info": ["waytype"], "options": {}}
-    if eviter_routes and profil in PIED:
+             "extra_info": ["waytype", "surface"], "options": {}}
+    if profil in PIED and (eviter_routes or sport in _BITUME):
         corps["options"]["profile_params"] = {"weightings": {"quiet": 1, "green": 1}}
     return corps
 
@@ -101,24 +107,53 @@ def _lire(feature: dict) -> Optional[dict]:
     prop = feature.get("properties", {})
     dist = prop.get("summary", {}).get("distance") or 0
     dplus = cs.denivele_positif([c[2] for c in coords if len(c) > 2]) or 0
-    repartition = {"route": 0.0, "chemin": 0.0, "sentier": 0.0}
-    for s in (prop.get("extras", {}).get("waytypes", {}).get("summary") or []):
-        v, d = s.get("value"), s.get("distance") or 0
-        k = "route" if v in _ROUTE else "chemin" if v in _CHEMIN else "sentier" if v in _SENTIER else None
-        if k:
-            repartition[k] += d
-    total = sum(repartition.values()) or 1
     return {
         "distance_km": round(dist / 1000, 2),
         "dplus_m": dplus,
         "duree_s": round(prop.get("summary", {}).get("duration") or 0),
-        "repartition": {k: round(100 * v / total) for k, v in repartition.items()},
+        "repartition": _repartition(coords, prop.get("extras") or {}),
         "points": [[round(c[1], 6), round(c[0], 6), round(c[2], 1) if len(c) > 2 else None] for c in coords],
     }
 
 
-def _ecart(r: dict, distance_km: Optional[float], dplus_m: Optional[int]) -> float:
-    e = 0.0
+def _valeurs(extras: dict, *noms: str) -> list:
+    for n in noms:
+        if (extras.get(n) or {}).get("values"):
+            return extras[n]["values"]
+    return []
+
+
+def _repartition(coords: list, extras: dict) -> Optional[dict]:
+    """Part (en %) de bitume, de chemin et de sentier, segment par segment."""
+    n = len(coords) - 1
+    voie, revet = [0] * n, [0] * n
+    for tab, nom in ((voie, ("waytypes", "waytype")), (revet, ("surface", "surfaces"))):
+        for debut, fin, v in _valeurs(extras, *nom):
+            for i in range(int(debut), min(int(fin), n)):
+                tab[i] = int(v)
+    if not any(voie) and not any(revet):
+        return None
+    parts = {"bitume": 0.0, "chemin": 0.0, "sentier": 0.0}
+    for i in range(n):
+        a, b = coords[i], coords[i + 1]
+        d = _dist(a, b)
+        if revet[i] in _REVETU or (revet[i] == 0 and voie[i] in _ROUTE):
+            parts["bitume"] += d
+        elif voie[i] in _SENTIER:
+            parts["sentier"] += d
+        else:
+            parts["chemin"] += d
+    total = sum(parts.values()) or 1
+    return {k: round(100 * v / total) for k, v in parts.items()}
+
+
+def _dist(a: list, b: list) -> float:
+    x = math.radians(b[0] - a[0]) * math.cos(math.radians((a[1] + b[1]) / 2))
+    return 6371000 * math.hypot(x, math.radians(b[1] - a[1]))
+
+
+def _ecart(r: dict, distance_km: Optional[float], dplus_m: Optional[int], sport: str = "") -> float:
+    e = _BITUME.get(sport, 0) * (r.get("repartition") or {}).get("bitume", 0) / 100
     if distance_km:
         e += abs(r["distance_km"] - distance_km) / distance_km
     if dplus_m is not None:
@@ -140,19 +175,19 @@ def proposer(sport: str, depart: list[float], arrivee: Optional[list[float]], di
     a = [depart[1], depart[0]]  # ORS : [lon, lat]
 
     if arrivee:
-        corps = _corps([a, [arrivee[1], arrivee[0]]], profil, eviter_routes)
+        corps = _corps([a, [arrivee[1], arrivee[0]]], profil, eviter_routes, sport)
         corps["alternative_routes"] = {"target_count": 3, "weight_factor": 1.4 + 0.3 * min(essai, 3), "share_factor": 0.6}
         res = [r for r in map(_lire, _appel(profil, corps).get("features", [])) if r]
         if not res:
             raise ItineraireErreur("Aucun itinéraire trouvé entre ces deux points.")
-        res.sort(key=lambda r: _ecart(r, None, dplus_m))
+        res.sort(key=lambda r: _ecart(r, None, dplus_m, sport))
         return {"profil": profil, "propositions": res, "calculs": 1}
 
     if not distance_km:
         raise ItineraireErreur("Indique la distance de la boucle.")
 
     def boucle(longueur_km: float, graine: int) -> Optional[dict]:
-        corps = _corps([a], profil, eviter_routes)
+        corps = _corps([a], profil, eviter_routes, sport)
         corps["options"]["round_trip"] = {"length": round(longueur_km * 1000), "points": 3 + graine % 3, "seed": graine}
         try:
             f = _appel(profil, corps).get("features", [])
@@ -179,7 +214,7 @@ def proposer(sport: str, depart: list[float], arrivee: Optional[list[float]], di
     rapport = median(r["distance_km"] / (vise * f) for r, f in paires)
     _RAPPORT[profil] = round(min(2.0, max(0.5, 0.5 * _RAPPORT.get(profil, 1.0) + 0.5 * rapport)), 3)
 
-    toutes.sort(key=lambda r: _ecart(r, distance_km, dplus_m))
+    toutes.sort(key=lambda r: _ecart(r, distance_km, dplus_m, sport))
     gardees: list[dict] = []
     for r in toutes:
         if _differente(r, gardees):

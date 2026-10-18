@@ -15,6 +15,8 @@ const SPORTS = [
 const A_PIED = ["course", "trail", "randonnee"];
 // « Privilégier les sentiers » n'a de sens que là où le profil change
 const AVEC_SENTIERS = ["course", "gravel"];
+// Sports classés d'abord sur la part de chemins (le bitume est pénalisé côté serveur)
+const HORS_BITUME = ["trail", "randonnee", "vtt"];
 const DEFAUTS = {
   course: [10, 100], trail: [18, 650], randonnee: [15, 500], velo: [60, 600], gravel: [45, 500], vtt: [30, 700],
 };
@@ -336,18 +338,28 @@ function Pastille({ r, distance, dplus, boucle }) {
   );
 }
 
-function Repartition({ r }) {
-  const parts = [["sentier", "sentier"], ["chemin", "chemin"], ["route", "route"]]
-    .map(([k, l]) => [r.repartition?.[k] ?? 0, l]).filter(([v]) => v >= 5);
+function Repartition({ r, sport }) {
+  const parts = [["sentier", "sentier"], ["chemin", "chemin"], ["bitume", "bitume"]]
+    .map(([k, l]) => [r.repartition?.[k] ?? 0, l, k]).filter(([v]) => v >= 5);
   if (!parts.length) return null;
-  return <span className="text-[12px] text-label-2 chiffres">{parts.map(([v, l]) => `${v} % ${l}`).join(" · ")}</span>;
+  return (
+    <span className="text-[12px] text-label-2 chiffres">
+      {parts.map(([v, l, k], j) => (
+        <span key={k}>
+          {j > 0 && " · "}
+          <span className={k === "bitume" && HORS_BITUME.includes(sport) && v > 25 ? "text-ios-orange font-semibold" : ""}>{v} % {l}</span>
+        </span>
+      ))}
+    </span>
+  );
 }
 
 function Proposition({ r, i, choisie, onChoisir, sport, distance, dplus, boucle }) {
   const couleur = COULEURS[i % COULEURS.length];
   const sel = i === choisie;
   return (
-    <div className={`ligne !items-stretch flex-col !gap-1.5 !py-3 ${sel ? "bg-remplissage/60" : ""}`}>
+    <div className={`ligne !items-stretch flex-col !gap-1.5 !py-3 ${sel ? "rounded-[12px]" : ""}`}
+      style={sel ? { boxShadow: `inset 0 0 0 2px ${couleur}` } : undefined}>
       <div className="flex items-center gap-3">
         <button type="button" onClick={() => onChoisir(sel ? null : i)} className="flex-1 min-w-0 flex items-start gap-3 text-left">
           <span className="w-3 h-3 mt-1.5 rounded-full shrink-0" style={{ backgroundColor: couleur }} aria-hidden />
@@ -355,7 +367,7 @@ function Proposition({ r, i, choisie, onChoisir, sport, distance, dplus, boucle 
             <span className="block text-[16px] font-semibold chiffres">{km(r.distance_km)} km · {r.dplus_m} m D+</span>
             <span className="mt-1 flex flex-wrap items-center gap-1.5">
               <Pastille r={r} distance={distance} dplus={dplus} boucle={boucle} />
-              <Repartition r={r} />
+              <Repartition r={r} sport={sport} />
             </span>
           </span>
         </button>
@@ -408,7 +420,7 @@ export default function Itineraires() {
       distance_km: boucle ? Number(String(distance).replace(",", ".")) : null,
       dplus_m: dplus === "" ? null : Math.round(Number(dplus)),
       sentiers: AVEC_SENTIERS.includes(sport) && sentiers,
-      eviter_routes: A_PIED.includes(sport) && eviterRoutes,
+      eviter_routes: sport === "course" && eviterRoutes,
       essai: n,
     }),
     onSuccess: (r, n) => {
@@ -509,7 +521,7 @@ export default function Itineraires() {
             </div>
           )}
 
-          {(AVEC_SENTIERS.includes(sport) || A_PIED.includes(sport)) && (
+          {(AVEC_SENTIERS.includes(sport) || sport === "course") && (
             <div className="card py-0.5">
               {AVEC_SENTIERS.includes(sport) && (
                 <div className="ligne">
@@ -517,13 +529,19 @@ export default function Itineraires() {
                   <Interrupteur actif={sentiers} onChange={setSentiers} label="Privilégier les sentiers" />
                 </div>
               )}
-              {A_PIED.includes(sport) && (
+              {sport === "course" && (
                 <div className="ligne">
                   <span className="flex-1 text-[16px] md:text-[15px]">Éviter les routes</span>
                   <Interrupteur actif={eviterRoutes} onChange={setEviterRoutes} label="Éviter les routes" />
                 </div>
               )}
             </div>
+          )}
+
+          {HORS_BITUME.includes(sport) && (
+            <p className="px-4 -mt-2 text-[13px] text-label-2">
+              {sport === "vtt" ? "VTT" : sport === "trail" ? "Trail" : "Rando"} : chemins et sentiers d'abord, les tracés sur bitume passent en dernier.
+            </p>
           )}
 
           {erreur && <p className="px-1 text-[14px] text-ios-red" role="alert">{erreur}</p>}
@@ -546,6 +564,12 @@ export default function Itineraires() {
             resultats.length ? (
               <div>
                 <h2 className="entete-liste">{resultats.length} proposition{resultats.length > 1 ? "s" : ""}</h2>
+                {HORS_BITUME.includes(resultat.sport) && Math.min(...resultats.map((r) => r.repartition?.bitume ?? 0)) > 30 && (
+                  <p className="mb-2 rounded-[12px] bg-ios-orange/15 px-4 py-2.5 text-[13px] text-label">
+                    Peu de chemins autour de ce départ : toutes les boucles ont plus de 30 % de bitume.
+                    Place le départ plus près des sentiers (parc, colline, lisière) avec « Sur la carte ».
+                  </p>
+                )}
                 <div className="card py-0.5">
                   {resultats.map((r, i) => (
                     <Proposition key={`${essai}-${i}`} r={r} i={i} choisie={choisie} onChoisir={setChoisie}
