@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getTrace } from "../api";
+import { getTerrains, getTrace } from "../api";
+import Profil from "./ProfilAltitude";
+
+const TYPES_TERRAIN = { sentier: "sentier", chemin: "chemin", bitume: "route" };
 
 // maplibre 6 (ESM) : le worker est un fichier à part, à servir depuis nos propres assets
 export async function chargerMaplibre() {
@@ -190,6 +193,13 @@ export default function CarteTrace({ activiteId }) {
   const { data, isLoading, isError } = useQuery({
     queryKey: ["trace", activiteId], queryFn: () => getTrace(activiteId), staleTime: Infinity,
   });
+  // Profil d'altitude sous la carte (seulement si le tracé a des altitudes)
+  const avecAltitude = !!data?.points?.some((p) => p[2] != null);
+  const { data: terrain } = useQuery({
+    queryKey: ["terrains", activiteId], queryFn: () => getTerrains(activiteId), staleTime: Infinity,
+    enabled: avecAltitude, retry: false,
+  });
+  const [repere, setRepere] = useState(null); // indice du point montré par le doigt sur le profil
 
   useEffect(() => {
     if (!data?.points?.length || !conteneur.current) return;
@@ -236,12 +246,24 @@ export default function CarteTrace({ activiteId }) {
         m.addSource("curseur", { type: "geojson", data: vide });
         m.addLayer({ id: "curseur", type: "circle", source: "curseur",
           paint: { "circle-radius": 7, "circle-color": "#FF3B30", "circle-stroke-color": "#fff", "circle-stroke-width": 3 } });
+        m.addSource("repere", { type: "geojson", data: vide });
+        m.addLayer({ id: "repere", type: "circle", source: "repere",
+          paint: { "circle-radius": 6, "circle-color": "#FF3B30", "circle-stroke-color": "#fff", "circle-stroke-width": 2.5 } });
         m.on("dragstart", () => survol.current.actif && pause());
         setPrete(true);
       });
     })();
     return () => { annule = true; cancelAnimationFrame(survol.current.raf); survol.current.actif = false; carte.current?.remove(); carte.current = null; setPrete(false); };
   }, [data]);
+
+  // Point du profil sous le doigt, repéré sur la carte
+  useEffect(() => {
+    const m = carte.current;
+    if (!prete || !m) return;
+    const p = repere != null ? data.points[repere] : null;
+    m.getSource("repere").setData({ type: "FeatureCollection", features: p
+      ? [{ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [p[1], p[0]] } }] : [] });
+  }, [repere, prete]);
 
   useEffect(() => {
     const m = carte.current;
@@ -413,7 +435,16 @@ export default function CarteTrace({ activiteId }) {
         <p className="text-[12px] text-label-2 text-center chiffres">
           Tracé GPS · {data.distance_km?.toFixed(2).replace(".", ",")} km
           {data.dplus_m != null && ` · ${data.dplus_m} m D+`}
+          {terrain?.repartition && Object.entries(TYPES_TERRAIN)
+            .filter(([k]) => terrain.repartition[k] > 0)
+            .map(([k, l]) => ` · ${terrain.repartition[k]} % ${l}`).join("")}
         </p>
+      )}
+      {avecAltitude && (
+        <div className="pt-1">
+          <Profil points={data.points} couleur="#FF3B30" hauteur={78} detail terrains={terrain?.terrains}
+            curseur={repere} onCurseur={setRepere} />
+        </div>
       )}
     </div>
   );

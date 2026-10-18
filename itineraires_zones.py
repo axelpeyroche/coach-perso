@@ -101,7 +101,7 @@ def _trace(geom: list[int]) -> tuple[float, list[tuple[int, int]]]:
 
 
 def _voies(b: bytes):
-    """(propriétés, longueur, sommets, étendue) des lignes de la couche transportation."""
+    """(propriétés, géométrie encodée, étendue) des lignes de la couche transportation."""
     for n, _, couche in _champs(b):
         if n != 3:
             continue
@@ -131,8 +131,7 @@ def _voies(b: bytes):
                 elif p == 4:
                     geom = _paquet(w)
             prop = {cles[tags[j]]: vals[tags[j + 1]] for j in range(0, len(tags) - 1, 2)}
-            longueur, pts = _trace(geom)
-            yield prop, longueur, pts, ext
+            yield prop, geom, ext
         return
 
 
@@ -187,7 +186,8 @@ def _mesurer(gabarit: str, x: int, y: int) -> Optional[dict]:
     largeur = _dist_km((lat0, lon0), (lat0, lon1))
     chemins = routes = 0.0
     sommets: list[tuple[float, float]] = []
-    for prop, longueur, pts, ext in _voies(b):
+    for prop, geom, ext in _voies(b):
+        longueur, pts = _trace(geom)
         classe, sous, revet = prop.get("class"), prop.get("subclass"), prop.get("surface")
         km = longueur / ext * largeur
         if classe in ("path", "track"):

@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 import analyses_service as an
 import carnet_service as cs
 from database import obtenir_session
-from deps import get_current_user
+from deps import get_current_user, limiter
 from models import Activite, CacheCarte, Objectif, ObjectifCourse, TraceGPS, Utilisateur
 
 _log = logging.getLogger(__name__)
@@ -266,6 +266,27 @@ def trace_activite(
         raise HTTPException(404, "Pas de tracé pour cette activité")
     return {"debut": t.debut.isoformat(), "distance_km": t.distance_km, "dplus_m": t.dplus_m,
             "points": json.loads(t.points)}
+
+
+@router.get("/api/activites/{activite_id}/terrains", summary="Route, chemin ou sentier le long du tracé GPS")
+def terrains_activite(
+    activite_id: int,
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(obtenir_session),
+):
+    """Lecture seule : déduit des voies OSM les plus proches (tuiles OpenFreeMap), gardé en mémoire par tracé."""
+    import terrains_trace as tt
+    a = _activite_utilisateur(db, current_user, activite_id)
+    t = db.query(TraceGPS).filter(TraceGPS.activite_id == a.id).first()
+    if not t:
+        raise HTTPException(404, "Pas de tracé pour cette activité")
+    limiter(f"terrains:{current_user.id}", 30, 60)
+    points = json.loads(t.points)
+    try:
+        return tt.terrains((t.id, len(points), t.distance_km), points)
+    except Exception as e:  # tuiles injoignables : le profil s'affiche sans le terrain
+        _log.warning("Terrains du tracé %s : %s", t.id, e)
+        return {"terrains": [], "repartition": None}
 
 
 @router.get("/api/activites/{activite_id}/flux", summary="Courbes détaillées d'une séance (FC, vitesse, cadence…)")
