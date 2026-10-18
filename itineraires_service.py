@@ -138,37 +138,59 @@ def _brouter_unique(url: str) -> dict:
     raise ItineraireErreur("BRouter n'a pas trouvé d'itinéraire.")
 
 
-def _repartition_br(messages: list) -> Optional[dict]:
-    """Part (en %) de bitume, de chemin et de sentier d'après les étiquettes OSM du tracé."""
+def _type_voie(tags: dict) -> str:
+    """« bitume », « chemin » ou « sentier » d'après les étiquettes OSM d'un tronçon."""
+    voie, revet = tags.get("highway", ""), tags.get("surface")
+    if revet:
+        pave = revet in _PAVE_OSM
+    elif voie == "track":
+        pave = tags.get("tracktype") == "grade1"
+    elif voie in ("footway", "path"):
+        pave = tags.get("footway") in ("sidewalk", "crossing")
+    else:
+        pave = voie in _ROUTE_OSM
+    if pave:
+        return "bitume"
+    return "sentier" if voie in _SENTIER_OSM else "chemin"
+
+
+def _terrains_br(messages: list) -> list[list]:
+    """Tronçons successifs [début km, fin km, type] le long du tracé (types voisins fusionnés)."""
     if not messages or len(messages) < 2:
-        return None
+        return []
     entete = messages[0]
     try:
         i_dist, i_tags = entete.index("Distance"), entete.index("WayTags")
     except ValueError:
-        return None
-    parts = {"bitume": 0.0, "chemin": 0.0, "sentier": 0.0}
+        return []
+    res: list[list] = []
+    km = 0.0
     for ligne in messages[1:]:
         try:
-            d = float(ligne[i_dist])
+            d = float(ligne[i_dist]) / 1000
         except (ValueError, IndexError):
             continue
-        tags = dict(t.split("=", 1) for t in ligne[i_tags].split() if "=" in t)
-        voie, revet = tags.get("highway", ""), tags.get("surface")
-        if revet:
-            pave = revet in _PAVE_OSM
-        elif voie == "track":
-            pave = tags.get("tracktype") == "grade1"
-        elif voie in ("footway", "path"):
-            pave = tags.get("footway") in ("sidewalk", "crossing")
+        t = _type_voie(dict(x.split("=", 1) for x in ligne[i_tags].split() if "=" in x))
+        if res and (res[-1][2] == t or d < 0.03):  # bouts de moins de 30 m : rattachés au précédent
+            res[-1][1] = km + d
         else:
-            pave = voie in _ROUTE_OSM
-        if pave:
-            parts["bitume"] += d
-        elif voie in _SENTIER_OSM:
-            parts["sentier"] += d
+            res.append([km, km + d, t])
+        km += d
+    # Fusion après absorption des petits bouts
+    fus: list[list] = []
+    for t in res:
+        if fus and fus[-1][2] == t[2]:
+            fus[-1][1] = t[1]
         else:
-            parts["chemin"] += d
+            fus.append(t)
+    return [[round(a, 3), round(b, 3), t] for a, b, t in fus]
+
+
+def _repartition_br(terrains: list[list]) -> Optional[dict]:
+    """Part (en %) de bitume, de chemin et de sentier d'après les étiquettes OSM du tracé."""
+    parts = {"bitume": 0.0, "chemin": 0.0, "sentier": 0.0}
+    for a, b, t in terrains:
+        parts[t] += b - a
     total = sum(parts.values())
     if not total:
         return None
@@ -184,11 +206,13 @@ def _lire_br(res: dict) -> Optional[dict]:
         return None
     prop = f.get("properties", {})
     dplus = cs.denivele_positif([c[2] for c in coords if len(c) > 2]) or 0
+    terrains = _terrains_br(prop.get("messages") or [])
     return {
         "distance_km": round(float(prop.get("track-length") or 0) / 1000, 2),
         "dplus_m": dplus,
         "duree_s": round(float(prop.get("total-time") or 0)),
-        "repartition": _repartition_br(prop.get("messages") or []),
+        "repartition": _repartition_br(terrains),
+        "terrains": terrains,
         "points": [[round(c[1], 6), round(c[0], 6), round(c[2], 1) if len(c) > 2 else None] for c in coords],
     }
 

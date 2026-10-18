@@ -197,7 +197,48 @@ function ChoixPoint({ titre, point, setPoint, pointage, setPointage, cle, gps, p
 }
 
 // ── Profil d'altitude ──────────────────────────────────────────────────────
-function Profil({ points, couleur, hauteur = 26, detail = false }) {
+// Terrain le long du tracé : route = deux traits pleins, chemin = trait plein sous des pointillés,
+// sentier = pointillés seuls (la couleur double le motif)
+const TERRAINS = { bitume: ["Route", "#8E8E93"], chemin: ["Chemin", "#A2845E"], sentier: ["Sentier", "#30A46C"] };
+
+function Motif({ type, x1, x2 }) {
+  const c = TERRAINS[type]?.[1] ?? "#8E8E93";
+  const commun = { x1, x2, stroke: c, strokeWidth: 2 };
+  if (type === "bitume") return <><line {...commun} y1={2} y2={2} /><line {...commun} y1={10} y2={10} /></>;
+  if (type === "chemin") return <><line {...commun} y1={2} y2={2} strokeDasharray="4 3" /><line {...commun} y1={10} y2={10} /></>;
+  return <line {...commun} y1={6} y2={6} strokeWidth={3} strokeDasharray="0.1 5" strokeLinecap="round" />;
+}
+
+function BandeTerrain({ terrains }) {
+  const fin = terrains.at(-1)[1] || 1;
+  const pc = (v) => `${((v / fin) * 100).toFixed(2)}%`;
+  return (
+    <svg className="w-full block mt-1.5" height={12} role="img" aria-label="Type de terrain le long du parcours">
+      {terrains.map(([a, b, t], k) => (
+        <g key={k}>
+          <title>{`${TERRAINS[t]?.[0] ?? t} · ${km(a)} → ${km(b)} km`}</title>
+          <Motif type={t} x1={pc(a)} x2={pc(b)} />
+        </g>
+      ))}
+    </svg>
+  );
+}
+
+function LegendeTerrain({ terrains }) {
+  const presents = Object.keys(TERRAINS).filter((t) => terrains.some((x) => x[2] === t));
+  return (
+    <p className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-label-2">
+      {presents.map((t) => (
+        <span key={t} className="inline-flex items-center gap-1">
+          <svg width={20} height={12} aria-hidden><Motif type={t} x1={1} x2={19} /></svg>
+          {TERRAINS[t][0]}
+        </span>
+      ))}
+    </p>
+  );
+}
+
+function Profil({ points, couleur, hauteur = 26, detail = false, terrains }) {
   const prof = useMemo(() => profil(points), [points]);
   const total = prof.at(-1)?.[0] || 1;
   const alts = prof.map((p) => p[1]);
@@ -212,11 +253,13 @@ function Profil({ points, couleur, hauteur = 26, detail = false }) {
         <path d={`M0,${H} L${ligne} L${L},${H} Z`} fill={couleur} fillOpacity={0.15} />
         <path d={`M${ligne}`} fill="none" stroke={couleur} strokeWidth={1.6} vectorEffect="non-scaling-stroke" />
       </svg>
+      {detail && terrains?.length > 0 && <BandeTerrain terrains={terrains} />}
       {detail && (
         <p className="flex justify-between text-[11px] text-label-2 chiffres mt-0.5">
           <span>{Math.round(min)} m</span><span>alt. max {Math.round(max)} m</span><span>{km(total)} km</span>
         </p>
       )}
+      {detail && terrains?.length > 0 && <LegendeTerrain terrains={terrains} />}
     </div>
   );
 }
@@ -394,7 +437,7 @@ function Proposition({ r, i, choisie, onChoisir, sport, distance, dplus, boucle 
         </button>
       </div>
       <button type="button" onClick={() => onChoisir(sel ? null : i)} className="pl-6 text-left" aria-hidden tabIndex={-1}>
-        <Profil points={r.points} couleur={couleur} hauteur={sel ? 70 : 26} detail={sel} />
+        <Profil points={r.points} couleur={couleur} hauteur={sel ? 70 : 26} detail={sel} terrains={r.terrains} />
       </button>
     </div>
   );
