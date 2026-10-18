@@ -487,6 +487,10 @@
   .chiffres { font-variant-numeric: tabular-nums; }
 }
 
+/* Barres de défilement masquées partout (page, menus, feuilles) : on défile toujours à la molette ou au doigt */
+* { -ms-overflow-style: none; scrollbar-width: none; }
+*::-webkit-scrollbar { display: none; }
+
 @layer utilities {
   .scrollbar-hide::-webkit-scrollbar { display: none; }
   .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
