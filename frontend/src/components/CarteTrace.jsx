@@ -38,6 +38,56 @@ export const STYLE = {
   ],
 };
 
+// Boutons pour tourner la carte : plus simple que le geste à deux doigts ou le clic droit
+const FLECHE = (sens) => `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin:auto${sens > 0 ? ";transform:scaleX(-1)" : ""}"><path d="M4 12a8 8 0 1 0 2.6-5.9"/><path d="M4 3v4.5h4.5"/></svg>`;
+export function controleRotation(auDebut) {
+  let boite, cible = null;
+  return {
+    onAdd(m) {
+      boite = document.createElement("div");
+      boite.className = "maplibregl-ctrl maplibregl-ctrl-group";
+      for (const [sens, titre] of [[-1, "Tourner la carte à gauche"], [1, "Tourner la carte à droite"]]) {
+        const b = document.createElement("button");
+        b.type = "button"; b.title = titre; b.setAttribute("aria-label", titre);
+        b.style.color = "#333";
+        b.innerHTML = FLECHE(sens);
+        b.addEventListener("click", () => {
+          auDebut?.();
+          // Clics rapprochés : on repart de l'angle visé, pas de l'angle en cours d'animation
+          cible = (m.isMoving() && cible != null ? cible : m.getBearing()) + sens * 45;
+          m.easeTo({ bearing: cible, duration: 450 });
+        });
+        boite.appendChild(b);
+      }
+      return boite;
+    },
+    onRemove() { boite?.remove(); },
+  };
+}
+// Molette et pavé tactile : deux doigts à l'horizontale ou Shift + molette pour tourner,
+// Alt + molette pour incliner ; rotation à deux doigts sur le pavé d'un Mac (Safari).
+// Écouté en capture sur le conteneur pour passer avant le zoom de MapLibre.
+export function tournerALaSouris(m, el, auDebut) {
+  el.addEventListener("wheel", (e) => {
+    if (e.ctrlKey) return; // pincement du pavé tactile : zoom
+    const k = e.deltaMode === 1 ? 16 : 1;
+    const dx = e.deltaX * k, dy = e.deltaY * k;
+    const horizontal = Math.abs(dx) > 1.5 * Math.abs(dy);
+    if (!e.shiftKey && !e.altKey && !horizontal) return;
+    e.preventDefault();
+    e.stopPropagation();
+    auDebut?.();
+    const d = Math.abs(dx) > Math.abs(dy) ? dx : dy;
+    if (e.altKey) m.setPitch(Math.max(0, Math.min(m.getMaxPitch(), m.getPitch() - d * 0.15)));
+    else m.setBearing(m.getBearing() + d * 0.2);
+  }, { capture: true, passive: false });
+  let cap0 = 0;
+  el.addEventListener("gesturestart", (e) => { e.preventDefault(); auDebut?.(); cap0 = m.getBearing(); });
+  el.addEventListener("gesturechange", (e) => {
+    e.preventDefault();
+    if (Math.abs(e.rotation) > 3) m.setBearing(cap0 - e.rotation);
+  });
+}
 export function Bascule({ options, valeur, onChange }) {
   return (
     <div className="flex rounded-[9px] bg-black/55 backdrop-blur p-0.5 text-[12px] font-semibold">
@@ -145,6 +195,10 @@ export default function CarteTrace({ activiteId }) {
       });
       carte.current = m;
       m.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
+      // Tourner à la main met le survol en pause, comme un glissé
+      const arreter = () => survol.current.actif && pause();
+      m.addControl(controleRotation(arreter), "top-right");
+      tournerALaSouris(m, conteneur.current, arreter);
       // iPhone : pas de plein écran pour un élément → « pseudo » plein écran (CSS), à l'entrée comme à la sortie
       const pseudo = !cadre.current.requestFullscreen && !cadre.current.webkitRequestFullscreen;
       const ecran = new maplibregl.FullscreenControl({ container: cadre.current, pseudo });

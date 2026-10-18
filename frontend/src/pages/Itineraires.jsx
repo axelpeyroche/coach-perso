@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import Page from "../components/Page";
 import ConfirmDialog from "../components/ConfirmDialog";
-import { Bascule, chargerMaplibre } from "../components/CarteTrace";
+import { Bascule, chargerMaplibre, controleRotation, tournerALaSouris } from "../components/CarteTrace";
 import { Interrupteur, Segmente } from "../components/ui";
 import {
   creerFavoriItineraire, getAlluresItineraire, getFavoriItineraire, getFavorisItineraire, getItineraires,
@@ -41,54 +41,6 @@ const lirePref = (cle, defaut, valides) => {
   try { const v = localStorage.getItem(cle); return valides.includes(v) ? v : defaut; } catch { return defaut; }
 };
 const ecrirePref = (cle, v) => { try { localStorage.setItem(cle, v); } catch { /* stockage indisponible */ } };
-// Boutons pour tourner la carte : plus simple que le geste à deux doigts ou le clic droit
-const FLECHE = (sens) => `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin:auto${sens > 0 ? ";transform:scaleX(-1)" : ""}"><path d="M4 12a8 8 0 1 0 2.6-5.9"/><path d="M4 3v4.5h4.5"/></svg>`;
-function controleRotation() {
-  let boite, cible = null;
-  return {
-    onAdd(m) {
-      boite = document.createElement("div");
-      boite.className = "maplibregl-ctrl maplibregl-ctrl-group";
-      for (const [sens, titre] of [[-1, "Tourner la carte à gauche"], [1, "Tourner la carte à droite"]]) {
-        const b = document.createElement("button");
-        b.type = "button"; b.title = titre; b.setAttribute("aria-label", titre);
-        b.style.color = "#333";
-        b.innerHTML = FLECHE(sens);
-        b.addEventListener("click", () => {
-          // Clics rapprochés : on repart de l'angle visé, pas de l'angle en cours d'animation
-          cible = (m.isMoving() && cible != null ? cible : m.getBearing()) + sens * 45;
-          m.easeTo({ bearing: cible, duration: 450 });
-        });
-        boite.appendChild(b);
-      }
-      return boite;
-    },
-    onRemove() { boite?.remove(); },
-  };
-}
-// Molette et pavé tactile : deux doigts à l'horizontale ou Shift + molette pour tourner,
-// Alt + molette pour incliner ; rotation à deux doigts sur le pavé d'un Mac (Safari).
-// Écouté en capture sur le conteneur pour passer avant le zoom de MapLibre.
-function tournerALaSouris(m, el) {
-  el.addEventListener("wheel", (e) => {
-    if (e.ctrlKey) return; // pincement du pavé tactile : zoom
-    const k = e.deltaMode === 1 ? 16 : 1;
-    const dx = e.deltaX * k, dy = e.deltaY * k;
-    const horizontal = Math.abs(dx) > 1.5 * Math.abs(dy);
-    if (!e.shiftKey && !e.altKey && !horizontal) return;
-    e.preventDefault();
-    e.stopPropagation();
-    const d = Math.abs(dx) > Math.abs(dy) ? dx : dy;
-    if (e.altKey) m.setPitch(Math.max(0, Math.min(m.getMaxPitch(), m.getPitch() - d * 0.15)));
-    else m.setBearing(m.getBearing() + d * 0.2);
-  }, { capture: true, passive: false });
-  let cap0 = 0;
-  el.addEventListener("gesturestart", (e) => { e.preventDefault(); cap0 = m.getBearing(); });
-  el.addEventListener("gesturechange", (e) => {
-    e.preventDefault();
-    if (Math.abs(e.rotation) > 3) m.setBearing(cap0 - e.rotation);
-  });
-}
 const TACTILE = typeof window !== "undefined" && !!window.matchMedia?.("(pointer: coarse)").matches;
 
 // Fonds gratuits et sans clé : OSM, OpenTopoMap (courbes de niveau), Plan IGN (Géoplateforme),
