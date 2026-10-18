@@ -1,6 +1,6 @@
 import { memo, useCallback, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 import { getFlux } from "../api";
 import { sportInfo, fmtDateHeure, fmtDuree, nombre, SOURCES } from "../carnet";
 import Feuille from "./Feuille";
@@ -82,7 +82,7 @@ function preparer(flux, sport) {
 const fmtVal = (s, v) => (v == null ? "—" : s.allure ? mmss(v) : nombre(v, s.dec));
 
 // Une courbe : mémorisée pour ne pas tout redessiner pendant le survol
-const Graphe = memo(function Graphe({ s, lignes, axe, ticksX, onSurvol }) {
+const Graphe = memo(function Graphe({ s, lignes, axe, ticksX, onSurvol, repere }) {
   const id = `deg-${s.cle}`;
   return (
     <div className="h-[132px] md:h-[150px] -mx-1" style={{ touchAction: "pan-y" }}
@@ -102,6 +102,8 @@ const Graphe = memo(function Graphe({ s, lignes, axe, ticksX, onSurvol }) {
             tickFormatter={(v) => (axe === "d" ? `${nombre(v, Number.isInteger(v) ? 0 : 1)} km` : chrono(v))} />
           <YAxis {...axeY} width={40} domain={s.domaine} ticks={s.ticks} reversed={!!s.allure} allowDataOverflow
             tickFormatter={(v) => (s.allure ? mmss(v) : nombre(v, Math.min(2, s.decAxe)))} />
+          {/* Position montrée depuis le profil de dénivelé */}
+          {repere != null && <ReferenceLine x={repere} stroke="currentColor" strokeOpacity={0.35} strokeWidth={1} />}
           <Tooltip content={() => null} cursor={{ stroke: "currentColor", strokeOpacity: 0.35, strokeWidth: 1 }} />
           <Area type="monotone" dataKey={s.cle} stroke={s.couleur} strokeWidth={1.8} fill={`url(#${id})`}
             baseValue={s.allure ? "dataMax" : "dataMin"} connectNulls={false} isAnimationActive={false}
@@ -176,7 +178,29 @@ export default function FicheActivite({ activite: initiale, onClose }) {
   });
   const prepa = useMemo(() => preparer(flux, a.sport), [flux, a.sport]);
   const axeEff = prepa && !flux.distance ? "t" : axe;
-  const onSurvol = useCallback((i) => setIndex(i), []);
+  // Curseur partagé avec le profil de dénivelé (sous la carte), repéré par la part du parcours
+  const [depuisProfil, setDepuisProfil] = useState(false);
+  const [posProfil, setPosProfil] = useState(null);
+  const onSurvol = useCallback((i) => { setIndex(i); setDepuisProfil(false); }, []);
+  // Repère de chaque ligne le long du parcours : distance, sinon temps (trous comblés)
+  const reperes = useMemo(() => {
+    if (!prepa) return null;
+    const dist = !!flux.distance;
+    let dernier = 0;
+    const r = prepa.lignes.map((l) => { const v = dist ? l.d : l.t; if (v != null) dernier = v; return dernier; });
+    return r.at(-1) ? r : null;
+  }, [prepa, flux]);
+  const onPositionProfil = useCallback((r) => {
+    setDepuisProfil(true);
+    setPosProfil(r);
+    if (r == null || !reperes) { setIndex(null); return; }
+    const cible = r * reperes.at(-1);
+    let lo = 0, hi = reperes.length - 1;
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (reperes[mid] < cible) lo = mid + 1; else hi = mid; }
+    setIndex(lo);
+  }, [reperes]);
+  const position = depuisProfil ? posProfil
+    : index != null && reperes ? reperes[index] / reperes.at(-1) : null;
   const ticksX = useMemo(() => {
     if (!prepa) return undefined;
     const vals = prepa.lignes.map((l) => l[axeEff]).filter((v) => v != null);
@@ -230,7 +254,7 @@ export default function FicheActivite({ activite: initiale, onClose }) {
           </div>
         )}
 
-        {det.trace && <CarteTrace activiteId={a.id} />}
+        {det.trace && <CarteTrace activiteId={a.id} position={position} onPosition={onPositionProfil} />}
 
         {Array.isArray(det.zones_fc) && <ZonesFC zones={det.zones_fc} />}
 
@@ -273,7 +297,8 @@ export default function FicheActivite({ activite: initiale, onClose }) {
                       {fmtVal(serie, point ? v : serie.moy)}
                       <span className="text-[13px] font-medium text-label-2 ml-1">{serie.unite}</span>
                     </p>
-                    <Graphe s={serie} lignes={prepa.lignes} axe={axeEff} ticksX={ticksX} onSurvol={onSurvol} />
+                    <Graphe s={serie} lignes={prepa.lignes} axe={axeEff} ticksX={ticksX} onSurvol={onSurvol}
+                      repere={depuisProfil && point ? point[axeEff] : null} />
                   </div>
                 );
               })}

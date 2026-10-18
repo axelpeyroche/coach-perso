@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getTerrains, getTrace } from "../api";
 import { nombre } from "../carnet";
-import Profil from "./ProfilAltitude";
+import Profil, { profil } from "./ProfilAltitude";
 
 const ALTITUDE = "#30B0C7"; // couleur de l'altitude dans les courbes de la fiche
 const TYPES_TERRAIN = { sentier: "sentier", chemin: "chemin", bitume: "route" };
@@ -178,7 +178,9 @@ const chrono = (s) => {
 };
 
 // Carte du tracé GPS d'une activité : plan ou satellite, 2D ou 3D (relief).
-export default function CarteTrace({ activiteId }) {
+// `position` / `onPosition` (facultatifs) : part du parcours (0 → 1) montrée par le curseur,
+// partagée avec les courbes de la fiche ; sans eux, le profil garde son propre curseur.
+export default function CarteTrace({ activiteId, position, onPosition }) {
   const conteneur = useRef(null);
   const cadre = useRef(null);
   const carte = useRef(null);
@@ -201,7 +203,22 @@ export default function CarteTrace({ activiteId }) {
     queryKey: ["terrains", activiteId], queryFn: () => getTerrains(activiteId), staleTime: Infinity,
     enabled: avecAltitude, retry: false,
   });
-  const [repere, setRepere] = useState(null); // indice du point montré par le doigt sur le profil
+  const [repereLocal, setRepereLocal] = useState(null); // indice du point montré par le doigt sur le profil
+  // Distance cumulée de chaque point : passage indice ↔ part du parcours
+  const cumul = useMemo(() => (data?.points ? profil(data.points).map((p) => p[0]) : []), [data]);
+  const pilote = !!onPosition;
+  const repere = useMemo(() => {
+    if (!pilote) return repereLocal;
+    if (position == null || cumul.length < 2) return null;
+    const d = position * cumul.at(-1);
+    let lo = 0, hi = cumul.length - 1;
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (cumul[mid] < d) lo = mid + 1; else hi = mid; }
+    if (lo > 0 && d - cumul[lo - 1] < cumul[lo] - d) lo--;
+    return lo;
+  }, [pilote, repereLocal, position, cumul]);
+  const setRepere = (i) => (pilote
+    ? onPosition(i == null || !cumul.at(-1) ? null : cumul[i] / cumul.at(-1))
+    : setRepereLocal(i));
   const alts = useMemo(() => (data?.points ?? []).map((p) => p[2]).filter((a) => a != null), [data]);
 
   useEffect(() => {
