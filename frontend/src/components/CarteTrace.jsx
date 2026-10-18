@@ -38,9 +38,11 @@ export const STYLE = {
   ],
 };
 
-// Boutons pour tourner la carte : plus simple que le geste à deux doigts ou le clic droit
+// Boutons pour tourner la carte : plus simple que le geste à deux doigts ou le clic droit,
+// plus un bouton « Recentrer » (s'il est fourni) qui garde l'angle et l'inclinaison
 const FLECHE = (sens) => `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin:auto${sens > 0 ? ";transform:scaleX(-1)" : ""}"><path d="M4 12a8 8 0 1 0 2.6-5.9"/><path d="M4 3v4.5h4.5"/></svg>`;
-export function controleRotation(auDebut) {
+const CADRE = `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin:auto"><path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4"/><circle cx="12" cy="12" r="2.5"/></svg>`;
+export function controleRotation(auDebut, recentrer) {
   let boite, cible = null;
   return {
     onAdd(m) {
@@ -57,6 +59,15 @@ export function controleRotation(auDebut) {
           cible = (m.isMoving() && cible != null ? cible : m.getBearing()) + sens * 45;
           m.easeTo({ bearing: cible, duration: 450 });
         });
+        boite.appendChild(b);
+      }
+      if (recentrer) {
+        const b = document.createElement("button");
+        const titre = "Recentrer sur le tracé";
+        b.type = "button"; b.title = titre; b.setAttribute("aria-label", titre);
+        b.style.color = "#333";
+        b.innerHTML = CADRE;
+        b.addEventListener("click", () => { auDebut?.(); recentrer(); });
         boite.appendChild(b);
       }
       return boite;
@@ -197,7 +208,8 @@ export default function CarteTrace({ activiteId }) {
       m.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
       // Tourner à la main met le survol en pause, comme un glissé
       const arreter = () => survol.current.actif && pause();
-      m.addControl(controleRotation(arreter), "top-right");
+      m.addControl(controleRotation(arreter, () =>
+        m.fitBounds(bornes, { padding: 30, bearing: m.getBearing(), pitch: m.getPitch(), duration: 700 })), "top-right");
       tournerALaSouris(m, conteneur.current, arreter);
       // iPhone : pas de plein écran pour un élément → « pseudo » plein écran (CSS), à l'entrée comme à la sortie
       const pseudo = !cadre.current.requestFullscreen && !cadre.current.webkitRequestFullscreen;
@@ -354,7 +366,7 @@ export default function CarteTrace({ activiteId }) {
   return (
     <div className="space-y-1.5">
       {/* className fixe : MapLibre y ajoute lui-même « maplibregl-pseudo-fullscreen » (plein écran sur iPhone) */}
-      <div ref={cadre} className="relative h-64 rounded-[14px] overflow-hidden bg-remplissage">
+      <div ref={cadre} className="relative h-72 rounded-[14px] overflow-hidden bg-remplissage">
         <div ref={conteneur} className="w-full h-full" />
         {isLoading && <p className="absolute inset-0 grid place-items-center text-[13px] text-label-2">Chargement du tracé…</p>}
         <div style={plein ? { top: "calc(env(safe-area-inset-top) + 8px)" } : undefined}

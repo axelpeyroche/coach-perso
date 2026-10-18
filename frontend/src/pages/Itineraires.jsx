@@ -414,6 +414,7 @@ function Carte({ propositions, choisie, onChoisir, depart, arrivee, pointage, on
   const carte = useRef(null);
   const libre = useRef(null);
   const popup = useRef(null);
+  const cadrer = useRef(() => {});
   const [prete, setPrete] = useState(false);
   const [fond, setFond] = useState(() => lirePref("itineraires-fond", "topo", FONDS.map(([k]) => k)));
   const [vue, setVue] = useState(() => lirePref("itineraires-vue", "2d", ["2d", "3d"]));
@@ -455,7 +456,7 @@ function Carte({ propositions, choisie, onChoisir, depart, arrivee, pointage, on
         maxPitch: 75, attributionControl: { compact: true } });
       carte.current = m;
       m.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
-      m.addControl(controleRotation(), "top-right");
+      m.addControl(controleRotation(null, () => cadrer.current()), "top-right");
       tournerALaSouris(m, conteneur.current);
       m.on("load", () => {
         const rond = { "line-join": "round", "line-cap": "round" };
@@ -667,12 +668,19 @@ function Carte({ propositions, choisie, onChoisir, depart, arrivee, pointage, on
   }, [curseur, prete]);
 
   // Cadrage sur le tracé choisi (ou sur toutes les propositions) quand le résultat ou le choix change
-  useEffect(() => {
+  // (aussi appelé par le bouton « Recentrer », d'où la référence à jour à chaque rendu)
+  cadrer.current = () => {
     const m = carte.current;
-    if (!prete || !m || !propositions?.length) return;
-    const pts = (choisie != null ? [propositions[choisie]] : propositions).flatMap((r) => r.points);
+    if (!m) return;
+    const pts = propositions?.length ? (choisie != null ? [propositions[choisie]] : propositions).flatMap((r) => r.points)
+      : [depart?.pos, arrivee?.pos].filter(Boolean);
+    if (!pts.length) return;
     const lats = pts.map((p) => p[0]), lons = pts.map((p) => p[1]);
-    m.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]], { padding: 40, pitch: m.getPitch(), bearing: m.getBearing(), duration: 700 });
+    m.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]],
+      { padding: 40, maxZoom: 15, pitch: m.getPitch(), bearing: m.getBearing(), duration: 700 });
+  };
+  useEffect(() => {
+    if (prete && propositions?.length) cadrer.current();
   }, [cadrage, choisie, prete]);
 
   return (
