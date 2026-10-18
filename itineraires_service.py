@@ -1,11 +1,14 @@
 """
-Propositions d'itinéraires (boucles ou aller simple) avec OpenRouteService.
+Propositions d'itinéraires (boucles ou aller simple).
 
-Gratuit : clé personnelle dans la variable d'environnement ORS_API_KEY (environ 2 000
-calculs par jour). Pour une boucle, ORS ne vise qu'une longueur : on calcule en un seul
-tour six variantes (graines et longueurs étalées autour de la cible, recalée sur l'écart
-appris lors des recherches précédentes), puis on garde celles qui collent le mieux à la
-distance et au D+ visés.
+Service principal : BRouter (serveur public brouter.de, gratuit et sans clé, profils
+randonnée et VTT qui privilégient vraiment les sentiers). Secours : OpenRouteService si la
+clé ORS_API_KEY est présente (environ 2 000 calculs par jour).
+
+Pour une boucle, le service ne vise qu'une longueur : on calcule en un seul tour six
+variantes (directions et longueurs étalées autour de la cible, recalée sur l'écart appris
+lors des recherches précédentes), puis on garde celles qui collent le mieux à la distance
+et au D+ visés.
 """
 from __future__ import annotations
 
@@ -15,6 +18,7 @@ import logging
 import os
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from statistics import median
@@ -46,7 +50,6 @@ _REVETU = {1, 3, 4, 5, 6, 14, 18}
 _BITUME = {"trail": 2.0, "randonnee": 1.2, "vtt": 1.2}
 
 
-# Longueurs demandées autour de la cible, et rapport longueur obtenue / demandée appris par profil
 _ETALEMENT = (0.85, 1.0, 1.15, 0.92, 1.08, 1.0)
 _RAPPORT: dict[str, float] = {}
 
@@ -55,8 +58,136 @@ class ItineraireErreur(Exception):
     pass
 
 
+class _Passager(Exception):
+    pass
+
+
+class _Surcharge(ItineraireErreur):
+    """Le serveur public refuse encore après les pauses : inutile d'enchaîner d'autres calculs."""
+
+
 def cle() -> Optional[str]:
     return (os.environ.get("ORS_API_KEY") or "").strip() or None
+
+
+# ─────────────────────────────── BRouter ───────────────────────────────
+
+BROUTER = "https://brouter.de/brouter"
+
+# Sport du carnet → profil BRouter (sans option, avec « sentiers » ou « éviter les routes »)
+PROFILS_BR = {
+    "course":    ("hiking-beta", "hiking-mountain"),
+    "trail":     ("hiking-mountain", "hiking-mountain"),
+    "randonnee": ("hiking-mountain", "hiking-mountain"),
+    "velo":      ("fastbike-lowtraffic", "fastbike-lowtraffic"),
+    "gravel":    ("gravel", "mtb"),
+    "vtt":       ("mtb", "mtb"),
+}
+
+# Revêtements et voies OSM (étiquettes WayTags renvoyées par BRouter)
+_PAVE_OSM = {"asphalt", "paved", "concrete", "concrete:plates", "concrete:lanes", "paving_stones",
+             "sett", "cobblestone", "unhewn_cobblestone", "chipseal", "metal"}
+_ROUTE_OSM = {"motorway", "trunk", "primary", "secondary", "tertiary", "unclassified", "residential",
+              "service", "living_street", "pedestrian", "road", "cycleway", "motorway_link", "trunk_link",
+              "primary_link", "secondary_link", "tertiary_link"}
+_SENTIER_OSM = {"path", "footway", "steps", "bridleway"}
+
+
+def _brouter(params: dict, essais: int = 3) -> dict:
+    """Appel BRouter, relancé après une pause si le serveur public demande d'attendre
+    (il accepte une dizaine de calculs d'affilée par adresse, puis freine quelques secondes)."""
+    url = BROUTER + "?" + urllib.parse.urlencode({**params, "format": "geojson"}, safe=",|")
+    for n in range(essais):
+        try:
+            return _brouter_unique(url)
+        except _Passager as e:
+            if n == essais - 1:
+                raise _Surcharge(str(e))
+            time.sleep(4 * (n + 1))
+
+
+def _brouter_unique(url: str) -> dict:
+    req = urllib.request.Request(url, headers={"User-Agent": "Carnet (carnet d'entrainement personnel)"})
+    try:
+        with urllib.request.urlopen(req, timeout=25) as r:
+            texte = r.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as e:
+        texte = e.read().decode("utf-8", "replace")
+        if e.code in (429, 502, 503, 504):
+            raise _Passager("BRouter est surchargé pour le moment. Réessaie dans un instant.")
+    except (urllib.error.URLError, TimeoutError):
+        raise _Passager("BRouter ne répond pas. Réessaie dans un instant.")
+    try:
+        return json.loads(texte)
+    except ValueError:
+        pass
+    m = texte.strip().lower()
+    if "retry later" in m:
+        raise _Passager("Le serveur d'itinéraires gratuit limite le nombre de calculs à la suite. Réessaie dans une minute.")
+    if "not mapped" in m or "not found" in m or "no track" in m:
+        raise ItineraireErreur("Aucun chemin praticable trouvé près du point de départ (ou d'arrivée). Déplace-le un peu.")
+    if "watchdog" in m or "timeout" in m:
+        raise ItineraireErreur("Calcul trop long pour BRouter : essaie une distance plus courte.")
+    _log.warning("BRouter : %s", texte[:200])
+    raise ItineraireErreur("BRouter n'a pas trouvé d'itinéraire.")
+
+
+def _repartition_br(messages: list) -> Optional[dict]:
+    """Part (en %) de bitume, de chemin et de sentier d'après les étiquettes OSM du tracé."""
+    if not messages or len(messages) < 2:
+        return None
+    entete = messages[0]
+    try:
+        i_dist, i_tags = entete.index("Distance"), entete.index("WayTags")
+    except ValueError:
+        return None
+    parts = {"bitume": 0.0, "chemin": 0.0, "sentier": 0.0}
+    for ligne in messages[1:]:
+        try:
+            d = float(ligne[i_dist])
+        except (ValueError, IndexError):
+            continue
+        tags = dict(t.split("=", 1) for t in ligne[i_tags].split() if "=" in t)
+        voie, revet = tags.get("highway", ""), tags.get("surface")
+        if revet:
+            pave = revet in _PAVE_OSM
+        elif voie == "track":
+            pave = tags.get("tracktype") == "grade1"
+        elif voie in ("footway", "path"):
+            pave = tags.get("footway") in ("sidewalk", "crossing")
+        else:
+            pave = voie in _ROUTE_OSM
+        if pave:
+            parts["bitume"] += d
+        elif voie in _SENTIER_OSM:
+            parts["sentier"] += d
+        else:
+            parts["chemin"] += d
+    total = sum(parts.values())
+    if not total:
+        return None
+    return {k: round(100 * v / total) for k, v in parts.items()}
+
+
+def _lire_br(res: dict) -> Optional[dict]:
+    f = (res.get("features") or [None])[0]
+    if not f:
+        return None
+    coords = f.get("geometry", {}).get("coordinates") or []
+    if len(coords) < 2:
+        return None
+    prop = f.get("properties", {})
+    dplus = cs.denivele_positif([c[2] for c in coords if len(c) > 2]) or 0
+    return {
+        "distance_km": round(float(prop.get("track-length") or 0) / 1000, 2),
+        "dplus_m": dplus,
+        "duree_s": round(float(prop.get("total-time") or 0)),
+        "repartition": _repartition_br(prop.get("messages") or []),
+        "points": [[round(c[1], 6), round(c[0], 6), round(c[2], 1) if len(c) > 2 else None] for c in coords],
+    }
+
+
+# ─────────────────────────── OpenRouteService ───────────────────────────
 
 
 def _appel(profil: str, corps: dict, essais: int = 3) -> dict:
@@ -68,10 +199,6 @@ def _appel(profil: str, corps: dict, essais: int = 3) -> dict:
             if n == essais - 1:
                 raise ItineraireErreur(str(e))
             time.sleep(1.5 * (n + 1))
-
-
-class _Passager(Exception):
-    pass
 
 
 def _appel_unique(profil: str, corps: dict) -> dict:
@@ -186,58 +313,115 @@ def _differente(r: dict, gardees: list[dict]) -> bool:
 
 def proposer(sport: str, depart: list[float], arrivee: Optional[list[float]], distance_km: Optional[float],
              dplus_m: Optional[int], sentiers: bool, eviter_routes: bool, essai: int = 0, nombre: int = 4) -> dict:
-    if not cle():
-        raise ItineraireErreur("Clé OpenRouteService absente : ajoute ORS_API_KEY dans les variables d'environnement de Render.")
-    profil = PROFILS.get(sport, PROFILS["course"])[1 if sentiers else 0]
-    a = [depart[1], depart[0]]  # ORS : [lon, lat]
+    if not arrivee and not distance_km:
+        raise ItineraireErreur("Indique la distance de la boucle.")
     # Poids du bitume au classement : imposé pour trail / rando / VTT, demandé par « Éviter les routes »
     bitume = max(_BITUME.get(sport, 0), 1.5 if eviter_routes else 0)
+    try:
+        res = _proposer_br(sport, depart, arrivee, distance_km, sentiers or eviter_routes, essai)
+    except ItineraireErreur as e:
+        if not cle():
+            raise
+        _log.warning("BRouter en échec (%s), secours OpenRouteService", e)
+        res = _proposer_ors(sport, depart, arrivee, distance_km, sentiers, essai)
 
-    if arrivee:
-        corps = _corps([a, [arrivee[1], arrivee[0]]])
-        corps["alternative_routes"] = {"target_count": 3, "weight_factor": 1.4 + 0.3 * min(essai, 3), "share_factor": 0.6}
-        res = [r for r in map(_lire, _appel(profil, corps).get("features", [])) if r]
-        if not res:
-            raise ItineraireErreur("Aucun itinéraire trouvé entre ces deux points.")
-        res.sort(key=lambda r: _ecart(r, None, dplus_m, bitume))
-        return {"profil": profil, "propositions": res, "calculs": 1}
-
-    if not distance_km:
-        raise ItineraireErreur("Indique la distance de la boucle.")
-
-    def boucle(longueur_km: float, graine: int) -> Optional[dict]:
-        corps = _corps([a])
-        corps["options"]["round_trip"] = {"length": round(longueur_km * 1000), "points": 3 + graine % 3, "seed": graine}
-        try:
-            f = _appel(profil, corps).get("features", [])
-        except ItineraireErreur as e:
-            _log.info("Boucle ORS refusée (graine %s) : %s", graine, e)
-            erreurs.append(e)
-            return None
-        return _lire(f[0]) if f else None
-
-    erreurs: list[ItineraireErreur] = []
-    base = 6 * essai  # « Autres propositions » : nouvelles graines
-    # ORS rend des boucles plus longues ou plus courtes que demandé : on part du rapport
-    # appris pour ce profil et on étale les longueurs pour encadrer la cible
-    vise = distance_km / _RAPPORT.get(profil, 1.0)
-    debut = time.monotonic()
-    with ThreadPoolExecutor(max_workers=4) as ex:
-        paires = [(r, f) for r, f in zip(ex.map(lambda gf: boucle(vise * gf[1], gf[0]),
-                                                 zip(range(base, base + 6), _ETALEMENT)), _ETALEMENT) if r]
-    toutes = [r for r, _ in paires]
-    _log.info("Itinéraires %s %.1f km : %d boucles en %.1f s", profil, distance_km, len(toutes),
-              time.monotonic() - debut)
-    if not toutes:
-        raise erreurs[0] if erreurs else ItineraireErreur("Aucune boucle trouvée depuis ce point.")
-    rapport = median(r["distance_km"] / (vise * f) for r, f in paires)
-    _RAPPORT[profil] = round(min(2.0, max(0.5, 0.5 * _RAPPORT.get(profil, 1.0) + 0.5 * rapport)), 3)
-
-    toutes.sort(key=lambda r: _ecart(r, distance_km, dplus_m, bitume))
+    toutes = res.pop("toutes")
+    toutes.sort(key=lambda r: _ecart(r, None if arrivee else distance_km, dplus_m, bitume))
     gardees: list[dict] = []
     for r in toutes:
         if _differente(r, gardees):
             gardees.append(r)
         if len(gardees) >= nombre:
             break
-    return {"profil": profil, "propositions": gardees, "calculs": 6}
+    return {**res, "propositions": gardees}
+
+
+# Longueurs demandées autour de la cible, et rapport longueur obtenue / paramètre envoyé,
+# appris par service et par profil (BRouter vise un rayon : la boucle fait environ 5 fois plus)
+_RAPPORT_INITIAL = {"br": 5.2, "ors": 1.0}
+
+
+def _boucles(source: str, profil: str, distance_km: float, essai: int, calcul, workers: int) -> list[dict]:
+    """Six boucles en un tour : graines (ou directions) et longueurs étalées autour de la cible."""
+    cle_r = f"{source}:{profil}"
+    initial = _RAPPORT_INITIAL[source]
+    vise = distance_km / _RAPPORT.get(cle_r, initial)
+    erreurs: list[ItineraireErreur] = []
+
+    def une(gf):
+        graine, facteur = gf
+        if any(isinstance(e, _Surcharge) for e in erreurs):
+            return None
+        try:
+            return calcul(vise * facteur, graine)
+        except ItineraireErreur as e:
+            _log.info("Boucle %s refusée (graine %s) : %s", source, graine, e)
+            erreurs.append(e)
+            return None
+
+    base = 6 * essai  # « Autres propositions » : nouvelles graines
+    debut = time.monotonic()
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        paires = [(r, f) for r, f in zip(ex.map(une, zip(range(base, base + 6), _ETALEMENT)), _ETALEMENT) if r]
+    toutes = [r for r, _ in paires]
+    _log.info("Itinéraires %s %s %.1f km : %d boucles en %.1f s", source, profil, distance_km, len(toutes),
+              time.monotonic() - debut)
+    if not toutes:
+        raise erreurs[0] if erreurs else ItineraireErreur("Aucune boucle trouvée depuis ce point.")
+    rapport = median(r["distance_km"] / (vise * f) for r, f in paires)
+    _RAPPORT[cle_r] = round(min(2 * initial, max(initial / 2, 0.5 * _RAPPORT.get(cle_r, initial) + 0.5 * rapport)), 3)
+    return toutes
+
+
+def _proposer_br(sport, depart, arrivee, distance_km, sentiers, essai) -> dict:
+    profil = PROFILS_BR.get(sport, PROFILS_BR["course"])[1 if sentiers else 0]
+    a = f"{depart[1]:.6f},{depart[0]:.6f}"  # BRouter : lon,lat
+    source = {"source": "BRouter", "profil": profil}
+
+    if arrivee:
+        b = f"{arrivee[1]:.6f},{arrivee[0]:.6f}"
+        toutes, erreurs = [], []
+        for idx in range(3):  # tracé principal puis deux variantes
+            try:
+                r = _lire_br(_brouter({"lonlats": f"{a}|{b}", "profile": profil, "alternativeidx": idx}))
+            except ItineraireErreur as e:
+                erreurs.append(e)
+                if isinstance(e, _Surcharge):
+                    break
+                continue
+            if r:
+                toutes.append(r)
+        if not toutes:
+            raise erreurs[0] if erreurs else ItineraireErreur("Aucun itinéraire trouvé entre ces deux points.")
+        return {**source, "toutes": toutes, "calculs": 3}
+
+    def boucle(longueur_km: float, graine: int) -> Optional[dict]:
+        # Six directions réparties autour du départ, décalées à chaque « Autres propositions »
+        direction = (graine % 6) * 60 + (graine // 6) * 23
+        return _lire_br(_brouter({"lonlats": a, "profile": profil, "alternativeidx": 0, "engineMode": 4,
+                                  "roundTripDistance": round(longueur_km * 1000), "direction": direction % 360}))
+
+    # Serveur public partagé : il freine les calculs simultanés, on les enchaîne
+    return {**source, "toutes": _boucles("br", profil, distance_km, essai, boucle, 1), "calculs": 6}
+
+
+def _proposer_ors(sport, depart, arrivee, distance_km, sentiers, essai) -> dict:
+    profil = PROFILS.get(sport, PROFILS["course"])[1 if sentiers else 0]
+    a = [depart[1], depart[0]]  # ORS : [lon, lat]
+    source = {"source": "OpenRouteService", "profil": profil}
+
+    if arrivee:
+        corps = _corps([a, [arrivee[1], arrivee[0]]])
+        corps["alternative_routes"] = {"target_count": 3, "weight_factor": 1.4 + 0.3 * min(essai, 3), "share_factor": 0.6}
+        toutes = [r for r in map(_lire, _appel(profil, corps).get("features", [])) if r]
+        if not toutes:
+            raise ItineraireErreur("Aucun itinéraire trouvé entre ces deux points.")
+        return {**source, "toutes": toutes, "calculs": 1}
+
+    def boucle(longueur_km: float, graine: int) -> Optional[dict]:
+        corps = _corps([a])
+        corps["options"]["round_trip"] = {"length": round(longueur_km * 1000), "points": 3 + graine % 3, "seed": graine}
+        f = _appel(profil, corps).get("features", [])
+        return _lire(f[0]) if f else None
+
+    return {**source, "toutes": _boucles("ors", profil, distance_km, essai, boucle, 4), "calculs": 6}

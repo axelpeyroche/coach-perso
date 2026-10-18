@@ -431,7 +431,7 @@ export default function Itineraires() {
       haut.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     },
     onError: (e) => setErreur(e?.response?.data?.detail?.toString?.()
-      ?? (e?.code === "ECONNABORTED" ? "OpenRouteService met trop de temps à répondre. Réessaie dans un instant." : "Calcul impossible pour le moment.")),
+      ?? (e?.code === "ECONNABORTED" ? "Le calcul prend trop de temps. Réessaie dans un instant." : "Calcul impossible pour le moment.")),
   });
 
   const lancer = (n = 0) => {
@@ -451,7 +451,7 @@ export default function Itineraires() {
   };
 
   const enCours = demande.isPending;
-  // Chrono pendant le calcul (quelques secondes à une demi-minute selon OpenRouteService)
+  // Chrono pendant le calcul (quelques secondes, plus si le serveur public est chargé)
   const [secondes, setSecondes] = useState(0);
   useEffect(() => {
     if (!enCours) return;
@@ -467,7 +467,7 @@ export default function Itineraires() {
       <div ref={haut} className="scroll-mt-24" />
       {statut && !statut.disponible && (
         <div className="card p-4 text-[14px] text-label-2">
-          Le calcul d'itinéraires n'est pas encore activé : la clé OpenRouteService (ORS_API_KEY) manque sur le serveur.
+          Le calcul d'itinéraires n'est pas disponible pour le moment.
         </div>
       )}
 
@@ -577,7 +577,7 @@ export default function Itineraires() {
                   ))}
                 </div>
                 <div className="flex items-center justify-between gap-3 px-4 pt-2">
-                  <p className="text-[12px] text-label-2">Tracés OpenRouteService · données © OpenStreetMap</p>
+                  <p className="text-[12px] text-label-2">Tracés {resultat.source ?? "BRouter"} · données © OpenStreetMap</p>
                   <button type="button" onClick={() => lancer(essai + 1)} disabled={enCours} className="btn-texte shrink-0">
                     {enCours ? `Calcul… ${secondes} s` : "Autres propositions"}
                   </button>

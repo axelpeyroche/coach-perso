@@ -1,5 +1,6 @@
 """
-Itinéraires : boucles ou aller simple proposés par OpenRouteService, à exporter en GPX.
+Itinéraires : boucles ou aller simple proposés par BRouter (secours OpenRouteService),
+à exporter en GPX.
 
 La clé ORS (ORS_API_KEY) reste côté serveur ; le navigateur ne voit que les tracés.
 """
@@ -32,7 +33,7 @@ class DemandeItineraire(BaseModel):
 
 @router.get("/api/itineraires", summary="Le calcul d'itinéraires est-il disponible ?")
 def statut(current_user: Utilisateur = Depends(get_current_user)):
-    return {"disponible": bool(it.cle())}
+    return {"disponible": True}  # BRouter ne demande pas de clé
 
 
 @router.post("/api/itineraires", summary="Proposer des itinéraires (boucle ou A → B)")
@@ -43,7 +44,7 @@ def proposer(p: DemandeItineraire, current_user: Utilisateur = Depends(get_curre
     pied = p.sport in ("course", "trail", "randonnee")
     if p.distance_km and pied and p.distance_km > 80:
         raise HTTPException(422, "Boucle à pied limitée à 80 km")
-    # Une recherche de boucle coûte six calculs ORS (quota gratuit : 40 par minute)
+    # Une recherche de boucle coûte six calculs sur un serveur public partagé
     limiter(f"itineraires:{current_user.id}", 5, 60)
     try:
         return it.proposer(p.sport, p.depart, p.arrivee, p.distance_km, p.dplus_m, p.sentiers, p.eviter_routes, p.essai)
