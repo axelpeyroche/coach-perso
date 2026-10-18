@@ -92,7 +92,7 @@ function RechercheLieu({ onChoix, centre }) {
 }
 
 // Tous les tracés sur une carte, colorés selon le nombre de passages au même endroit.
-export default function CartePassages() {
+export default function CartePassages({ annee: fixe } = {}) {
   const cadre = useRef(null);
   const conteneur = useRef(null);
   const carte = useRef(null);
@@ -100,7 +100,8 @@ export default function CartePassages() {
   const [prete, setPrete] = useState(false);
   const [fond, setFond] = useState("satellite");
   const [sports, setSports] = useState(PAR_DEFAUT);
-  const [annee, setAnnee] = useState(null);   // null = toutes les années
+  const [choisie, setAnnee] = useState(null);   // null = toutes les années
+  const annee = fixe ?? choisie;   // année imposée par le Bilan
   // Tous les tracés sont chargés une fois ; changer de filtre ne fait que recalculer ici.
   const { data: brut, isLoading, isError } = useQuery({
     queryKey: ["carte-traces"], queryFn: getCarteTraces, enabled: visible, staleTime: 10 * 60 * 1000,
@@ -162,17 +163,17 @@ export default function CartePassages() {
     m.setLayoutProperty("satellite", "visibility", fond === "satellite" ? "visible" : "none");
   }, [fond, prete]);
 
-  // Données : on ne recadre qu'au premier affichage, pas à chaque changement de filtre
-  const cadree = useRef(false);
+  // Données : on ne recadre qu'au premier affichage (ou quand l'année imposée change), pas à chaque filtre
+  const cadree = useRef(null);
   useEffect(() => {
     const m = carte.current;
     if (!prete || !m || !data) return;
     m.getSource("passages").setData({ type: "FeatureCollection", features: data.features });
-    if (!cadree.current && data.vue) {
-      m.fitBounds(data.vue, { padding: 20, duration: 0 });
-      cadree.current = true;
+    if (cadree.current !== (fixe ?? "tout") && data.vue) {
+      m.fitBounds(data.vue, { padding: 20, duration: cadree.current == null ? 0 : 600 });
+      cadree.current = fixe ?? "tout";
     }
-  }, [data, prete]);
+  }, [data, prete, fixe]);
 
   const basculer = (k) =>
     setSports((s) => (s.includes(k) ? (s.length > 1 ? s.filter((x) => x !== k) : s) : [...s, k]));
@@ -188,7 +189,7 @@ export default function CartePassages() {
             {label}
           </button>
         ))}
-        {annees.length > 1 && (
+        {fixe == null && annees.length > 1 && (
           <select aria-label="Année" value={annee ?? ""} onChange={(e) => setAnnee(e.target.value ? Number(e.target.value) : null)}
             className="ml-auto px-3 py-1.5 rounded-full text-[14px] font-semibold bg-remplissage text-label border-0">
             <option value="">Toutes les années</option>

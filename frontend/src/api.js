@@ -117,6 +117,7 @@ export const importerFichierActivites = (fichier) => {
 // Tracés GPS : [{ debut, points: [[lat, lon, altitude|null, secondes depuis le début], …] }]
 export const importerTraces = (traces) =>
   api.post("/activites/traces", { traces }, { timeout: 120000 }).then((r) => r.data);
+export const getActivite = (id) => api.get(`/activites/${id}`).then((r) => r.data);
 export const getTrace = (id) => api.get(`/activites/${id}/trace`).then((r) => r.data);
 export const getTerrains = (id) => api.get(`/activites/${id}/terrains`).then((r) => r.data);
 export const getFlux = (id) => api.get(`/activites/${id}/flux`).then((r) => r.data);
@@ -204,6 +205,7 @@ export const urlApiAbsolue = () => {
 // --- Suivi : forme du matin, records, notifications ---
 export const getFormeJour = () => api.get("/forme/jour").then((r) => r.data);
 export const getRecords = () => api.get("/records").then((r) => r.data);
+export const getBilan = (annee) => api.get("/bilan", { params: { annee }, timeout: 90000 }).then((r) => r.data);
 export const getPush = () => api.get("/push").then((r) => r.data);
 export const abonnerPush = (abo) => api.post("/push/abonnement", abo).then((r) => r.data);
 export const desabonnerPush = (endpoint) => api.post("/push/desabonnement", { endpoint }).then((r) => r.data);

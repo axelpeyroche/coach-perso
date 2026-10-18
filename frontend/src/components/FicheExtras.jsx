@@ -113,7 +113,7 @@ export function Decoupage({ decoupage, sport, onPosition }) {
 
 // ───────────────────────── Météo ─────────────────────────
 
-function ciel(code) {
+export function ciel(code) {
   if (code == null) return ["🌡️", ""];
   if (code === 0) return ["☀️", "Ciel dégagé"];
   if (code <= 2) return ["🌤️", "Peu nuageux"];

@@ -2,10 +2,11 @@ import { memo, useCallback, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 import { getFlux } from "../api";
-import { sportInfo, fmtDateHeure, fmtDuree, nombre, SOURCES } from "../carnet";
+import { sportInfo, fmtDuree, nombre } from "../carnet";
 import Feuille from "./Feuille";
 import CarteTrace from "./CarteTrace";
 import ModalActivite from "./ModalActivite";
+import EnteteFiche, { ancre } from "./EnteteFiche";
 import { Decoupage, Materiel, MemeParcours, Meteo, Partager, SegmentsSeance } from "./FicheExtras";
 import { Segmente } from "./ui";
 import { axeX, axeY, grille } from "./graphiques";
@@ -228,14 +229,7 @@ export default function FicheActivite({ activite: initiale, onClose }) {
 
   const pied = PIED.has(a.sport);
   const tuiles = [
-    ["Durée", a.duree_sec ? fmtDuree(a.duree_sec) : null],
-    ["Distance", a.distance_km != null ? nombre(a.distance_km, 2) : null, "km"],
-    pied ? ["Allure moy.", a.allure_sec_km ? mmss(a.allure_sec_km) : null, "/km"]
-      : ["Vitesse moy.", a.vitesse_kmh ? nombre(a.vitesse_kmh) : null, "km/h"],
-    // Équivalent sur le plat (course et trail avec altitude)
-    ["Allure ajustée", flux?.decoupage?.gap_ratio && a.allure_sec_km ? mmss(a.allure_sec_km * flux.decoupage.gap_ratio)
-      : flux?.decoupage?.gap_sec_km ? mmss(flux.decoupage.gap_sec_km) : null, "/km"],
-    ["Dénivelé +", a.dplus_m || null, "m"],
+    // Durée, distance, allure, allure ajustée et D+ sont dans l'en-tête
     ["FC moyenne", a.fc_moyenne_bpm, "bpm", "#FF375F"],
     ["FC max", a.fc_max_bpm, "bpm", "#FF375F"],
     ["Calories", a.calories ? Math.round(a.calories) : null, "kcal"],
@@ -253,18 +247,7 @@ export default function FicheActivite({ activite: initiale, onClose }) {
       <Feuille large onClose={onClose} titre={a.titre || a.sport_label || s.label}
         action={<button type="button" className="btn-texte" onClick={() => setEdition(true)}>Modifier</button>}>
 
-        <div className="flex items-center gap-3 -mt-1">
-          <span className="w-12 h-12 shrink-0 rounded-full flex items-center justify-center text-[24px]"
-            style={{ backgroundColor: `${s.couleur}26` }}>{a.emoji ?? s.emoji}</span>
-          <div className="min-w-0">
-            <p className="text-[17px] font-semibold truncate">
-              {a.sport_label || s.label}{a.est_competition && " 🏅"}
-            </p>
-            <p className="text-[13px] text-label-2 truncate">
-              {fmtDateHeure(a.debut)} · {SOURCES[a.source] ?? a.source}
-            </p>
-          </div>
-        </div>
+        <EnteteFiche a={a} flux={flux} />
 
         {tuiles.length > 0 && (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
@@ -272,19 +255,23 @@ export default function FicheActivite({ activite: initiale, onClose }) {
           </div>
         )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 empty:hidden">
+        <div id={ancre(a.id, "conditions")} className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 empty:hidden scroll-mt-16">
           {det.trace && <Meteo activiteId={a.id} />}
           <Materiel activiteId={a.id} />
         </div>
 
-        {det.trace && <CarteTrace activiteId={a.id} position={position} onPosition={onPositionProfil} />}
+        {det.trace && (
+          <div id={ancre(a.id, "carte")} className="scroll-mt-16">
+            <CarteTrace activiteId={a.id} position={position} onPosition={onPositionProfil} />
+          </div>
+        )}
 
         <Decoupage decoupage={flux?.decoupage} sport={a.sport} onPosition={onPositionProfil} />
 
         {Array.isArray(det.zones_fc) && <ZonesFC zones={det.zones_fc} />}
 
-        {det.trace && <MemeParcours activite={a} />}
-        <SegmentsSeance activite={a} avecTrace={!!det.trace} />
+        {det.trace && <div id={ancre(a.id, "parcours")} className="empty:hidden scroll-mt-16"><MemeParcours activite={a} /></div>}
+        <div id={ancre(a.id, "segments")} className="empty:hidden scroll-mt-16"><SegmentsSeance activite={a} avecTrace={!!det.trace} /></div>
 
         <section className="space-y-3">
           <div className="flex items-center justify-between gap-3 px-1">

@@ -17,6 +17,7 @@ const Analyses = lazy(() => import("./pages/Analyses"));
 const Sources = lazy(() => import("./pages/Sources"));
 const Profil = lazy(() => import("./pages/Profil"));
 const Records = lazy(() => import("./pages/Records"));
+const Bilan = lazy(() => import("./pages/Bilan"));
 const Itineraires = lazy(() => import("./pages/Itineraires"));
 
 // ── SVG Icons ──────────────────────────────────────────────────────────────
@@ -470,6 +471,7 @@ export default function App() {
                   <Route path="/stats"      element={<StatsCarnet />} />
                   <Route path="/analyses"   element={<Analyses />} />
                   <Route path="/records"    element={<Records />} />
+                  <Route path="/bilan"      element={<Bilan />} />
                   <Route path="/sources"    element={<Sources />} />
                   <Route path="/itineraires" element={<Itineraires />} />
                   <Route path="/profil"     element={<Profil theme={theme} setTheme={setTheme} />} />

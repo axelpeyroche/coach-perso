@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import clsx from "clsx";
@@ -269,6 +270,36 @@ function Segments() {
   );
 }
 
+// Accès au bilan : mis en avant en décembre, discret le reste de l'année
+function EntreeBilan() {
+  const auj = new Date();
+  const decembre = auj.getMonth() === 11;
+  const annee = auj.getFullYear();
+  if (decembre) {
+    return (
+      <Link to="/bilan" className="block rounded-[20px] text-white px-5 py-4 active:opacity-80 transition"
+        style={{ background: "linear-gradient(135deg, #0a84ff, #5e5ce6)" }}>
+        <p className="text-[13px] font-semibold uppercase tracking-[0.06em] opacity-80">C'est l'heure du bilan</p>
+        <p className="text-[22px] font-bold">Bilan {annee} →</p>
+        <p className="text-[14px] opacity-90">Kilomètres, records, régularité et sorties marquantes de l'année.</p>
+      </Link>
+    );
+  }
+  return (
+    <Link to="/bilan" className="card flex items-center gap-3 px-4 py-3 active:opacity-70 transition">
+      <span className="w-[30px] h-[30px] rounded-[8px] grid place-items-center text-[16px] shrink-0"
+        style={{ background: "linear-gradient(135deg, #0a84ff, #5e5ce6)" }}>📅</span>
+      <span className="flex-1 min-w-0">
+        <span className="block text-[17px]">Bilan de l'année</span>
+        <span className="block text-[13px] text-label-2">{annee} en cours et années passées</span>
+      </span>
+      <svg viewBox="0 0 24 24" className="w-4 h-4 text-label-3" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+        <path d="M9 5l7 7-7 7" />
+      </svg>
+    </Link>
+  );
+}
+
 export default function Records() {
   const { data: r, isLoading } = useQuery({ queryKey: ["records"], queryFn: getRecords, staleTime: 5 * 60_000 });
 
@@ -278,6 +309,8 @@ export default function Records() {
         <p className="text-[15px] text-label-2">Chargement…</p>
       ) : (
         <div className="space-y-7">
+          <EntreeBilan />
+
           <Section titre="Course à pied">
             <Course c={r.course} />
           </Section>
