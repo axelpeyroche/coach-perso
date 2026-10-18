@@ -441,7 +441,11 @@ export default function CarteTrace({ activiteId }) {
         </p>
       )}
       {avecAltitude && (
-        <div className="pt-1">
+        <div className="card p-4 space-y-2 !mt-4">
+          <div className="flex items-baseline justify-between gap-3">
+            <h3 className="text-[15px] font-semibold">Dénivelé</h3>
+            {data.dplus_m != null && <p className="text-[13px] text-label-2 chiffres">{data.dplus_m} m D+</p>}
+          </div>
           <Profil points={data.points} couleur="#FF3B30" hauteur={78} detail terrains={terrain?.terrains}
             curseur={repere} onCurseur={setRepere} />
         </div>
