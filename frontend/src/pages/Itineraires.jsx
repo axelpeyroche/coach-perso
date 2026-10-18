@@ -78,21 +78,12 @@ ${pts}
 `;
 }
 
-// Téléphone : feuille de partage (ouvrir directement dans l'app de guidage) ; ordinateur : téléchargement
-// Sur téléphone : « Partager » ouvre la feuille de partage (les apps avec extension de partage,
-// comme OpenRunner) ; « Enregistrer dans Fichiers » télécharge un vrai .gpx que l'app Fichiers
-// propose ensuite d'ouvrir dans les apps qui importent les GPX (WorkOutDoors…)
-const TACTILE = typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches;
-
-async function telecharger(r, sport, boucle, mode = "partager") {
+// Enregistre un vrai .gpx : sur iPhone il arrive dans Fichiers, d'où on l'ouvre dans WorkOutDoors
+function telecharger(r, sport, boucle) {
   const nomSport = SPORTS.find(([k]) => k === sport)?.[1] ?? "Parcours";
   const titre = `${boucle ? "Boucle" : "Parcours"} ${nomSport.toLowerCase()} ${km(r.distance_km)} km ${r.dplus_m} m D+`;
   const nom = `carnet-${sport}-${String(r.distance_km).replace(".", ",")}km-${r.dplus_m}m.gpx`;
   const fichier = new File([gpx(r, sport, titre)], nom, { type: "application/gpx+xml" });
-  if (mode === "partager" && TACTILE && navigator.canShare?.({ files: [fichier] })) {
-    try { await navigator.share({ files: [fichier], title: titre }); return; }
-    catch (e) { if (e.name === "AbortError") return; }
-  }
   const url = URL.createObjectURL(fichier);
   const a = document.createElement("a");
   a.href = url; a.download = nom; document.body.appendChild(a); a.click(); a.remove();
@@ -444,37 +435,11 @@ function IconeGpx() {
 }
 
 function BoutonGpx({ r, i, sport, boucle }) {
-  const [menu, setMenu] = useState(false);
-  if (!TACTILE) {
-    return (
-      <button type="button" onClick={() => telecharger(r, sport, boucle, "fichier")} className="btn-teinte btn-sm shrink-0 gap-1"
-        aria-label={`Télécharger le GPX de la proposition ${i + 1}`}>
-        <IconeGpx />GPX
-      </button>
-    );
-  }
-  const choisir = (mode) => { setMenu(false); telecharger(r, sport, boucle, mode); };
   return (
-    <div className="relative shrink-0">
-      <button type="button" onClick={() => setMenu((m) => !m)} className="btn-teinte btn-sm gap-1" aria-expanded={menu}
-        aria-label={`GPX de la proposition ${i + 1}`}>
-        <IconeGpx />GPX
-      </button>
-      {menu && (
-        <>
-          <button type="button" className="fixed inset-0 z-10 cursor-default" aria-label="Fermer" onClick={() => setMenu(false)} />
-          <div className="absolute right-0 top-full mt-1.5 z-20 w-[230px] card py-0.5 shadow-lg">
-            <button type="button" onClick={() => choisir("partager")} className="ligne w-full text-left text-[15px]">
-              Partager vers une app…
-            </button>
-            <button type="button" onClick={() => choisir("fichier")} className="ligne w-full text-left text-[15px] flex-col !items-start !gap-0">
-              <span>Enregistrer dans Fichiers</span>
-              <span className="text-[12px] text-label-2">Pour WorkOutDoors : ouvre le GPX depuis Fichiers</span>
-            </button>
-          </div>
-        </>
-      )}
-    </div>
+    <button type="button" onClick={() => telecharger(r, sport, boucle)} className="btn-teinte btn-sm shrink-0 gap-1"
+      aria-label={`Enregistrer le GPX de la proposition ${i + 1}`}>
+      <IconeGpx />GPX
+    </button>
   );
 }
 
