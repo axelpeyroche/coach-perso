@@ -121,6 +121,26 @@ export const getTrace = (id) => api.get(`/activites/${id}/trace`).then((r) => r.
 export const getTerrains = (id) => api.get(`/activites/${id}/terrains`).then((r) => r.data);
 export const getFlux = (id) => api.get(`/activites/${id}/flux`).then((r) => r.data);
 export const getCarteTraces = () => api.get("/traces/carte", { timeout: 60000 }).then((r) => r.data);
+export const getMeteo = (id) => api.get(`/activites/${id}/meteo`).then((r) => r.data);
+export const getMemeParcours = (id) => api.get(`/activites/${id}/meme-parcours`, { timeout: 45000 }).then((r) => r.data);
+
+// --- Matériel (usure des chaussures) ---
+export const getEquipements = () => api.get("/equipements").then((r) => r.data);
+export const creerEquipement = (d) => api.post("/equipements", d).then((r) => r.data);
+export const modifierEquipement = (id, d) => api.put(`/equipements/${id}`, d).then((r) => r.data);
+export const supprimerEquipement = (id) => api.delete(`/equipements/${id}`).then((r) => r.data);
+export const getEquipementActivite = (id) => api.get(`/activites/${id}/equipement`).then((r) => r.data);
+// equipement_id : identifiant, "aucun", ou null pour revenir au matériel par défaut
+export const choisirEquipement = (id, equipement_id) =>
+  api.put(`/activites/${id}/equipement`, { equipement_id }).then((r) => r.data);
+
+// --- Segments ---
+export const getSegments = () => api.get("/segments", { timeout: 90000 }).then((r) => r.data);
+export const getSegment = (id) => api.get(`/segments/${id}`, { timeout: 90000 }).then((r) => r.data);
+export const creerSegment = (d) => api.post("/segments", d).then((r) => r.data);
+export const renommerSegment = (id, nom) => api.put(`/segments/${id}`, { nom }).then((r) => r.data);
+export const supprimerSegment = (id) => api.delete(`/segments/${id}`).then((r) => r.data);
+export const getSegmentsActivite = (id) => api.get(`/activites/${id}/segments`, { timeout: 90000 }).then((r) => r.data);
 
 // --- Intervals.icu (séances de la montre avec tracé GPS) ---
 export const getItineraires = () => api.get("/itineraires").then((r) => r.data);

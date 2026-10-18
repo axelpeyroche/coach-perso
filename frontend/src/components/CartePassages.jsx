@@ -100,6 +100,7 @@ export default function CartePassages() {
   const [prete, setPrete] = useState(false);
   const [fond, setFond] = useState("satellite");
   const [sports, setSports] = useState(PAR_DEFAUT);
+  const [annee, setAnnee] = useState(null);   // null = toutes les années
   // Tous les tracés sont chargés une fois ; changer de filtre ne fait que recalculer ici.
   const { data: brut, isLoading, isError } = useQuery({
     queryKey: ["carte-traces"], queryFn: getCarteTraces, enabled: visible, staleTime: 10 * 60 * 1000,
@@ -107,10 +108,11 @@ export default function CartePassages() {
   const traces = useMemo(() => (brut ? decoderTraces(brut.traces) : null), [brut]);
   const data = useMemo(() => {
     if (!traces) return null;
-    const idx = brut.meta.flatMap(([sport], i) => (sports.includes(sport) ? [i] : []));
+    const idx = brut.meta.flatMap(([sport, , an], i) => (sports.includes(sport) && (annee == null || an === annee) ? [i] : []));
     return { ...calculerPassages(idx.map((i) => traces[i])), nb_traces: idx.length,
       km: Math.round(idx.reduce((t, i) => t + brut.meta[i][1], 0)) };
-  }, [traces, brut, sports]);
+  }, [traces, brut, sports, annee]);
+  const annees = useMemo(() => (brut ? [...new Set(brut.meta.map((m) => m[2]).filter(Boolean))].sort((a, b) => b - a) : []), [brut]);
 
   // Ne charge les tracés (≈ 400 Ko) que lorsqu'elle arrive à l'écran
   useEffect(() => {
@@ -186,6 +188,13 @@ export default function CartePassages() {
             {label}
           </button>
         ))}
+        {annees.length > 1 && (
+          <select aria-label="Année" value={annee ?? ""} onChange={(e) => setAnnee(e.target.value ? Number(e.target.value) : null)}
+            className="ml-auto px-3 py-1.5 rounded-full text-[14px] font-semibold bg-remplissage text-label border-0">
+            <option value="">Toutes les années</option>
+            {annees.map((a) => <option key={a} value={a}>{a}</option>)}
+          </select>
+        )}
       </div>
       <div ref={cadre} className="relative h-80 lg:h-[26rem] rounded-[14px] overflow-hidden bg-remplissage">
         <div ref={conteneur} className="w-full h-full" />
@@ -222,7 +231,7 @@ export default function CartePassages() {
       </div>
       {data && (
         <p className="px-1 text-[12px] text-label-2 chiffres">
-          {data.nb_traces} sorties · {data.km.toLocaleString("fr-FR")} km · jusqu'à {data.max} passages au même endroit
+          {data.nb_traces} sortie{data.nb_traces > 1 ? "s" : ""} · {data.km.toLocaleString("fr-FR")} km · jusqu'à {data.max} passages au même endroit
         </p>
       )}
     </div>

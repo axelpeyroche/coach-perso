@@ -1,13 +1,15 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import clsx from "clsx";
 import Card from "../components/Card";
 import Page from "../components/Page";
 import { Section, Segmente } from "../components/ui";
 import { axeX, axeY, grille, InfoBulle, GRIS } from "../components/graphiques";
-import { getRecords } from "../api";
-import { fmtDate, nombre } from "../carnet";
+import { getRecords, getSegment, getSegments, renommerSegment, supprimerSegment } from "../api";
+import ConfirmDialog from "../components/ConfirmDialog";
+import Feuille from "../components/Feuille";
+import { SPORTS, fmtDate, nombre } from "../carnet";
 
 const ORANGE = "#FF9500";
 const VIOLET = "#AF52DE";
@@ -178,6 +180,95 @@ function Muscu({ m }) {
   );
 }
 
+// Segments personnels : créés depuis la fiche d'une séance, retrouvés sur toutes les sorties
+const longueur = (m) => (m >= 1000 ? `${nombre(m / 1000, 2)} km` : `${Math.round(m)} m`);
+const MEDAILLES = ["🥇", "🥈", "🥉"];
+
+function DetailSegment({ id, onClose }) {
+  const qc = useQueryClient();
+  const { data: d } = useQuery({ queryKey: ["segment", id], queryFn: () => getSegment(id), staleTime: 60_000 });
+  const [nom, setNom] = useState(null);
+  const [suppr, setSuppr] = useState(false);
+  const maj = () => { qc.invalidateQueries({ queryKey: ["segments"] }); qc.invalidateQueries({ queryKey: ["segment", id] }); qc.invalidateQueries({ queryKey: ["segments-activite"] }); };
+  const renommer = useMutation({ mutationFn: () => renommerSegment(id, nom.trim()), onSuccess: () => { maj(); setNom(null); } });
+  const effacer = useMutation({ mutationFn: () => supprimerSegment(id), onSuccess: () => { maj(); onClose(); } });
+  const rec = d?.record?.duree_sec;
+
+  return (
+    <Feuille titre={d?.nom ?? "Segment"} onClose={onClose}>
+      {!d ? <p className="text-[15px] text-label-2 text-center py-6">Recherche des passages…</p> : (
+        <>
+          <p className="text-[15px] text-label-2 text-center chiffres">
+            {SPORTS[d.sport]?.emoji} {longueur(d.distance_m)}{d.dplus_m ? ` · D+ ${Math.round(d.dplus_m)} m` : ""} · {d.nb_passages} passage{d.nb_passages > 1 ? "s" : ""}
+          </p>
+          <div className="card py-0.5 overflow-hidden">
+            {d.passages.length === 0 && <p className="ligne text-[15px] text-label-2">Aucun passage retrouvé.</p>}
+            {d.passages.map((p, i) => (
+              <div key={p.activite_id} className="ligne">
+                <span className="w-7 text-center text-[15px] chiffres text-label-2">{MEDAILLES[i] ?? i + 1}</span>
+                <span className="flex-1 text-[15px]">{fmtDate(p.date)}</span>
+                <span className="text-[13px] text-label-2 chiffres">{nombre(p.vitesse_kmh, 1)} km/h</span>
+                <span className="w-16 text-right font-semibold chiffres">{hms(p.duree_sec)}</span>
+                <span className="w-12 text-right text-[12px] text-label-2 chiffres">{i && rec ? `+${hms(p.duree_sec - rec)}` : ""}</span>
+              </div>
+            ))}
+          </div>
+          {nom == null ? (
+            <button className="btn-gris w-full" onClick={() => setNom(d.nom)}>Renommer</button>
+          ) : (
+            <div className="flex gap-2">
+              <input className="champ flex-1" maxLength={120} value={nom} onChange={(e) => setNom(e.target.value)} autoFocus />
+              <button className="btn-primaire" disabled={!nom.trim() || renommer.isPending} onClick={() => renommer.mutate()}>OK</button>
+            </div>
+          )}
+          <button className="btn-texte text-ios-red w-full justify-center text-center" onClick={() => setSuppr(true)}>Supprimer le segment</button>
+        </>
+      )}
+      <ConfirmDialog open={suppr} title="Supprimer ce segment ?" danger confirmLabel="Supprimer" pending={effacer.isPending}
+        message="Les séances ne changent pas ; seul le classement de ce segment disparaît."
+        onConfirm={() => effacer.mutate()} onCancel={() => setSuppr(false)} />
+    </Feuille>
+  );
+}
+
+function Segments() {
+  const { data } = useQuery({ queryKey: ["segments"], queryFn: getSegments, staleTime: 5 * 60_000 });
+  const [ouvert, setOuvert] = useState(null);
+  if (!data) return null;
+  return (
+    <Section titre="Segments">
+      <Card pad={false}>
+        {data.length === 0 ? (
+          <p className="text-[15px] text-label-2 text-center px-4 py-5">
+            Aucun segment : depuis la fiche d'une sortie avec trace GPS, choisis un départ et une arrivée pour créer le tien
+            (une côte, un tour de parc…). Tous tes passages y seront classés.
+          </p>
+        ) : (
+          <div className="divide-y-[0.5px] divide-separateur">
+            {data.map((sg) => (
+              <button key={sg.id} type="button" onClick={() => setOuvert(sg.id)}
+                className="w-full flex items-center gap-3 px-4 py-2.5 text-left active:bg-remplissage">
+                <span className="text-[20px]" aria-hidden>{SPORTS[sg.sport]?.emoji ?? "📍"}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[17px] truncate">{sg.nom}</p>
+                  <p className="text-[12px] text-label-2 chiffres">
+                    {longueur(sg.distance_m)}{sg.dplus_m ? ` · D+ ${Math.round(sg.dplus_m)} m` : ""} · {sg.nb_passages} passage{sg.nb_passages > 1 ? "s" : ""}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="font-semibold chiffres">{sg.record ? hms(sg.record.duree_sec) : "—"}</p>
+                  {sg.record && <p className="text-[12px] text-label-2">{court(sg.record.date)}</p>}
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </Card>
+      {ouvert && <DetailSegment id={ouvert} onClose={() => setOuvert(null)} />}
+    </Section>
+  );
+}
+
 export default function Records() {
   const { data: r, isLoading } = useQuery({ queryKey: ["records"], queryFn: getRecords, staleTime: 5 * 60_000 });
 
@@ -190,6 +281,8 @@ export default function Records() {
           <Section titre="Course à pied">
             <Course c={r.course} />
           </Section>
+
+          <Segments />
 
           {r.officiels.length > 0 && (
             <Section titre="Sorties complètes">

@@ -6,6 +6,7 @@ import { sportInfo, fmtDateHeure, fmtDuree, nombre, SOURCES } from "../carnet";
 import Feuille from "./Feuille";
 import CarteTrace from "./CarteTrace";
 import ModalActivite from "./ModalActivite";
+import { Decoupage, Materiel, MemeParcours, Meteo, Partager, SegmentsSeance } from "./FicheExtras";
 import { Segmente } from "./ui";
 import { axeX, axeY, grille } from "./graphiques";
 
@@ -46,18 +47,27 @@ const quantile = (tri, q) => tri[Math.min(tri.length - 1, Math.max(0, Math.floor
 // En course à pied, la vitesse devient une allure (min/km), axe inversé : plus haut = plus vite.
 function preparer(flux, sport) {
   if (!flux?.series?.length) return null;
-  const series = flux.series.map((s) => ({ ...s, dec: DECIMALES[s.cle] ?? 1 }));
+  // Les séries « superposées » (vitesse ajustée à la pente) se dessinent en pointillés sur leur série de base
+  const dessus = flux.series.filter((s) => s.superpose);
+  const series = flux.series.filter((s) => !s.superpose).map((s) => ({ ...s, dec: DECIMALES[s.cle] ?? 1 }));
+  const versAllure = (data) => data.map((x) => (x != null && x >= 3 ? 3600 / x : null));
   const iv = series.findIndex((s) => s.cle === "vitesse");
-  if (PIED.has(sport) && iv >= 0) {
+  const pied = PIED.has(sport) && iv >= 0;
+  if (pied) {
     const v = series[iv];
-    series[iv] = {
-      ...v, cle: "allure", nom: "Allure", unite: "/km", allure: true,
-      data: v.data.map((x) => (x != null && x >= 3 ? 3600 / x : null)),
-    };
+    series[iv] = { ...v, cle: "allure", nom: "Allure", unite: "/km", allure: true, data: versAllure(v.data) };
+  }
+  for (const d of dessus) {
+    const base = series.find((s) => s.cle === d.superpose || (d.superpose === "vitesse" && s.cle === "allure"));
+    if (!base) continue;
+    base.dessus = { cle: d.cle, nom: pied ? "Allure ajustée" : d.nom, data: pied ? versAllure(d.data) : d.data };
   }
   const lignes = flux.temps.map((t, i) => {
     const l = { t, d: flux.distance?.[i] ?? null };
-    for (const s of series) l[s.cle] = s.data[i];
+    for (const s of series) {
+      l[s.cle] = s.data[i];
+      if (s.dessus) l[s.dessus.cle] = s.dessus.data[i];
+    }
     return l;
   });
   for (const s of series) {
@@ -108,6 +118,11 @@ const Graphe = memo(function Graphe({ s, lignes, axe, ticksX, onSurvol, repere }
           <Area type="monotone" dataKey={s.cle} stroke={s.couleur} strokeWidth={1.8} fill={`url(#${id})`}
             baseValue={s.allure ? "dataMax" : "dataMin"} connectNulls={false} isAnimationActive={false}
             dot={false} activeDot={{ r: 4, strokeWidth: 2, stroke: "rgb(var(--surface))", fill: s.couleur }} />
+          {/* Allure (ou vitesse) ajustée à la pente, en pointillés */}
+          {s.dessus && (
+            <Area type="monotone" dataKey={s.dessus.cle} stroke="currentColor" strokeOpacity={0.55} strokeWidth={1.2}
+              strokeDasharray="3 3" fill="none" connectNulls={false} isAnimationActive={false} dot={false} activeDot={false} />
+          )}
         </AreaChart>
       </ResponsiveContainer>
     </div>
@@ -217,6 +232,9 @@ export default function FicheActivite({ activite: initiale, onClose }) {
     ["Distance", a.distance_km != null ? nombre(a.distance_km, 2) : null, "km"],
     pied ? ["Allure moy.", a.allure_sec_km ? mmss(a.allure_sec_km) : null, "/km"]
       : ["Vitesse moy.", a.vitesse_kmh ? nombre(a.vitesse_kmh) : null, "km/h"],
+    // Équivalent sur le plat (course et trail avec altitude)
+    ["Allure ajustée", flux?.decoupage?.gap_ratio && a.allure_sec_km ? mmss(a.allure_sec_km * flux.decoupage.gap_ratio)
+      : flux?.decoupage?.gap_sec_km ? mmss(flux.decoupage.gap_sec_km) : null, "/km"],
     ["Dénivelé +", a.dplus_m || null, "m"],
     ["FC moyenne", a.fc_moyenne_bpm, "bpm", "#FF375F"],
     ["FC max", a.fc_max_bpm, "bpm", "#FF375F"],
@@ -254,9 +272,19 @@ export default function FicheActivite({ activite: initiale, onClose }) {
           </div>
         )}
 
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 empty:hidden">
+          {det.trace && <Meteo activiteId={a.id} />}
+          <Materiel activiteId={a.id} />
+        </div>
+
         {det.trace && <CarteTrace activiteId={a.id} position={position} onPosition={onPositionProfil} />}
 
+        <Decoupage decoupage={flux?.decoupage} sport={a.sport} onPosition={onPositionProfil} />
+
         {Array.isArray(det.zones_fc) && <ZonesFC zones={det.zones_fc} />}
+
+        {det.trace && <MemeParcours activite={a} />}
+        <SegmentsSeance activite={a} avecTrace={!!det.trace} />
 
         <section className="space-y-3">
           <div className="flex items-center justify-between gap-3 px-1">
@@ -319,6 +347,8 @@ export default function FicheActivite({ activite: initiale, onClose }) {
           )}
           {flux?.avertissement && <p className="text-[12px] text-ios-orange px-1">{flux.avertissement}</p>}
         </section>
+
+        <Partager activite={a} avecTrace={!!det.trace} />
 
         {a.notes && (
           <div className="card p-4">
