@@ -126,7 +126,6 @@ export function ciel(code) {
   if (code <= 86) return ["🌨️", "Averses de neige"];
   return ["⛈️", "Orage"];
 }
-const CARDINAUX = ["N", "NE", "E", "SE", "S", "SO", "O", "NO"];
 
 // Lecture d'Open-Meteo depuis le navigateur, quand le serveur n'a rien obtenu
 // (ses adresses partagées peuvent être limitées par Open-Meteo). Même calcul que meteo_service.lire.
@@ -186,41 +185,6 @@ export function useMeteo(a) {
       return res;
     },
   });
-}
-
-export function Meteo({ activite }) {
-  const { data: m } = useMeteo(activite);
-  if (!m) return null;
-  const [emoji, texte] = ciel(m.code);
-  return (
-    <section className="card px-4 py-3 flex items-center gap-3.5">
-      <span className="text-[34px] leading-none shrink-0" aria-hidden>{emoji}</span>
-      <div className="min-w-0 flex-1">
-        <p className="text-[22px] font-semibold leading-tight chiffres">
-          {nombre(m.temperature, 0)}°
-          {m.ressentie != null && Math.round(m.ressentie) !== Math.round(m.temperature) && (
-            <span className="text-[13px] font-medium text-label-2 ml-1.5">ressenti {nombre(m.ressentie, 0)}°</span>
-          )}
-        </p>
-        <p className="text-[13px] text-label-2 truncate">{texte}</p>
-      </div>
-      <div className="text-[13px] text-right chiffres space-y-0.5 shrink-0">
-        {m.vent_kmh != null && (
-          <p className="flex items-center justify-end gap-1">
-            {m.vent_dir != null && (
-              // La flèche montre où va le vent (il souffle depuis `vent_dir`)
-              <span className="inline-block text-label-2" style={{ transform: `rotate(${m.vent_dir + 180}deg)` }} aria-hidden>↑</span>
-            )}
-            {m.vent_kmh} km/h{m.vent_dir != null && <span className="text-label-2">{CARDINAUX[Math.round(m.vent_dir / 45) % 8]}</span>}
-          </p>
-        )}
-        <p className="text-label-2">
-          {m.humidite != null && `💧 ${m.humidite} %`}
-          {m.precipitation_mm > 0 && ` · ${nombre(m.precipitation_mm, 1)} mm`}
-        </p>
-      </div>
-    </section>
-  );
 }
 
 // ───────────────────────── Chaussures ─────────────────────────

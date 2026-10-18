@@ -18,7 +18,7 @@ function Puce({ children, alerte, onClick }) {
   );
 }
 
-// En-tête : sport, date, titre et puces qui mènent aux encarts détaillés plus bas.
+// En-tête : sport, date, titre suivi de la météo, puis puces qui mènent aux encarts détaillés plus bas.
 // Les chiffres, la carte, le profil et l'effort sont dans les encarts et dans l'image à partager.
 export default function EnteteFiche({ a }) {
   const s = sportInfo(a.sport);
@@ -49,16 +49,21 @@ export default function EnteteFiche({ a }) {
             {" · "}{SOURCES[a.source] ?? a.source}
           </span>
         </p>
-        <h2 className="text-[26px] font-bold leading-[1.15] mt-0.5 [text-wrap:balance]">{a.titre || a.sport_label || s.label}</h2>
+        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 mt-0.5">
+          <h2 className="text-[26px] font-bold leading-[1.15] [text-wrap:balance] min-w-0">{a.titre || a.sport_label || s.label}</h2>
+          {meteo && (
+            <span className="inline-flex items-center gap-1 rounded-full card px-2.5 py-[5px] text-[13px] font-medium text-label-2 whitespace-nowrap chiffres"
+              title={ciel(meteo.code)[1]}>
+              {ciel(meteo.code)[0]} {nombre(meteo.temperature, 0)}°
+              {meteo.vent_kmh != null && ` · vent ${meteo.vent_kmh} km/h`}
+              {meteo.precipitation_mm > 0 && ` · 💧 ${nombre(meteo.precipitation_mm, 1)} mm`}
+            </span>
+          )}
+        </div>
       </div>
 
-      {(meteo || e || fois || seg) && (
+      {(e || fois || seg) && (
         <div className="flex flex-wrap gap-1.5">
-          {meteo && (
-            <Puce onClick={() => aller(id, "conditions")}>
-              {ciel(meteo.code)[0]} {nombre(meteo.temperature, 0)}°{meteo.vent_kmh != null ? ` · vent ${meteo.vent_kmh} km/h` : ""}
-            </Puce>
-          )}
           {e && <Puce alerte={e.alerte} onClick={() => aller(id, "conditions")}>👟 {e.nom} · {nombre(e.km, 0)} km</Puce>}
           {fois && <Puce onClick={() => aller(id, "parcours")}>🔁 {fois}<sup>{fois === 1 ? "re" : "e"}</sup> fois sur ce parcours</Puce>}
           {seg && (

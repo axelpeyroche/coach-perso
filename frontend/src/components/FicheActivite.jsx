@@ -7,7 +7,7 @@ import Feuille from "./Feuille";
 import CarteTrace from "./CarteTrace";
 import ModalActivite from "./ModalActivite";
 import EnteteFiche, { ancre } from "./EnteteFiche";
-import { allureAjustee, Decoupage, Materiel, MemeParcours, Meteo, Partager, SegmentsSeance } from "./FicheExtras";
+import { allureAjustee, Decoupage, Materiel, MemeParcours, Partager, SegmentsSeance } from "./FicheExtras";
 import { Segmente } from "./ui";
 import { axeX, axeY, grille } from "./graphiques";
 
@@ -228,6 +228,7 @@ export default function FicheActivite({ activite: initiale, onClose }) {
   const point = index != null ? prepa?.lignes[index] : null;
 
   const pied = PIED.has(a.sport);
+  // Données essentielles seulement ; foulée, pas, dérive… restent dans les analyses
   const tuiles = [
     ["Durée", a.duree_sec ? fmtDuree(a.duree_sec) : null],
     ["Distance", a.distance_km != null ? nombre(a.distance_km, 2) : null, "km"],
@@ -238,14 +239,9 @@ export default function FicheActivite({ activite: initiale, onClose }) {
     ["Dénivelé +", a.dplus_m || null, "m"],
     ["FC moyenne", a.fc_moyenne_bpm, "bpm", "#FF375F"],
     ["FC max", a.fc_max_bpm, "bpm", "#FF375F"],
-    ["Calories", a.calories ? Math.round(a.calories) : null, "kcal"],
     ["Effort", a.rpe != null ? a.rpe : null, "/10"],
-    ["Puissance moy.", det.puissance_moy_w ? Math.round(det.puissance_moy_w) : null, "W"],
-    ["Foulée", det.foulee_m ? nombre(det.foulee_m, 2) : null, "m"],
-    ["Oscillation", det.oscillation_cm ? nombre(det.oscillation_cm, 1) : null, "cm"],
-    ["Contact au sol", det.contact_sol_ms ? Math.round(det.contact_sol_ms) : null, "ms"],
-    ["Pas", det.pas ? Math.round(det.pas).toLocaleString("fr-FR") : null],
-    ["Dérive cardiaque", det.derive_fc != null ? nombre(det.derive_fc, 1) : null, "%"],
+    // Puissance : utile à vélo seulement (estimée par la montre en course)
+    ["Puissance moy.", !pied && det.puissance_moy_w ? Math.round(det.puissance_moy_w) : null, "W"],
   ].filter((t) => t[1] != null);
 
   return (
@@ -262,7 +258,6 @@ export default function FicheActivite({ activite: initiale, onClose }) {
         )}
 
         <div id={ancre(a.id, "conditions")} className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 empty:hidden scroll-mt-16">
-          {det.trace && <Meteo activite={a} />}
           <Materiel activiteId={a.id} />
         </div>
 
