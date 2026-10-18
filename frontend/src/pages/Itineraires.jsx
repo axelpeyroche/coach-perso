@@ -14,9 +14,12 @@ const SPORTS = [
 ];
 const A_PIED = ["course", "trail", "randonnee"];
 // « Privilégier les sentiers » n'a de sens que là où le profil change
-const AVEC_SENTIERS = ["course", "gravel"];
+const AVEC_SENTIERS = ["course"];
 // Sports classés d'abord sur la part de chemins (le bitume est pénalisé côté serveur)
-const HORS_BITUME = ["trail", "randonnee", "vtt"];
+const HORS_BITUME = ["trail", "randonnee", "gravel", "vtt"];
+// Boucle : le départ peut être déplacé jusqu'à ce rayon pour trouver une zone de chemins
+const RAYONS = [["0", "Ici"], ["2", "2 km"], ["5", "5 km"], ["10", "10 km"], ["15", "15 km"]];
+const rayonDefaut = (s) => (HORS_BITUME.includes(s) ? "5" : "0");
 const DEFAUTS = {
   course: [10, 100], trail: [18, 650], randonnee: [15, 500], velo: [60, 600], gravel: [45, 500], vtt: [30, 700],
 };
@@ -281,9 +284,15 @@ function Carte({ propositions, choisie, onChoisir, depart, arrivee, pointage, on
     if (!prete) return;
     const f = [[depart, "#34C759"], [arrivee, "#1C1C1E"]].filter(([p]) => p)
       .map(([p, c]) => ({ type: "Feature", properties: { c }, geometry: { type: "Point", coordinates: [p.pos[1], p.pos[0]] } }));
+    // Départ déplacé vers une zone de chemins : un point à la couleur de la proposition
+    (propositions ?? []).forEach((r, i) => {
+      if (r.depart && r.approche_km >= 0.3) {
+        f.push({ type: "Feature", properties: { c: COULEURS[i % COULEURS.length] }, geometry: { type: "Point", coordinates: [r.depart[1], r.depart[0]] } });
+      }
+    });
     m.getSource("points").setData({ type: "FeatureCollection", features: f });
     if (depart && !propositions?.length) m.easeTo({ center: [depart.pos[1], depart.pos[0]], zoom: Math.max(m.getZoom(), 12.5) });
-  }, [depart, arrivee, prete]);
+  }, [depart, arrivee, propositions, prete]);
 
   // Tracés proposés
   useEffect(() => {
@@ -367,6 +376,11 @@ function Proposition({ r, i, choisie, onChoisir, sport, distance, dplus, boucle 
             <span className="block text-[16px] font-semibold chiffres">{km(r.distance_km)} km · {r.dplus_m} m D+</span>
             <span className="mt-1 flex flex-wrap items-center gap-1.5">
               <Pastille r={r} distance={distance} dplus={dplus} boucle={boucle} />
+              {r.approche_km >= 0.3 && (
+                <span className="inline-flex items-center h-[20px] px-1.5 rounded-md text-[11px] font-semibold whitespace-nowrap bg-remplissage text-label-2">
+                  Départ à {km(r.approche_km)} km
+                </span>
+              )}
               <Repartition r={r} sport={sport} />
             </span>
           </span>
@@ -396,6 +410,7 @@ export default function Itineraires() {
   const [dplus, setDplus] = useState(params.get("dplus") ?? (params.get("distance") ? "" : String(DEFAUTS[sportInitial][1])));
   const [sentiers, setSentiers] = useState(sportInitial === "course");
   const [eviterRoutes, setEviterRoutes] = useState(false);
+  const [rayon, setRayon] = useState(rayonDefaut(sportInitial));
   const [depart, setDepart] = useState(null);
   const [arrivee, setArrivee] = useState(null);
   const [pointage, setPointage] = useState(null); // "depart" | "arrivee" | null
@@ -412,6 +427,7 @@ export default function Itineraires() {
     setSport(s);
     if (!params.get("distance")) { setDistance(String(DEFAUTS[s][0])); setDplus(String(DEFAUTS[s][1])); }
     setSentiers(s === "course");
+    setRayon(rayonDefaut(s));
   };
 
   const demande = useMutation({
@@ -422,9 +438,10 @@ export default function Itineraires() {
       sentiers: AVEC_SENTIERS.includes(sport) && sentiers,
       eviter_routes: sport === "course" && eviterRoutes,
       essai: n,
+      rayon_km: boucle ? Number(rayon) : 0,
     }),
     onSuccess: (r, n) => {
-      setResultat({ ...r, boucle, distance: boucle ? Number(String(distance).replace(",", ".")) : null, dplus: dplus === "" ? null : Number(dplus), sport });
+      setResultat({ ...r, boucle, distance: boucle ? Number(String(distance).replace(",", ".")) : null, dplus: dplus === "" ? null : Number(dplus), sport, rayon: boucle ? Number(rayon) : 0 });
       setChoisie(r.propositions.length ? 0 : null);
       setEssai(n);
       setVue("resultats");
@@ -491,6 +508,15 @@ export default function Itineraires() {
 
           <ChoixPoint titre="Départ" cle="depart" gps point={depart} setPoint={setDepart}
             pointage={pointage} setPointage={setPointage} />
+          {boucle && (
+            <div>
+              <h2 className="entete-liste">Départ jusqu'à</h2>
+              <Segmente options={RAYONS} valeur={rayon} onChange={setRayon} className="w-full" />
+              <p className="px-4 pt-1.5 text-[13px] text-label-2">
+                {rayon === "0" ? "La boucle part du point choisi." : `La boucle peut partir jusqu'à ${rayon} km du point choisi, là où il y a le plus de chemins.`}
+              </p>
+            </div>
+          )}
           {!boucle && (
             <ChoixPoint titre="Arrivée" cle="arrivee" point={arrivee} setPoint={setArrivee}
               pointage={pointage} setPointage={setPointage} proche={depart?.pos} />
@@ -540,7 +566,7 @@ export default function Itineraires() {
 
           {HORS_BITUME.includes(sport) && (
             <p className="px-4 -mt-2 text-[13px] text-label-2">
-              {sport === "vtt" ? "VTT" : sport === "trail" ? "Trail" : "Rando"} : chemins et sentiers d'abord, les tracés sur bitume passent en dernier.
+              {{ vtt: "VTT", trail: "Trail", gravel: "Gravel", randonnee: "Rando" }[sport]} : chemins et sentiers d'abord, les tracés sur bitume passent en dernier.
             </p>
           )}
 
@@ -566,8 +592,10 @@ export default function Itineraires() {
                 <h2 className="entete-liste">{resultats.length} proposition{resultats.length > 1 ? "s" : ""}</h2>
                 {HORS_BITUME.includes(resultat.sport) && Math.min(...resultats.map((r) => r.repartition?.bitume ?? 0)) > 30 && (
                   <p className="mb-2 rounded-[12px] bg-ios-orange/15 px-4 py-2.5 text-[13px] text-label">
-                    Peu de chemins autour de ce départ : toutes les boucles ont plus de 30 % de bitume.
-                    Place le départ plus près des sentiers (parc, colline, lisière) avec « Sur la carte ».
+                    Peu de chemins dans cette zone : toutes les boucles ont plus de 30 % de bitume.
+                    {resultat.boucle && resultat.rayon < 15
+                      ? "Élargis « Départ jusqu'à » ou place le départ plus près des sentiers avec « Sur la carte »."
+                      : "Place le départ plus près des sentiers (parc, colline, lisière) avec « Sur la carte »."}
                   </p>
                 )}
                 <div className="card py-0.5">

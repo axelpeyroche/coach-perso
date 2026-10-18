@@ -29,6 +29,7 @@ class DemandeItineraire(BaseModel):
     sentiers: bool = False
     eviter_routes: bool = False
     essai: int = Field(0, ge=0, le=20, description="0, puis 1, 2… pour d'autres propositions")
+    rayon_km: float = Field(0, ge=0, le=15, description="Boucle : départ cherché jusqu'à cette distance, dans les chemins")
 
 
 @router.get("/api/itineraires", summary="Le calcul d'itinéraires est-il disponible ?")
@@ -47,6 +48,7 @@ def proposer(p: DemandeItineraire, current_user: Utilisateur = Depends(get_curre
     # Une recherche de boucle coûte six calculs sur un serveur public partagé
     limiter(f"itineraires:{current_user.id}", 5, 60)
     try:
-        return it.proposer(p.sport, p.depart, p.arrivee, p.distance_km, p.dplus_m, p.sentiers, p.eviter_routes, p.essai)
+        return it.proposer(p.sport, p.depart, p.arrivee, p.distance_km, p.dplus_m, p.sentiers, p.eviter_routes, p.essai,
+                           rayon_km=p.rayon_km)
     except it.ItineraireErreur as e:
         raise HTTPException(502, str(e))

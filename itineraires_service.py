@@ -25,6 +25,7 @@ from statistics import median
 from typing import Optional
 
 import carnet_service as cs
+import itineraires_zones
 
 _log = logging.getLogger(__name__)
 
@@ -46,8 +47,8 @@ PROFILS = {
 _ROUTE, _SENTIER = {1, 2, 3}, {4, 7, 8}
 _REVETU = {1, 3, 4, 5, 6, 14, 18}
 
-# Poids de la part de bitume dans le classement : un trail se court sur les chemins
-_BITUME = {"trail": 2.0, "randonnee": 1.2, "vtt": 1.2}
+# Poids de la part de bitume dans le classement : trail, rando et gravel se font sur les chemins
+_BITUME = {"trail": 2.0, "randonnee": 1.5, "gravel": 1.5, "vtt": 1.2}
 
 
 _ETALEMENT = (0.85, 1.0, 1.15, 0.92, 1.08, 1.0)
@@ -80,9 +81,14 @@ PROFILS_BR = {
     "trail":     ("hiking-mountain", "hiking-mountain"),
     "randonnee": ("hiking-mountain", "hiking-mountain"),
     "velo":      ("fastbike-lowtraffic", "fastbike-lowtraffic"),
-    "gravel":    ("gravel", "mtb"),
+    "gravel":    ("mtb", "mtb"),  # le profil « gravel » de BRouter reste à 80-90 % sur route
     "vtt":       ("mtb", "mtb"),
 }
+
+# Pénalité des voies goudronnées ou hors sentier (variable « path_preference » des profils) pour
+# les sports de chemins : environ deux fois moins de bitume sur les boucles autour de Lyon
+CHEMINS_BR = {"hiking-mountain": 20, "mtb": 40}
+_SPORTS_CHEMINS = {"trail", "randonnee", "gravel", "vtt"}
 
 # Revêtements et voies OSM (étiquettes WayTags renvoyées par BRouter)
 _PAVE_OSM = {"asphalt", "paved", "concrete", "concrete:plates", "concrete:lanes", "paving_stones",
@@ -96,7 +102,7 @@ _SENTIER_OSM = {"path", "footway", "steps", "bridleway"}
 def _brouter(params: dict, essais: int = 3) -> dict:
     """Appel BRouter, relancé après une pause si le serveur public demande d'attendre
     (il accepte une dizaine de calculs d'affilée par adresse, puis freine quelques secondes)."""
-    url = BROUTER + "?" + urllib.parse.urlencode({**params, "format": "geojson"}, safe=",|")
+    url = BROUTER + "?" + urllib.parse.urlencode({**params, "format": "geojson"}, safe=",|:")
     for n in range(essais):
         try:
             return _brouter_unique(url)
@@ -306,19 +312,21 @@ def _ecart(r: dict, distance_km: Optional[float], dplus_m: Optional[int], bitume
 
 
 def _differente(r: dict, gardees: list[dict]) -> bool:
-    """Écarte les quasi-doublons (même distance et même D+ à peu de chose près)."""
+    """Écarte les quasi-doublons (même départ, même distance et même D+ à peu de chose près)."""
     return all(abs(r["distance_km"] - g["distance_km"]) > 0.25 or abs(r["dplus_m"] - g["dplus_m"]) > 15
-               for g in gardees)
+               or itineraires_zones._dist_km(r.get("depart") or [0, 0], g.get("depart") or [0, 0]) > 1 for g in gardees)
 
 
 def proposer(sport: str, depart: list[float], arrivee: Optional[list[float]], distance_km: Optional[float],
-             dplus_m: Optional[int], sentiers: bool, eviter_routes: bool, essai: int = 0, nombre: int = 4) -> dict:
+             dplus_m: Optional[int], sentiers: bool, eviter_routes: bool, essai: int = 0, nombre: int = 4,
+             rayon_km: float = 0) -> dict:
     if not arrivee and not distance_km:
         raise ItineraireErreur("Indique la distance de la boucle.")
     # Poids du bitume au classement : imposé pour trail / rando / VTT, demandé par « Éviter les routes »
     bitume = max(_BITUME.get(sport, 0), 1.5 if eviter_routes else 0)
     try:
-        res = _proposer_br(sport, depart, arrivee, distance_km, sentiers or eviter_routes, essai)
+        res = _proposer_br(sport, depart, arrivee, distance_km, sentiers or eviter_routes, essai,
+                           _departs(depart, None if arrivee else rayon_km, distance_km, dplus_m))
     except ItineraireErreur as e:
         if not cle():
             raise
@@ -326,7 +334,9 @@ def proposer(sport: str, depart: list[float], arrivee: Optional[list[float]], di
         res = _proposer_ors(sport, depart, arrivee, distance_km, sentiers, essai)
 
     toutes = res.pop("toutes")
-    toutes.sort(key=lambda r: _ecart(r, None if arrivee else distance_km, dplus_m, bitume))
+    # À qualité égale, le départ le plus proche du point demandé passe devant
+    proche = lambda r: 0.15 * r.get("approche_km", 0) / max(rayon_km, 1)
+    toutes.sort(key=lambda r: _ecart(r, None if arrivee else distance_km, dplus_m, bitume) + proche(r))
     gardees: list[dict] = []
     for r in toutes:
         if _differente(r, gardees):
@@ -334,6 +344,18 @@ def proposer(sport: str, depart: list[float], arrivee: Optional[list[float]], di
         if len(gardees) >= nombre:
             break
     return {**res, "propositions": gardees}
+
+
+def _departs(depart: list[float], rayon_km: Optional[float], distance_km, dplus_m) -> list[dict]:
+    """Départs à essayer : le point demandé, ou les zones de chemins les plus proches dans le rayon."""
+    ici = [{"pos": list(depart), "direction": None}]
+    if not rayon_km:
+        return ici
+    try:
+        return itineraires_zones.departs(depart, rayon_km, distance_km, dplus_m) or ici
+    except Exception as e:  # tuiles injoignables : on reste au point demandé
+        _log.warning("Recherche de zones de chemins impossible : %s", e)
+        return ici
 
 
 # Longueurs demandées autour de la cible, et rapport longueur obtenue / paramètre envoyé,
@@ -373,17 +395,20 @@ def _boucles(source: str, profil: str, distance_km: float, essai: int, calcul, w
     return toutes
 
 
-def _proposer_br(sport, depart, arrivee, distance_km, sentiers, essai) -> dict:
+def _proposer_br(sport, depart, arrivee, distance_km, sentiers, essai, departs: list[dict]) -> dict:
     profil = PROFILS_BR.get(sport, PROFILS_BR["course"])[1 if sentiers else 0]
     a = f"{depart[1]:.6f},{depart[0]:.6f}"  # BRouter : lon,lat
     source = {"source": "BRouter", "profil": profil}
+    reglage = {}
+    if (sport in _SPORTS_CHEMINS or sentiers) and profil in CHEMINS_BR:
+        reglage["profile:path_preference"] = CHEMINS_BR[profil]
 
     if arrivee:
         b = f"{arrivee[1]:.6f},{arrivee[0]:.6f}"
         toutes, erreurs = [], []
         for idx in range(3):  # tracé principal puis deux variantes
             try:
-                r = _lire_br(_brouter({"lonlats": f"{a}|{b}", "profile": profil, "alternativeidx": idx}))
+                r = _lire_br(_brouter({"lonlats": f"{a}|{b}", "profile": profil, "alternativeidx": idx, **reglage}))
             except ItineraireErreur as e:
                 erreurs.append(e)
                 if isinstance(e, _Surcharge):
@@ -396,10 +421,22 @@ def _proposer_br(sport, depart, arrivee, distance_km, sentiers, essai) -> dict:
         return {**source, "toutes": toutes, "calculs": 3}
 
     def boucle(longueur_km: float, graine: int) -> Optional[dict]:
-        # Six directions réparties autour du départ, décalées à chaque « Autres propositions »
-        direction = (graine % 6) * 60 + (graine // 6) * 23
-        return _lire_br(_brouter({"lonlats": a, "profile": profil, "alternativeidx": 0, "engineMode": 4,
-                                  "roundTripDistance": round(longueur_km * 1000), "direction": direction % 360}))
+        # Les six calculs se répartissent entre les départs retenus. Sans zone visée : six directions
+        # autour du départ ; vers une zone de chemins : partir vers son cœur, de part et d'autre.
+        d = departs[graine % len(departs)]
+        tour = graine // len(departs)
+        if d["direction"] is None:
+            direction = (tour * 360 // max(1, 6 // len(departs))) + (graine // 6) * 23
+        else:
+            direction = d["direction"] + (-35 if tour % 2 else 35) + (graine // 6) * 23
+        r = _lire_br(_brouter({"lonlats": f"{d['pos'][1]:.6f},{d['pos'][0]:.6f}", "profile": profil,
+                               "alternativeidx": 0, "engineMode": 4,
+                               "roundTripDistance": round(longueur_km * 1000), "direction": direction % 360,
+                               **reglage}))
+        if r:
+            r["depart"] = d["pos"]
+            r["approche_km"] = round(itineraires_zones._dist_km(depart, d["pos"]), 1)
+        return r
 
     # Serveur public partagé : il freine les calculs simultanés, on les enchaîne
     return {**source, "toutes": _boucles("br", profil, distance_km, essai, boucle, 1), "calculs": 6}
