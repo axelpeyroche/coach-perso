@@ -79,13 +79,17 @@ ${pts}
 }
 
 // Téléphone : feuille de partage (ouvrir directement dans l'app de guidage) ; ordinateur : téléchargement
-async function telecharger(r, sport, boucle) {
+// Sur téléphone : « Partager » ouvre la feuille de partage (les apps avec extension de partage,
+// comme OpenRunner) ; « Enregistrer dans Fichiers » télécharge un vrai .gpx que l'app Fichiers
+// propose ensuite d'ouvrir dans les apps qui importent les GPX (WorkOutDoors…)
+const TACTILE = typeof window !== "undefined" && window.matchMedia?.("(pointer: coarse)").matches;
+
+async function telecharger(r, sport, boucle, mode = "partager") {
   const nomSport = SPORTS.find(([k]) => k === sport)?.[1] ?? "Parcours";
   const titre = `${boucle ? "Boucle" : "Parcours"} ${nomSport.toLowerCase()} ${km(r.distance_km)} km ${r.dplus_m} m D+`;
   const nom = `carnet-${sport}-${String(r.distance_km).replace(".", ",")}km-${r.dplus_m}m.gpx`;
   const fichier = new File([gpx(r, sport, titre)], nom, { type: "application/gpx+xml" });
-  const tactile = window.matchMedia?.("(pointer: coarse)").matches;
-  if (tactile && navigator.canShare?.({ files: [fichier] })) {
+  if (mode === "partager" && TACTILE && navigator.canShare?.({ files: [fichier] })) {
     try { await navigator.share({ files: [fichier], title: titre }); return; }
     catch (e) { if (e.name === "AbortError") return; }
   }
@@ -201,27 +205,17 @@ function ChoixPoint({ titre, point, setPoint, pointage, setPointage, cle, gps, p
 // sentier = pointillés seuls (la couleur double le motif)
 const TERRAINS = { bitume: ["Route", "#8E8E93"], chemin: ["Chemin", "#A2845E"], sentier: ["Sentier", "#30A46C"] };
 
-function Motif({ type, x1, x2 }) {
+// Trait d'un tronçon : décalé de part et d'autre du tracé pour la route et le chemin
+function Trait({ type, d }) {
   const c = TERRAINS[type]?.[1] ?? "#8E8E93";
-  const commun = { x1, x2, stroke: c, strokeWidth: 2 };
-  if (type === "bitume") return <><line {...commun} y1={2} y2={2} /><line {...commun} y1={10} y2={10} /></>;
-  if (type === "chemin") return <><line {...commun} y1={2} y2={2} strokeDasharray="4 3" /><line {...commun} y1={10} y2={10} /></>;
-  return <line {...commun} y1={6} y2={6} strokeWidth={3} strokeDasharray="0.1 5" strokeLinecap="round" />;
-}
-
-function BandeTerrain({ terrains }) {
-  const fin = terrains.at(-1)[1] || 1;
-  const pc = (v) => `${((v / fin) * 100).toFixed(2)}%`;
-  return (
-    <svg className="w-full block mt-1.5" height={12} role="img" aria-label="Type de terrain le long du parcours">
-      {terrains.map(([a, b, t], k) => (
-        <g key={k}>
-          <title>{`${TERRAINS[t]?.[0] ?? t} · ${km(a)} → ${km(b)} km`}</title>
-          <Motif type={t} x1={pc(a)} x2={pc(b)} />
-        </g>
-      ))}
-    </svg>
-  );
+  const p = { d, fill: "none", stroke: c, strokeLinejoin: "round" };
+  if (type === "bitume") {
+    return <><path {...p} strokeWidth={1.5} transform="translate(0,-1.9)" /><path {...p} strokeWidth={1.5} transform="translate(0,1.9)" /></>;
+  }
+  if (type === "chemin") {
+    return <><path {...p} strokeWidth={1.5} strokeDasharray="4 3" transform="translate(0,-1.9)" /><path {...p} strokeWidth={1.6} transform="translate(0,1.9)" /></>;
+  }
+  return <path {...p} strokeWidth={3} strokeDasharray="0.1 4.5" strokeLinecap="round" />;
 }
 
 function LegendeTerrain({ terrains }) {
@@ -230,7 +224,7 @@ function LegendeTerrain({ terrains }) {
     <p className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-label-2">
       {presents.map((t) => (
         <span key={t} className="inline-flex items-center gap-1">
-          <svg width={20} height={12} aria-hidden><Motif type={t} x1={1} x2={19} /></svg>
+          <svg width={20} height={10} aria-hidden><Trait type={t} d="M1,5 L19,5" /></svg>
           {TERRAINS[t][0]}
         </span>
       ))}
@@ -240,26 +234,61 @@ function LegendeTerrain({ terrains }) {
 
 function Profil({ points, couleur, hauteur = 26, detail = false, terrains }) {
   const prof = useMemo(() => profil(points), [points]);
+  // Largeur réelle en pixels : les pointillés et traits doubles gardent leurs proportions
+  const boite = useRef(null);
+  const [L, setL] = useState(300);
+  useEffect(() => {
+    const el = boite.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([e]) => setL(Math.max(60, Math.round(e.contentRect.width))));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const total = prof.at(-1)?.[0] || 1;
   const alts = prof.map((p) => p[1]);
   const min = Math.min(...alts), max = Math.max(...alts), ecart = Math.max(max - min, 20);
-  const L = 300, H = hauteur;
-  const pas = Math.max(1, Math.floor(prof.length / 300));
-  const ligne = prof.filter((_, i) => i % pas === 0 || i === prof.length - 1)
-    .map(([d, a]) => `${((d / total) * L).toFixed(1)},${(H - 2 - ((a - min) / ecart) * (H - 4)).toFixed(1)}`).join(" L");
+  const H = hauteur, marge = detail ? 4 : 2;
+  const pas = Math.max(1, Math.floor(prof.length / 400));
+  const pts = prof.filter((_, i) => i % pas === 0 || i === prof.length - 1)
+    .map(([d, a]) => [d, (d / total) * L, H - marge - ((a - min) / ecart) * (H - 2 * marge)]);
+  const chemin = (liste) => liste.map(([, x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" L");
+  const ligne = chemin(pts);
+
+  // Découpe de la courbe par terrain (kilomètres BRouter recalés sur la distance du profil)
+  const troncons = useMemo(() => {
+    if (!detail || !terrains?.length) return [];
+    const k = total / (terrains.at(-1)[1] || total);
+    const res = [];
+    let i = 0;
+    for (const [a, b, t] of terrains) {
+      const fin = b * k;
+      const morceau = i > 0 ? [pts[i - 1]] : [];
+      while (i < pts.length && pts[i][0] <= fin) morceau.push(pts[i++]);
+      if (i < pts.length) morceau.push(pts[i]);
+      if (morceau.length >= 2) res.push({ a, b, t, d: `M${chemin(morceau)}` });
+    }
+    return res;
+  }, [detail, terrains, L, H, points]);
+
   return (
-    <div>
-      <svg viewBox={`0 0 ${L} ${H}`} preserveAspectRatio="none" className="w-full block" style={{ height: H }} aria-hidden>
+    <div ref={boite}>
+      <svg viewBox={`0 0 ${L} ${H}`} className="w-full block" style={{ height: H }}
+        role={troncons.length ? "img" : undefined} aria-hidden={troncons.length ? undefined : true}
+        aria-label={troncons.length ? "Profil d'altitude et terrain le long du parcours" : undefined}>
         <path d={`M0,${H} L${ligne} L${L},${H} Z`} fill={couleur} fillOpacity={0.15} />
-        <path d={`M${ligne}`} fill="none" stroke={couleur} strokeWidth={1.6} vectorEffect="non-scaling-stroke" />
+        {troncons.length ? troncons.map(({ a, b, t, d }, j) => (
+          <g key={j}>
+            <title>{`${TERRAINS[t]?.[0] ?? t} · ${km(a)} → ${km(b)} km`}</title>
+            <Trait type={t} d={d} />
+          </g>
+        )) : <path d={`M${ligne}`} fill="none" stroke={couleur} strokeWidth={1.6} />}
       </svg>
-      {detail && terrains?.length > 0 && <BandeTerrain terrains={terrains} />}
       {detail && (
         <p className="flex justify-between text-[11px] text-label-2 chiffres mt-0.5">
           <span>{Math.round(min)} m</span><span>alt. max {Math.round(max)} m</span><span>{km(total)} km</span>
         </p>
       )}
-      {detail && terrains?.length > 0 && <LegendeTerrain terrains={terrains} />}
+      {troncons.length > 0 && <LegendeTerrain terrains={terrains} />}
     </div>
   );
 }
@@ -406,6 +435,49 @@ function Repartition({ r, sport }) {
   );
 }
 
+function IconeGpx() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4" aria-hidden>
+      <path d="M12 4v11M7 10l5 5 5-5M5 20h14" />
+    </svg>
+  );
+}
+
+function BoutonGpx({ r, i, sport, boucle }) {
+  const [menu, setMenu] = useState(false);
+  if (!TACTILE) {
+    return (
+      <button type="button" onClick={() => telecharger(r, sport, boucle, "fichier")} className="btn-teinte btn-sm shrink-0 gap-1"
+        aria-label={`Télécharger le GPX de la proposition ${i + 1}`}>
+        <IconeGpx />GPX
+      </button>
+    );
+  }
+  const choisir = (mode) => { setMenu(false); telecharger(r, sport, boucle, mode); };
+  return (
+    <div className="relative shrink-0">
+      <button type="button" onClick={() => setMenu((m) => !m)} className="btn-teinte btn-sm gap-1" aria-expanded={menu}
+        aria-label={`GPX de la proposition ${i + 1}`}>
+        <IconeGpx />GPX
+      </button>
+      {menu && (
+        <>
+          <button type="button" className="fixed inset-0 z-10 cursor-default" aria-label="Fermer" onClick={() => setMenu(false)} />
+          <div className="absolute right-0 top-full mt-1.5 z-20 w-[230px] card py-0.5 shadow-lg">
+            <button type="button" onClick={() => choisir("partager")} className="ligne w-full text-left text-[15px]">
+              Partager vers une app…
+            </button>
+            <button type="button" onClick={() => choisir("fichier")} className="ligne w-full text-left text-[15px] flex-col !items-start !gap-0">
+              <span>Enregistrer dans Fichiers</span>
+              <span className="text-[12px] text-label-2">Pour WorkOutDoors : ouvre le GPX depuis Fichiers</span>
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function Proposition({ r, i, choisie, onChoisir, sport, distance, dplus, boucle }) {
   const couleur = COULEURS[i % COULEURS.length];
   const sel = i === choisie;
@@ -428,13 +500,7 @@ function Proposition({ r, i, choisie, onChoisir, sport, distance, dplus, boucle 
             </span>
           </span>
         </button>
-        <button type="button" onClick={() => telecharger(r, sport, boucle)} className="btn-teinte btn-sm shrink-0 gap-1"
-          aria-label={`Télécharger le GPX de la proposition ${i + 1}`}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4" aria-hidden>
-            <path d="M12 4v11M7 10l5 5 5-5M5 20h14" />
-          </svg>
-          GPX
-        </button>
+        <BoutonGpx r={r} i={i} sport={sport} boucle={boucle} />
       </div>
       <button type="button" onClick={() => onChoisir(sel ? null : i)} className="pl-6 text-left" aria-hidden tabIndex={-1}>
         <Profil points={r.points} couleur={couleur} hauteur={sel ? 70 : 26} detail={sel} terrains={r.terrains} />
