@@ -43,7 +43,8 @@ export default function Accueil() {
 
   const actifs = objectifs.filter((o) => o.statut === "actif").slice(0, 2);
   const t = stats?.totaux;
-  const vide = liste && liste.total === 0;
+  // Carnet vide = aucune séance du tout (pas seulement cette semaine)
+  const vide = t?.total?.nb === 0;
 
   return (
     <Page large
