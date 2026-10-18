@@ -254,7 +254,8 @@ export default function FicheActivite({ activite: initiale, onClose }) {
 
           {isLoading ? <Squelette /> : prepa ? (
             <div className="grid gap-3">
-              {prepa.series.map((serie) => {
+              {/* L'altitude est déjà montrée par le profil sous la carte */}
+              {prepa.series.filter((serie) => !(det.trace && serie.cle === "altitude")).map((serie) => {
                 const v = point ? point[serie.cle] : null;
                 return (
                   <div key={serie.cle} className="card px-4 pt-3 pb-2">
