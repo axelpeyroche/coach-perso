@@ -41,6 +41,31 @@ const lirePref = (cle, defaut, valides) => {
   try { const v = localStorage.getItem(cle); return valides.includes(v) ? v : defaut; } catch { return defaut; }
 };
 const ecrirePref = (cle, v) => { try { localStorage.setItem(cle, v); } catch { /* stockage indisponible */ } };
+// Boutons pour tourner la carte : plus simple que le geste à deux doigts ou le clic droit
+const FLECHE = (sens) => `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="margin:auto${sens > 0 ? ";transform:scaleX(-1)" : ""}"><path d="M4 12a8 8 0 1 0 2.6-5.9"/><path d="M4 3v4.5h4.5"/></svg>`;
+function controleRotation() {
+  let boite, cible = null;
+  return {
+    onAdd(m) {
+      boite = document.createElement("div");
+      boite.className = "maplibregl-ctrl maplibregl-ctrl-group";
+      for (const [sens, titre] of [[-1, "Tourner la carte à gauche"], [1, "Tourner la carte à droite"]]) {
+        const b = document.createElement("button");
+        b.type = "button"; b.title = titre; b.setAttribute("aria-label", titre);
+        b.style.color = "#333";
+        b.innerHTML = FLECHE(sens);
+        b.addEventListener("click", () => {
+          // Clics rapprochés : on repart de l'angle visé, pas de l'angle en cours d'animation
+          cible = (m.isMoving() && cible != null ? cible : m.getBearing()) + sens * 45;
+          m.easeTo({ bearing: cible, duration: 450 });
+        });
+        boite.appendChild(b);
+      }
+      return boite;
+    },
+    onRemove() { boite?.remove(); },
+  };
+}
 const TACTILE = typeof window !== "undefined" && !!window.matchMedia?.("(pointer: coarse)").matches;
 
 // Fonds gratuits et sans clé : OSM, OpenTopoMap (courbes de niveau), Plan IGN (Géoplateforme),
@@ -455,6 +480,7 @@ function Carte({ propositions, choisie, onChoisir, depart, arrivee, pointage, on
         maxPitch: 75, attributionControl: { compact: true } });
       carte.current = m;
       m.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
+      m.addControl(controleRotation(), "top-right");
       m.on("load", () => {
         const rond = { "line-join": "round", "line-cap": "round" };
         m.addSource("routes", { type: "geojson", data: VIDE });
@@ -536,6 +562,8 @@ function Carte({ propositions, choisie, onChoisir, depart, arrivee, pointage, on
           else if (Date.now() - dernierToucher < 1000) return;
           if (!ed || ed.attente || props.current.pointage) return;
           if (touches && touches.length > 1) { annulerGeste(); return; }
+          // Clic droit ou Ctrl + glisser : la carte tourne, même depuis le tracé
+          if (!touches && (e.originalEvent.button !== 0 || e.originalEvent.ctrlKey)) return;
           const wp = m.queryRenderedFeatures(e.point, { layers: ["edit-points-cible"] })[0];
           const seg = !wp && m.queryRenderedFeatures(e.point, { layers: ["edit-segs-cible"] })[0];
           if (!wp && !seg) return;
@@ -665,7 +693,7 @@ function Carte({ propositions, choisie, onChoisir, depart, arrivee, pointage, on
   // Cadrage sur le tracé choisi (ou sur toutes les propositions) quand le résultat ou le choix change
   useEffect(() => {
     const m = carte.current;
-    if (!prete || !propositions?.length) return;
+    if (!prete || !m || !propositions?.length) return;
     const pts = (choisie != null ? [propositions[choisie]] : propositions).flatMap((r) => r.points);
     const lats = pts.map((p) => p[0]), lons = pts.map((p) => p[1]);
     m.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]], { padding: 40, pitch: m.getPitch(), bearing: m.getBearing(), duration: 700 });
@@ -702,6 +730,7 @@ function PanneauRetouche({ edition, stats, allure, onAnnuler, onRevenir, onTermi
     [`${verbe} la carte`, " : le tracé passe par là."],
     ["Fais glisser un point ou le tracé", " pour le déplacer."],
     [`${verbe} un point`, ` pour le retirer.${TACTILE ? "" : " Ctrl+Z annule."}`],
+    ["Pour tourner la carte", TACTILE ? " : deux doigts, ou les flèches ↺ ↻." : " : clic droit glissé, ou les flèches ↺ ↻."],
   ];
   return (
     <div className="card p-4 space-y-3">
