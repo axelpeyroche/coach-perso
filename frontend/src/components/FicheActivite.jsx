@@ -7,7 +7,7 @@ import Feuille from "./Feuille";
 import CarteTrace from "./CarteTrace";
 import ModalActivite from "./ModalActivite";
 import EnteteFiche, { ancre } from "./EnteteFiche";
-import { Decoupage, Materiel, MemeParcours, Meteo, Partager, SegmentsSeance } from "./FicheExtras";
+import { allureAjustee, Decoupage, Materiel, MemeParcours, Meteo, Partager, SegmentsSeance } from "./FicheExtras";
 import { Segmente } from "./ui";
 import { axeX, axeY, grille } from "./graphiques";
 
@@ -229,7 +229,13 @@ export default function FicheActivite({ activite: initiale, onClose }) {
 
   const pied = PIED.has(a.sport);
   const tuiles = [
-    // Durée, distance, allure, allure ajustée et D+ sont dans l'en-tête
+    ["Durée", a.duree_sec ? fmtDuree(a.duree_sec) : null],
+    ["Distance", a.distance_km != null ? nombre(a.distance_km, 2) : null, "km"],
+    pied ? ["Allure moy.", a.allure_sec_km ? mmss(a.allure_sec_km) : null, "/km"]
+      : ["Vitesse moy.", a.vitesse_kmh ? nombre(a.vitesse_kmh) : null, "km/h"],
+    // Équivalent sur le plat (course et trail avec altitude)
+    ["Allure ajustée", allureAjustee(a, flux) ? mmss(allureAjustee(a, flux)) : null, "/km"],
+    ["Dénivelé +", a.dplus_m || null, "m"],
     ["FC moyenne", a.fc_moyenne_bpm, "bpm", "#FF375F"],
     ["FC max", a.fc_max_bpm, "bpm", "#FF375F"],
     ["Calories", a.calories ? Math.round(a.calories) : null, "kcal"],
@@ -247,7 +253,7 @@ export default function FicheActivite({ activite: initiale, onClose }) {
       <Feuille large onClose={onClose} titre={a.titre || a.sport_label || s.label}
         action={<button type="button" className="btn-texte" onClick={() => setEdition(true)}>Modifier</button>}>
 
-        <EnteteFiche a={a} flux={flux} />
+        <EnteteFiche a={a} />
 
         {tuiles.length > 0 && (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
@@ -335,7 +341,7 @@ export default function FicheActivite({ activite: initiale, onClose }) {
           {flux?.avertissement && <p className="text-[12px] text-ios-orange px-1">{flux.avertissement}</p>}
         </section>
 
-        <Partager activite={a} avecTrace={!!det.trace} />
+        <Partager activite={a} avecTrace={!!det.trace} flux={flux} />
 
         {a.notes && (
           <div className="card p-4">

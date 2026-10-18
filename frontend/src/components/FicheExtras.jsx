@@ -367,38 +367,112 @@ export function SegmentsSeance({ activite, avecTrace }) {
 
 // ───────────────────────── Image à partager ─────────────────────────
 
-async function dessinerImage(a, points) {
-  const N = 1080, c = document.createElement("canvas");
-  c.width = c.height = N;
+// Allure ramenée au plat : allure × ratio, cohérente avec la durée de la montre
+export function allureAjustee(a, flux) {
+  const d = flux?.decoupage;
+  return d?.gap_ratio && a.allure_sec_km ? a.allure_sec_km * d.gap_ratio : d?.gap_sec_km ?? null;
+}
+
+// Intensité de 0 à 1 : temps passé dans les zones cardiaques, sinon effort ressenti
+export function intensite(a) {
+  const zones = a.details?.zones_fc;
+  const total = Array.isArray(zones) ? zones.reduce((t, z) => t + (z.min_passees || 0), 0) : 0;
+  if (total) {
+    const moy = zones.reduce((t, z, i) => t + i * (z.min_passees || 0), 0) / total;   // 0 (Z1) à 4 (Z5)
+    const mot = moy <= 1.2 ? "Facile" : moy <= 1.9 ? "Modéré" : moy <= 2.6 ? "Soutenu" : moy <= 3.3 ? "Difficile" : "Maximal";
+    return { f: moy / 4, mot };
+  }
+  if (a.rpe != null) {
+    const mot = a.rpe <= 3 ? "Facile" : a.rpe <= 5 ? "Modéré" : a.rpe <= 7 ? "Soutenu" : a.rpe <= 8.5 ? "Difficile" : "Maximal";
+    return { f: a.rpe / 10, mot };
+  }
+  return null;
+}
+
+// Image verticale 1080 × 1980 : résumé chiffré, carte, profil de dénivelé et effort
+async function dessinerImage(a, points, flux) {
+  const W = 1080, H = 1980, M = 72, c = document.createElement("canvas");
+  c.width = W;
+  c.height = H;
   const g = c.getContext("2d");
   const s = sportInfo(a.sport);
-  const fond = g.createLinearGradient(0, 0, N, N);
+  const fond = g.createLinearGradient(0, 0, W, H);
   fond.addColorStop(0, "#101016");
   fond.addColorStop(1, "#22222c");
   g.fillStyle = fond;
-  g.fillRect(0, 0, N, N);
+  g.fillRect(0, 0, W, H);
   const police = (px, poids = 600) => `${poids} ${px}px -apple-system, "SF Pro Display", "Segoe UI", Roboto, sans-serif`;
+  const texte = (t, x, y, px, poids, coul, align = "left") => {
+    g.font = police(px, poids);
+    g.fillStyle = coul;
+    g.textAlign = align;
+    g.fillText(t, x, y);
+    g.textAlign = "left";
+    return g.measureText(t).width;
+  };
+  const carte = (y, h) => {
+    g.fillStyle = "rgba(255,255,255,0.07)";
+    g.beginPath();
+    g.roundRect(M, y, W - 2 * M, h, 36);
+    g.fill();
+  };
+  const GRIS = "rgba(255,255,255,0.55)";
 
-  // En-tête : sport, date, titre
-  g.fillStyle = s.couleur;
-  g.font = police(34, 600);
-  g.fillText(`${s.emoji}  ${(a.sport_label || s.label).toUpperCase()}`, 72, 104);
-  g.fillStyle = "rgba(255,255,255,0.6)";
-  g.font = police(30, 500);
-  g.fillText(new Date(a.debut).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" }), 72, 150);
-  g.fillStyle = "#fff";
-  g.font = police(60, 700);
-  let titre = a.titre || a.sport_label || s.label;
-  while (g.measureText(titre).width > N - 144 && titre.length > 4) titre = `${titre.slice(0, -2)}…`.replace(/……$/, "…");
-  g.fillText(titre, 72, 226);
+  // En-tête : sport, date et heure, titre sur deux lignes au plus
+  const date = new Date(a.debut);
+  texte(`${s.emoji}  ${(a.sport_label || s.label).toUpperCase()}`, M, 120, 34, 700, s.couleur);
+  texte("Carnet", W - M, 120, 26, 600, "rgba(255,255,255,0.35)", "right");
+  texte(`${date.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })} · ${
+    date.toLocaleTimeString("fr-FR", { hour: "numeric", minute: "2-digit" }).replace(":", " h ")}`, M, 170, 30, 500, GRIS);
+  g.font = police(64, 800);
+  const lignes = [];
+  let reste = (a.titre || a.sport_label || s.label).split(" ");
+  while (reste.length && lignes.length < 2) {
+    let n = reste.length;
+    while (n > 1 && g.measureText(reste.slice(0, n).join(" ")).width > W - 2 * M) n--;
+    let l = reste.slice(0, n).join(" ");
+    reste = reste.slice(n);
+    if (lignes.length === 1 && reste.length) l += "…";
+    while (g.measureText(l).width > W - 2 * M && l.length > 4) l = `${l.slice(0, -2)}…`;
+    lignes.push(l);
+  }
+  lignes.forEach((l, i) => texte(l, M, 260 + i * 76, 64, 800, "#fff"));
+  let y = 260 + (lignes.length - 1) * 76 + 50;
 
-  // Tracé
+  // Résumé : distance en grand (sinon la durée), puis durée, allure, allure ajustée, D+
+  const pied = PIED.has(a.sport);
+  const avecDistance = a.distance_km > 0;
+  const ajustee = allureAjustee(a, flux);
+  const stats = [
+    avecDistance && a.duree_sec && [chrono(a.duree_sec), "Durée"],
+    pied ? avecDistance && a.allure_sec_km && [mmss(a.allure_sec_km), "Allure /km"] : a.vitesse_kmh && [nombre(a.vitesse_kmh, 1), "km/h"],
+    ajustee && [mmss(ajustee), "Ajustée /km", "#30D158"],
+    a.dplus_m > 0 && [`${nombre(a.dplus_m, 0)} m`, "D+"],
+    !avecDistance && a.fc_moyenne_bpm && [String(a.fc_moyenne_bpm), "FC moy."],
+    !avecDistance && a.calories && [nombre(a.calories, 0), "kcal"],
+  ].filter(Boolean);
+  const hr = stats.length ? 340 : 230;
+  carte(y, hr);
+  const w = texte(avecDistance ? nombre(a.distance_km, 2) : a.duree_sec ? chrono(a.duree_sec) : "—", M + 44, y + 180, 170, 800, "#fff");
+  if (avecDistance) texte("km", M + 44 + w + 14, y + 180, 54, 700, GRIS);
+  const col = (W - 2 * M - 88) / Math.max(1, stats.length);
+  stats.forEach(([v, l, coul], i) => {
+    texte(v, M + 44 + i * col, y + 262, 50, 700, coul || "#fff");
+    texte(l, M + 44 + i * col, y + 304, 26, 500, GRIS);
+  });
+  y += hr + 32;
+
+  // Carte du tracé : elle prend toute la hauteur laissée par les autres blocs
   const pts = (points || []).filter((p) => p[0] != null && p[1] != null);
+  const idx = pts.map((_, i) => i).filter((i) => pts[i][2] != null);
+  const eff = intensite(a);
   if (pts.length > 1) {
+    const h = Math.max(600, H - 80 - y - (idx.length > 10 ? 322 : 0) - (eff ? 192 : 0));
+    carte(y, h);
     const k = Math.cos((pts[0][0] * Math.PI) / 180);
     const xs = pts.map((p) => p[1] * k), ys = pts.map((p) => -p[0]);
     const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
-    const zone = { x: 90, y: 270, w: N - 180, h: 470 };
+    const zone = { x: M + 70, y: y + 70, w: W - 2 * M - 140, h: h - 140 };
     const e = Math.min(zone.w / (x1 - x0 || 1e-9), zone.h / (y1 - y0 || 1e-9));
     const ox = zone.x + (zone.w - (x1 - x0) * e) / 2, oy = zone.y + (zone.h - (y1 - y0) * e) / 2;
     const P = (i) => [ox + (xs[i] - x0) * e, oy + (ys[i] - y0) * e];
@@ -411,8 +485,8 @@ async function dessinerImage(a, points) {
     pts.forEach((_, i) => (i ? g.lineTo(...P(i)) : g.moveTo(...P(i))));
     g.stroke();
     g.shadowBlur = 0;
-    for (const [i, col] of [[0, "#30D158"], [pts.length - 1, "#FF453A"]]) {
-      g.fillStyle = col;
+    for (const [i, coul] of [[pts.length - 1, "#FF453A"], [0, "#30D158"]]) {
+      g.fillStyle = coul;
       g.beginPath();
       g.arc(...P(i), 13, 0, 2 * Math.PI);
       g.fill();
@@ -420,56 +494,64 @@ async function dessinerImage(a, points) {
       g.lineWidth = 4;
       g.stroke();
     }
+    y += h + 32;
   }
 
-  // Chiffres
-  const pied = PIED.has(a.sport);
-  const stats = [
-    a.distance_km != null && ["Distance", nombre(a.distance_km, 2), "km"],
-    a.duree_sec && ["Durée", chrono(a.duree_sec), ""],
-    pied ? a.allure_sec_km && ["Allure", mmss(a.allure_sec_km), "/km"] : a.vitesse_kmh && ["Vitesse", nombre(a.vitesse_kmh, 1), "km/h"],
-    a.dplus_m ? ["Dénivelé", String(a.dplus_m), "m"] : a.fc_moyenne_bpm && ["FC moy.", String(a.fc_moyenne_bpm), "bpm"],
-  ].filter(Boolean);
-  const largeur = (N - 144) / Math.max(1, stats.length);
-  stats.forEach(([l, v, u], i) => {
-    const x = 72 + i * largeur;
-    g.fillStyle = "rgba(255,255,255,0.55)";
-    g.font = police(28, 500);
-    g.fillText(l, x, 818);
-    g.fillStyle = "#fff";
-    g.font = police(64, 700);
-    g.fillText(v, x, 888);
-    const w = g.measureText(v).width;
-    g.fillStyle = "rgba(255,255,255,0.55)";
-    g.font = police(28, 600);
-    g.fillText(u, x + w + 8, 888);
-  });
-
-  // Mini-profil d'altitude
-  const alts = pts.map((p) => p[2]).filter((v) => v != null);
-  if (alts.length > 10) {
-    const cum = cumulKm(pts), tot = cum.at(-1) || 1;
+  // Profil de dénivelé
+  if (idx.length > 10) {
+    const h = 290;
+    carte(y, h);
+    const alts = idx.map((i) => pts[i][2]);
     const [lo, hi] = [Math.min(...alts), Math.max(...alts)];
-    const zone = { x: 72, y: 930, w: N - 144, h: 90 };
+    const wd = texte(`${nombre(a.dplus_m || 0, 0)} m`, M + 44, y + 76, 46, 700, "#fff");
+    texte("D+", M + 44 + wd + 12, y + 76, 28, 600, GRIS);
+    texte(`de ${nombre(lo, 0)} à ${nombre(hi, 0)} m`, W - M - 44, y + 76, 28, 500, GRIS, "right");
+    const cum = cumulKm(pts), tot = cum.at(-1) || 1;
+    const zone = { x: M + 44, y: y + 112, w: W - 2 * M - 88, h: h - 150 };
+    const X = (i) => zone.x + (cum[i] / tot) * zone.w;
+    const Y = (v) => zone.y + zone.h - (hi > lo ? ((v - lo) / (hi - lo)) * zone.h : zone.h / 2);
     g.beginPath();
-    g.moveTo(zone.x, zone.y + zone.h);
-    pts.forEach((p, i) => {
-      if (p[2] == null) return;
-      g.lineTo(zone.x + (cum[i] / tot) * zone.w, zone.y + zone.h - (hi > lo ? ((p[2] - lo) / (hi - lo)) * zone.h : zone.h / 2));
-    });
-    g.lineTo(zone.x + zone.w, zone.y + zone.h);
+    idx.forEach((i, j) => (j ? g.lineTo(X(i), Y(pts[i][2])) : g.moveTo(X(i), Y(pts[i][2]))));
+    g.strokeStyle = "#30D158";
+    g.lineWidth = 4;
+    g.stroke();
+    g.lineTo(X(idx.at(-1)), zone.y + zone.h);
+    g.lineTo(X(idx[0]), zone.y + zone.h);
     g.closePath();
-    g.fillStyle = `${s.couleur}55`;
+    g.fillStyle = "rgba(48,209,88,0.22)";
     g.fill();
+    y += h + 32;
   }
-  g.fillStyle = "rgba(255,255,255,0.35)";
-  g.font = police(24, 600);
-  g.textAlign = "right";
-  g.fillText("Carnet", N - 72, 104);
+
+  // Effort : jauge verte → orange → rouge
+  if (eff) {
+    const h = 160;
+    carte(y, h);
+    const charge = a.duree_sec && a.rpe != null ? Math.round((a.duree_sec / 60) * a.rpe) : null;
+    texte(`Effort${a.fc_moyenne_bpm ? ` · FC moy. ${a.fc_moyenne_bpm}` : ""}${charge ? ` · charge ${charge}` : ""}`, M + 44, y + 62, 28, 500, GRIS);
+    texte(eff.mot, W - M - 44, y + 64, 40, 700, "#fff", "right");
+    const bx = M + 44, bw = W - 2 * M - 88, by = y + 104;
+    const deg = g.createLinearGradient(bx, 0, bx + bw, 0);
+    deg.addColorStop(0, "#30D158");
+    deg.addColorStop(0.5, "#FF9F0A");
+    deg.addColorStop(1, "#FF453A");
+    g.fillStyle = deg;
+    g.beginPath();
+    g.roundRect(bx, by, bw, 14, 7);
+    g.fill();
+    const cx = bx + bw * Math.min(0.97, Math.max(0.03, eff.f));
+    g.beginPath();
+    g.arc(cx, by + 7, 18, 0, 2 * Math.PI);
+    g.fillStyle = "#1c1c24";
+    g.fill();
+    g.lineWidth = 7;
+    g.strokeStyle = eff.f < 0.4 ? "#30D158" : eff.f < 0.7 ? "#FF9F0A" : "#FF453A";
+    g.stroke();
+  }
   return new Promise((ok) => c.toBlob(ok, "image/png"));
 }
 
-export function Partager({ activite, avecTrace }) {
+export function Partager({ activite, avecTrace, flux }) {
   const qc = useQueryClient();
   const [etat, setEtat] = useState(null);
   const lancer = async () => {
@@ -478,7 +560,7 @@ export function Partager({ activite, avecTrace }) {
       const trace = avecTrace
         ? await qc.fetchQuery({ queryKey: ["trace", activite.id], queryFn: () => getTrace(activite.id), staleTime: Infinity })
         : null;
-      const blob = await dessinerImage(activite, trace?.points);
+      const blob = await dessinerImage(activite, trace?.points, flux);
       const nom = `seance-${activite.debut.slice(0, 10)}.png`;
       const fichier = new File([blob], nom, { type: "image/png" });
       if (navigator.canShare?.({ files: [fichier] })) {
