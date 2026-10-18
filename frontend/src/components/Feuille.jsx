@@ -6,6 +6,7 @@ import { useVerrouDefilement } from "../navigation";
 // capsule bleue à droite. On la ferme en la tirant vers le bas (depuis le
 // haut de son contenu), en touchant le voile ou le ✕ ; la page derrière ne
 // défile pas tant qu'elle est ouverte.
+// La barre de défilement est masquée (le contenu défile toujours à la molette ou au doigt).
 export default function Feuille({ titre, onClose, action, children, large = false, classe = "", as: Tag = "div", ...props }) {
   const feuille = useRef(null);
   const voile = useRef(null);
@@ -95,7 +96,7 @@ export default function Feuille({ titre, onClose, action, children, large = fals
 
   return createPortal(
     <div ref={voile} className={`voile ${ferme ? "ferme" : ""}`} onClick={fermer}>
-      <Tag ref={feuille} className={`feuille ${large ? "feuille-large" : ""} ${classe} ${ferme ? "ferme" : ""}`} onClick={(e) => e.stopPropagation()} {...props}>
+      <Tag ref={feuille} className={`feuille scrollbar-hide ${large ? "feuille-large" : ""} ${classe} ${ferme ? "ferme" : ""}`} onClick={(e) => e.stopPropagation()} {...props}>
         <div className="feuille-barre sticky top-0 z-10 bg-inherit">
           <div className="poignee" />
           <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-4 h-[52px] md:h-14">
