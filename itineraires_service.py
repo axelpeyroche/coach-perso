@@ -59,7 +59,22 @@ def cle() -> Optional[str]:
     return (os.environ.get("ORS_API_KEY") or "").strip() or None
 
 
-def _appel(profil: str, corps: dict) -> dict:
+def _appel(profil: str, corps: dict, essais: int = 3) -> dict:
+    """Appel ORS, relancé après une courte pause si leur serveur est momentanément en erreur."""
+    for n in range(essais):
+        try:
+            return _appel_unique(profil, corps)
+        except _Passager as e:
+            if n == essais - 1:
+                raise ItineraireErreur(str(e))
+            time.sleep(1.5 * (n + 1))
+
+
+class _Passager(Exception):
+    pass
+
+
+def _appel_unique(profil: str, corps: dict) -> dict:
     req = urllib.request.Request(URL.format(profil=profil), data=json.dumps(corps).encode(), method="POST",
                                  headers={"Authorization": cle(), "Content-Type": "application/json",
                                           "Accept": "application/geo+json"})
@@ -76,6 +91,9 @@ def _appel(profil: str, corps: dict) -> dict:
             raise ItineraireErreur("Clé OpenRouteService refusée : vérifie ORS_API_KEY dans Render.")
         if e.code == 429:
             raise ItineraireErreur("Quota OpenRouteService atteint pour le moment. Réessaie dans une minute.")
+        if e.code in (500, 502, 503, 504):
+            _log.warning("ORS %s : %s", e.code, msg)
+            raise _Passager(f"OpenRouteService est surchargé ou en panne (erreur {e.code}). Réessaie dans quelques minutes.")
         raise ItineraireErreur(_traduire(msg) or f"OpenRouteService a répondu {e.code}.")
     except (urllib.error.URLError, TimeoutError):
         raise ItineraireErreur("OpenRouteService ne répond pas. Réessaie dans un instant.")
@@ -204,7 +222,7 @@ def proposer(sport: str, depart: list[float], arrivee: Optional[list[float]], di
     # appris pour ce profil et on étale les longueurs pour encadrer la cible
     vise = distance_km / _RAPPORT.get(profil, 1.0)
     debut = time.monotonic()
-    with ThreadPoolExecutor(max_workers=6) as ex:
+    with ThreadPoolExecutor(max_workers=4) as ex:
         paires = [(r, f) for r, f in zip(ex.map(lambda gf: boucle(vise * gf[1], gf[0]),
                                                  zip(range(base, base + 6), _ETALEMENT)), _ETALEMENT) if r]
     toutes = [r for r, _ in paires]
