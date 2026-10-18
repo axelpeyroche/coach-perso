@@ -97,6 +97,11 @@ class Utilisateur(Base):
     taille_cm: Mapped[Optional[float]] = mapped_column(Float, comment="Taille (cm), pour l'IMC")
     besoin_sommeil_h: Mapped[Optional[float]] = mapped_column(Float, comment="Besoin de sommeil (h), pour la dette")
 
+    # Adresse (domicile) : centre la carte « Mes tracés »
+    adresse: Mapped[Optional[str]] = mapped_column(String(300))
+    adresse_lat: Mapped[Optional[float]] = mapped_column(Float)
+    adresse_lon: Mapped[Optional[float]] = mapped_column(Float)
+
     # Photo de profil (data URL base64, cf. absence de stockage objet dédié)
     photo_url: Mapped[Optional[str]] = mapped_column(Text)
 

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getCarteTraces } from "../api";
+import { useAuth } from "../AuthContext";
 import { STYLE, Bascule, chargerMaplibre } from "./CarteTrace";
 import { calculerPassages, decoderTraces } from "../passages";
 
@@ -14,7 +15,7 @@ const PALIERS = [
 const COULEUR = ["match", ["get", "n"], ...PALIERS.flatMap(([n, , c]) => [n, c]), "#64D2FF"];
 const LARGEUR = ["interpolate", ["linear"], ["zoom"], 9, 1.2, 13, 2.2, 16, 4];
 const LARGEUR_BORD = ["interpolate", ["linear"], ["zoom"], 9, 2.4, 13, 3.6, 16, 5.5];
-const LYON = [[4.77, 45.70], [4.92, 45.81]]; // Lyon et Villeurbanne
+const ZOOM_DOMICILE = 11.5;
 
 // Recherche d'une ville ou d'un lieu (Photon / OpenStreetMap : gratuit, sans clé).
 function RechercheLieu({ onChoix, centre }) {
@@ -102,6 +103,11 @@ export default function CartePassages({ annee: fixe } = {}) {
   const [sports, setSports] = useState(PAR_DEFAUT);
   const [choisie, setAnnee] = useState(null);   // null = toutes les années
   const annee = fixe ?? choisie;   // année imposée par le Bilan
+  // Adresse du Profil : centre de la carte (sauf dans le Bilan, cadré sur les tracés de l'année)
+  const { user } = useAuth();
+  const lat = user?.adresse_lat, lon = user?.adresse_lon;
+  const domicile = useMemo(() => (lat != null && lon != null ? [lon, lat] : null), [lat, lon]);
+  const centrerDomicile = fixe == null ? domicile : null;
   // Tous les tracés sont chargés une fois ; changer de filtre ne fait que recalculer ici.
   const { data: brut, isLoading, isError } = useQuery({
     queryKey: ["carte-traces"], queryFn: getCarteTraces, enabled: visible, staleTime: 10 * 60 * 1000,
@@ -129,7 +135,8 @@ export default function CartePassages({ annee: fixe } = {}) {
       const maplibregl = await chargerMaplibre();
       if (annule) return;
       const m = new maplibregl.Map({
-        container: conteneur.current, style: STYLE, center: [2.5, 46.5], zoom: 4.5,
+        container: conteneur.current, style: STYLE,
+        ...(centrerDomicile ? { center: centrerDomicile, zoom: ZOOM_DOMICILE } : { center: [2.5, 46.5], zoom: 4.5 }),
         attributionControl: { compact: true }, cooperativeGestures: true,
         locale: {
           "CooperativeGesturesHandler.WindowsHelpText": "Ctrl + molette pour zoomer",
@@ -169,11 +176,24 @@ export default function CartePassages({ annee: fixe } = {}) {
     const m = carte.current;
     if (!prete || !m || !data) return;
     m.getSource("passages").setData({ type: "FeatureCollection", features: data.features });
-    if (cadree.current !== (fixe ?? "tout") && data.vue) {
+    if (!centrerDomicile && cadree.current !== (fixe ?? "tout") && data.vue) {
       m.fitBounds(data.vue, { padding: 20, duration: cadree.current == null ? 0 : 600 });
       cadree.current = fixe ?? "tout";
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, prete, fixe]);
+
+  // Adresse enregistrée ou modifiée dans le Profil : la carte s'y recentre
+  const centree = useRef(null);
+  useEffect(() => {
+    const m = carte.current;
+    if (!prete || !m || !centrerDomicile) return;
+    const cle = centrerDomicile.join(",");
+    if (centree.current === cle) return;
+    if (centree.current == null) m.jumpTo({ center: centrerDomicile, zoom: ZOOM_DOMICILE });
+    else m.flyTo({ center: centrerDomicile, zoom: ZOOM_DOMICILE, duration: 800 });
+    centree.current = cle;
+  }, [prete, centrerDomicile]);
 
   const basculer = (k) =>
     setSports((s) => (s.includes(k) ? (s.length > 1 ? s.filter((x) => x !== k) : s) : [...s, k]));
@@ -206,14 +226,17 @@ export default function CartePassages({ annee: fixe } = {}) {
         )}
         <div className="absolute top-2 left-2 right-12 flex flex-wrap items-start gap-1.5">
           <Bascule options={[["plan", "Plan"], ["satellite", "Satellite"]]} valeur={fond} onChange={setFond} />
-          <button type="button" onClick={() => carte.current?.fitBounds(LYON, { padding: 10, duration: 800 })}
+          {domicile && (
+          <button type="button" title="Revenir sur l'adresse du Profil"
+            onClick={() => carte.current?.flyTo({ center: domicile, zoom: ZOOM_DOMICILE, duration: 800 })}
             className="flex items-center gap-1 rounded-[9px] bg-black/55 backdrop-blur px-2.5 py-1 text-[12px] font-semibold text-white">
             <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
               <circle cx="12" cy="12" r="7" /><circle cx="12" cy="12" r="2" fill="currentColor" />
               <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
             </svg>
-            Lyon
+            Domicile
           </button>
+          )}
           <RechercheLieu centre={() => carte.current?.getCenter()} onChoix={(r) => {
             const m = carte.current;
             if (!m) return;

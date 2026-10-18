@@ -171,6 +171,61 @@ function Field({ label, children }) {
   );
 }
 
+// ── Adresse (centre de la carte « Mes tracés ») ──────────────────────────────
+// Suggestions Photon / OpenStreetMap (gratuit, sans clé) ; l'adresse n'est retenue
+// qu'une fois choisie dans la liste, avec ses coordonnées.
+function libelleAdresse(p) {
+  const rue = p.street ? `${p.housenumber ? `${p.housenumber} ` : ""}${p.street}` : null;
+  const premier = p.name && p.name !== p.city ? p.name : rue;
+  return [premier, [p.postcode, p.city].filter(Boolean).join(" "), p.country !== "France" && p.country]
+    .filter(Boolean).join(", ");
+}
+
+function ChampAdresse({ valeur, onChange }) {
+  const [q, setQ] = useState(valeur.adresse);
+  const [res, setRes] = useState([]);
+  const [ouvert, setOuvert] = useState(false);
+  useEffect(() => {
+    const t = q.trim();
+    // Pas de recherche sur une adresse déjà choisie (avec ses coordonnées)
+    if (t.length < 3 || (valeur.lat != null && t === valeur.adresse)) { setRes([]); return; }
+    const ctrl = new AbortController();
+    const id = setTimeout(async () => {
+      try {
+        const r = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(t)}&lang=fr&limit=6`, { signal: ctrl.signal });
+        const j = await r.json();
+        const vus = new Set();
+        setRes((j.features ?? []).map((f) => ({ adresse: libelleAdresse(f.properties), lon: f.geometry.coordinates[0], lat: f.geometry.coordinates[1] }))
+          .filter((r) => r.adresse && !vus.has(r.adresse) && vus.add(r.adresse)));
+        setOuvert(true);
+      } catch { /* hors ligne ou requête annulée */ }
+    }, 300);
+    return () => { clearTimeout(id); ctrl.abort(); };
+  }, [q, valeur.adresse, valeur.lat]);
+  const saisir = (e) => {
+    setQ(e.target.value);
+    // Texte modifié : l'adresse n'est plus valide tant qu'une suggestion n'est pas choisie
+    onChange(e.target.value.trim() ? { adresse: e.target.value, lat: null, lon: null } : { adresse: "", lat: null, lon: null });
+  };
+  const choisir = (r) => { setQ(r.adresse); setRes([]); setOuvert(false); onChange(r); };
+  return (
+    <div className="relative">
+      <input className="champ" value={q} onChange={saisir} placeholder="ex. 12 rue de la République, Lyon" autoComplete="street-address"
+        onFocus={() => res.length && setOuvert(true)} onBlur={() => setTimeout(() => setOuvert(false), 150)} />
+      {ouvert && res.length > 0 && (
+        <ul className="absolute z-20 mt-1 w-full rounded-[12px] bg-surface card shadow-lg py-1 max-h-60 overflow-y-auto">
+          {res.map((r) => (
+            <li key={r.adresse}>
+              <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => choisir(r)}
+                className="w-full text-left px-3 py-2 text-[15px] active:bg-remplissage hover:bg-remplissage">{r.adresse}</button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 // ── Edit infos ─────────────────────────────────────────────────────────────
 function EditInfosModal({ user, onClose, onSaved }) {
   const [form, setForm] = useState({
@@ -182,6 +237,8 @@ function EditInfosModal({ user, onClose, onSaved }) {
     poids_kg: user?.poids_kg ?? "",
     taille_cm: user?.taille_cm ?? "",
   });
+  const [adresse, setAdresse] = useState({ adresse: user?.adresse || "", lat: user?.adresse_lat ?? null, lon: user?.adresse_lon ?? null });
+  const [errAdresse, setErrAdresse] = useState("");
   const qc = useQueryClient();
 
   const mutation = useMutation({
@@ -191,7 +248,7 @@ function EditInfosModal({ user, onClose, onSaved }) {
 
   function set(k) { return e => setForm(f => ({ ...f, [k]: e.target.value })); }
 
-  function save() {
+  async function save() {
     const payload = {};
     if (form.prenom !== (user?.prenom || "")) payload.prenom = form.prenom;
     if (form.nom !== (user?.nom || "")) payload.nom = form.nom;
@@ -202,6 +259,20 @@ function EditInfosModal({ user, onClose, onSaved }) {
     if (newPoids !== user?.poids_kg) payload.poids_kg = newPoids;
     const newTaille = form.taille_cm !== "" ? parseFloat(form.taille_cm) : null;
     if (newTaille !== (user?.taille_cm ?? null)) payload.taille_cm = newTaille;
+    if (adresse.adresse.trim() !== (user?.adresse || "")) {
+      let choix = adresse;
+      // Texte tapé sans choisir de suggestion : on retient le premier résultat
+      if (adresse.adresse.trim() && adresse.lat == null) {
+        try {
+          const r = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(adresse.adresse.trim())}&lang=fr&limit=1`);
+          const f = (await r.json()).features?.[0];
+          choix = f ? { adresse: libelleAdresse(f.properties) || adresse.adresse.trim(), lon: f.geometry.coordinates[0], lat: f.geometry.coordinates[1] } : null;
+        } catch { choix = null; }
+        if (!choix) { setErrAdresse("Adresse introuvable : choisis-la dans les suggestions"); return; }
+      }
+      Object.assign(payload, { adresse: choix.adresse.trim() || null, adresse_lat: choix.lat, adresse_lon: choix.lon });
+    }
+    setErrAdresse("");
     if (Object.keys(payload).length > 0) {
       mutation.mutate(payload);
     } else {
@@ -234,6 +305,14 @@ function EditInfosModal({ user, onClose, onSaved }) {
         <Field label="Date de naissance">
           <input type="date" className="champ" value={form.date_naissance || ""} onChange={set("date_naissance")} />
         </Field>
+        <div className="col-span-2">
+          <label className="block">
+            <span className="libelle">Adresse</span>
+            <ChampAdresse valeur={adresse} onChange={setAdresse} />
+          </label>
+          <p className="text-[12px] text-label-2 mt-1 px-1">Centre la carte « Mes tracés » sur cette adresse.</p>
+          {errAdresse && <p className="text-[13px] text-ios-red mt-1 px-1">{errAdresse}</p>}
+        </div>
       </div>
       {mutation.isError && <p className="text-[13px] text-ios-red text-center">{getErrorMessage(mutation.error, "Erreur — réessaie")}</p>}
       <button onClick={save} disabled={mutation.isPending} className="btn-primaire w-full">
@@ -566,6 +645,7 @@ export default function Profil({ theme, setTheme }) {
           <Row label="Sexe" value={user?.sexe === "M" ? "Homme" : user?.sexe === "F" ? "Femme" : null} />
           <Row label="Poids" value={user?.poids_kg ? `${user.poids_kg} kg` : null} />
           <Row label="Taille" value={user?.taille_cm ? `${nombre(user.taille_cm, 0)} cm` : null} />
+          <Row label="Adresse" value={user?.adresse} />
           {imc(user?.poids_kg, user?.taille_cm) && (
             <Row label="IMC" value={`${nombre(imc(user.poids_kg, user.taille_cm).valeur, 1)} · ${imc(user.poids_kg, user.taille_cm).zone.label}`} />
           )}

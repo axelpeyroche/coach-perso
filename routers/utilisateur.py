@@ -103,6 +103,10 @@ class ProfilInfosSchema(BaseModel):
     poids_kg: Optional[float] = Field(None, gt=0, lt=300)
     taille_cm: Optional[float] = Field(None, ge=100, le=250)
     besoin_sommeil_h: Optional[float] = Field(None, ge=5, le=11)
+    # Adresse choisie dans les suggestions (Photon) avec ses coordonnées ; null pour effacer
+    adresse: Optional[str] = Field(None, max_length=300)
+    adresse_lat: Optional[float] = Field(None, ge=-90, le=90)
+    adresse_lon: Optional[float] = Field(None, ge=-180, le=180)
 
 @router.patch("/api/utilisateur/infos", summary="Met à jour les informations personnelles")
 def patch_utilisateur_infos(
@@ -131,6 +135,13 @@ def patch_utilisateur_infos(
         current_user.taille_cm = payload.taille_cm
     if "besoin_sommeil_h" in payload.model_fields_set:
         current_user.besoin_sommeil_h = payload.besoin_sommeil_h
+    if "adresse" in payload.model_fields_set:
+        adresse = (payload.adresse or "").strip() or None
+        if adresse and (payload.adresse_lat is None or payload.adresse_lon is None):
+            raise HTTPException(400, "Adresse introuvable : choisis-la dans les suggestions")
+        current_user.adresse = adresse
+        current_user.adresse_lat = payload.adresse_lat if adresse else None
+        current_user.adresse_lon = payload.adresse_lon if adresse else None
     if "date_naissance" in payload.model_fields_set:
         if payload.date_naissance:
             try:
