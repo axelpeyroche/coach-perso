@@ -2,15 +2,17 @@
 Propositions d'itinéraires (boucles ou aller simple) avec OpenRouteService.
 
 Gratuit : clé personnelle dans la variable d'environnement ORS_API_KEY (environ 2 000
-calculs par jour). Pour une boucle, ORS ne vise qu'une longueur : on calcule plusieurs
-variantes (graines et nombres de points différents), on recale la longueur demandée sur
-l'écart observé, puis on garde celles qui collent le mieux à la distance et au D+ visés.
+calculs par jour). Pour une boucle, ORS ne vise qu'une longueur : on calcule en un seul
+tour six variantes (graines et longueurs étalées autour de la cible, recalée sur l'écart
+appris lors des recherches précédentes), puis on garde celles qui collent le mieux à la
+distance et au D+ visés.
 """
 from __future__ import annotations
 
 import json
 import logging
 import os
+import time
 import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
@@ -38,6 +40,11 @@ PROFILS = {
 _ROUTE, _CHEMIN, _SENTIER = {1, 2, 3}, {5, 6}, {4, 7, 8}
 
 
+# Longueurs demandées autour de la cible, et rapport longueur obtenue / demandée appris par profil
+_ETALEMENT = (0.85, 1.0, 1.15, 0.92, 1.08, 1.0)
+_RAPPORT: dict[str, float] = {}
+
+
 class ItineraireErreur(Exception):
     pass
 
@@ -51,7 +58,7 @@ def _appel(profil: str, corps: dict) -> dict:
                                  headers={"Authorization": cle(), "Content-Type": "application/json",
                                           "Accept": "application/geo+json"})
     try:
-        with urllib.request.urlopen(req, timeout=30) as r:
+        with urllib.request.urlopen(req, timeout=20) as r:
             return json.loads(r.read())
     except urllib.error.HTTPError as e:
         try:
@@ -81,7 +88,7 @@ def _traduire(msg: Optional[str]) -> Optional[str]:
 
 def _corps(points: list[list[float]], profil: str, eviter_routes: bool) -> dict:
     corps = {"coordinates": points, "elevation": True, "instructions": False,
-             "extra_info": ["waytype", "surface"], "options": {}}
+             "extra_info": ["waytype"], "options": {}}
     if eviter_routes and profil in PIED:
         corps["options"]["profile_params"] = {"weightings": {"quiet": 1, "green": 1}}
     return corps
@@ -156,21 +163,27 @@ def proposer(sport: str, depart: list[float], arrivee: Optional[list[float]], di
         return _lire(f[0]) if f else None
 
     erreurs: list[ItineraireErreur] = []
-    base = 12 * essai  # « Autres propositions » : nouvelles graines
+    base = 6 * essai  # « Autres propositions » : nouvelles graines
+    # ORS rend des boucles plus longues ou plus courtes que demandé : on part du rapport
+    # appris pour ce profil et on étale les longueurs pour encadrer la cible
+    vise = distance_km / _RAPPORT.get(profil, 1.0)
+    debut = time.monotonic()
     with ThreadPoolExecutor(max_workers=6) as ex:
-        tour1 = [r for r in ex.map(lambda g: boucle(distance_km, g), range(base, base + 6)) if r]
-        if not tour1:
-            raise erreurs[0] if erreurs else ItineraireErreur("Aucune boucle trouvée depuis ce point.")
-        # ORS rend souvent des boucles plus longues ou plus courtes que demandé : on corrige
-        ratio = median(r["distance_km"] / distance_km for r in tour1) or 1
-        corrigee = distance_km / min(2.0, max(0.5, ratio))
-        tour2 = [r for r in ex.map(lambda g: boucle(corrigee, g), range(base + 6, base + 12)) if r]
+        paires = [(r, f) for r, f in zip(ex.map(lambda gf: boucle(vise * gf[1], gf[0]),
+                                                 zip(range(base, base + 6), _ETALEMENT)), _ETALEMENT) if r]
+    toutes = [r for r, _ in paires]
+    _log.info("Itinéraires %s %.1f km : %d boucles en %.1f s", profil, distance_km, len(toutes),
+              time.monotonic() - debut)
+    if not toutes:
+        raise erreurs[0] if erreurs else ItineraireErreur("Aucune boucle trouvée depuis ce point.")
+    rapport = median(r["distance_km"] / (vise * f) for r, f in paires)
+    _RAPPORT[profil] = round(min(2.0, max(0.5, 0.5 * _RAPPORT.get(profil, 1.0) + 0.5 * rapport)), 3)
 
-    toutes = sorted(tour1 + tour2, key=lambda r: _ecart(r, distance_km, dplus_m))
+    toutes.sort(key=lambda r: _ecart(r, distance_km, dplus_m))
     gardees: list[dict] = []
     for r in toutes:
         if _differente(r, gardees):
             gardees.append(r)
         if len(gardees) >= nombre:
             break
-    return {"profil": profil, "propositions": gardees, "calculs": len(tour1) + len(tour2)}
+    return {"profil": profil, "propositions": gardees, "calculs": 6}

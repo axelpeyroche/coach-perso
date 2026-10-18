@@ -43,8 +43,8 @@ def proposer(p: DemandeItineraire, current_user: Utilisateur = Depends(get_curre
     pied = p.sport in ("course", "trail", "randonnee")
     if p.distance_km and pied and p.distance_km > 80:
         raise HTTPException(422, "Boucle à pied limitée à 80 km")
-    # Une recherche de boucle coûte une douzaine de calculs ORS (quota gratuit : 40 par minute)
-    limiter(f"itineraires:{current_user.id}", 3, 60)
+    # Une recherche de boucle coûte six calculs ORS (quota gratuit : 40 par minute)
+    limiter(f"itineraires:{current_user.id}", 5, 60)
     try:
         return it.proposer(p.sport, p.depart, p.arrivee, p.distance_km, p.dplus_m, p.sentiers, p.eviter_routes, p.essai)
     except it.ItineraireErreur as e:

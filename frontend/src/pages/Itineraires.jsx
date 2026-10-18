@@ -418,7 +418,8 @@ export default function Itineraires() {
       setVue("resultats");
       haut.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     },
-    onError: (e) => setErreur(e?.response?.data?.detail?.toString?.() ?? "Calcul impossible pour le moment."),
+    onError: (e) => setErreur(e?.response?.data?.detail?.toString?.()
+      ?? (e?.code === "ECONNABORTED" ? "OpenRouteService met trop de temps à répondre. Réessaie dans un instant." : "Calcul impossible pour le moment.")),
   });
 
   const lancer = (n = 0) => {
@@ -438,6 +439,15 @@ export default function Itineraires() {
   };
 
   const enCours = demande.isPending;
+  // Chrono pendant le calcul (quelques secondes à une demi-minute selon OpenRouteService)
+  const [secondes, setSecondes] = useState(0);
+  useEffect(() => {
+    if (!enCours) return;
+    setSecondes(0);
+    const id = setInterval(() => setSecondes((s) => s + 1), 1000);
+    return () => clearInterval(id);
+  }, [enCours]);
+  const calcul = `Calcul des itinéraires… ${secondes} s`;
   const resultats = resultat?.propositions ?? [];
 
   return (
@@ -518,7 +528,7 @@ export default function Itineraires() {
 
           {erreur && <p className="px-1 text-[14px] text-ios-red" role="alert">{erreur}</p>}
           <button type="button" onClick={() => lancer(0)} disabled={enCours} className="btn-primaire w-full">
-            {enCours ? "Calcul des itinéraires…" : "Proposer des itinéraires"}
+            {enCours ? calcul : "Proposer des itinéraires"}
           </button>
         </div>
 
@@ -545,7 +555,7 @@ export default function Itineraires() {
                 <div className="flex items-center justify-between gap-3 px-4 pt-2">
                   <p className="text-[12px] text-label-2">Tracés OpenRouteService · données © OpenStreetMap</p>
                   <button type="button" onClick={() => lancer(essai + 1)} disabled={enCours} className="btn-texte shrink-0">
-                    {enCours ? "Calcul…" : "Autres propositions"}
+                    {enCours ? `Calcul… ${secondes} s` : "Autres propositions"}
                   </button>
                 </div>
               </div>

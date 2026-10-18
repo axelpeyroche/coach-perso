@@ -119,11 +119,11 @@ export const importerTraces = (traces) =>
   api.post("/activites/traces", { traces }, { timeout: 120000 }).then((r) => r.data);
 export const getTrace = (id) => api.get(`/activites/${id}/trace`).then((r) => r.data);
 export const getFlux = (id) => api.get(`/activites/${id}/flux`).then((r) => r.data);
-export const getCarteTraces = () => api.get("/traces/carte", { timeout: 90000 }).then((r) => r.data);
+export const getCarteTraces = () => api.get("/traces/carte", { timeout: 60000 }).then((r) => r.data);
 
 // --- Intervals.icu (séances de la montre avec tracé GPS) ---
 export const getItineraires = () => api.get("/itineraires").then((r) => r.data);
-export const proposerItineraires = (d) => api.post("/itineraires", d, { timeout: 90000 }).then((r) => r.data);
+export const proposerItineraires = (d) => api.post("/itineraires", d, { timeout: 60000 }).then((r) => r.data);
 export const getIntervals = () => api.get("/intervals").then((r) => r.data);
 export const connecterIntervals = (cle, athlete_id) => api.put("/intervals", { cle, athlete_id }).then((r) => r.data);
 // Nuits importées par l'ancien raccourci Sommeil / l'export Santé : à effacer pour revenir à Intervals.icu
@@ -147,7 +147,7 @@ export const getStatsCarnet = (sport) =>
 
 export const getMesures = (jours = 365) => api.get("/mesures", { params: { jours } }).then((r) => r.data);
 
-export const getAnalyses = () => api.get("/analyses", { timeout: 90000 }).then((r) => r.data);
+export const getAnalyses = () => api.get("/analyses", { timeout: 60000 }).then((r) => r.data);
 
 // --- Plan (séances prévues) ---
 export const getPlan = (depuis, jusqu_a) => api.get("/plan", { params: { depuis, jusqu_a } }).then((r) => r.data);
