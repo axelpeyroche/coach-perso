@@ -10,7 +10,6 @@ import Page from "../components/Page";
 import Feuille from "../components/Feuille";
 import { MenuChoix } from "../components/Menu";
 import ModalPoids from "../components/ModalPoids";
-import Chaussures from "../components/Chaussures";
 import { imc } from "../components/Poids";
 import { nombre } from "../carnet";
 import { Chevron, Interrupteur, Segmente, SelecteurHeure } from "../components/ui";
@@ -609,8 +608,6 @@ export default function Profil({ theme, setTheme }) {
             <Chevron />
           </Link>
         </Groupe>
-
-        <Chaussures />
 
         <Groupe titre="Apparence">
           <div className="ligne" style={inset}>

@@ -1,10 +1,10 @@
 // Encarts complémentaires de la fiche d'une séance : découpage par km et par tour, météo,
-// chaussures, sorties sur le même parcours, segments et image à partager.
+// sorties sur le même parcours, segments et image à partager.
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
 import {
-  choisirEquipement, creerSegment, enregistrerMeteo, getEquipementActivite, getMemeParcours, getMeteo, getSegmentsActivite, getTrace,
+  creerSegment, enregistrerMeteo, getMemeParcours, getMeteo, getSegmentsActivite, getTrace,
 } from "../api";
 import { fmtDate, fmtDuree, nombre, sportInfo } from "../carnet";
 import { Segmente } from "./ui";
@@ -185,38 +185,6 @@ export function useMeteo(a) {
       return res;
     },
   });
-}
-
-// ───────────────────────── Chaussures ─────────────────────────
-
-export function Materiel({ activiteId }) {
-  const qc = useQueryClient();
-  const { data } = useQuery({ queryKey: ["equipement", activiteId], queryFn: () => getEquipementActivite(activiteId), staleTime: 60_000 });
-  const choix = useMutation({
-    mutationFn: (v) => choisirEquipement(activiteId, v),
-    onSuccess: (d) => { qc.setQueryData(["equipement", activiteId], d); qc.invalidateQueries({ queryKey: ["equipements"] }); },
-  });
-  if (!data || (!data.equipement && !data.options.length)) return null;
-  const e = data.equipement;
-  const valeur = e ? (data.manuel ? String(e.id) : "") : data.manuel ? "aucun" : "";
-  return (
-    <label className="card px-4 py-3 flex items-center gap-3 cursor-pointer">
-      <span className="text-[22px] leading-none" aria-hidden>👟</span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-[15px] font-semibold truncate">{e ? e.nom : "Aucun matériel"}</span>
-        <span className={clsx("block text-[12px] chiffres truncate", e?.alerte ? "text-ios-orange" : "text-label-2")}>
-          {e ? `${nombre(e.km, 0)} km${e.limite_km ? ` sur ${e.limite_km}` : ""}${e.alerte ? " · à changer bientôt" : ""}` : "Non compté"}
-          {!data.manuel && e && " · par défaut"}
-        </span>
-      </span>
-      <select className="champ !w-auto max-w-[45%] text-[14px]" value={valeur} disabled={choix.isPending}
-        onChange={(ev) => choix.mutate(ev.target.value === "" ? null : ev.target.value)} aria-label="Matériel de la séance">
-        <option value="">Par défaut</option>
-        {data.options.map((o) => <option key={o.id} value={String(o.id)}>{o.nom}</option>)}
-        <option value="aucun">Aucun</option>
-      </select>
-    </label>
-  );
 }
 
 // ───────────────────────── Même parcours ─────────────────────────

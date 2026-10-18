@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import clsx from "clsx";
-import { getEquipementActivite, getMemeParcours, getSegmentsActivite } from "../api";
+import { getMemeParcours, getSegmentsActivite } from "../api";
 import { nombre, sportInfo, SOURCES } from "../carnet";
 import { ciel, useMeteo } from "./FicheExtras";
 
@@ -27,11 +27,9 @@ export default function EnteteFiche({ a }) {
 
   // Mêmes requêtes que les encarts du dessous : pas d'appel en plus
   const { data: meteo } = useMeteo(a);
-  const { data: equip } = useQuery({ queryKey: ["equipement", id], queryFn: () => getEquipementActivite(id), staleTime: 60_000 });
   const { data: meme } = useQuery({ queryKey: ["meme-parcours", id], queryFn: () => getMemeParcours(id), staleTime: 10 * 60_000, enabled: avecTrace });
   const { data: segs } = useQuery({ queryKey: ["segments-activite", id], queryFn: () => getSegmentsActivite(id), staleTime: 10 * 60_000, enabled: avecTrace });
 
-  const e = equip?.equipement;
   const courante = meme?.find((l) => l.courante);
   const fois = meme?.length > 1 && courante ? meme.filter((l) => l.date <= courante.date).length : null;
   const seg = (segs ?? []).filter((x) => x.nb_passages > 0).sort((x, y) => x.rang - y.rang)[0];
@@ -62,9 +60,8 @@ export default function EnteteFiche({ a }) {
         </div>
       </div>
 
-      {(e || fois || seg) && (
+      {(fois || seg) && (
         <div className="flex flex-wrap gap-1.5">
-          {e && <Puce alerte={e.alerte} onClick={() => aller(id, "conditions")}>👟 {e.nom} · {nombre(e.km, 0)} km</Puce>}
           {fois && <Puce onClick={() => aller(id, "parcours")}>🔁 {fois}<sup>{fois === 1 ? "re" : "e"}</sup> fois sur ce parcours</Puce>}
           {seg && (
             <Puce onClick={() => aller(id, "segments")}>

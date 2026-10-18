@@ -199,7 +199,6 @@ function Records({ b, ouvrir }) {
 
 function Marquantes({ b, ouvrir }) {
   const { plus_longue: l, plus_gros_dplus: d, plus_longue_duree: t } = b.marquantes;
-  const m = b.materiel;
   const lignes = [
     l && <Ligne key="l" ico={sportInfo(l.sport).emoji} fond={teinte("rgb(var(--green))")} titre="Plus longue sortie"
       sous={`${l.titre || sportInfo(l.sport).label} · ${court(l.date)}`} valeur={`${nombre(l.distance_km, 1)} km`}
@@ -210,10 +209,6 @@ function Marquantes({ b, ouvrir }) {
     t && t.id !== l?.id && <Ligne key="t" ico="⏱️" fond={teinte("rgb(var(--blue))")} titre="Plus longue séance"
       sous={`${t.titre || sportInfo(t.sport).label} · ${court(t.date)}`} valeur={hms(t.duree_sec)}
       detail={t.distance_km ? `${nombre(t.distance_km, 1)} km` : null} onClick={() => ouvrir(t.id)} />,
-    m && <Ligne key="m" ico="👟" fond="rgb(120 120 128 / 0.16)" titre="Paire la plus utilisée"
-      sous={`${m.nom}${m.alerte ? " · à remplacer bientôt" : ""}`} valeur={`${nombre(m.km_annee, 0)} km`}
-      couleur={m.alerte ? ORANGE : undefined}
-      detail={m.limite_km ? `${nombre(m.km, 0)} / ${nombre(m.limite_km, 0)} km au total` : "cette année"} />,
   ].filter(Boolean);
   if (!lignes.length) return null;
   return (

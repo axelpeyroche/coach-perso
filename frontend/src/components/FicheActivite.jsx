@@ -7,7 +7,7 @@ import Feuille from "./Feuille";
 import CarteTrace from "./CarteTrace";
 import ModalActivite from "./ModalActivite";
 import EnteteFiche, { ancre } from "./EnteteFiche";
-import { allureAjustee, Decoupage, Materiel, MemeParcours, Partager, SegmentsSeance } from "./FicheExtras";
+import { allureAjustee, Decoupage, MemeParcours, Partager, SegmentsSeance } from "./FicheExtras";
 import { Segmente } from "./ui";
 import { axeX, axeY, grille } from "./graphiques";
 
@@ -256,10 +256,6 @@ export default function FicheActivite({ activite: initiale, onClose }) {
             {tuiles.map(([l, v, u, c]) => <Tuile key={l} label={l} valeur={v} unite={u} couleur={c} />)}
           </div>
         )}
-
-        <div id={ancre(a.id, "conditions")} className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 empty:hidden scroll-mt-16">
-          <Materiel activiteId={a.id} />
-        </div>
 
         {det.trace && (
           <div id={ancre(a.id, "carte")} className="scroll-mt-16">

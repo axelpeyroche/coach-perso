@@ -126,15 +126,6 @@ export const getMeteo = (id) => api.get(`/activites/${id}/meteo`).then((r) => r.
 export const enregistrerMeteo = (id, meteo) => api.put(`/activites/${id}/meteo`, meteo).then((r) => r.data);
 export const getMemeParcours = (id) => api.get(`/activites/${id}/meme-parcours`, { timeout: 45000 }).then((r) => r.data);
 
-// --- Matériel (usure des chaussures) ---
-export const getEquipements = () => api.get("/equipements").then((r) => r.data);
-export const creerEquipement = (d) => api.post("/equipements", d).then((r) => r.data);
-export const modifierEquipement = (id, d) => api.put(`/equipements/${id}`, d).then((r) => r.data);
-export const supprimerEquipement = (id) => api.delete(`/equipements/${id}`).then((r) => r.data);
-export const getEquipementActivite = (id) => api.get(`/activites/${id}/equipement`).then((r) => r.data);
-// equipement_id : identifiant, "aucun", ou null pour revenir au matériel par défaut
-export const choisirEquipement = (id, equipement_id) =>
-  api.put(`/activites/${id}/equipement`, { equipement_id }).then((r) => r.data);
 
 // --- Segments ---
 export const getSegments = () => api.get("/segments", { timeout: 90000 }).then((r) => r.data);

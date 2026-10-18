@@ -1,22 +1,17 @@
 """
-Matériel (usure des chaussures), segments personnels et sorties sur le même parcours.
+Segments personnels et sorties sur le même parcours.
 """
 from __future__ import annotations
 
 import json
-from datetime import date
-from typing import Optional, Union
-
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-import carnet_service as cs
-import materiel_service as ms
 import parcours_service as ps
 from database import obtenir_session
 from deps import get_current_user, limiter
-from models import Activite, Equipement, EquipementActivite, Segment, TraceGPS, Utilisateur
+from models import Activite, Segment, TraceGPS, Utilisateur
 
 router = APIRouter()
 
@@ -26,110 +21,6 @@ def _activite(db: Session, user: Utilisateur, activite_id: int) -> Activite:
     if not a:
         raise HTTPException(404, "Activité introuvable")
     return a
-
-
-# ---------------------------------------------------------------------------
-# Matériel
-# ---------------------------------------------------------------------------
-
-class EquipementSchema(BaseModel):
-    nom: str = Field(..., min_length=1, max_length=120)
-    sports: list[str] = Field(default_factory=lambda: ["course"], max_length=10)
-    par_defaut: bool = True
-    mise_en_service: date
-    km_initial: float = Field(0, ge=0, le=100_000)
-    limite_km: Optional[int] = Field(700, ge=0, le=100_000)
-    retire_le: Optional[date] = None
-    notes: Optional[str] = Field(None, max_length=2000)
-
-
-def _appliquer(e: Equipement, p: EquipementSchema) -> None:
-    sports = [s for s in p.sports if s in cs.SPORTS]
-    if not sports:
-        raise HTTPException(400, "Choisir au moins un sport")
-    if p.retire_le and p.retire_le < p.mise_en_service:
-        raise HTTPException(400, "La date de retrait précède la mise en service")
-    e.nom, e.sports, e.par_defaut = p.nom.strip(), ",".join(sports), p.par_defaut
-    e.mise_en_service, e.km_initial, e.limite_km = p.mise_en_service, p.km_initial, p.limite_km or None
-    e.retire_le, e.notes = p.retire_le, (p.notes or "").strip() or None
-
-
-def _equipement(db: Session, user: Utilisateur, eid: int) -> Equipement:
-    e = db.query(Equipement).filter(Equipement.id == eid, Equipement.utilisateur_id == user.id).first()
-    if not e:
-        raise HTTPException(404, "Matériel introuvable")
-    return e
-
-
-@router.get("/api/equipements", summary="Matériel et km parcourus avec chacun")
-def lister_equipements(current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
-    return ms.lister(db, current_user.id)
-
-
-@router.post("/api/equipements", summary="Ajoute du matériel")
-def creer_equipement(payload: EquipementSchema, current_user: Utilisateur = Depends(get_current_user),
-                     db: Session = Depends(obtenir_session)):
-    if db.query(Equipement).filter(Equipement.utilisateur_id == current_user.id).count() >= 100:
-        raise HTTPException(400, "Trop de matériel enregistré")
-    e = Equipement(utilisateur_id=current_user.id)
-    _appliquer(e, payload)
-    db.add(e)
-    db.commit()
-    return {"ok": True, "id": e.id}
-
-
-@router.put("/api/equipements/{eid}", summary="Modifie du matériel")
-def modifier_equipement(eid: int, payload: EquipementSchema, current_user: Utilisateur = Depends(get_current_user),
-                        db: Session = Depends(obtenir_session)):
-    e = _equipement(db, current_user, eid)
-    _appliquer(e, payload)
-    db.commit()
-    return {"ok": True}
-
-
-@router.delete("/api/equipements/{eid}", summary="Supprime du matériel (les séances n'en gardent pas trace)")
-def supprimer_equipement(eid: int, current_user: Utilisateur = Depends(get_current_user),
-                         db: Session = Depends(obtenir_session)):
-    e = _equipement(db, current_user, eid)
-    db.query(EquipementActivite).filter(EquipementActivite.equipement_id == e.id).delete()
-    db.delete(e)
-    db.commit()
-    return {"ok": True}
-
-
-@router.get("/api/activites/{activite_id}/equipement", summary="Matériel compté pour une séance")
-def equipement_activite(activite_id: int, current_user: Utilisateur = Depends(get_current_user),
-                        db: Session = Depends(obtenir_session)):
-    return ms.de_activite(db, current_user.id, _activite(db, current_user, activite_id))
-
-
-class ChoixEquipement(BaseModel):
-    # identifiant du matériel, "aucun", ou null pour revenir au matériel par défaut
-    equipement_id: Union[int, str, None] = None
-
-
-@router.put("/api/activites/{activite_id}/equipement", summary="Choisit le matériel d'une séance")
-def choisir_equipement(activite_id: int, payload: ChoixEquipement,
-                       current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
-    a = _activite(db, current_user, activite_id)
-    choix = db.get(EquipementActivite, a.id)
-    v = payload.equipement_id
-    if v is None:
-        if choix:
-            db.delete(choix)
-    else:
-        eid = None
-        if v != "aucun":
-            try:
-                eid = _equipement(db, current_user, int(v)).id
-            except ValueError:
-                raise HTTPException(400, "Choix invalide")
-        if choix:
-            choix.equipement_id = eid
-        else:
-            db.add(EquipementActivite(activite_id=a.id, equipement_id=eid))
-    db.commit()
-    return ms.de_activite(db, current_user.id, a)
 
 
 # ---------------------------------------------------------------------------

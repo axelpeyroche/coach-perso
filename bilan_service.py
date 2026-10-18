@@ -1,6 +1,6 @@
 """
 Bilan d'une année : totaux et comparaison avec l'année précédente, mois par mois, régularité,
-records battus, sorties marquantes, répartition par sport et matériel le plus utilisé.
+records battus, sorties marquantes et répartition par sport.
 """
 from __future__ import annotations
 
@@ -13,7 +13,6 @@ from sqlalchemy.orm import Session
 
 import analyses_service as an
 import carnet_service as cs
-import materiel_service as ms
 import parcours_service as ps
 import suivi_service as sv
 from models import Activite, Segment, TraceGPS, Utilisateur
@@ -79,23 +78,6 @@ def _segments(db: Session, user_id: int, annee: int) -> list[dict]:
                         "date": str(pas[0]["date"])[:10], "activite_id": pas[0]["activite_id"],
                         "nb_passages": len(dans)})
     return sorted(res, key=lambda r: -r["nb_passages"])[:5]
-
-
-def _materiel(db: Session, user_id: int, ids_annee: set[int]) -> Optional[dict]:
-    """Matériel qui a fait le plus de km dans l'année."""
-    eqs, compte, _ = ms.attribution(db, user_id)
-    if not eqs:
-        return None
-    km: Counter = Counter()
-    distances = dict(db.query(Activite.id, Activite.distance_km).filter(Activite.id.in_(ids_annee))) if ids_annee else {}
-    for aid, eid in compte.items():
-        if eid and aid in distances:
-            km[eid] += distances[aid] or 0
-    if not km:
-        return None
-    eid, k = km.most_common(1)[0]
-    tous = {e["id"]: e for e in ms.lister(db, user_id)}
-    return {**tous[eid], "km_annee": round(k, 1)} if eid in tous else None
 
 
 def bilan(db: Session, user: Utilisateur, annee: int) -> dict:
@@ -169,6 +151,5 @@ def bilan(db: Session, user: Utilisateur, annee: int) -> dict:
         "marquantes": marquantes,
         "records": _records(tous, annee),
         "segments": _segments(db, user.id, annee),
-        "materiel": _materiel(db, user.id, {a.id for a in acts}),
         "nb_traces": nb_traces,
     }

@@ -239,9 +239,6 @@ def exporter_donnees(current_user: Utilisateur = Depends(get_current_user), db: 
     nuits = db.query(NuitSommeil).filter_by(utilisateur_id=current_user.id).order_by(NuitSommeil.jour).all()
     prevues = db.query(SeancePrevue).filter_by(utilisateur_id=current_user.id).order_by(SeancePrevue.jour).all()
     traces = db.query(TraceGPS).filter_by(utilisateur_id=current_user.id).order_by(TraceGPS.activite_id).all()
-    equipements = db.query(Equipement).filter_by(utilisateur_id=current_user.id).order_by(Equipement.id).all()
-    choix_materiel = (db.query(EquipementActivite).join(Activite, Activite.id == EquipementActivite.activite_id)
-                      .filter(Activite.utilisateur_id == current_user.id).all())
     segments = db.query(Segment).filter_by(utilisateur_id=current_user.id).order_by(Segment.id).all()
 
     profil = _dump(current_user)
@@ -259,8 +256,6 @@ def exporter_donnees(current_user: Utilisateur = Depends(get_current_user), db: 
         "nuits_sommeil": [_dump(n) for n in nuits],
         "seances_prevues": [_dump(p) for p in prevues],
         "traces_gps": [_dump(t) for t in traces],  # points : JSON [[lat, lon, alt, s], …] tel que stocké
-        "equipements": [_dump(e) for e in equipements],
-        "equipements_activites": [_dump(c) for c in choix_materiel],
         "segments": [_dump(s) for s in segments],
         "exporte_le": datetime.utcnow().isoformat(timespec="seconds") + "Z",
         "version": 2,
