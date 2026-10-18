@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getTerrains, getTrace } from "../api";
+import { nombre } from "../carnet";
 import Profil from "./ProfilAltitude";
 
+const ALTITUDE = "#30B0C7"; // couleur de l'altitude dans les courbes de la fiche
 const TYPES_TERRAIN = { sentier: "sentier", chemin: "chemin", bitume: "route" };
 
 // maplibre 6 (ESM) : le worker est un fichier à part, à servir depuis nos propres assets
@@ -200,6 +202,7 @@ export default function CarteTrace({ activiteId }) {
     enabled: avecAltitude, retry: false,
   });
   const [repere, setRepere] = useState(null); // indice du point montré par le doigt sur le profil
+  const alts = useMemo(() => (data?.points ?? []).map((p) => p[2]).filter((a) => a != null), [data]);
 
   useEffect(() => {
     if (!data?.points?.length || !conteneur.current) return;
@@ -441,13 +444,24 @@ export default function CarteTrace({ activiteId }) {
         </p>
       )}
       {avecAltitude && (
-        <div className="card p-4 space-y-2 !mt-4">
-          <div className="flex items-baseline justify-between gap-3">
-            <h3 className="text-[15px] font-semibold">Dénivelé</h3>
-            {data.dplus_m != null && <p className="text-[13px] text-label-2 chiffres">{data.dplus_m} m D+</p>}
-          </div>
-          <Profil points={data.points} couleur="#FF3B30" hauteur={78} detail terrains={terrain?.terrains}
-            curseur={repere} onCurseur={setRepere} />
+        <div className="card px-4 pt-3 pb-3 !mt-4">
+          <Profil points={data.points} couleur={ALTITUDE} hauteur={110} detail axes terrains={terrain?.terrains}
+            curseur={repere} onCurseur={setRepere} entete={(l) => (
+              <div className="mb-1">
+                <div className="flex items-baseline justify-between gap-3">
+                  <h3 className="text-[13px] font-semibold uppercase tracking-[0.02em]" style={{ color: ALTITUDE }}>Dénivelé</h3>
+                  <p className="text-[12px] text-label-2 chiffres shrink-0 truncate">
+                    {l ? [`${nombre(l.km, 2)} km`, l.pente != null && `${l.pente > 0 ? "+" : l.pente < 0 ? "−" : ""}${Math.abs(l.pente)} %`, l.terrain]
+                      .filter(Boolean).join(" · ")
+                      : `min ${Math.round(Math.min(...alts))} · max ${Math.round(Math.max(...alts))}`}
+                  </p>
+                </div>
+                <p className="text-[24px] font-semibold leading-tight chiffres">
+                  {l ? Math.round(l.alt) : data.dplus_m ?? "—"}
+                  <span className="text-[13px] font-medium text-label-2 ml-1">{l ? "m" : "m D+"}</span>
+                </p>
+              </div>
+            )} />
         </div>
       )}
     </div>
