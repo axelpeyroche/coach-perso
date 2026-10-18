@@ -66,6 +66,29 @@ function controleRotation() {
     onRemove() { boite?.remove(); },
   };
 }
+// Molette et pavé tactile : deux doigts à l'horizontale ou Shift + molette pour tourner,
+// Alt + molette pour incliner ; rotation à deux doigts sur le pavé d'un Mac (Safari).
+// Écouté en capture sur le conteneur pour passer avant le zoom de MapLibre.
+function tournerALaSouris(m, el) {
+  el.addEventListener("wheel", (e) => {
+    if (e.ctrlKey) return; // pincement du pavé tactile : zoom
+    const k = e.deltaMode === 1 ? 16 : 1;
+    const dx = e.deltaX * k, dy = e.deltaY * k;
+    const horizontal = Math.abs(dx) > 1.5 * Math.abs(dy);
+    if (!e.shiftKey && !e.altKey && !horizontal) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const d = Math.abs(dx) > Math.abs(dy) ? dx : dy;
+    if (e.altKey) m.setPitch(Math.max(0, Math.min(m.getMaxPitch(), m.getPitch() - d * 0.15)));
+    else m.setBearing(m.getBearing() + d * 0.2);
+  }, { capture: true, passive: false });
+  let cap0 = 0;
+  el.addEventListener("gesturestart", (e) => { e.preventDefault(); cap0 = m.getBearing(); });
+  el.addEventListener("gesturechange", (e) => {
+    e.preventDefault();
+    if (Math.abs(e.rotation) > 3) m.setBearing(cap0 - e.rotation);
+  });
+}
 const TACTILE = typeof window !== "undefined" && !!window.matchMedia?.("(pointer: coarse)").matches;
 
 // Fonds gratuits et sans clé : OSM, OpenTopoMap (courbes de niveau), Plan IGN (Géoplateforme),
@@ -481,6 +504,7 @@ function Carte({ propositions, choisie, onChoisir, depart, arrivee, pointage, on
       carte.current = m;
       m.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
       m.addControl(controleRotation(), "top-right");
+      tournerALaSouris(m, conteneur.current);
       m.on("load", () => {
         const rond = { "line-join": "round", "line-cap": "round" };
         m.addSource("routes", { type: "geojson", data: VIDE });
@@ -730,7 +754,7 @@ function PanneauRetouche({ edition, stats, allure, onAnnuler, onRevenir, onTermi
     [`${verbe} la carte`, " : le tracé passe par là."],
     ["Fais glisser un point ou le tracé", " pour le déplacer."],
     [`${verbe} un point`, ` pour le retirer.${TACTILE ? "" : " Ctrl+Z annule."}`],
-    ["Pour tourner la carte", TACTILE ? " : deux doigts, ou les flèches ↺ ↻." : " : clic droit glissé, ou les flèches ↺ ↻."],
+    ["Pour tourner la carte", TACTILE ? " : deux doigts, ou les flèches ↺ ↻." : " : deux doigts à l'horizontale sur le pavé tactile, Shift + molette, clic droit glissé ou ↺ ↻."],
   ];
   return (
     <div className="card p-4 space-y-3">
