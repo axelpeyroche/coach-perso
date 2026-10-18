@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 
 import analyses_service as an
 import carnet_service as cs
+import decoupage as dc
 from models import Activite, MesureSante, TraceGPS, Utilisateur
 
 _log = logging.getLogger(__name__)
@@ -511,7 +512,20 @@ def _sortie(source: str, temps: list, dist_km: Optional[list], series: list, sau
     }
 
 
-def _depuis_streams(streams: list, sport: str) -> Optional[dict]:
+def _vitesse_ajustee(seance, series: list) -> None:
+    """Ajoute la courbe de vitesse ajustée à la pente (course et trail), superposée à la vitesse."""
+    vit = next((s for s in series if s["cle"] == "vitesse"), None)
+    if not vit:
+        return
+    ms = [v / 3.6 if _num(v) else None for v in vit["brut"]]
+    va = seance.vitesse_ajustee(ms)
+    if va:
+        series.append({"cle": "vitesse_ajustee", "nom": "Vitesse ajustée à la pente", "unite": "km/h",
+                       "couleur": vit["couleur"], "superpose": "vitesse",
+                       "brut": [v * 3.6 if _num(v) else None for v in va]})
+
+
+def _depuis_streams(streams: list, sport: str, intervalles: Optional[list] = None) -> Optional[dict]:
     par_type = {s.get("type"): s for s in streams or [] if s.get("type")}
     temps = (par_type.get("time") or {}).get("data") or []
     n = len(temps)
@@ -532,10 +546,18 @@ def _depuis_streams(streams: list, sport: str) -> Optional[dict]:
     if not series:
         return None
     dist_km = [d / 1000 if isinstance(d, (int, float)) else None for d in dist] if len(dist) == n else None
-    return _sortie("intervals", temps, dist_km, series, sauts)
+    decoupe = {}
+    if dist_km:
+        par_cle = {s["cle"]: s["brut"] for s in series}
+        alt = next((d for d in ((par_type.get(t) or {}).get("data") for t in ("fixed_altitude", "altitude"))
+                    if d and len(d) == n), None)
+        seance = dc.Seance(temps, dist, alt, par_cle.get("fc"), par_cle.get("cadence"), sport)
+        decoupe = dc.decouper(seance, intervalles)
+        _vitesse_ajustee(seance, series)
+    return {**_sortie("intervals", temps, dist_km, series, sauts), "decoupage": decoupe}
 
 
-def _depuis_trace(points: list) -> Optional[dict]:
+def _depuis_trace(points: list, sport: str = "") -> Optional[dict]:
     """Repli sans Intervals : vitesse et altitude recalculées depuis le tracé GPS (un point tous les 10 m)."""
     if len(points) < 10:
         return None
@@ -565,7 +587,10 @@ def _depuis_trace(points: list) -> Optional[dict]:
             series.append({"cle": cle, "nom": nom, "unite": unite, "couleur": couleur, "brut": data})
     if not series:
         return None
-    return _sortie("trace", temps, [d / 1000 for d in dist], series)
+    seance = dc.Seance(temps, dist, alt, sport=sport)
+    decoupe = dc.decouper(seance)
+    _vitesse_ajustee(seance, series)
+    return {**_sortie("trace", temps, [d / 1000 for d in dist], series), "decoupage": decoupe}
 
 
 def flux_seance(user: Utilisateur, act: Activite, points_trace: Optional[list]) -> dict:
@@ -581,11 +606,16 @@ def flux_seance(user: Utilisateur, act: Activite, points_trace: Optional[list]) 
     if iid and user.intervals_cle:
         try:
             streams = _appel(user.intervals_cle, f"/activity/{urllib.parse.quote(str(iid))}/streams.json")
-            res = _depuis_streams(streams if isinstance(streams, list) else [], act.sport)
+            try:  # tours (intervalles détectés ou saisis sur Intervals.icu) : facultatifs
+                ivs = _appel(user.intervals_cle, f"/activity/{urllib.parse.quote(str(iid))}/intervals")
+                intervalles = ivs.get("icu_intervals") if isinstance(ivs, dict) else None
+            except IntervalsErreur:
+                intervalles = None
+            res = _depuis_streams(streams if isinstance(streams, list) else [], act.sport, intervalles)
         except IntervalsErreur as e:
             avertissement = str(e)
     if res is None and points_trace:
-        res = _depuis_trace(points_trace)
+        res = _depuis_trace(points_trace, act.sport)
     if res is None:
         res = {"source": None, "temps": [], "distance": None, "series": []}
     if avertissement:

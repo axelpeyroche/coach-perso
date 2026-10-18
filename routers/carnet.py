@@ -22,7 +22,8 @@ import analyses_service as an
 import carnet_service as cs
 from database import obtenir_session
 from deps import get_current_user, limiter
-from models import Activite, CacheCarte, Objectif, ObjectifCourse, TraceGPS, Utilisateur
+from models import (Activite, CacheCarte, EquipementActivite, MeteoActivite, Objectif, ObjectifCourse, Segment,
+                    TraceGPS, Utilisateur)
 
 _log = logging.getLogger(__name__)
 
@@ -214,6 +215,9 @@ def supprimer_activite(
     a = _activite_utilisateur(db, current_user, activite_id)
     cs.memoriser_seance_ignoree(current_user, a)
     db.query(TraceGPS).filter(TraceGPS.activite_id == a.id).update({"activite_id": None})
+    db.query(MeteoActivite).filter(MeteoActivite.activite_id == a.id).delete()
+    db.query(EquipementActivite).filter(EquipementActivite.activite_id == a.id).delete()
+    db.query(Segment).filter(Segment.activite_id == a.id).update({"activite_id": None})
     db.delete(a)
     db.commit()
     return {"ok": True}
@@ -302,14 +306,32 @@ def flux_activite(
     return iv.flux_seance(current_user, a, json.loads(t.points) if t else None)
 
 
+@router.get("/api/activites/{activite_id}/meteo", summary="Météo pendant la séance (Open-Meteo)")
+def meteo_activite(
+    activite_id: int,
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(obtenir_session),
+):
+    """Lue au départ du tracé GPS, gardée en base une fois la journée passée ; null sans tracé."""
+    import meteo_service as mt
+    a = _activite_utilisateur(db, current_user, activite_id)
+    if not db.get(MeteoActivite, a.id):
+        limiter(f"meteo:{current_user.id}", 30, 60)
+    try:
+        return mt.meteo_activite(db, a, current_user.fuseau_horaire or "Europe/Paris")
+    except Exception as e:  # Open-Meteo injoignable : la fiche s'affiche sans la météo
+        _log.warning("Météo de la séance %s : %s", a.id, e)
+        return None
+
+
 @router.get("/api/traces/carte", summary="Tous les tracés allégés, pour la carte des passages")
 def carte_traces(
     current_user: Utilisateur = Depends(get_current_user),
     db: Session = Depends(obtenir_session),
 ):
-    """`meta[i]` = [sport, km] du tracé `traces[i]` ; seuls les tracés liés à une séance du carnet sont servis.
+    """`meta[i]` = [sport, km, année] du tracé `traces[i]` ; seuls les tracés liés à une séance du carnet sont servis.
     Les tracés encodés sont gardés en base et regénérés seulement quand les tracés changent."""
-    lignes = (db.query(TraceGPS.id, TraceGPS.distance_km, Activite.sport)
+    lignes = (db.query(TraceGPS.id, TraceGPS.distance_km, Activite.sport, Activite.debut)
               .join(Activite, Activite.id == TraceGPS.activite_id)
               .filter(TraceGPS.utilisateur_id == current_user.id).order_by(TraceGPS.id).all())
     signature = f"seances:{len(lignes)}:{sum(l.id for l in lignes)}:{round(sum(l.distance_km or 0 for l in lignes), 3)}"
@@ -324,7 +346,7 @@ def carte_traces(
             db.add(cache)
         cache.signature, cache.donnees = signature, "[" + ",".join(encodes) + "]"
         db.commit()
-    meta = [[l.sport, round(l.distance_km or 0, 2)] for l in lignes]
+    meta = [[l.sport, round(l.distance_km or 0, 2), l.debut.year] for l in lignes]
     return Response('{"meta":' + json.dumps(meta, separators=(",", ":")) + ',"traces":' + cache.donnees + "}",
                     media_type="application/json")
 

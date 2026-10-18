@@ -15,7 +15,7 @@ from carnet_service import synchroniser_physiologie
 from database import obtenir_session
 from deps import (_create_token, _hash_password, _verify_password, compter_echec, get_current_user, limiter,
                   normaliser_email, verifier_mot_de_passe_robuste)
-from models import (Activite, ItineraireFavori, MesureSante, NuitSommeil, Objectif, ObjectifCourse, PoidsUtilisateur, SeancePrevue, TraceGPS,
+from models import (Activite, Equipement, EquipementActivite, ItineraireFavori, MeteoActivite, Segment, MesureSante, NuitSommeil, Objectif, ObjectifCourse, PoidsUtilisateur, SeancePrevue, TraceGPS,
                     Utilisateur)
 
 router = APIRouter()
@@ -239,6 +239,10 @@ def exporter_donnees(current_user: Utilisateur = Depends(get_current_user), db: 
     nuits = db.query(NuitSommeil).filter_by(utilisateur_id=current_user.id).order_by(NuitSommeil.jour).all()
     prevues = db.query(SeancePrevue).filter_by(utilisateur_id=current_user.id).order_by(SeancePrevue.jour).all()
     traces = db.query(TraceGPS).filter_by(utilisateur_id=current_user.id).order_by(TraceGPS.activite_id).all()
+    equipements = db.query(Equipement).filter_by(utilisateur_id=current_user.id).order_by(Equipement.id).all()
+    choix_materiel = (db.query(EquipementActivite).join(Activite, Activite.id == EquipementActivite.activite_id)
+                      .filter(Activite.utilisateur_id == current_user.id).all())
+    segments = db.query(Segment).filter_by(utilisateur_id=current_user.id).order_by(Segment.id).all()
 
     profil = _dump(current_user)
     for secret in ("password_hash", "strava_access_token", "strava_refresh_token", "intervals_cle",
@@ -255,6 +259,9 @@ def exporter_donnees(current_user: Utilisateur = Depends(get_current_user), db: 
         "nuits_sommeil": [_dump(n) for n in nuits],
         "seances_prevues": [_dump(p) for p in prevues],
         "traces_gps": [_dump(t) for t in traces],  # points : JSON [[lat, lon, alt, s], …] tel que stocké
+        "equipements": [_dump(e) for e in equipements],
+        "equipements_activites": [_dump(c) for c in choix_materiel],
+        "segments": [_dump(s) for s in segments],
         "exporte_le": datetime.utcnow().isoformat(timespec="seconds") + "Z",
         "version": 2,
     }
@@ -302,6 +309,11 @@ def supprimer_compte(payload: SuppressionCompteSchema, current_user: Utilisateur
     db.query(NuitSommeil).filter_by(utilisateur_id=current_user.id).delete()
     db.query(SeancePrevue).filter_by(utilisateur_id=current_user.id).delete()
     db.query(ObjectifCourse).filter_by(utilisateur_id=current_user.id).delete()
+    mes_activites = db.query(Activite.id).filter_by(utilisateur_id=current_user.id)
+    db.query(MeteoActivite).filter(MeteoActivite.activite_id.in_(mes_activites)).delete(synchronize_session=False)
+    db.query(EquipementActivite).filter(EquipementActivite.activite_id.in_(mes_activites)).delete(synchronize_session=False)
+    db.query(Segment).filter_by(utilisateur_id=current_user.id).delete()
+    db.query(Equipement).filter_by(utilisateur_id=current_user.id).delete()
     db.query(Activite).filter_by(utilisateur_id=current_user.id).delete()
     db.query(Objectif).filter_by(utilisateur_id=current_user.id).delete()
     db.query(ItineraireFavori).filter_by(utilisateur_id=current_user.id).delete()

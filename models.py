@@ -372,3 +372,63 @@ class ItineraireFavori(Base):
     donnees: Mapped[str] = mapped_column(Text, nullable=False)
     cree_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     maj_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+# ---------------------------------------------------------------------------
+# Météo, matériel et segments
+# ---------------------------------------------------------------------------
+
+class MeteoActivite(Base):
+    """Météo d'une sortie au départ du tracé (Open-Meteo), gardée une fois lue. `donnees` = JSON."""
+    __tablename__ = "meteo_activites"
+
+    activite_id: Mapped[int] = mapped_column(ForeignKey("activites.id", ondelete="CASCADE"), primary_key=True)
+    donnees: Mapped[str] = mapped_column(Text, nullable=False)
+    cree_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class Equipement(Base):
+    """
+    Paire de chaussures (ou autre matériel) dont on suit l'usure en km.
+    Une paire « par défaut » est comptée pour chaque séance de ses sports à partir de sa
+    mise en service, sauf choix contraire sur la séance (EquipementActivite).
+    """
+    __tablename__ = "equipements"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    utilisateur_id: Mapped[int] = mapped_column(ForeignKey("utilisateurs.id", ondelete="CASCADE"), nullable=False, index=True)
+    nom: Mapped[str] = mapped_column(String(120), nullable=False)
+    sports: Mapped[str] = mapped_column(String(200), nullable=False, default="course")  # codes séparés par des virgules
+    par_defaut: Mapped[bool] = mapped_column(Boolean, default=True)
+    mise_en_service: Mapped[date] = mapped_column(Date, nullable=False)
+    km_initial: Mapped[float] = mapped_column(Float, default=0)
+    limite_km: Mapped[int] = mapped_column(Integer, default=700)
+    retire_le: Mapped[Optional[date]] = mapped_column(Date)
+    notes: Mapped[Optional[str]] = mapped_column(Text)
+    cree_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class EquipementActivite(Base):
+    """Choix fait sur une séance : telle paire, ou aucune (`equipement_id` vide)."""
+    __tablename__ = "equipements_activites"
+
+    activite_id: Mapped[int] = mapped_column(ForeignKey("activites.id", ondelete="CASCADE"), primary_key=True)
+    equipement_id: Mapped[Optional[int]] = mapped_column(ForeignKey("equipements.id", ondelete="CASCADE"), index=True)
+
+
+class Segment(Base):
+    """
+    Portion de parcours chronométrée à chaque passage (montée, ligne droite…).
+    `points` = JSON [[lat, lon, alt|null], …], un point tous les ~10 m.
+    """
+    __tablename__ = "segments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    utilisateur_id: Mapped[int] = mapped_column(ForeignKey("utilisateurs.id", ondelete="CASCADE"), nullable=False, index=True)
+    nom: Mapped[str] = mapped_column(String(120), nullable=False)
+    sport: Mapped[Optional[str]] = mapped_column(String(30))
+    distance_m: Mapped[float] = mapped_column(Float, nullable=False)
+    dplus_m: Mapped[Optional[int]] = mapped_column(Integer)
+    points: Mapped[str] = mapped_column(Text, nullable=False)
+    activite_id: Mapped[Optional[int]] = mapped_column(ForeignKey("activites.id", ondelete="SET NULL"))
+    cree_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
