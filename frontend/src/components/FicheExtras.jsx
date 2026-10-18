@@ -318,6 +318,14 @@ export function SegmentsSeance({ activite, avecTrace }) {
   });
   if (!avecTrace) return null;
   const lignes = data ?? [];
+  // Sans segment sur ce parcours : pas d'encart, juste de quoi en créer un
+  if (!lignes.length && !creation) {
+    return data ? (
+      <button type="button" className="btn-texte block mx-auto text-[15px]" onClick={() => setCreation(true)}>
+        Créer un segment sur ce parcours
+      </button>
+    ) : null;
+  }
   return (
     <section className="card p-4 space-y-3">
       <div className="flex items-center justify-between gap-3">
@@ -352,11 +360,7 @@ export function SegmentsSeance({ activite, avecTrace }) {
             );
           })}
         </ul>
-      ) : !creation && (
-        <p className="text-[13px] text-label-2">
-          {data ? "Aucun segment sur ce parcours. Crée-en un pour chronométrer une montée ou une portion à chaque passage." : "Recherche des segments…"}
-        </p>
-      )}
+      ) : null}
     </section>
   );
 }
