@@ -35,9 +35,16 @@ const COULEURS = ["#FF6B35", "#7F77DD", "#1D9E75", "#E8338A"];
 const LYON = [4.835, 45.76];
 // Sorties du carnet qui servent à estimer le temps
 const BASES = { course: "de course", trail: "de trail", randonnee: "de rando", marche: "de marche", velo: "de vélo" };
+const FONDS = [["osm", "Plan"], ["topo", "Topo"], ["ign", "IGN"], ["satellite", "Satellite"]];
+// Fond et vue 2D / 3D retenus d'une visite à l'autre
+const lirePref = (cle, defaut, valides) => {
+  try { const v = localStorage.getItem(cle); return valides.includes(v) ? v : defaut; } catch { return defaut; }
+};
+const ecrirePref = (cle, v) => { try { localStorage.setItem(cle, v); } catch { /* stockage indisponible */ } };
 const TACTILE = typeof window !== "undefined" && !!window.matchMedia?.("(pointer: coarse)").matches;
 
-// Fonds gratuits et sans clé : OSM, OpenTopoMap (courbes de niveau), Plan IGN (Géoplateforme)
+// Fonds gratuits et sans clé : OSM, OpenTopoMap (courbes de niveau), Plan IGN (Géoplateforme),
+// imagerie Esri ; relief AWS (Terrarium) pour la 3D
 const STYLE = {
   version: 8,
   sources: {
@@ -52,11 +59,21 @@ const STYLE = {
       tiles: ["https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2&STYLE=normal&TILEMATRIXSET=PM&FORMAT=image/png&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}"],
       attribution: "© IGN",
     },
+    satellite: {
+      type: "raster", tileSize: 256, maxzoom: 19,
+      tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
+      attribution: "Esri, Maxar, Earthstar Geographics",
+    },
+    relief: {
+      type: "raster-dem", tileSize: 256, maxzoom: 15, encoding: "terrarium",
+      tiles: ["https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"],
+    },
   },
   layers: [
     { id: "osm", type: "raster", source: "osm" },
     { id: "topo", type: "raster", source: "topo", layout: { visibility: "none" } },
     { id: "ign", type: "raster", source: "ign", layout: { visibility: "none" } },
+    { id: "satellite", type: "raster", source: "satellite", layout: { visibility: "none" } },
   ],
 };
 
@@ -398,7 +415,8 @@ function Carte({ propositions, choisie, onChoisir, depart, arrivee, pointage, on
   const libre = useRef(null);
   const popup = useRef(null);
   const [prete, setPrete] = useState(false);
-  const [fond, setFond] = useState("topo");
+  const [fond, setFond] = useState(() => lirePref("itineraires-fond", "topo", FONDS.map(([k]) => k)));
+  const [vue, setVue] = useState(() => lirePref("itineraires-vue", "2d", ["2d", "3d"]));
   // Valeurs à jour pour les gestionnaires d'événements, branchés une seule fois
   const props = useRef({});
   props.current = { pointage, onPoint, onChoisir, edition, couleurEdition, onOp, traceSurvol, onSurvol };
@@ -434,9 +452,9 @@ function Carte({ propositions, choisie, onChoisir, depart, arrivee, pointage, on
       libre.current = maplibregl;
       const centre = depart ? [depart.pos[1], depart.pos[0]] : LYON;
       const m = new maplibregl.Map({ container: conteneur.current, style: STYLE, center: centre, zoom: depart ? 13 : 11,
-        attributionControl: { compact: true } });
+        maxPitch: 75, attributionControl: { compact: true } });
       carte.current = m;
-      m.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+      m.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
       m.on("load", () => {
         const rond = { "line-join": "round", "line-cap": "round" };
         m.addSource("routes", { type: "geojson", data: VIDE });
@@ -584,8 +602,23 @@ function Carte({ propositions, choisie, onChoisir, depart, arrivee, pointage, on
   useEffect(() => {
     const m = carte.current;
     if (!prete || !m) return;
-    for (const f of ["osm", "topo", "ign"]) m.setLayoutProperty(f, "visibility", f === fond ? "visible" : "none");
+    for (const [f] of FONDS) m.setLayoutProperty(f, "visibility", f === fond ? "visible" : "none");
+    ecrirePref("itineraires-fond", fond);
   }, [fond, prete]);
+
+  // 3D : relief exagéré et carte inclinée ; en 2D, retour à plat et au nord
+  useEffect(() => {
+    const m = carte.current;
+    if (!prete || !m) return;
+    ecrirePref("itineraires-vue", vue);
+    if (vue === "3d") {
+      m.setTerrain({ source: "relief", exaggeration: 1.5 });
+      m.easeTo({ pitch: 60, duration: 800 });
+    } else {
+      m.setTerrain(null);
+      m.easeTo({ pitch: 0, bearing: 0, duration: 800 });
+    }
+  }, [vue, prete]);
 
   useEffect(() => {
     if (prete && carte.current) carte.current.getCanvas().style.cursor = pointage ? "crosshair" : edition ? "crosshair" : "";
@@ -635,14 +668,15 @@ function Carte({ propositions, choisie, onChoisir, depart, arrivee, pointage, on
     if (!prete || !propositions?.length) return;
     const pts = (choisie != null ? [propositions[choisie]] : propositions).flatMap((r) => r.points);
     const lats = pts.map((p) => p[0]), lons = pts.map((p) => p[1]);
-    m.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]], { padding: 40, duration: 700 });
+    m.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]], { padding: 40, pitch: m.getPitch(), bearing: m.getBearing(), duration: 700 });
   }, [cadrage, choisie, prete]);
 
   return (
     <div className={`relative rounded-[14px] overflow-hidden bg-remplissage transition-[height] ${edition ? "h-[56vh] md:h-[560px]" : "h-[300px] md:h-[440px]"}`}>
       <div ref={conteneur} className="w-full h-full" />
-      <div className="absolute top-2 left-2">
-        <Bascule options={[["osm", "OSM"], ["topo", "Topo"], ["ign", "IGN"]]} valeur={fond} onChange={setFond} />
+      <div className="absolute top-2 left-2 flex flex-col items-start gap-1.5">
+        <Bascule options={FONDS} valeur={fond} onChange={setFond} />
+        <Bascule options={[["2d", "2D"], ["3d", "3D"]]} valeur={vue} onChange={setVue} />
       </div>
       {pointage && (
         <p className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-black/65 backdrop-blur px-3 py-1.5 text-[13px] font-semibold text-white whitespace-nowrap">
