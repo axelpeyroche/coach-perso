@@ -15,7 +15,7 @@ from carnet_service import synchroniser_physiologie
 from database import obtenir_session
 from deps import (_create_token, _hash_password, _verify_password, compter_echec, get_current_user, limiter,
                   normaliser_email, verifier_mot_de_passe_robuste)
-from models import (Activite, MesureSante, NuitSommeil, Objectif, ObjectifCourse, PoidsUtilisateur, SeancePrevue, TraceGPS,
+from models import (Activite, ItineraireFavori, MesureSante, NuitSommeil, Objectif, ObjectifCourse, PoidsUtilisateur, SeancePrevue, TraceGPS,
                     Utilisateur)
 
 router = APIRouter()
@@ -304,6 +304,7 @@ def supprimer_compte(payload: SuppressionCompteSchema, current_user: Utilisateur
     db.query(ObjectifCourse).filter_by(utilisateur_id=current_user.id).delete()
     db.query(Activite).filter_by(utilisateur_id=current_user.id).delete()
     db.query(Objectif).filter_by(utilisateur_id=current_user.id).delete()
+    db.query(ItineraireFavori).filter_by(utilisateur_id=current_user.id).delete()
     db.delete(current_user)
     db.commit()
     return {"ok": True}

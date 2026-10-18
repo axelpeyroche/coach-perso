@@ -124,6 +124,14 @@ export const getCarteTraces = () => api.get("/traces/carte", { timeout: 60000 })
 // --- Intervals.icu (séances de la montre avec tracé GPS) ---
 export const getItineraires = () => api.get("/itineraires").then((r) => r.data);
 export const proposerItineraires = (d) => api.post("/itineraires", d, { timeout: 60000 }).then((r) => r.data);
+export const tracerItineraire = (d) => api.post("/itineraires/trace", d, { timeout: 45000 }).then((r) => r.data);
+export const getAlluresItineraire = () => api.get("/itineraires/allures").then((r) => r.data);
+export const getFavorisItineraire = () => api.get("/itineraires/favoris").then((r) => r.data);
+export const getFavoriItineraire = (id) => api.get(`/itineraires/favoris/${id}`).then((r) => r.data);
+export const creerFavoriItineraire = (d) => api.post("/itineraires/favoris", d).then((r) => r.data);
+export const modifierFavoriItineraire = (id, d) => api.put(`/itineraires/favoris/${id}`, d).then((r) => r.data);
+export const renommerFavoriItineraire = (id, nom) => api.patch(`/itineraires/favoris/${id}`, { nom }).then((r) => r.data);
+export const supprimerFavoriItineraire = (id) => api.delete(`/itineraires/favoris/${id}`).then((r) => r.data);
 export const getIntervals = () => api.get("/intervals").then((r) => r.data);
 export const connecterIntervals = (cle, athlete_id) => api.put("/intervals", { cle, athlete_id }).then((r) => r.data);
 // Nuits importées par l'ancien raccourci Sommeil / l'export Santé : à effacer pour revenir à Intervals.icu

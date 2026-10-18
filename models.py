@@ -353,3 +353,22 @@ class PushSubscription(Base):
     p256dh: Mapped[str] = mapped_column(Text, nullable=False)
     auth: Mapped[str] = mapped_column(Text, nullable=False)
     cree_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class ItineraireFavori(Base):
+    """
+    Parcours mis de côté depuis la page Itinéraires (proposition retouchée ou non).
+    `donnees` = JSON {points: [[lat, lon, alt], …], terrains, repartition, etapes, depart}.
+    """
+    __tablename__ = "itineraires_favoris"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    utilisateur_id: Mapped[int] = mapped_column(ForeignKey("utilisateurs.id", ondelete="CASCADE"), nullable=False, index=True)
+    nom: Mapped[str] = mapped_column(String(120), nullable=False)
+    sport: Mapped[str] = mapped_column(String(20), nullable=False)
+    boucle: Mapped[bool] = mapped_column(Boolean, default=True)
+    distance_km: Mapped[float] = mapped_column(Float, nullable=False)
+    dplus_m: Mapped[int] = mapped_column(Integer, nullable=False)
+    donnees: Mapped[str] = mapped_column(Text, nullable=False)
+    cree_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    maj_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())

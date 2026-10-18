@@ -1,11 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import Page from "../components/Page";
+import ConfirmDialog from "../components/ConfirmDialog";
 import { Bascule, chargerMaplibre } from "../components/CarteTrace";
 import { Interrupteur, Segmente } from "../components/ui";
-import { getItineraires, proposerItineraires } from "../api";
+import {
+  creerFavoriItineraire, getAlluresItineraire, getFavoriItineraire, getFavorisItineraire, getItineraires,
+  modifierFavoriItineraire, proposerItineraires, renommerFavoriItineraire, supprimerFavoriItineraire, tracerItineraire,
+} from "../api";
 import { nombre } from "../carnet";
+import * as T from "./itineraireTrace";
 
 // ── Réglages ───────────────────────────────────────────────────────────────
 const SPORTS = [
@@ -28,6 +33,9 @@ const DEPUIS_CARNET = { course: "course", trail: "trail", randonnee: "randonnee"
 const TYPE_GPX = { course: "running", trail: "trail_running", randonnee: "hiking", velo: "cycling", gravel: "cycling", vtt: "mountain_biking" };
 const COULEURS = ["#FF6B35", "#7F77DD", "#1D9E75", "#E8338A"];
 const LYON = [4.835, 45.76];
+// Sorties du carnet qui servent à estimer le temps
+const BASES = { course: "de course", trail: "de trail", randonnee: "de rando", marche: "de marche", velo: "de vélo" };
+const TACTILE = typeof window !== "undefined" && !!window.matchMedia?.("(pointer: coarse)").matches;
 
 // Fonds gratuits et sans clé : OSM, OpenTopoMap (courbes de niveau), Plan IGN (Géoplateforme)
 const STYLE = {
@@ -53,16 +61,12 @@ const STYLE = {
 };
 
 // ── Calculs sur un tracé ([lat, lon, alt]) ─────────────────────────────────
-const RAD = Math.PI / 180;
-function distM(a, b) {
-  const x = (b[1] - a[1]) * RAD * Math.cos(((a[0] + b[0]) / 2) * RAD), y = (b[0] - a[0]) * RAD;
-  return 6371000 * Math.hypot(x, y);
-}
 function profil(points) {
   let d = 0;
-  return points.map((p, i) => { if (i) d += distM(points[i - 1], p); return [d / 1000, p[2] ?? 0]; });
+  return points.map((p, i) => { if (i) d += T.distM(points[i - 1], p); return [d / 1000, p[2] ?? 0]; });
 }
 const km = (v) => nombre(v, v < 10 ? 2 : 1);
+const nomSport = (s) => SPORTS.find(([k]) => k === s)?.[1] ?? "Parcours";
 
 function gpx(r, sport, titre) {
   const echap = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;");
@@ -80,9 +84,11 @@ ${pts}
 
 // Enregistre un vrai .gpx : sur iPhone il arrive dans Fichiers, d'où on l'ouvre dans WorkOutDoors
 function telecharger(r, sport, boucle) {
-  const nomSport = SPORTS.find(([k]) => k === sport)?.[1] ?? "Parcours";
-  const titre = `${boucle ? "Boucle" : "Parcours"} ${nomSport.toLowerCase()} ${km(r.distance_km)} km ${r.dplus_m} m D+`;
-  const nom = `carnet-${sport}-${String(r.distance_km).replace(".", ",")}km-${r.dplus_m}m.gpx`;
+  const titre = r.nom ?? `${boucle ? "Boucle" : "Parcours"} ${nomSport(sport).toLowerCase()} ${km(r.distance_km)} km ${r.dplus_m} m D+`;
+  const base = r.nom
+    ? r.nom.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^\w-]+/g, "-").replace(/^-|-$/g, "").toLowerCase().slice(0, 60)
+    : `carnet-${sport}-${String(r.distance_km).replace(".", ",")}km-${r.dplus_m}m`;
+  const nom = `${base || "parcours"}.gpx`;
   const fichier = new File([gpx(r, sport, titre)], nom, { type: "application/gpx+xml" });
   const url = URL.createObjectURL(fichier);
   const a = document.createElement("a");
@@ -212,7 +218,7 @@ function Trait({ type, d }) {
 function LegendeTerrain({ terrains }) {
   const presents = Object.keys(TERRAINS).filter((t) => terrains.some((x) => x[2] === t));
   return (
-    <p className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-label-2">
+    <p className="flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-label-2">
       {presents.map((t) => (
         <span key={t} className="inline-flex items-center gap-1">
           <svg width={20} height={10} aria-hidden><Trait type={t} d="M1,5 L19,5" /></svg>
@@ -223,7 +229,23 @@ function LegendeTerrain({ terrains }) {
   );
 }
 
-function Profil({ points, couleur, hauteur = 26, detail = false, terrains }) {
+function LegendePente() {
+  return (
+    <p className="flex flex-wrap gap-x-2.5 gap-y-0.5 text-[11px] text-label-2 chiffres">
+      {T.PENTES.map(([, l, c]) => (
+        <span key={l} className="inline-flex items-center gap-1">
+          <span className="w-2.5 h-2.5 rounded-[3px]" style={{ backgroundColor: c }} aria-hidden />{l}
+        </span>
+      ))}
+    </p>
+  );
+}
+
+const lireModeProfil = () => {
+  try { return localStorage.getItem("itineraires-profil") === "pente" ? "pente" : "terrain"; } catch { return "terrain"; }
+};
+
+function Profil({ points, couleur, hauteur = 26, detail = false, terrains, mode = "terrain", setMode, curseur = null, onCurseur }) {
   const prof = useMemo(() => profil(points), [points]);
   // Largeur réelle en pixels : les pointillés et traits doubles gardent leurs proportions
   const boite = useRef(null);
@@ -239,16 +261,21 @@ function Profil({ points, couleur, hauteur = 26, detail = false, terrains }) {
   const alts = prof.map((p) => p[1]);
   const min = Math.min(...alts), max = Math.max(...alts), ecart = Math.max(max - min, 20);
   const H = hauteur, marge = detail ? 4 : 2;
+  const yDe = (a) => H - marge - ((a - min) / ecart) * (H - 2 * marge);
   const pas = Math.max(1, Math.floor(prof.length / 400));
-  const pts = prof.filter((_, i) => i % pas === 0 || i === prof.length - 1)
-    .map(([d, a]) => [d, (d / total) * L, H - marge - ((a - min) / ecart) * (H - 2 * marge)]);
+  // [km, x, y, indice du point]
+  const pts = [];
+  prof.forEach(([d, a], i) => { if (i % pas === 0 || i === prof.length - 1) pts.push([d, (d / total) * L, yDe(a), i]); });
   const chemin = (liste) => liste.map(([, x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" L");
   const ligne = chemin(pts);
+  // Kilomètres BRouter recalés sur la distance du profil
+  const k = terrains?.length ? total / (terrains.at(-1)[1] || total) : 1;
+  const pente = useMemo(() => (detail ? T.pentes(prof) : null), [detail, prof]);
+  const enPente = detail && mode === "pente";
 
-  // Découpe de la courbe par terrain (kilomètres BRouter recalés sur la distance du profil)
+  // Découpe de la courbe par terrain
   const troncons = useMemo(() => {
-    if (!detail || !terrains?.length) return [];
-    const k = total / (terrains.at(-1)[1] || total);
+    if (!detail || enPente || !terrains?.length) return [];
     const res = [];
     let i = 0;
     for (const [a, b, t] of terrains) {
@@ -259,68 +286,291 @@ function Profil({ points, couleur, hauteur = 26, detail = false, terrains }) {
       if (morceau.length >= 2) res.push({ a, b, t, d: `M${chemin(morceau)}` });
     }
     return res;
-  }, [detail, terrains, L, H, points]);
+  }, [detail, enPente, terrains, L, H, points]);
+
+  // Découpe par classe de pente
+  const zones = useMemo(() => {
+    if (!enPente) return [];
+    const res = [];
+    for (let j = 0; j < pts.length - 1; j++) {
+      const c = T.classePente(pente[pts[j][3]]);
+      if (res.length && res.at(-1).c === c) res.at(-1).pts.push(pts[j + 1]);
+      else res.push({ c, pts: [pts[j], pts[j + 1]] });
+    }
+    return res;
+  }, [enPente, pente, L, H, points]);
+
+  // Curseur : le doigt (ou la souris) sur le profil donne le point le plus proche
+  const indice = (clientX) => {
+    const r = boite.current.getBoundingClientRect();
+    const d = Math.min(1, Math.max(0, (clientX - r.left) / r.width)) * total;
+    let lo = 0, hi = prof.length - 1;
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (prof[mid][0] < d) lo = mid + 1; else hi = mid; }
+    if (lo > 0 && d - prof[lo - 1][0] < prof[lo][0] - d) lo--;
+    return lo;
+  };
+  const c = curseur != null && curseur < prof.length ? curseur : null;
+  const cx = c != null ? (prof[c][0] / total) * L : 0;
+  const terrainC = c != null ? terrains?.find(([, b]) => prof[c][0] <= b * k + 1e-6)?.[2] : null;
+  const penteC = c != null && pente ? Math.round(pente[c]) : null;
+  const gestes = onCurseur ? {
+    onPointerDown: (e) => { e.currentTarget.setPointerCapture?.(e.pointerId); onCurseur(indice(e.clientX)); },
+    onPointerMove: (e) => onCurseur(indice(e.clientX)),
+    onPointerLeave: (e) => { if (e.pointerType === "mouse") onCurseur(null); },
+    style: { touchAction: "pan-y" },
+  } : {};
 
   return (
     <div ref={boite}>
-      <svg viewBox={`0 0 ${L} ${H}`} className="w-full block" style={{ height: H }}
-        role={troncons.length ? "img" : undefined} aria-hidden={troncons.length ? undefined : true}
-        aria-label={troncons.length ? "Profil d'altitude et terrain le long du parcours" : undefined}>
-        <path d={`M0,${H} L${ligne} L${L},${H} Z`} fill={couleur} fillOpacity={0.15} />
-        {troncons.length ? troncons.map(({ a, b, t, d }, j) => (
-          <g key={j}>
-            <title>{`${TERRAINS[t]?.[0] ?? t} · ${km(a)} → ${km(b)} km`}</title>
-            <Trait type={t} d={d} />
-          </g>
-        )) : <path d={`M${ligne}`} fill="none" stroke={couleur} strokeWidth={1.6} />}
-      </svg>
+      <div {...gestes} className={onCurseur ? "cursor-crosshair select-none" : undefined}>
+        <svg viewBox={`0 0 ${L} ${H}`} className="w-full block overflow-visible" style={{ height: H }}
+          role={detail ? "img" : undefined} aria-hidden={detail ? undefined : true}
+          aria-label={detail ? `Profil d'altitude ${enPente ? "et pentes" : "et terrain"} le long du parcours` : undefined}>
+          {enPente ? zones.map((z, j) => {
+            const col = T.PENTES[z.c][2];
+            return (
+              <g key={j}>
+                <path d={`M${z.pts[0][1].toFixed(1)},${H} L${chemin(z.pts)} L${z.pts.at(-1)[1].toFixed(1)},${H} Z`} fill={col} fillOpacity={0.2} />
+                <path d={`M${chemin(z.pts)}`} fill="none" stroke={col} strokeWidth={2} strokeLinejoin="round" />
+              </g>
+            );
+          }) : (
+            <>
+              <path d={`M0,${H} L${ligne} L${L},${H} Z`} fill={couleur} fillOpacity={0.15} />
+              {troncons.length ? troncons.map(({ a, b, t, d }, j) => (
+                <g key={j}>
+                  <title>{`${TERRAINS[t]?.[0] ?? t} · ${km(a)} → ${km(b)} km`}</title>
+                  <Trait type={t} d={d} />
+                </g>
+              )) : <path d={`M${ligne}`} fill="none" stroke={couleur} strokeWidth={1.6} />}
+            </>
+          )}
+          {c != null && (
+            <g className="text-label" pointerEvents="none">
+              <line x1={cx} x2={cx} y1={0} y2={H} stroke="currentColor" strokeOpacity={0.45} strokeWidth={1} />
+              <circle cx={cx} cy={yDe(prof[c][1])} r={4.5} fill={couleur} stroke="#fff" strokeWidth={2} />
+            </g>
+          )}
+        </svg>
+      </div>
       {detail && (
-        <p className="flex justify-between text-[11px] text-label-2 chiffres mt-0.5">
-          <span>{Math.round(min)} m</span><span>alt. max {Math.round(max)} m</span><span>{km(total)} km</span>
+        <p className="flex justify-between gap-2 text-[11px] text-label-2 chiffres mt-0.5 min-h-[16px]">
+          {c != null ? (
+            <span className="text-label font-semibold">
+              {km(prof[c][0])} km · {Math.round(prof[c][1])} m
+              {penteC != null && ` · ${penteC > 0 ? "+" : penteC < 0 ? "−" : ""}${Math.abs(penteC)} %`}
+              {terrainC && ` · ${TERRAINS[terrainC]?.[0] ?? terrainC}`}
+            </span>
+          ) : (
+            <><span>{Math.round(min)} m</span><span>alt. max {Math.round(max)} m</span><span>{km(total)} km</span></>
+          )}
         </p>
       )}
-      {troncons.length > 0 && <LegendeTerrain terrains={terrains} />}
+      {detail && (
+        <div className="mt-1 flex items-center justify-between gap-2">
+          {enPente ? <LegendePente /> : troncons.length > 0 ? <LegendeTerrain terrains={terrains} /> : <span />}
+          {setMode && (
+            <div className="flex shrink-0 rounded-[8px] bg-remplissage p-0.5 text-[11px] font-semibold" role="group" aria-label="Couleurs du profil">
+              {[["terrain", "Terrain"], ["pente", "Pente"]].map(([v, l]) => (
+                <button type="button" key={v} aria-pressed={mode === v} onClick={() => setMode(v)}
+                  className={`px-2 py-0.5 rounded-[6px] transition ${mode === v ? "bg-surface text-label shadow-sm" : "text-label-2"}`}>
+                  {l}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
 // ── Carte ──────────────────────────────────────────────────────────────────
-function Carte({ propositions, choisie, onChoisir, depart, arrivee, pointage, onPoint }) {
+const VIDE = { type: "FeatureCollection", features: [] };
+const ligneGeo = (pts, properties = {}) => ({ type: "Feature", properties, geometry: { type: "LineString", coordinates: pts.map((p) => [p[1], p[0]]) } });
+const pointGeo = (p, properties = {}) => ({ type: "Feature", properties, geometry: { type: "Point", coordinates: [p[1], p[0]] } });
+const collection = (features) => ({ type: "FeatureCollection", features });
+
+function Carte({ propositions, choisie, onChoisir, depart, arrivee, pointage, onPoint, cadrage,
+  edition, couleurEdition, onOp, traceSurvol, onSurvol, curseur }) {
   const conteneur = useRef(null);
   const carte = useRef(null);
+  const libre = useRef(null);
+  const popup = useRef(null);
   const [prete, setPrete] = useState(false);
   const [fond, setFond] = useState("topo");
-  const pointageRef = useRef(pointage);
-  pointageRef.current = pointage;
-  const onPointRef = useRef(onPoint);
-  onPointRef.current = onPoint;
-  const onChoisirRef = useRef(onChoisir);
-  onChoisirRef.current = onChoisir;
+  // Valeurs à jour pour les gestionnaires d'événements, branchés une seule fois
+  const props = useRef({});
+  props.current = { pointage, onPoint, onChoisir, edition, couleurEdition, onOp, traceSurvol, onSurvol };
+  // Geste en cours sur le tracé en retouche : { type: "point" | "ligne", k, x0, pos, bouge }
+  const geste = useRef(null);
+  const finGeste = useRef(0);
+
+  // Tracé en retouche, avec l'aperçu en tirets pendant un glissé ou un calcul
+  const dessinerEdition = useCallback(() => {
+    const m = carte.current;
+    if (!m?.getSource("edit-segs")) return;
+    const { edition: ed, couleurEdition: c } = props.current;
+    if (!ed) {
+      for (const s of ["edit-segs", "edit-apercu", "edit-points"]) m.getSource(s).setData(VIDE);
+      return;
+    }
+    const g = geste.current;
+    const op = g?.bouge ? { type: g.type === "point" ? "deplacer" : "inserer", k: g.k, pos: g.pos } : ed.attente;
+    const ap = T.apercu(ed.e, op);
+    m.getSource("edit-segs").setData(collection(ed.e.segs.map((s, k) => ligneGeo(s.pts, { k, c, masque: ap.masques.includes(k) }))));
+    m.getSource("edit-apercu").setData(collection(ap.lignes.map((l) => ligneGeo(l))));
+    const n = ap.wps.length;
+    m.getSource("edit-points").setData(collection(ap.wps.map((w, k) => pointGeo(w, {
+      k, c, role: k === 0 ? "depart" : !ed.e.boucle && k === n - 1 ? "arrivee" : "etape",
+    }))));
+  }, []);
 
   useEffect(() => {
     let annule = false;
     (async () => {
       const maplibregl = await chargerMaplibre();
       if (annule || !conteneur.current) return;
+      libre.current = maplibregl;
       const centre = depart ? [depart.pos[1], depart.pos[0]] : LYON;
       const m = new maplibregl.Map({ container: conteneur.current, style: STYLE, center: centre, zoom: depart ? 13 : 11,
         attributionControl: { compact: true } });
       carte.current = m;
       m.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
       m.on("load", () => {
-        const vide = { type: "FeatureCollection", features: [] };
-        m.addSource("routes", { type: "geojson", data: vide });
-        m.addLayer({ id: "routes-bord", type: "line", source: "routes", layout: { "line-join": "round", "line-cap": "round" },
+        const rond = { "line-join": "round", "line-cap": "round" };
+        m.addSource("routes", { type: "geojson", data: VIDE });
+        m.addLayer({ id: "routes-bord", type: "line", source: "routes", layout: rond,
           paint: { "line-color": "#fff", "line-width": ["case", ["get", "sel"], 7, 4.5], "line-opacity": ["case", ["get", "sel"], 1, 0.6] } });
-        m.addLayer({ id: "routes", type: "line", source: "routes", layout: { "line-join": "round", "line-cap": "round", "line-sort-key": ["case", ["get", "sel"], 1, 0] },
+        m.addLayer({ id: "routes", type: "line", source: "routes", layout: { ...rond, "line-sort-key": ["case", ["get", "sel"], 1, 0] },
           paint: { "line-color": ["get", "c"], "line-width": ["case", ["get", "sel"], 4.5, 2.5], "line-opacity": ["case", ["get", "sel"], 1, 0.55] } });
-        m.addSource("points", { type: "geojson", data: vide });
+        // Retouche : larges cibles invisibles pour attraper le tracé et les points au doigt
+        for (const s of ["edit-segs", "edit-apercu", "edit-points", "points", "curseur"]) m.addSource(s, { type: "geojson", data: VIDE });
+        m.addLayer({ id: "edit-segs-cible", type: "line", source: "edit-segs", layout: rond,
+          paint: { "line-color": "#000", "line-opacity": 0.01, "line-width": 22 } });
+        m.addLayer({ id: "edit-segs-bord", type: "line", source: "edit-segs", layout: rond,
+          paint: { "line-color": "#fff", "line-width": 7.5, "line-opacity": ["case", ["get", "masque"], 0.3, 1] } });
+        m.addLayer({ id: "edit-segs", type: "line", source: "edit-segs", layout: rond,
+          paint: { "line-color": ["get", "c"], "line-width": 4.5, "line-opacity": ["case", ["get", "masque"], 0.3, 1] } });
+        m.addLayer({ id: "edit-apercu", type: "line", source: "edit-apercu", layout: rond,
+          paint: { "line-color": "#1C1C1E", "line-width": 3, "line-dasharray": [0.6, 1.8] } });
         m.addLayer({ id: "points", type: "circle", source: "points",
           paint: { "circle-radius": 7, "circle-color": ["get", "c"], "circle-stroke-color": "#fff", "circle-stroke-width": 2.5 } });
-        m.on("click", "routes", (e) => { if (!pointageRef.current) onChoisirRef.current(e.features[0].properties.i); });
-        m.on("mouseenter", "routes", () => { m.getCanvas().style.cursor = "pointer"; });
-        m.on("mouseleave", "routes", () => { m.getCanvas().style.cursor = ""; });
-        m.on("click", (e) => { if (pointageRef.current) onPointRef.current([e.lngLat.lat, e.lngLat.lng]); });
+        m.addLayer({ id: "edit-points-cible", type: "circle", source: "edit-points",
+          paint: { "circle-radius": 20, "circle-color": "#000", "circle-opacity": 0.01 } });
+        m.addLayer({ id: "edit-points", type: "circle", source: "edit-points", paint: {
+          "circle-radius": ["match", ["get", "role"], "etape", 6.5, 8.5],
+          "circle-color": ["match", ["get", "role"], "depart", "#34C759", "arrivee", "#1C1C1E", "#fff"],
+          "circle-stroke-color": ["match", ["get", "role"], "etape", ["get", "c"], "#fff"],
+          "circle-stroke-width": 3,
+        } });
+        m.addLayer({ id: "curseur", type: "circle", source: "curseur",
+          paint: { "circle-radius": 7, "circle-color": ["get", "c"], "circle-stroke-color": "#fff", "circle-stroke-width": 3 } });
+
+        m.on("click", "routes", (e) => {
+          const p = props.current;
+          if (!p.pointage && !p.edition) p.onChoisir(e.features[0].properties.i);
+        });
+        m.on("mouseenter", "routes", () => { if (!props.current.edition) m.getCanvas().style.cursor = "pointer"; });
+        m.on("mouseleave", "routes", () => { if (!props.current.edition) m.getCanvas().style.cursor = ""; });
+
+        // ── Gestes de retouche ──
+        const fermerPopup = () => { popup.current?.remove(); popup.current = null; };
+        const ouvrirPopup = (k) => {
+          const e = props.current.edition.e, w = e.wps[k];
+          const div = document.createElement("div");
+          div.style.color = "#1C1C1E";
+          if (T.retirable(e, k)) {
+            const b = document.createElement("button");
+            b.type = "button";
+            b.className = "btn-danger btn-sm";
+            b.textContent = "Retirer ce point";
+            b.onclick = () => { fermerPopup(); props.current.onOp({ type: "retirer", k }); };
+            div.appendChild(b);
+          } else {
+            div.className = "text-[13px] px-1";
+            div.textContent = k === 0
+              ? `${e.boucle ? "Départ et arrivée" : "Départ"} : fais-le glisser pour le déplacer.`
+              : "Arrivée : fais-la glisser pour la déplacer.";
+          }
+          fermerPopup();
+          popup.current = new maplibregl.Popup({ closeButton: false, closeOnClick: false, offset: 14, maxWidth: "240px" })
+            .setLngLat([w[1], w[0]]).setDOMContent(div).addTo(m);
+        };
+        const annulerGeste = () => { if (geste.current) { geste.current = null; dessinerEdition(); } };
+        const lacher = () => {
+          const g = geste.current;
+          geste.current = null;
+          if (!g) return;
+          finGeste.current = Date.now();
+          const p = props.current;
+          if (!p.edition || p.edition.attente) { dessinerEdition(); return; }
+          if (g.bouge) p.onOp({ type: g.type === "point" ? "deplacer" : "inserer", k: g.k, pos: g.pos });
+          else if (g.type === "point") ouvrirPopup(g.k);
+          else p.onOp({ type: "couper", k: g.k, pos: g.pos });
+        };
+        let dernierToucher = 0;
+        const appuyer = (e) => {
+          const ed = props.current.edition;
+          const touches = e.originalEvent.touches;
+          if (touches) dernierToucher = Date.now();
+          // Après un toucher, le navigateur simule aussi la souris : ce second geste est ignoré
+          else if (Date.now() - dernierToucher < 1000) return;
+          if (!ed || ed.attente || props.current.pointage) return;
+          if (touches && touches.length > 1) { annulerGeste(); return; }
+          const wp = m.queryRenderedFeatures(e.point, { layers: ["edit-points-cible"] })[0];
+          const seg = !wp && m.queryRenderedFeatures(e.point, { layers: ["edit-segs-cible"] })[0];
+          if (!wp && !seg) return;
+          e.preventDefault(); // pas de déplacement de la carte : c'est le tracé qu'on attrape
+          geste.current = { type: wp ? "point" : "ligne", k: (wp ?? seg).properties.k, x0: e.point, pos: [e.lngLat.lat, e.lngLat.lng], bouge: false };
+          if (!touches) window.addEventListener("mouseup", lacher, { once: true });
+        };
+        let raf = 0, dernier = null;
+        const survoler = (e) => {
+          const p = props.current;
+          if (p.edition && !p.edition.attente) {
+            const sur = m.queryRenderedFeatures(e.point, { layers: ["edit-points-cible", "edit-segs-cible"] }).length;
+            m.getCanvas().style.cursor = sur ? "pointer" : "crosshair";
+          }
+          if (!p.onSurvol || !p.traceSurvol?.length) return;
+          dernier = e;
+          if (raf) return;
+          raf = requestAnimationFrame(() => {
+            raf = 0;
+            const pts = props.current.traceSurvol;
+            if (!pts?.length) return;
+            const { i } = T.plusProche(pts, [dernier.lngLat.lat, dernier.lngLat.lng]);
+            const px = m.project([pts[i][1], pts[i][0]]);
+            props.current.onSurvol(Math.hypot(px.x - dernier.point.x, px.y - dernier.point.y) < 40 ? i : null);
+          });
+        };
+        const bouger = (e) => {
+          const g = geste.current;
+          if (!g) { if (e.type === "mousemove") survoler(e); return; }
+          if (e.originalEvent.touches?.length > 1) { annulerGeste(); return; }
+          g.pos = [e.lngLat.lat, e.lngLat.lng];
+          if (!g.bouge && Math.hypot(e.point.x - g.x0.x, e.point.y - g.x0.y) < 6) return;
+          g.bouge = true;
+          dessinerEdition();
+        };
+        m.on("mousedown", appuyer);
+        m.on("touchstart", appuyer);
+        m.on("mousemove", bouger);
+        m.on("touchmove", bouger);
+        m.on("touchend", () => { dernierToucher = Date.now(); lacher(); });
+        m.on("touchcancel", annulerGeste);
+        m.on("mouseout", () => props.current.onSurvol?.(null));
+
+        m.on("click", (e) => {
+          const p = props.current;
+          if (p.pointage) { p.onPoint([e.lngLat.lat, e.lngLat.lng]); return; }
+          if (!p.edition) return;
+          // Le clic qui suit un glissé ou un toucher sur le tracé est déjà traité
+          if (Date.now() - finGeste.current < 500 || p.edition.attente) return;
+          if (popup.current) { fermerPopup(); return; }
+          if (m.queryRenderedFeatures(e.point, { layers: ["edit-points-cible", "edit-segs-cible"] }).length) return;
+          p.onOp({ type: "ajouter", pos: [e.lngLat.lat, e.lngLat.lng] });
+        });
         setPrete(true);
       });
       // La carte peut naître cachée (téléphone) : on la redimensionne quand elle apparaît
@@ -333,52 +583,63 @@ function Carte({ propositions, choisie, onChoisir, depart, arrivee, pointage, on
 
   useEffect(() => {
     const m = carte.current;
-    if (!prete) return;
+    if (!prete || !m) return;
     for (const f of ["osm", "topo", "ign"]) m.setLayoutProperty(f, "visibility", f === fond ? "visible" : "none");
   }, [fond, prete]);
 
   useEffect(() => {
-    if (prete) carte.current.getCanvas().style.cursor = pointage ? "crosshair" : "";
-  }, [pointage, prete]);
+    if (prete && carte.current) carte.current.getCanvas().style.cursor = pointage ? "crosshair" : edition ? "crosshair" : "";
+  }, [pointage, !!edition, prete]);
+
+  // Retouche : dessin du tracé et des points ; la bulle se ferme quand le tracé change
+  useEffect(() => {
+    if (!prete || !carte.current) return;
+    popup.current?.remove();
+    popup.current = null;
+    dessinerEdition();
+  }, [edition, couleurEdition, prete]);
 
   // Points de départ et d'arrivée
   useEffect(() => {
     const m = carte.current;
-    if (!prete) return;
-    const f = [[depart, "#34C759"], [arrivee, "#1C1C1E"]].filter(([p]) => p)
-      .map(([p, c]) => ({ type: "Feature", properties: { c }, geometry: { type: "Point", coordinates: [p.pos[1], p.pos[0]] } }));
+    if (!prete || !m) return;
+    const f = [[depart, "#34C759"], [arrivee, "#1C1C1E"]].filter(([p]) => p).map(([p, c]) => pointGeo(p.pos, { c }));
     // Départ déplacé vers une zone de chemins : un point à la couleur de la proposition
-    (propositions ?? []).forEach((r, i) => {
-      if (r.depart && r.approche_km >= 0.3) {
-        f.push({ type: "Feature", properties: { c: COULEURS[i % COULEURS.length] }, geometry: { type: "Point", coordinates: [r.depart[1], r.depart[0]] } });
-      }
-    });
-    m.getSource("points").setData({ type: "FeatureCollection", features: f });
+    if (!edition) {
+      (propositions ?? []).forEach((r, i) => {
+        if (r.depart && r.approche_km >= 0.3) f.push(pointGeo(r.depart, { c: COULEURS[i % COULEURS.length] }));
+      });
+    }
+    m.getSource("points").setData(collection(f));
     if (depart && !propositions?.length) m.easeTo({ center: [depart.pos[1], depart.pos[0]], zoom: Math.max(m.getZoom(), 12.5) });
-  }, [depart, arrivee, propositions, prete]);
+  }, [depart, arrivee, propositions, !!edition, prete]);
 
-  // Tracés proposés
+  // Tracés proposés (masqués pendant la retouche : seul le tracé retouché reste)
   useEffect(() => {
     const m = carte.current;
-    if (!prete) return;
-    const f = (propositions ?? []).map((r, i) => ({
-      type: "Feature", properties: { i, c: COULEURS[i % COULEURS.length], sel: i === choisie },
-      geometry: { type: "LineString", coordinates: r.points.map((p) => [p[1], p[0]]) },
-    }));
-    m.getSource("routes").setData({ type: "FeatureCollection", features: f });
-  }, [propositions, choisie, prete]);
+    if (!prete || !m) return;
+    const f = edition ? [] : (propositions ?? []).map((r, i) => ligneGeo(r.points, { i, c: COULEURS[i % COULEURS.length], sel: i === choisie }));
+    m.getSource("routes").setData(collection(f));
+  }, [propositions, choisie, !!edition, prete]);
 
-  // Cadrage sur le tracé choisi (ou sur toutes les propositions)
+  // Point de la courbe d'altitude sous le doigt
+  useEffect(() => {
+    const m = carte.current;
+    if (!prete || !m) return;
+    m.getSource("curseur").setData(curseur ? collection([pointGeo(curseur.pos, { c: curseur.c })]) : VIDE);
+  }, [curseur, prete]);
+
+  // Cadrage sur le tracé choisi (ou sur toutes les propositions) quand le résultat ou le choix change
   useEffect(() => {
     const m = carte.current;
     if (!prete || !propositions?.length) return;
     const pts = (choisie != null ? [propositions[choisie]] : propositions).flatMap((r) => r.points);
     const lats = pts.map((p) => p[0]), lons = pts.map((p) => p[1]);
     m.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]], { padding: 40, duration: 700 });
-  }, [propositions, choisie, prete]);
+  }, [cadrage, choisie, prete]);
 
   return (
-    <div className="relative h-[300px] md:h-[440px] rounded-[14px] overflow-hidden bg-remplissage">
+    <div className={`relative rounded-[14px] overflow-hidden bg-remplissage transition-[height] ${edition ? "h-[56vh] md:h-[560px]" : "h-[300px] md:h-[440px]"}`}>
       <div ref={conteneur} className="w-full h-full" />
       <div className="absolute top-2 left-2">
         <Bascule options={[["osm", "OSM"], ["topo", "Topo"], ["ign", "IGN"]]} valeur={fond} onChange={setFond} />
@@ -388,6 +649,55 @@ function Carte({ propositions, choisie, onChoisir, depart, arrivee, pointage, on
           Touche la carte pour placer {pointage === "depart" ? "le départ" : "l'arrivée"}
         </p>
       )}
+      {edition?.attente && (
+        <p className="absolute bottom-3 left-1/2 -translate-x-1/2 inline-flex items-center gap-2 rounded-full bg-black/65 backdrop-blur px-3 py-1.5 text-[13px] font-semibold text-white whitespace-nowrap" role="status">
+          <span className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" aria-hidden />
+          Calcul du tracé…
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ── Retouche ───────────────────────────────────────────────────────────────
+function PanneauRetouche({ edition, stats, allure, onAnnuler, onRevenir, onTerminer }) {
+  const t = T.duree(T.tempsEstime(stats, allure));
+  const change = edition.e !== edition.initial;
+  const verbe = TACTILE ? "Touche" : "Clique sur";
+  const aide = [
+    [`${verbe} la carte`, " : le tracé passe par là."],
+    ["Fais glisser un point ou le tracé", " pour le déplacer."],
+    [`${verbe} un point`, ` pour le retirer.${TACTILE ? "" : " Ctrl+Z annule."}`],
+  ];
+  return (
+    <div className="card p-4 space-y-3">
+      <div>
+        <p className="text-[12px] font-semibold text-label-2">Retouche du tracé</p>
+        <p className="text-[18px] font-semibold chiffres">
+          {km(stats.distance_km)} km · {stats.dplus_m} m D+
+          {t && <span className="font-normal text-label-2"> · ≈ {t}</span>}
+        </p>
+        {change && (
+          <p className="text-[12px] text-label-2 chiffres">Avant : {km(edition.avant.distance_km)} km · {edition.avant.dplus_m} m D+</p>
+        )}
+      </div>
+      {edition.erreur && <p className="text-[13px] text-ios-red" role="alert">{edition.erreur}</p>}
+      <div className="flex items-center gap-2">
+        <button type="button" onClick={onAnnuler} disabled={!edition.pile.length || !!edition.attente} className="btn-gris btn-sm">
+          ↶ Annuler
+        </button>
+        <button type="button" onClick={onRevenir} disabled={!change || !!edition.attente} className="btn-texte !text-[13px] whitespace-nowrap">
+          Revenir à l'original
+        </button>
+        <button type="button" onClick={onTerminer} disabled={!!edition.attente} className="btn-primaire btn-sm ml-auto">
+          Terminer
+        </button>
+      </div>
+      <ul className="space-y-1 text-[13px] text-label-2">
+        {aide.map(([a, b]) => (
+          <li key={a} className="flex gap-2"><span aria-hidden className="text-brand">•</span><span><b className="font-semibold text-label">{a}</b>{b}</span></li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -395,7 +705,7 @@ function Carte({ propositions, choisie, onChoisir, depart, arrivee, pointage, on
 // ── Proposition ────────────────────────────────────────────────────────────
 function Pastille({ r, distance, dplus, boucle }) {
   const pastille = "inline-flex items-center h-[20px] px-1.5 rounded-md text-[11px] font-semibold whitespace-nowrap";
-  if (!boucle) return null;
+  if (!boucle || (!distance && dplus == null)) return null;
   const ed = distance ? r.distance_km - distance : 0;
   const eh = dplus != null ? r.dplus_m - dplus : 0;
   const okD = !distance || Math.abs(ed) <= Math.max(0.5, distance * 0.05);
@@ -443,40 +753,107 @@ function BoutonGpx({ r, i, sport, boucle }) {
   );
 }
 
-function Proposition({ r, i, choisie, onChoisir, sport, distance, dplus, boucle }) {
+function ChampNom({ nom, onValider, onAnnuler }) {
+  const [v, setV] = useState(nom);
+  const valider = () => { const t = v.trim(); if (t && t !== nom) onValider(t.slice(0, 120)); else onAnnuler(); };
+  return (
+    <input autoFocus value={v} onChange={(e) => setV(e.target.value)} maxLength={120} aria-label="Nom du parcours"
+      onKeyDown={(e) => { if (e.key === "Enter") valider(); if (e.key === "Escape") onAnnuler(); }} onBlur={valider}
+      className="w-full rounded-[8px] bg-remplissage px-2 py-1 text-[16px] md:text-[14px] font-semibold outline-none" />
+  );
+}
+
+function Proposition({ r, i, choisie, onChoisir, sport, distance, dplus, boucle, allure, enRetouche,
+  modeProfil, setModeProfil, curseur, onCurseur, onModifier, onEnregistrer, enregistrement, renommage,
+  onRenommer, onNommer, onSupprimer }) {
   const couleur = COULEURS[i % COULEURS.length];
   const sel = i === choisie;
+  const temps = T.duree(T.tempsEstime(r, allure));
   return (
     <div className={`ligne !items-stretch flex-col !gap-1.5 !py-3 ${sel ? "rounded-[12px]" : ""}`}
       style={sel ? { boxShadow: `inset 0 0 0 2px ${couleur}` } : undefined}>
       <div className="flex items-center gap-3">
-        <button type="button" onClick={() => onChoisir(sel ? null : i)} className="flex-1 min-w-0 flex items-start gap-3 text-left">
-          <span className="w-3 h-3 mt-1.5 rounded-full shrink-0" style={{ backgroundColor: couleur }} aria-hidden />
-          <span className="flex-1 min-w-0">
-            <span className="block text-[16px] font-semibold chiffres">{km(r.distance_km)} km · {r.dplus_m} m D+</span>
-            <span className="mt-1 flex flex-wrap items-center gap-1.5">
-              <Pastille r={r} distance={distance} dplus={dplus} boucle={boucle} />
-              {r.approche_km >= 0.3 && (
-                <span className="inline-flex items-center h-[20px] px-1.5 rounded-md text-[11px] font-semibold whitespace-nowrap bg-remplissage text-label-2">
-                  Départ à {km(r.approche_km)} km
-                </span>
-              )}
-              <Repartition r={r} sport={sport} />
+        {renommage ? (
+          <div className="flex-1 min-w-0 pl-6">
+            <ChampNom nom={r.nom ?? ""} onValider={onNommer} onAnnuler={() => onRenommer(false)} />
+          </div>
+        ) : (
+          <button type="button" onClick={() => onChoisir(sel ? null : i)} className="flex-1 min-w-0 flex items-start gap-3 text-left">
+            <span className="w-3 h-3 mt-1.5 rounded-full shrink-0" style={{ backgroundColor: couleur }} aria-hidden />
+            <span className="flex-1 min-w-0">
+              {r.nom && <span className="block text-[13px] font-semibold text-label-2 truncate">★ {r.nom}</span>}
+              <span className="block text-[16px] font-semibold chiffres">
+                {km(r.distance_km)} km · {r.dplus_m} m D+
+                {temps && <span className="font-normal text-label-2"> · ≈ {temps}</span>}
+              </span>
+              <span className="mt-1 flex flex-wrap items-center gap-1.5">
+                {enRetouche && (
+                  <span className="inline-flex items-center h-[20px] px-1.5 rounded-md text-[11px] font-semibold whitespace-nowrap bg-brand/15 text-brand">En retouche</span>
+                )}
+                {!enRetouche && r.retouche && (
+                  <span className="inline-flex items-center h-[20px] px-1.5 rounded-md text-[11px] font-semibold whitespace-nowrap bg-brand/15 text-brand">Retouché</span>
+                )}
+                {!r.retouche && !enRetouche && <Pastille r={r} distance={distance} dplus={dplus} boucle={boucle} />}
+                {r.approche_km >= 0.3 && (
+                  <span className="inline-flex items-center h-[20px] px-1.5 rounded-md text-[11px] font-semibold whitespace-nowrap bg-remplissage text-label-2">
+                    Départ à {km(r.approche_km)} km
+                  </span>
+                )}
+                <Repartition r={r} sport={sport} />
+              </span>
             </span>
-          </span>
-        </button>
-        <BoutonGpx r={r} i={i} sport={sport} boucle={boucle} />
+          </button>
+        )}
+        {!enRetouche && <BoutonGpx r={r} i={i} sport={sport} boucle={boucle} />}
       </div>
-      <button type="button" onClick={() => onChoisir(sel ? null : i)} className="pl-6 text-left" aria-hidden tabIndex={-1}>
-        <Profil points={r.points} couleur={couleur} hauteur={sel ? 70 : 26} detail={sel} terrains={r.terrains} />
-      </button>
+      <div className="pl-6">
+        {sel ? (
+          <Profil points={r.points} couleur={couleur} hauteur={78} detail terrains={r.terrains}
+            mode={modeProfil} setMode={setModeProfil} curseur={curseur} onCurseur={onCurseur} />
+        ) : (
+          <button type="button" onClick={() => onChoisir(i)} className="block w-full text-left" aria-hidden tabIndex={-1}>
+            <Profil points={r.points} couleur={couleur} hauteur={26} />
+          </button>
+        )}
+      </div>
+      {sel && !enRetouche && (
+        <div className="pl-6 pt-1 flex flex-wrap items-center gap-2">
+          <button type="button" onClick={onModifier} className="btn-gris btn-sm">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4" aria-hidden>
+              <path d="M4 20h4L19 9l-4-4L4 16v4zM14 6l4 4" />
+            </svg>
+            Modifier le tracé
+          </button>
+          {r.favori_id && !r.modifie ? (
+            <span className="inline-flex items-center gap-1 h-8 px-3 text-[13px] font-semibold text-brand">★ Enregistré</span>
+          ) : (
+            <button type="button" onClick={onEnregistrer} disabled={enregistrement} className="btn-teinte btn-sm">
+              {enregistrement ? "Enregistrement…" : r.favori_id ? "★ Mettre à jour" : "☆ Enregistrer"}
+            </button>
+          )}
+          {r.favori_id && !renommage && (
+            <>
+              <button type="button" onClick={() => onRenommer(true)} className="btn-texte !text-[13px]">Renommer</button>
+              <button type="button" onClick={onSupprimer} className="btn-texte !text-[13px] !text-ios-red">Supprimer</button>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
+}
+
+function messageRetouche(e) {
+  if (e?.response?.status === 429) return "Beaucoup de retouches d'affilée : patiente quelques secondes.";
+  if (e?.code === "ECONNABORTED") return "Le calcul prend trop de temps. Réessaie dans un instant.";
+  const d = e?.response?.data?.detail;
+  return typeof d === "string" ? `${d} Essaie un point un peu plus loin.` : "Tracé impossible par ce point. Essaie un peu plus loin.";
 }
 
 // ── Page ───────────────────────────────────────────────────────────────────
 export default function Itineraires() {
   const [params] = useSearchParams();
+  const qc = useQueryClient();
   const sportInitial = DEPUIS_CARNET[params.get("sport")] ?? (SPORTS.some(([k]) => k === params.get("sport")) ? params.get("sport") : "trail");
   const [sport, setSport] = useState(sportInitial);
   const [boucle, setBoucle] = useState(true);
@@ -493,15 +870,43 @@ export default function Itineraires() {
   const [essai, setEssai] = useState(0);
   const [erreur, setErreur] = useState(null);
   const [vue, setVue] = useState("recherche"); // téléphone : « recherche » puis « resultats »
+  const [edition, setEdition] = useState(null);
+  const [curseur, setCurseur] = useState(null);
+  const [modeProfil, setModeProfilBrut] = useState(lireModeProfil);
+  const [renommage, setRenommage] = useState(null);
+  const [aSupprimer, setASupprimer] = useState(null);
+  const [erreurFavori, setErreurFavori] = useState(null);
+  const [tousFavoris, setTousFavoris] = useState(false);
   const haut = useRef(null);
+  const zoneCarte = useRef(null);
+  const editionRef = useRef(edition);
+  editionRef.current = edition;
 
   const { data: statut } = useQuery({ queryKey: ["itineraires"], queryFn: getItineraires, staleTime: 300_000 });
+  const { data: allures } = useQuery({ queryKey: ["itineraires-allures"], queryFn: getAlluresItineraire, staleTime: 600_000 });
+  const { data: favoris } = useQuery({ queryKey: ["itineraires-favoris"], queryFn: getFavorisItineraire, staleTime: 60_000 });
+
+  const setModeProfil = (v) => {
+    setModeProfilBrut(v);
+    try { localStorage.setItem("itineraires-profil", v); } catch { /* stockage indisponible */ }
+  };
 
   const changerSport = (s) => {
     setSport(s);
     if (!params.get("distance")) { setDistance(String(DEFAUTS[s][0])); setDplus(String(DEFAUTS[s][1])); }
     setSentiers(s === "course");
     setRayon(rayonDefaut(s));
+  };
+
+  const afficher = (res) => {
+    setEdition(null);
+    setRenommage(null);
+    setCurseur(null);
+    setErreurFavori(null);
+    setResultat({ id: Date.now(), ...res });
+    setChoisie(res.propositions.length ? 0 : null);
+    setVue("resultats");
+    haut.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   const demande = useMutation({
@@ -515,11 +920,15 @@ export default function Itineraires() {
       rayon_km: boucle ? Number(rayon) : 0,
     }),
     onSuccess: (r, n) => {
-      setResultat({ ...r, boucle, distance: boucle ? Number(String(distance).replace(",", ".")) : null, dplus: dplus === "" ? null : Number(dplus), sport, rayon: boucle ? Number(rayon) : 0 });
-      setChoisie(r.propositions.length ? 0 : null);
+      afficher({
+        ...r, boucle, sport,
+        distance: boucle ? Number(String(distance).replace(",", ".")) : null,
+        dplus: dplus === "" ? null : Number(dplus),
+        rayon: boucle ? Number(rayon) : 0,
+        sentiers: AVEC_SENTIERS.includes(sport) && sentiers,
+        nomDepart: depart?.mode === "adresse" ? depart.nom : null,
+      });
       setEssai(n);
-      setVue("resultats");
-      haut.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     },
     onError: (e) => setErreur(e?.response?.data?.detail?.toString?.()
       ?? (e?.code === "ECONNABORTED" ? "Le calcul prend trop de temps. Réessaie dans un instant." : "Calcul impossible pour le moment.")),
@@ -541,6 +950,128 @@ export default function Itineraires() {
     setPointage(null);
   };
 
+  const resultats = resultat?.propositions ?? [];
+  const majProposition = (i, patch) => setResultat((res) => res && {
+    ...res, propositions: res.propositions.map((p, j) => (j === i ? { ...p, ...patch } : p)),
+  });
+
+  // ── Retouche du tracé ──
+  const trace = useMemo(() => (edition ? T.assembler(edition.e) : null), [edition?.e]);
+  const traceStats = useMemo(() => (trace ? T.decrire(trace.points, trace.types) : null), [trace]);
+  const affichees = useMemo(() => resultats.map((r, i) => (edition?.i === i && trace
+    ? { ...r, ...traceStats, points: trace.points } : r)), [resultats, edition?.i, trace, traceStats]);
+
+  const commencer = (i) => {
+    const e0 = T.decouper(resultats[i], resultat.boucle, A_PIED.includes(resultat.sport));
+    const t0 = T.assembler(e0), avant = T.decrire(t0.points, t0.types);
+    setChoisie(i);
+    setCurseur(null);
+    setRenommage(null);
+    setEdition({ i, e: e0, initial: e0, pile: [], attente: null, erreur: null, avant });
+    setTimeout(() => zoneCarte.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+  };
+
+  const executer = async (op) => {
+    const ed = editionRef.current;
+    if (!ed || ed.attente) return;
+    let o = op;
+    if (o.type === "ajouter") o = { type: "inserer", k: T.segmentPlusProche(ed.e, o.pos), pos: o.pos };
+    if (o.type === "couper") {
+      const e = T.couper(ed.e, o.k, o.pos);
+      if (e) setEdition({ ...ed, e, pile: [...ed.pile, ed.e].slice(-50), erreur: null });
+      return;
+    }
+    if (o.type === "retirer" && !T.retirable(ed.e, o.k)) return;
+    setEdition({ ...ed, attente: o, erreur: null });
+    try {
+      const res = await tracerItineraire({ sport: resultat.sport, points: T.demandeRetouche(ed.e, o), sentiers: !!resultat.sentiers });
+      setEdition((cur) => (cur && cur.e === ed.e
+        ? { ...cur, e: T.appliquerRetouche(ed.e, o, res), pile: [...cur.pile, ed.e].slice(-50), attente: null }
+        : cur));
+    } catch (err) {
+      setEdition((cur) => cur && { ...cur, attente: null, erreur: messageRetouche(err) });
+    }
+  };
+
+  const annuler = () => setEdition((ed) => (ed && ed.pile.length && !ed.attente
+    ? { ...ed, e: ed.pile.at(-1), pile: ed.pile.slice(0, -1), erreur: null } : ed));
+  const revenir = () => setEdition((ed) => (ed && ed.e !== ed.initial && !ed.attente
+    ? { ...ed, e: ed.initial, pile: [...ed.pile, ed.e], erreur: null } : ed));
+  const terminer = () => {
+    const ed = editionRef.current;
+    if (!ed) return;
+    if (ed.e !== ed.initial) {
+      const t = T.assembler(ed.e), d = T.decrire(t.points, t.types);
+      majProposition(ed.i, {
+        points: t.points, terrains: d.terrains, repartition: d.repartition, distance_km: d.distance_km, dplus_m: d.dplus_m,
+        etapes: t.etapes, depart: t.points[0].slice(0, 2), modifie: true, retouche: true,
+      });
+    }
+    setEdition(null);
+    setCurseur(null);
+  };
+
+  useEffect(() => {
+    if (!edition) return;
+    const f = (ev) => {
+      if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === "z" && !ev.target.closest?.("input, textarea")) {
+        ev.preventDefault();
+        annuler();
+      }
+    };
+    window.addEventListener("keydown", f);
+    return () => window.removeEventListener("keydown", f);
+  }, [!!edition]);
+
+  const choisir = (i) => {
+    if (editionRef.current) terminer();
+    setRenommage(null);
+    setChoisie(i);
+    setCurseur(null);
+  };
+
+  // ── Parcours enregistrés ──
+  const nomAuto = (r) => `${resultat.boucle ? "Boucle" : "Parcours"} ${nomSport(resultat.sport).toLowerCase()} ${km(r.distance_km)} km${
+    resultat.nomDepart ? ` · ${resultat.nomDepart}` : ""}`.slice(0, 120);
+  const corpsFavori = (r) => ({
+    nom: r.nom ?? nomAuto(r), sport: resultat.sport, boucle: resultat.boucle, distance_km: r.distance_km, dplus_m: r.dplus_m,
+    points: r.points, terrains: r.terrains ?? [], repartition: r.repartition ?? null,
+    etapes: (r.etapes?.length ?? 0) <= 100 ? (r.etapes ?? []) : [], depart: r.depart ?? null,
+  });
+  const erreurApi = (e, defaut) => setErreurFavori(typeof e?.response?.data?.detail === "string" ? e.response.data.detail : defaut);
+  const invaliderFavoris = () => qc.invalidateQueries({ queryKey: ["itineraires-favoris"] });
+
+  const enregistrer = useMutation({
+    mutationFn: ({ i, r }) => (r.favori_id ? modifierFavoriItineraire(r.favori_id, corpsFavori(r)) : creerFavoriItineraire(corpsFavori(r)))
+      .then((f) => ({ i, f })),
+    onSuccess: ({ i, f }) => { setErreurFavori(null); majProposition(i, { favori_id: f.id, nom: f.nom, modifie: false }); invaliderFavoris(); },
+    onError: (e) => erreurApi(e, "Enregistrement impossible pour le moment."),
+  });
+  const renommer = useMutation({
+    mutationFn: ({ i, id, nom }) => renommerFavoriItineraire(id, nom).then((f) => ({ i, f })),
+    onSuccess: ({ i, f }) => { setErreurFavori(null); majProposition(i, { nom: f.nom }); invaliderFavoris(); },
+    onError: (e) => erreurApi(e, "Renommage impossible pour le moment."),
+  });
+  const supprimer = useMutation({
+    mutationFn: ({ id }) => supprimerFavoriItineraire(id),
+    onSuccess: (_, { i }) => { setErreurFavori(null); majProposition(i, { favori_id: null, nom: null }); setASupprimer(null); invaliderFavoris(); },
+    onError: (e) => { setASupprimer(null); erreurApi(e, "Suppression impossible pour le moment."); },
+  });
+  const ouvrir = useMutation({
+    mutationFn: getFavoriItineraire,
+    onSuccess: (f) => {
+      afficher({
+        propositions: [{
+          points: f.points, terrains: f.terrains, repartition: f.repartition, etapes: f.etapes,
+          distance_km: f.distance_km, dplus_m: f.dplus_m, depart: f.depart, favori_id: f.id, nom: f.nom,
+        }],
+        boucle: f.boucle, sport: f.sport, distance: null, dplus: null, rayon: 0, sentiers: false, source: null, favori: true,
+      });
+      setEssai(0);
+    },
+    onError: (e) => erreurApi(e, "Ouverture impossible pour le moment."),
+  });
+
   const enCours = demande.isPending;
   // Chrono pendant le calcul (quelques secondes, plus si le serveur public est chargé)
   const [secondes, setSecondes] = useState(0);
@@ -551,7 +1082,11 @@ export default function Itineraires() {
     return () => clearInterval(id);
   }, [enCours]);
   const calcul = `Calcul des itinéraires… ${secondes} s`;
-  const resultats = resultat?.propositions ?? [];
+  const allure = resultat ? allures?.[resultat.sport] : null;
+  const pointsChoisis = choisie != null ? affichees[choisie]?.points : null;
+  const couleurChoisie = COULEURS[(choisie ?? 0) % COULEURS.length];
+  const posCurseur = curseur != null && pointsChoisis?.[curseur] ? { pos: pointsChoisis[curseur], c: couleurChoisie } : null;
+  const listeFavoris = tousFavoris ? favoris : favoris?.slice(0, 6);
 
   return (
     <Page titre="Itinéraires" sousTitre="Boucles et parcours GPX" large>
@@ -648,23 +1183,64 @@ export default function Itineraires() {
           <button type="button" onClick={() => lancer(0)} disabled={enCours} className="btn-primaire w-full">
             {enCours ? calcul : "Proposer des itinéraires"}
           </button>
+
+          {favoris?.length > 0 && (
+            <div>
+              <h2 className="entete-liste">Mes parcours</h2>
+              <div className="card py-0.5">
+                {listeFavoris.map((f) => (
+                  <button type="button" key={f.id} onClick={() => ouvrir.mutate(f.id)} disabled={ouvrir.isPending}
+                    className="ligne w-full text-left" style={{ "--inset": "3rem" }}>
+                    <span className="w-5 text-center text-[17px] shrink-0" aria-hidden>{SPORTS.find(([k]) => k === f.sport)?.[2] ?? "📍"}</span>
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-[15px] truncate">{f.nom}</span>
+                      <span className="block text-[12px] text-label-2 chiffres">
+                        {km(f.distance_km)} km · {f.dplus_m} m D+ · {f.boucle ? "boucle" : "aller simple"}
+                      </span>
+                    </span>
+                    {ouvrir.isPending && ouvrir.variables === f.id
+                      ? <span className="w-4 h-4 rounded-full border-2 border-label-3 border-t-brand animate-spin" aria-label="Ouverture" />
+                      : <span className="text-[18px] text-label-3" aria-hidden>›</span>}
+                  </button>
+                ))}
+              </div>
+              {favoris.length > 6 && (
+                <button type="button" onClick={() => setTousFavoris(!tousFavoris)} className="btn-texte px-4 pt-1.5 !text-[13px]">
+                  {tousFavoris ? "Afficher moins" : `Afficher les ${favoris.length} parcours`}
+                </button>
+              )}
+            </div>
+          )}
+          {vue === "recherche" && erreurFavori && <p className="px-1 text-[14px] text-ios-red md:hidden" role="alert">{erreurFavori}</p>}
         </div>
 
         {/* ── Carte et propositions ── */}
         <div className={`space-y-4 min-w-0 ${vue === "recherche" && !pointage ? "hidden md:block" : ""}`}>
-          {vue === "resultats" && (
+          {vue === "resultats" && !edition && (
             <button type="button" onClick={() => setVue("recherche")} className="btn-texte md:hidden">
               ‹ Modifier la recherche
             </button>
           )}
-          <Carte propositions={resultats} choisie={choisie} onChoisir={setChoisie}
-            depart={depart} arrivee={boucle ? null : arrivee} pointage={pointage} onPoint={poser} />
+          <div ref={zoneCarte} className="scroll-mt-16 md:scroll-mt-4">
+            <Carte propositions={affichees} choisie={choisie} onChoisir={choisir} cadrage={resultat?.id}
+              depart={resultat?.favori ? null : depart} arrivee={boucle && !resultat?.favori ? null : arrivee}
+              pointage={pointage} onPoint={poser}
+              edition={edition} couleurEdition={COULEURS[(edition?.i ?? 0) % COULEURS.length]} onOp={executer}
+              traceSurvol={pointsChoisis} onSurvol={TACTILE ? null : setCurseur} curseur={posCurseur} />
+          </div>
+
+          {edition && traceStats && (
+            <PanneauRetouche edition={edition} stats={traceStats} allure={allure}
+              onAnnuler={annuler} onRevenir={revenir} onTerminer={terminer} />
+          )}
 
           {resultat && (
             resultats.length ? (
               <div>
-                <h2 className="entete-liste">{resultats.length} proposition{resultats.length > 1 ? "s" : ""}</h2>
-                {HORS_BITUME.includes(resultat.sport) && Math.min(...resultats.map((r) => r.repartition?.bitume ?? 0)) > 30 && (
+                <h2 className="entete-liste">
+                  {resultat.favori ? "Parcours enregistré" : `${resultats.length} proposition${resultats.length > 1 ? "s" : ""}`}
+                </h2>
+                {!resultat.favori && HORS_BITUME.includes(resultat.sport) && Math.min(...resultats.map((r) => r.repartition?.bitume ?? 0)) > 30 && (
                   <p className="mb-2 rounded-[12px] bg-ios-orange/15 px-4 py-2.5 text-[13px] text-label">
                     Peu de chemins dans cette zone : toutes les boucles ont plus de 30 % de bitume.
                     {resultat.boucle && resultat.rayon < 15
@@ -673,17 +1249,39 @@ export default function Itineraires() {
                   </p>
                 )}
                 <div className="card py-0.5">
-                  {resultats.map((r, i) => (
-                    <Proposition key={`${essai}-${i}`} r={r} i={i} choisie={choisie} onChoisir={setChoisie}
-                      sport={resultat.sport} distance={resultat.distance} dplus={resultat.dplus} boucle={resultat.boucle} />
+                  {affichees.map((r, i) => (
+                    <Proposition key={`${resultat.id}-${i}`} r={r} i={i} choisie={choisie} onChoisir={choisir}
+                      sport={resultat.sport} distance={resultat.distance} dplus={resultat.dplus} boucle={resultat.boucle}
+                      allure={allure} enRetouche={edition?.i === i}
+                      modeProfil={modeProfil} setModeProfil={setModeProfil}
+                      curseur={i === choisie ? curseur : null} onCurseur={setCurseur}
+                      onModifier={() => commencer(i)}
+                      onEnregistrer={() => enregistrer.mutate({ i, r })}
+                      enregistrement={enregistrer.isPending && enregistrer.variables?.i === i}
+                      renommage={renommage === i} onRenommer={(v) => setRenommage(v ? i : null)}
+                      onNommer={(nom) => { setRenommage(null); renommer.mutate({ i, id: r.favori_id, nom }); }}
+                      onSupprimer={() => setASupprimer(i)} />
                   ))}
                 </div>
+                {erreurFavori && <p className="px-4 pt-2 text-[13px] text-ios-red" role="alert">{erreurFavori}</p>}
                 <div className="flex items-center justify-between gap-3 px-4 pt-2">
-                  <p className="text-[12px] text-label-2">Tracés {resultat.source ?? "BRouter"} · données © OpenStreetMap</p>
-                  <button type="button" onClick={() => lancer(essai + 1)} disabled={enCours} className="btn-texte shrink-0">
-                    {enCours ? `Calcul… ${secondes} s` : "Autres propositions"}
-                  </button>
+                  <p className="text-[12px] text-label-2">
+                    {resultat.favori ? "Données © OpenStreetMap" : `Tracés ${resultat.source ?? "BRouter"} · données © OpenStreetMap`}
+                  </p>
+                  {!resultat.favori && (
+                    <button type="button" onClick={() => lancer(essai + 1)} disabled={enCours} className="btn-texte shrink-0">
+                      {enCours ? `Calcul… ${secondes} s` : "Autres propositions"}
+                    </button>
+                  )}
                 </div>
+                {allure && (
+                  <p className="px-4 pt-1 text-[12px] text-label-2">
+                    Temps estimé {allure.seances
+                      ? `d'après tes ${allure.seances} dernières sorties ${BASES[allure.base] ?? ""}${allure.base !== resultat.sport && !(resultat.sport === "randonnee" && allure.base === "marche") ? " (allure ajustée)" : ""}`
+                      : "sur une allure type, faute de sorties récentes"}
+                    {" "}: 100 m de D+ comptent comme {allure.effort_dplus > 1 ? "1,5 km" : "1 km"}.
+                  </p>
+                )}
               </div>
             ) : (
               <p className="card p-4 text-[14px] text-label-2">Aucun itinéraire trouvé. Essaie un autre point de départ ou une autre distance.</p>
@@ -691,12 +1289,18 @@ export default function Itineraires() {
           )}
           {!resultat && (
             <p className="hidden md:block px-1 text-[13px] text-label-2">
-              Choisis un départ, la distance et le D+, puis lance la recherche : 3 à 4 propositions s'affichent ici, chacune exportable en GPX.
+              Choisis un départ, la distance et le D+, puis lance la recherche : 3 à 4 propositions s'affichent ici, chacune exportable en GPX et modifiable à la main.
             </p>
           )}
           {vue === "resultats" && erreur && <p className="px-1 text-[14px] text-ios-red md:hidden" role="alert">{erreur}</p>}
         </div>
       </div>
+
+      <ConfirmDialog open={aSupprimer != null} title="Supprimer ce parcours ?"
+        message={aSupprimer != null ? `« ${resultats[aSupprimer]?.nom ?? "Parcours"} » sera retiré de tes parcours enregistrés. Le tracé reste affiché tant que tu ne quittes pas la page.` : ""}
+        confirmLabel="Supprimer" cancelLabel="Annuler" danger pending={supprimer.isPending}
+        onConfirm={() => supprimer.mutate({ i: aSupprimer, id: resultats[aSupprimer]?.favori_id })}
+        onCancel={() => setASupprimer(null)} />
     </Page>
   );
 }

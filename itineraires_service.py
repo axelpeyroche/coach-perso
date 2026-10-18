@@ -47,8 +47,11 @@ PROFILS = {
 _ROUTE, _SENTIER = {1, 2, 3}, {4, 7, 8}
 _REVETU = {1, 3, 4, 5, 6, 14, 18}
 
-# Poids de la part de bitume dans le classement : trail, rando et gravel se font sur les chemins
-_BITUME = {"trail": 2.0, "randonnee": 1.5, "gravel": 1.5, "vtt": 1.2}
+# Poids de la part de bitume dans le classement : trail, rando et gravel se font sur les chemins.
+# Au-delà de 25 % de bitume, chaque point compte trois fois : une boucle très routière passe
+# derrière une boucle de chemins même si celle-ci s'éloigne davantage de la distance ou du D+.
+_BITUME = {"trail": 2.5, "randonnee": 2.0, "gravel": 2.0, "vtt": 1.5}
+_BITUME_SEUIL = 25
 
 
 _ETALEMENT = (0.85, 1.0, 1.15, 0.92, 1.08, 1.0)
@@ -327,7 +330,8 @@ def _dist(a: list, b: list) -> float:
 
 
 def _ecart(r: dict, distance_km: Optional[float], dplus_m: Optional[int], bitume: float = 0) -> float:
-    e = bitume * (r.get("repartition") or {}).get("bitume", 0) / 100
+    part = (r.get("repartition") or {}).get("bitume", 0)
+    e = bitume * (part + 2 * max(0, part - _BITUME_SEUIL)) / 100
     if distance_km:
         e += abs(r["distance_km"] - distance_km) / distance_km
     if dplus_m is not None:
@@ -368,6 +372,49 @@ def proposer(sport: str, depart: list[float], arrivee: Optional[list[float]], di
         if len(gardees) >= nombre:
             break
     return {**res, "propositions": gardees}
+
+
+def tracer(sport: str, points: list[list[float]], sentiers: bool = False) -> dict:
+    """Tracé passant par les points donnés, dans l'ordre (retouche d'un itinéraire à la main).
+    `etapes` : indice, dans `points` du tracé, du passage au plus près de chaque point demandé."""
+    profil = PROFILS_BR.get(sport, PROFILS_BR["course"])[1 if sentiers else 0]
+    params = {"lonlats": "|".join(f"{p[1]:.6f},{p[0]:.6f}" for p in points), "profile": profil, "alternativeidx": 0}
+    if (sport in _SPORTS_CHEMINS or sentiers) and profil in CHEMINS_BR:
+        params["profile:path_preference"] = CHEMINS_BR[profil]
+    r = _lire_br(_brouter(params))
+    if not r:
+        raise ItineraireErreur("Aucun tracé trouvé par ces points.")
+    r["etapes"] = _etapes(r["points"], points)
+    return r
+
+
+def _etapes(trace: list[list], demandes: list[list[float]]) -> list[int]:
+    """Indices du tracé les plus proches de chaque point demandé, en avançant le long du tracé
+    (une boucle repasse par son départ : la dernière étape est cherchée après les autres)."""
+    res, debut = [], 0
+    for k, p in enumerate(demandes):
+        if k == 0:
+            res.append(0)
+            continue
+        if k == len(demandes) - 1:
+            res.append(len(trace) - 1)
+            continue
+        # Premier passage au plus près (à 25 m près) : un tracé qui repasse plus loin au même
+        # endroit ne doit pas faire sauter les étapes intermédiaires
+        dist = [_dist_ll(trace[i], p) for i in range(debut, len(trace))]
+        d_min = min(dist)
+        i = next(j for j, d in enumerate(dist) if d <= d_min + 25)
+        while i + 1 < len(dist) and dist[i + 1] < dist[i]:
+            i += 1
+        debut += i
+        res.append(debut)
+    return res
+
+
+def _dist_ll(a: list, b: list) -> float:
+    """Distance en mètres entre deux points [lat, lon, …]."""
+    x = math.radians(b[1] - a[1]) * math.cos(math.radians((a[0] + b[0]) / 2))
+    return 6371000 * math.hypot(x, math.radians(b[0] - a[0]))
 
 
 def _departs(depart: list[float], rayon_km: Optional[float], distance_km, dplus_m) -> list[dict]:
@@ -486,3 +533,55 @@ def _proposer_ors(sport, depart, arrivee, distance_km, sentiers, essai) -> dict:
         return _lire(f[0]) if f else None
 
     return {**source, "toutes": _boucles("ors", profil, distance_km, essai, boucle, 4), "calculs": 6}
+
+
+# ─────────────────────────── Temps estimé ───────────────────────────
+
+# Distance-effort : 100 m de D+ comptent comme 1 km à pied, 1,5 km à vélo
+EFFORT_DPLUS = {"course": 1.0, "trail": 1.0, "randonnee": 1.0, "velo": 1.5, "gravel": 1.5, "vtt": 1.5}
+
+# Sport d'itinéraire → (sports du carnet, facteur de durée), du plus proche au plus lointain
+_ALLURES_SOURCES = {
+    "course":    [(("course",), 1.0), (("trail",), 0.85)],
+    "trail":     [(("trail",), 1.0), (("course",), 1.25)],
+    "randonnee": [(("randonnee", "marche"), 1.0), (("trail",), 1.7)],
+    "velo":      [(("velo",), 1.0)],
+    "gravel":    [(("velo",), 1.2)],
+    "vtt":       [(("velo",), 1.5)],
+}
+# Sans historique : secondes par km-effort
+_ALLURES_DEFAUT = {"course": 360, "trail": 450, "randonnee": 720, "velo": 140, "gravel": 175, "vtt": 230}
+
+
+def allures(db, user_id: int) -> dict:
+    """Allure habituelle (secondes par km-effort) de chaque sport d'itinéraire, d'après les
+    sorties d'entraînement des six derniers mois (médiane des 15 plus récentes)."""
+    from datetime import datetime, timedelta
+    from models import Activite
+
+    depuis = datetime.now() - timedelta(days=183)
+    lignes = (db.query(Activite.sport, Activite.duree_sec, Activite.distance_km, Activite.dplus_m)
+              .filter(Activite.utilisateur_id == user_id, Activite.debut >= depuis,
+                      Activite.duree_sec > 0, Activite.distance_km >= 3,
+                      Activite.est_competition.isnot(True))
+              .order_by(Activite.debut.desc()).all())
+    par_sport: dict[str, list[float]] = {}
+    for sport, duree, dist, dplus in lignes:
+        if sport == "trail" and dplus is None:
+            continue  # D+ inconnu : l'allure serait faussée
+        f = EFFORT_DPLUS.get("velo" if sport == "velo" else "course", 1.0)
+        effort = dist + (dplus or 0) / 100 * f
+        par_sport.setdefault(sport, []).append(duree / effort)
+
+    res = {}
+    for sport, sources in _ALLURES_SOURCES.items():
+        for noms, facteur in sources:
+            valeurs = [v for n in noms for v in par_sport.get(n, [])][:15]
+            if len(valeurs) >= 3:
+                res[sport] = {"s_par_km_effort": round(median(valeurs) * facteur), "seances": len(valeurs),
+                              "base": noms[0], "effort_dplus": EFFORT_DPLUS[sport]}
+                break
+        else:
+            res[sport] = {"s_par_km_effort": _ALLURES_DEFAUT[sport], "seances": 0, "base": None,
+                          "effort_dplus": EFFORT_DPLUS[sport]}
+    return res
