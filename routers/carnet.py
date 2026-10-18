@@ -324,6 +324,36 @@ def meteo_activite(
         return None
 
 
+class MeteoSchema(BaseModel):
+    """Météo lue par le navigateur sur Open-Meteo quand le serveur n'a pas pu la lire."""
+    model_config = ConfigDict(extra="ignore")
+    temperature: float = Field(ge=-60, le=60)
+    ressentie: Optional[float] = Field(None, ge=-80, le=70)
+    humidite: Optional[int] = Field(None, ge=0, le=100)
+    precipitation_mm: Optional[float] = Field(None, ge=0, le=500)
+    vent_kmh: Optional[int] = Field(None, ge=0, le=300)
+    rafales_kmh: Optional[int] = Field(None, ge=0, le=400)
+    vent_dir: Optional[int] = Field(None, ge=0, le=360)
+    code: Optional[int] = Field(None, ge=0, le=99)
+
+
+@router.put("/api/activites/{activite_id}/meteo", summary="Enregistrer la météo lue par le navigateur")
+def enregistrer_meteo(
+    activite_id: int,
+    meteo: MeteoSchema,
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(obtenir_session),
+):
+    """Gardée seulement si aucune météo n'est connue et que la journée est passée."""
+    a = _activite_utilisateur(db, current_user, activite_id)
+    limiter(f"meteo:{current_user.id}", 30, 60)
+    if db.get(MeteoActivite, a.id) or a.debut.date() >= date.today():
+        return {"ok": False}
+    db.add(MeteoActivite(activite_id=a.id, donnees=json.dumps({**meteo.model_dump(), "source": "navigateur"})))
+    db.commit()
+    return {"ok": True}
+
+
 @router.get("/api/traces/carte", summary="Tous les tracés allégés, pour la carte des passages")
 def carte_traces(
     current_user: Utilisateur = Depends(get_current_user),

@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
 import {
-  choisirEquipement, creerSegment, getEquipementActivite, getMemeParcours, getMeteo, getSegmentsActivite, getTrace,
+  choisirEquipement, creerSegment, enregistrerMeteo, getEquipementActivite, getMemeParcours, getMeteo, getSegmentsActivite, getTrace,
 } from "../api";
 import { fmtDate, fmtDuree, nombre, sportInfo } from "../carnet";
 import { Segmente } from "./ui";
@@ -128,8 +128,68 @@ export function ciel(code) {
 }
 const CARDINAUX = ["N", "NE", "E", "SE", "S", "SO", "O", "NO"];
 
-export function Meteo({ activiteId }) {
-  const { data: m } = useQuery({ queryKey: ["meteo", activiteId], queryFn: () => getMeteo(activiteId), staleTime: Infinity, retry: false });
+// Lecture d'Open-Meteo depuis le navigateur, quand le serveur n'a rien obtenu
+// (ses adresses partagées peuvent être limitées par Open-Meteo). Même calcul que meteo_service.lire.
+const HORAIRES = ["temperature_2m", "apparent_temperature", "relative_humidity_2m", "precipitation",
+  "weather_code", "wind_speed_10m", "wind_gusts_10m", "wind_direction_10m"];
+const isoLocal = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}T${
+  String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+
+async function meteoNavigateur(a, point) {
+  const debut = new Date(a.debut), fin = new Date(debut.getTime() + (a.duree_sec || 0) * 1000);
+  const recent = (Date.now() - debut.getTime()) / 86_400_000 <= 80;
+  const params = new URLSearchParams({
+    latitude: point[0].toFixed(3), longitude: point[1].toFixed(3), hourly: HORAIRES.join(","),
+    start_date: isoLocal(debut).slice(0, 10), end_date: isoLocal(fin).slice(0, 10),
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Europe/Paris", wind_speed_unit: "kmh",
+  });
+  const r = await fetch(`https://${recent ? "api" : "archive-api"}.open-meteo.com/v1/${recent ? "forecast" : "archive"}?${params}`);
+  if (!r.ok) return null;
+  const h = (await r.json()).hourly || {};
+  const heures = h.time || [];
+  const a0 = `${isoLocal(debut).slice(0, 13)}:00`, a1 = isoLocal(fin);
+  let idx = heures.map((t, i) => (t >= a0 && t <= a1 ? i : -1)).filter((i) => i >= 0);
+  if (!idx.length) idx = heures.map((t, i) => (t === a0 ? i : -1)).filter((i) => i >= 0);
+  if (!idx.length) return null;
+  const col = (k) => idx.map((i) => (h[k] || [])[i]).filter((v) => typeof v === "number");
+  const moy = (k) => { const v = col(k); return v.length ? v.reduce((x, y) => x + y, 0) / v.length : null; };
+  const temp = moy("temperature_2m");
+  if (temp == null) return null;
+  let x = 0, y = 0;
+  idx.forEach((i) => {
+    const d = (h.wind_direction_10m || [])[i], v = (h.wind_speed_10m || [])[i];
+    if (typeof d === "number" && typeof v === "number") { x += v * Math.cos((d * Math.PI) / 180); y += v * Math.sin((d * Math.PI) / 180); }
+  });
+  const rond = (v, n = 0) => (v == null ? null : Math.round(v * 10 ** n) / 10 ** n);
+  const codes = col("weather_code"), rafales = col("wind_gusts_10m");
+  return {
+    temperature: rond(temp, 1), ressentie: rond(moy("apparent_temperature"), 1), humidite: rond(moy("relative_humidity_2m")),
+    precipitation_mm: rond(col("precipitation").reduce((s, v) => s + v, 0), 1), vent_kmh: rond(moy("wind_speed_10m")),
+    rafales_kmh: rafales.length ? Math.round(Math.max(...rafales)) : null,
+    vent_dir: x || y ? Math.round((((Math.atan2(y, x) * 180) / Math.PI) % 360 + 360) % 360) : null,
+    code: codes.length ? Math.max(...codes) : null,
+  };
+}
+
+// Requête partagée par l'encart et la puce de l'en-tête
+export function useMeteo(a) {
+  const qc = useQueryClient();
+  return useQuery({
+    queryKey: ["meteo", a.id], staleTime: Infinity, retry: false, enabled: !!a.details?.trace,
+    queryFn: async () => {
+      const m = await getMeteo(a.id).catch(() => null);
+      if (m) return m;
+      const t = await qc.fetchQuery({ queryKey: ["trace", a.id], queryFn: () => getTrace(a.id), staleTime: Infinity });
+      const p = (t?.points || []).find((q) => q[0] != null && q[1] != null);
+      const res = p ? await meteoNavigateur(a, p).catch(() => null) : null;
+      if (res) enregistrerMeteo(a.id, res).catch(() => {});
+      return res;
+    },
+  });
+}
+
+export function Meteo({ activite }) {
+  const { data: m } = useMeteo(activite);
   if (!m) return null;
   const [emoji, texte] = ciel(m.code);
   return (

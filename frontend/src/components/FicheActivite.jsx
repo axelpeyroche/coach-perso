@@ -262,7 +262,7 @@ export default function FicheActivite({ activite: initiale, onClose }) {
         )}
 
         <div id={ancre(a.id, "conditions")} className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 empty:hidden scroll-mt-16">
-          {det.trace && <Meteo activiteId={a.id} />}
+          {det.trace && <Meteo activite={a} />}
           <Materiel activiteId={a.id} />
         </div>
 

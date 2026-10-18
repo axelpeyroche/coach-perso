@@ -13,7 +13,7 @@ function csp(apiUrl) {
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
     `img-src 'self' data: blob: ${tuiles}`,
-    `connect-src 'self' ${api} ${tuiles} https://photon.komoot.io`,
+    `connect-src 'self' ${api} ${tuiles} https://photon.komoot.io https://api.open-meteo.com https://archive-api.open-meteo.com`,
     "worker-src 'self' blob:",
     "child-src blob:",
     "manifest-src 'self'",

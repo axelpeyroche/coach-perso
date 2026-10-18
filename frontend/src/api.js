@@ -123,6 +123,7 @@ export const getTerrains = (id) => api.get(`/activites/${id}/terrains`).then((r)
 export const getFlux = (id) => api.get(`/activites/${id}/flux`).then((r) => r.data);
 export const getCarteTraces = () => api.get("/traces/carte", { timeout: 60000 }).then((r) => r.data);
 export const getMeteo = (id) => api.get(`/activites/${id}/meteo`).then((r) => r.data);
+export const enregistrerMeteo = (id, meteo) => api.put(`/activites/${id}/meteo`, meteo).then((r) => r.data);
 export const getMemeParcours = (id) => api.get(`/activites/${id}/meme-parcours`, { timeout: 45000 }).then((r) => r.data);
 
 // --- Matériel (usure des chaussures) ---

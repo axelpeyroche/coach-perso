@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import clsx from "clsx";
-import { getEquipementActivite, getMemeParcours, getMeteo, getSegmentsActivite } from "../api";
+import { getEquipementActivite, getMemeParcours, getSegmentsActivite } from "../api";
 import { nombre, sportInfo, SOURCES } from "../carnet";
-import { ciel } from "./FicheExtras";
+import { ciel, useMeteo } from "./FicheExtras";
 
 // Fait défiler la feuille jusqu'à l'encart détaillé correspondant
 export const ancre = (id, quoi) => `fiche-${id}-${quoi}`;
@@ -26,7 +26,7 @@ export default function EnteteFiche({ a }) {
   const avecTrace = !!a.details?.trace;
 
   // Mêmes requêtes que les encarts du dessous : pas d'appel en plus
-  const { data: meteo } = useQuery({ queryKey: ["meteo", id], queryFn: () => getMeteo(id), staleTime: Infinity, retry: false, enabled: avecTrace });
+  const { data: meteo } = useMeteo(a);
   const { data: equip } = useQuery({ queryKey: ["equipement", id], queryFn: () => getEquipementActivite(id), staleTime: 60_000 });
   const { data: meme } = useQuery({ queryKey: ["meme-parcours", id], queryFn: () => getMemeParcours(id), staleTime: 10 * 60_000, enabled: avecTrace });
   const { data: segs } = useQuery({ queryKey: ["segments-activite", id], queryFn: () => getSegmentsActivite(id), staleTime: 10 * 60_000, enabled: avecTrace });
