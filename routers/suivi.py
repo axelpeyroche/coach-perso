@@ -1,13 +1,16 @@
 """Forme du matin, records personnels et abonnement aux notifications push."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
+import bilan_service as bs
 import suivi_service as sv
 from database import obtenir_session
-from deps import get_current_user
+from deps import get_current_user, limiter
 from models import PushSubscription, Utilisateur
 
 router = APIRouter()
@@ -23,6 +26,15 @@ def forme_jour(current_user: Utilisateur = Depends(get_current_user), db: Sessio
 @router.get("/api/records", summary="Records personnels : course (tracés), distances, muscu (notes)")
 def records(current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
     res = sv.records(db, current_user)
+    db.commit()  # meilleurs efforts mémorisés
+    return res
+
+
+@router.get("/api/bilan", summary="Bilan d'une année : totaux, mois, régularité, records, sorties marquantes")
+def bilan(annee: Optional[int] = Query(None, ge=2000, le=2100),
+          current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
+    limiter(f"segments:{current_user.id}", 20, 60)
+    res = bs.bilan(db, current_user, annee or sv.aujourdhui(current_user).year)
     db.commit()  # meilleurs efforts mémorisés
     return res
 
