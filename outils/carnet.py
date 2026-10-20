@@ -107,7 +107,27 @@ def cmd_plan(a):
                      f"{' RPE ' + format(act['rpe'], 'g') if act['rpe'] is not None else ''}"
         if s.get("commentaire"):
             ligne += f"  « {s['commentaire']} »"
+        if s.get("deroule"):
+            ligne += f"  [{texte_deroule(s['deroule'])}]"
         print(ligne + f"   [{s['id_externe']}]")
+
+
+
+def texte_deroule(d: dict) -> str:
+    """Résumé d'une séance guidée : séries faites, difficulté et ressenti par exercice."""
+    parties = []
+    for e in d.get("exercices") or []:
+        if e.get("passe"):
+            parties.append(f"{e.get('nom')} : passé")
+            continue
+        t = f"{e.get('nom')} {e.get('series_faites')}/{e.get('series_prevues')}"
+        if e.get("difficulte"):
+            t += f" ({e['difficulte']})"
+        if (e.get("ressenti") or "").strip():
+            t += f" : « {e['ressenti'].strip()} »"
+        parties.append(t)
+    duree = d.get("duree_s") or 0
+    return f"séance guidée {round(duree / 60)} min · " + " ; ".join(parties)
 
 
 def cmd_envoyer(a):

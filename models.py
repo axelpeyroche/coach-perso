@@ -313,6 +313,7 @@ class SeancePrevue(Base):
     activite_id: Mapped[Optional[int]] = mapped_column(ForeignKey("activites.id", ondelete="SET NULL"), index=True)
     lien_manuel: Mapped[bool] = mapped_column(Boolean, default=False, comment="Rapprochement fixé à la main : ne pas recalculer")
     commentaire: Mapped[Optional[str]] = mapped_column(Text, comment="Note de l'athlète (pourquoi sautée, ressenti…)")
+    deroule: Mapped[Optional[str]] = mapped_column(Text, comment="Séance guidée (JSON) : durée, séries faites, difficulté et ressenti par exercice")
     cree_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     maj_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 

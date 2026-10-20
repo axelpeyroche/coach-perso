@@ -9,6 +9,7 @@ Plan d'entraînement : séances prévues.
 
 from __future__ import annotations
 
+import json
 import secrets as _secrets
 from datetime import date, datetime, timedelta
 from typing import Optional
@@ -67,6 +68,8 @@ class MajPrevueSchema(BaseModel):
     commentaire: Optional[str] = None
     activite_id: Optional[int] = None
     delier: bool = False
+    # Séance guidée terminée (mode « séance en cours ») ; null l'efface
+    deroule: Optional[dict] = None
 
 
 def _items(db: Session, user: Utilisateur, seances: list[SeancePrevueSchema]) -> list[dict]:
@@ -174,6 +177,11 @@ def modifier_prevue(
         p.statut = payload.statut
     if "commentaire" in champs:
         p.commentaire = (payload.commentaire or "").strip() or None
+    if "deroule" in champs:
+        brut = json.dumps(payload.deroule, ensure_ascii=False) if payload.deroule else None
+        if brut and len(brut) > 50_000:
+            raise HTTPException(400, "Déroulé de séance trop long")
+        p.deroule = brut
     if payload.delier:
         p.activite_id, p.lien_manuel = None, True
     elif payload.activite_id is not None:

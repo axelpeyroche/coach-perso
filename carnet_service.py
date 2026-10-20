@@ -854,7 +854,7 @@ def export_markdown(data: dict) -> str:
             l.append("| " + " | ".join(_cell(x) for x in [
                 p["jour"], p["sport_label"], seance, prevu,
                 f"{p['rpe_cible']:g}" if p["rpe_cible"] is not None else None, libelle.get(p["statut"], p["statut"]),
-                fait, p["commentaire"], p["id_externe"],
+                fait, " — ".join(x for x in [p["commentaire"], texte_deroule(p.get("deroule"))] if x), p["id_externe"],
             ]) + " |")
         l.append("")
 
@@ -1649,10 +1649,53 @@ def rapprocher_plan(db: Session, user_id: int, aujourd_hui: Optional[date] = Non
     return n
 
 
+def lire_deroule(p: SeancePrevue) -> Optional[dict]:
+    """Déroulé de la séance guidée (JSON stocké en texte), ou None."""
+    if not p.deroule:
+        return None
+    try:
+        d = json.loads(p.deroule)
+    except ValueError:
+        return None
+    return d if isinstance(d, dict) else None
+
+
+DIFFICULTES = {"facile": "facile", "correct": "correct", "dur": "dur", "echec": "échec"}
+
+
+def texte_deroule(d: Optional[dict]) -> str:
+    """Résumé lisible d'une séance guidée, pour l'export lu par l'IA :
+    « Séance guidée 58 min · Dips EMOM 10/10 min (dur) : « … » ; Planche 3/3 … »."""
+    if not d:
+        return ""
+    parties = []
+    for e in d.get("exercices") or []:
+        if not isinstance(e, dict):
+            continue
+        nom = str(e.get("nom") or "").strip()
+        if not nom:
+            continue
+        if e.get("passe"):
+            parties.append(f"{nom} : passé")
+            continue
+        faites, prevues = e.get("series_faites"), e.get("series_prevues")
+        t = nom
+        if faites is not None and prevues:
+            t += f" {faites}/{prevues}" + (" min" if e.get("emom") else "")
+        if e.get("difficulte") in DIFFICULTES:
+            t += f" ({DIFFICULTES[e['difficulte']]})"
+        if (e.get("ressenti") or "").strip():
+            t += f" : « {str(e['ressenti']).strip()} »"
+        parties.append(t)
+    duree = d.get("duree_s")
+    tete = "Séance guidée" + (f" {round(duree / 60)} min" if isinstance(duree, (int, float)) and duree > 0 else "")
+    return tete + (" · " + " ; ".join(parties) if parties else "")
+
+
 def statut_prevue(p: SeancePrevue, aujourd_hui: Optional[date] = None) -> str:
     """realisee | sautee | a_venir (à faire, semaine en cours ou future) | manquee (semaine terminée)."""
     auj = aujourd_hui or date.today()
-    if p.activite_id:
+    if p.activite_id or (lire_deroule(p) or {}).get("fin"):
         return "realisee"
     if p.statut == "sautee":
         return "sautee"
@@ -1670,6 +1713,7 @@ def serialiser_prevue(p: SeancePrevue, activite: Optional[Activite] = None,
         "distance_km": p.distance_km, "dplus_m": p.dplus_m, "rpe_cible": p.rpe_cible,
         "objectif_id": p.objectif_id, "commentaire": p.commentaire, "lien_manuel": bool(p.lien_manuel),
         "statut": statut_prevue(p, aujourd_hui), "activite": None,
+        "deroule": lire_deroule(p),
     }
     if activite:
         d["activite"] = serialiser_activite(activite)
@@ -1728,7 +1772,7 @@ def enregistrer_plan(db: Session, user_id: int, items: list[dict],
                   .filter(SeancePrevue.utilisateur_id == user_id,
                           SeancePrevue.jour >= max(depuis, _lundi(auj)), SeancePrevue.jour <= jusqu_a).all()):
             if (p.id_externe not in envoyes and p.activite_id is None and p.statut != "sautee"
-                    and not p.commentaire):
+                    and not p.commentaire and not p.deroule):
                 db.delete(p)
                 bilan["supprime"] += 1
     db.flush()

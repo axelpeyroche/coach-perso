@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import Card from "../components/Card";
@@ -9,7 +9,10 @@ import ModalActivite from "../components/ModalActivite";
 import ConfirmDialog from "../components/ConfirmDialog";
 import ImportPlan from "../components/ImportPlan";
 import ContenuSeance from "../components/ContenuSeance";
-import { resumeSeance } from "../seance";
+import SeanceEnCours, { seanceSauvegardee } from "../components/SeanceEnCours";
+import { resumeSeance, analyserDescription } from "../seance";
+import { DIFFICULTES, fmtChrono } from "../seanceGuidee";
+import { debloquerSon } from "../son";
 import { Section, BoutonAjout } from "../components/ui";
 import {
   getPlan, getActivites, creerPrevue, modifierPrevue, supprimerPrevue, getActivitesProches,
@@ -67,8 +70,13 @@ function ChoixActivite({ prevue, onChoix, onClose }) {
 const ITINERAIRE = { course: 1, trail: 1, randonnee: 1, marche: 1, velo: 1 };
 
 function DetailSeance({ s, onClose, onOuvrirActivite }) {
+  const qc = useQueryClient();
   const info = sportInfo(s.sport);
   const statut = STATUTS[s.statut] ?? STATUTS.a_venir;
+  const [enCours, setEnCours] = useState(false);
+  const contenu = useMemo(() => (s.description ? analyserDescription(s.description) : null), [s.description]);
+  const guidable = contenu?.type === "muscu" && contenu.sections.some((x) => x.exercices.length) && s.statut !== "realisee";
+  const reprise = guidable && seanceSauvegardee(s.id);
   const mesures = [
     ["Durée", s.duree_min != null ? fmtDuree(s.duree_min * 60) : null],
     ["Distance", s.distance_km != null ? `${nombre(s.distance_km)} km` : null],
@@ -87,6 +95,17 @@ function DetailSeance({ s, onClose, onOuvrirActivite }) {
             {info.label}<span className={`badge ${statut.cls}`}>{statut.label}</span>
           </p>
         </div>
+        {guidable && (
+          <button type="button" onClick={() => { debloquerSon(); setEnCours(true); }}
+            aria-label={reprise ? "Reprendre la séance" : "Lancer la séance"}
+            className="ml-auto shrink-0 flex flex-col items-center gap-1 active:scale-95 transition-transform">
+            <span className="w-12 h-12 rounded-full flex items-center justify-center text-white shadow-[0_4px_14px_rgba(175,82,222,0.35)]"
+              style={{ backgroundColor: info.couleur }}>
+              <svg viewBox="0 0 12 14" className="w-4 h-4 ml-0.5" aria-hidden><path d="M1 1.5v11a1 1 0 0 0 1.5.86l9-5.5a1 1 0 0 0 0-1.72l-9-5.5A1 1 0 0 0 1 1.5z" fill="currentColor" /></svg>
+            </span>
+            <span className="text-[11px] font-semibold" style={{ color: info.couleur }}>{reprise ? "Reprendre" : "Lancer"}</span>
+          </button>
+        )}
       </div>
 
       {mesures.length > 0 && (
@@ -100,6 +119,8 @@ function DetailSeance({ s, onClose, onOuvrirActivite }) {
           ))}
         </div>
       )}
+
+      {s.deroule?.fin && <RecapDeroule d={s.deroule} />}
 
       {s.description && <ContenuSeance description={s.description} couleur={info.couleur} />}
 
@@ -126,7 +147,41 @@ function DetailSeance({ s, onClose, onOuvrirActivite }) {
       )}
 
       <CommentaireSeance s={s} />
+
+      {enCours && (
+        <SeanceEnCours s={s} contenu={contenu} onClose={() => setEnCours(false)}
+          onEnregistree={() => { setEnCours(false); invaliderPlan(qc); onClose(); }} />
+      )}
     </Feuille>
+  );
+}
+
+// ── Séance guidée faite : difficulté et ressenti de chaque exercice ─────────
+const LIBELLE_DIFFICULTE = Object.fromEntries(DIFFICULTES);
+
+function RecapDeroule({ d }) {
+  const exos = (d.exercices ?? []).filter((e) => e.difficulte || e.ressenti || e.passe);
+  return (
+    <section className="space-y-1.5">
+      <h4 className="px-1 text-[13px] uppercase tracking-[0.02em] font-medium text-ios-green">
+        ✓ Séance guidée{d.duree_s ? ` · ${fmtChrono(d.duree_s)}` : ""}
+      </h4>
+      {exos.length > 0 && (
+        <div className="card divide-y-[0.5px] divide-separateur">
+          {exos.map((e, i) => (
+            <div key={i} className="px-4 py-2.5">
+              <p className="flex items-baseline justify-between gap-2 text-[15px] font-semibold">
+                <span className="min-w-0 truncate">{e.nom}</span>
+                <span className="shrink-0 text-[13px] font-normal text-label-2">
+                  {e.passe ? "Passé" : LIBELLE_DIFFICULTE[e.difficulte] ?? ""}
+                </span>
+              </p>
+              {e.ressenti && <p className="mt-0.5 text-[14px] leading-5 text-label-2">{e.ressenti}</p>}
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
