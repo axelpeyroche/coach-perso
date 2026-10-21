@@ -37,6 +37,22 @@ function effacer(id) {
   try { localStorage.removeItem(cle(id)); } catch { /* idem */ }
 }
 
+// Barre d'état noire pendant la séance : iOS teinte le haut de l'écran avec la
+// couleur du thème (gris clair en mode clair), ce qui posait un voile blanc
+// flouté sur l'écran noir de la séance.
+function useBarreEtatNoire() {
+  useEffect(() => {
+    const meta = document.querySelector('meta[name="theme-color"]');
+    const avant = meta?.getAttribute("content");
+    meta?.setAttribute("content", "#000000");
+    document.documentElement.classList.add("barre-noire");
+    return () => {
+      document.documentElement.classList.remove("barre-noire");
+      if (avant) meta?.setAttribute("content", avant);
+    };
+  }, []);
+}
+
 // Écran allumé pendant la séance (redemandé au retour sur la page)
 function useEcranAllume() {
   useEffect(() => {
@@ -154,6 +170,7 @@ const Coche = ({ className = "w-[18px] h-[18px]" }) => (
 export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
   useVerrouDefilement(true);
   useEcranAllume();
+  useBarreEtatNoire();
   const { exercices, etapes } = useMemo(() => construireSeance(contenu), [contenu]);
 
   const [etat, setEtat] = useState(() => lire(s.id, etapes.length) ?? {

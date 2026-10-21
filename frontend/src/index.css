@@ -254,6 +254,8 @@
     z-index: 40;
     pointer-events: none;
   }
+  /* Écran plein toujours sombre (séance guidée) : bande noire au-dessus de lui */
+  html.barre-noire body::before { background: #000; z-index: 70; }
 
   /* ── Barre de navigation mobile (iOS 26) ───────────────────────────────
      Boutons de verre flottants, sans bandeau flouté. */
