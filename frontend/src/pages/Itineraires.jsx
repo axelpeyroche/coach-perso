@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import Page from "../components/Page";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { Bascule, chargerMaplibre, controleRotation, tournerALaSouris } from "../components/CarteTrace";
 import { Interrupteur, Segmente } from "../components/ui";
 import {
-  creerFavoriItineraire, getAlluresItineraire, getFavoriItineraire, getFavorisItineraire, getItineraires,
+  creerFavoriItineraire, getAlluresItineraire, getFavoriItineraire, getItineraires,
   modifierFavoriItineraire, proposerItineraires, renommerFavoriItineraire, supprimerFavoriItineraire, tracerItineraire,
 } from "../api";
 import { nombre } from "../carnet";
@@ -726,7 +726,6 @@ export default function Itineraires() {
   const [renommage, setRenommage] = useState(null);
   const [aSupprimer, setASupprimer] = useState(null);
   const [erreurFavori, setErreurFavori] = useState(null);
-  const [tousFavoris, setTousFavoris] = useState(false);
   const haut = useRef(null);
   const zoneCarte = useRef(null);
   const editionRef = useRef(edition);
@@ -734,7 +733,6 @@ export default function Itineraires() {
 
   const { data: statut } = useQuery({ queryKey: ["itineraires"], queryFn: getItineraires, staleTime: 300_000 });
   const { data: allures } = useQuery({ queryKey: ["itineraires-allures"], queryFn: getAlluresItineraire, staleTime: 600_000 });
-  const { data: favoris } = useQuery({ queryKey: ["itineraires-favoris"], queryFn: getFavorisItineraire, staleTime: 60_000 });
 
   const changerSport = (s) => {
     setSport(s);
@@ -917,6 +915,14 @@ export default function Itineraires() {
     onError: (e) => erreurApi(e, "Ouverture impossible pour le moment."),
   });
 
+  // Parcours choisi sur la page « Mes parcours » (qui revient ici par l'historique)
+  useEffect(() => {
+    const id = qc.getQueryData(["itineraire-a-ouvrir"]);
+    if (id == null) return;
+    qc.removeQueries({ queryKey: ["itineraire-a-ouvrir"] });
+    ouvrir.mutate(id);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const enCours = demande.isPending;
   // Chrono pendant le calcul (quelques secondes, plus si le serveur public est chargé)
   const [secondes, setSecondes] = useState(0);
@@ -931,10 +937,10 @@ export default function Itineraires() {
   const pointsChoisis = choisie != null ? affichees[choisie]?.points : null;
   const couleurChoisie = COULEURS[(choisie ?? 0) % COULEURS.length];
   const posCurseur = curseur != null && pointsChoisis?.[curseur] ? { pos: pointsChoisis[curseur], c: couleurChoisie } : null;
-  const listeFavoris = tousFavoris ? favoris : favoris?.slice(0, 6);
 
   return (
-    <Page titre="Itinéraires" sousTitre="Boucles et parcours GPX" large>
+    <Page titre="Itinéraires" sousTitre="Boucles et parcours GPX" large
+      action={<Link to="/itineraires/parcours" className="btn-texte">Mes parcours</Link>}>
       <div ref={haut} className="scroll-mt-24" />
       {statut && !statut.disponible && (
         <div className="card p-4 text-[14px] text-label-2">
@@ -1029,33 +1035,6 @@ export default function Itineraires() {
             {enCours ? calcul : "Proposer des itinéraires"}
           </button>
 
-          {favoris?.length > 0 && (
-            <div>
-              <h2 className="entete-liste">Mes parcours</h2>
-              <div className="card py-0.5">
-                {listeFavoris.map((f) => (
-                  <button type="button" key={f.id} onClick={() => ouvrir.mutate(f.id)} disabled={ouvrir.isPending}
-                    className="ligne w-full text-left" style={{ "--inset": "3rem" }}>
-                    <span className="w-5 text-center text-[17px] shrink-0" aria-hidden>{SPORTS.find(([k]) => k === f.sport)?.[2] ?? "📍"}</span>
-                    <span className="flex-1 min-w-0">
-                      <span className="block text-[15px] truncate">{f.nom}</span>
-                      <span className="block text-[12px] text-label-2 chiffres">
-                        {km(f.distance_km)} km · {f.dplus_m} m D+ · {f.boucle ? "boucle" : "aller simple"}
-                      </span>
-                    </span>
-                    {ouvrir.isPending && ouvrir.variables === f.id
-                      ? <span className="w-4 h-4 rounded-full border-2 border-label-3 border-t-brand animate-spin" aria-label="Ouverture" />
-                      : <span className="text-[18px] text-label-3" aria-hidden>›</span>}
-                  </button>
-                ))}
-              </div>
-              {favoris.length > 6 && (
-                <button type="button" onClick={() => setTousFavoris(!tousFavoris)} className="btn-texte px-4 pt-1.5 !text-[13px]">
-                  {tousFavoris ? "Afficher moins" : `Afficher les ${favoris.length} parcours`}
-                </button>
-              )}
-            </div>
-          )}
           {vue === "recherche" && erreurFavori && <p className="px-1 text-[14px] text-ios-red md:hidden" role="alert">{erreurFavori}</p>}
         </div>
 

@@ -4,12 +4,12 @@ import { useEffect } from "react";
 // (comme dans une app iOS : l'onglet parent reste sélectionné et un bouton
 // retour apparaît en haut à gauche).
 export const ONGLETS = ["/", "/plan", "/carnet", "/stats", "/profil"];
-export const PARENTS = { "/objectifs": "/", "/analyses": "/stats", "/records": "/stats", "/bilan": "/stats", "/sources": "/profil", "/itineraires": "/plan" };
+export const PARENTS = { "/objectifs": "/", "/analyses": "/stats", "/records": "/stats", "/bilan": "/stats", "/sources": "/profil", "/itineraires": "/plan", "/itineraires/parcours": "/itineraires" };
 
 // Onglet auquel appartient une route
 export function ongletDe(pathname) {
   if (pathname === "/") return "/";
-  if (PARENTS[pathname]) return PARENTS[pathname];
+  if (PARENTS[pathname]) return ongletDe(PARENTS[pathname]);
   return ONGLETS.find((o) => o !== "/" && pathname.startsWith(o)) ?? null;
 }
 
