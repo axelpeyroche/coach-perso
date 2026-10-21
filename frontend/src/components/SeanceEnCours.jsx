@@ -240,7 +240,7 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
         setEtat((st) => (etape.type === "emom"
           ? { ...st, decompteFin: null, emomDebut: st.decompteFin }
           : { ...st, decompteFin: null, minuteurFin: st.decompteFin + ex.duree * 1000, minuteurTotal: ex.duree }));
-      } else if (r <= 3 && bipUneFois(`d${etat.decompteFin}-${r}`)) bipCourt();
+      } else if (r <= 3 && bipUneFois(`d${etat.decompteFin}-${r}`)) bipCourt(r);
     } else if (etat.minuteurFin) {
       const r = Math.ceil((etat.minuteurFin - now) / 1000);
       if (r <= 0) {
@@ -249,7 +249,7 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
           if (etape.type === "repos") suivant();
           else if (etape.type === "serie") validerSerie(etape.i);
         }
-      } else if (r <= 3 && bipUneFois(`m${etat.minuteurFin}-${r}`)) bipCourt();
+      } else if (r <= 3 && bipUneFois(`m${etat.minuteurFin}-${r}`)) bipCourt(r);
     } else if (etape.type === "emom" && etat.emomDebut) {
       const ecoule = now - etat.emomDebut;
       if (ecoule >= ex.series * 60000) {
@@ -258,7 +258,7 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
         const m = Math.floor(ecoule / 60000);
         const r = Math.ceil((60000 - (ecoule % 60000)) / 1000);
         if (m > 0 && bipUneFois(`g${etat.emomDebut}-${m}`)) bipLong();
-        else if (r <= 3 && bipUneFois(`e${etat.emomDebut}-${m}-${r}`)) bipCourt();
+        else if (r <= 3 && bipUneFois(`e${etat.emomDebut}-${m}-${r}`)) bipCourt(r);
       }
     }
   }, [now]); // eslint-disable-line react-hooks/exhaustive-deps
