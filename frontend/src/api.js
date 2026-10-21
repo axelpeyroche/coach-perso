@@ -139,6 +139,8 @@ export const getSegmentsActivite = (id) => api.get(`/activites/${id}/segments`, 
 export const getItineraires = () => api.get("/itineraires").then((r) => r.data);
 export const proposerItineraires = (d) => api.post("/itineraires", d, { timeout: 60000 }).then((r) => r.data);
 export const tracerItineraire = (d) => api.post("/itineraires/trace", d, { timeout: 45000 }).then((r) => r.data);
+export const ligneDroiteItineraire = (d) => api.post("/itineraires/droite", d, { timeout: 20000 }).then((r) => r.data);
+export const getSortiesItineraire = () => api.get("/itineraires/sorties").then((r) => r.data);
 export const getAlluresItineraire = () => api.get("/itineraires/allures").then((r) => r.data);
 export const getFavorisItineraire = () => api.get("/itineraires/favoris").then((r) => r.data);
 export const getFavoriItineraire = (id) => api.get(`/itineraires/favoris/${id}`).then((r) => r.data);

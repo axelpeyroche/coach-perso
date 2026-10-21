@@ -648,3 +648,27 @@ def allures(db, user_id: int) -> dict:
             res[sport] = {"s_par_km_effort": _ALLURES_DEFAUT[sport], "seances": 0, "base": None,
                           "effort_dplus": EFFORT_DPLUS[sport]}
     return res
+
+
+ALTITUDES_FINES = "https://api.opentopodata.org/v1/eudem25m,srtm30m"  # 25 m en Europe, 30 m ailleurs
+
+
+def ligne_droite(a: list[float], b: list[float]) -> dict:
+    """Tronçon tracé à la main, hors des chemins : ligne droite de a à b, un point tous les
+    25 m environ (100 au plus : un seul appel d'altitudes), altitudes du modèle de terrain."""
+    longueur = _dist_ll(a, b)
+    n = max(2, min(100, int(longueur / 25) + 2))
+    pts = [[round(a[0] + (b[0] - a[0]) * i / (n - 1), 6), round(a[1] + (b[1] - a[1]) * i / (n - 1), 6)] for i in range(n)]
+    alts: list[Optional[float]] = [None] * n
+    try:
+        q = urllib.parse.urlencode({"locations": "|".join(f"{p[0]:.6f},{p[1]:.6f}" for p in pts)}, safe=",|")
+        with urllib.request.urlopen(urllib.request.Request(f"{ALTITUDES_FINES}?{q}", headers=itineraires_zones._UA),
+                                    timeout=10) as r:
+            res = json.loads(r.read()).get("results", [])
+        alts = [round(x["elevation"], 1) if x.get("elevation") is not None else None for x in res][:n]
+        alts += [None] * (n - len(alts))
+    except Exception as e:  # sans altitudes, le tronçon reste utilisable (D+ inconnu sur ce morceau)
+        _log.info("Altitudes de la ligne droite indisponibles : %s", e)
+    km = round(longueur / 1000, 3)
+    return {"points": [[p[0], p[1], h] for p, h in zip(pts, alts)], "terrains": [[0, km, "hors"]],
+            "distance_km": round(km, 2), "dplus_m": cs.denivele_positif(alts, seuil=3) or 0}

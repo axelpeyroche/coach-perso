@@ -52,7 +52,7 @@ export function terrainsDepuis(points, types) {
 export function repartitionDepuis(terrains) {
   const parts = { bitume: 0, chemin: 0, sentier: 0 };
   for (const [a, b, t] of terrains) parts[t] = (parts[t] ?? 0) + b - a;
-  const total = parts.bitume + parts.chemin + parts.sentier;
+  const total = Object.values(parts).reduce((a, b) => a + b, 0);
   if (!total) return null;
   return Object.fromEntries(Object.entries(parts).map(([k, v]) => [k, Math.round((100 * v) / total)]));
 }

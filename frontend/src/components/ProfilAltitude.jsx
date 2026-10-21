@@ -30,7 +30,10 @@ const AXE_Y = 40, AXE_X = 22, GRIS = "#8E8E93";
 // ── Profil d'altitude ──────────────────────────────────────────────────────
 // Terrain le long du tracé : route = deux traits pleins, chemin = trait plein sous des pointillés,
 // sentier = pointillés seuls (la couleur double le motif)
-const TERRAINS = { bitume: ["Route", "#8E8E93"], chemin: ["Chemin", "#A2845E"], sentier: ["Sentier", "#30A46C"] };
+// hors = tracé à la main en ligne droite, hors des chemins (création d'un parcours)
+export const TERRAINS = {
+  bitume: ["Route", "#8E8E93"], chemin: ["Chemin", "#A2845E"], sentier: ["Sentier", "#30A46C"], hors: ["Hors sentier", "#AF52DE"],
+};
 
 // Trait d'un tronçon : décalé de part et d'autre du tracé pour la route et le chemin
 function Trait({ type, d }) {
@@ -42,6 +45,7 @@ function Trait({ type, d }) {
   if (type === "chemin") {
     return <><path {...p} strokeWidth={1.5} strokeDasharray="4 3" transform="translate(0,-1.9)" /><path {...p} strokeWidth={1.6} transform="translate(0,1.9)" /></>;
   }
+  if (type === "hors") return <path {...p} strokeWidth={2} strokeDasharray="5 3" />;
   return <path {...p} strokeWidth={3} strokeDasharray="0.1 4.5" strokeLinecap="round" />;
 }
 

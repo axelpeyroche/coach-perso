@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 import itineraires_service as it
 from database import obtenir_session
 from deps import get_current_user, limiter
-from models import ItineraireFavori, Utilisateur
+from models import Activite, ItineraireFavori, TraceGPS, Utilisateur
 
 router = APIRouter()
 
@@ -79,6 +79,31 @@ def tracer(p: DemandeTrace, current_user: Utilisateur = Depends(get_current_user
         return it.tracer(p.sport, [x[:2] for x in p.points], p.sentiers)
     except it.ItineraireErreur as e:
         raise HTTPException(502, str(e))
+
+
+class DemandeDroite(BaseModel):
+    points: list[Point] = Field(..., min_length=2, max_length=2, description="[[lat, lon], [lat, lon]]")
+
+
+@router.post("/api/itineraires/droite", summary="Tronçon en ligne droite, hors des chemins (création à la main)")
+def ligne_droite(p: DemandeDroite, current_user: Utilisateur = Depends(get_current_user)):
+    _verifier(p.points)
+    a, b = p.points[0][:2], p.points[1][:2]
+    if it._dist_ll(a, b) > 20000:
+        raise HTTPException(422, "Ligne droite limitée à 20 km : ajoute des points intermédiaires.")
+    # Une seule demande d'altitudes par tronçon ; le service public accepte environ un appel par seconde
+    limiter(f"itineraires-droite:{current_user.id}", 30, 60)
+    return it.ligne_droite(a, b)
+
+
+@router.get("/api/itineraires/sorties", summary="Dernières séances avec un tracé GPS (point de départ d'un parcours)")
+def sorties(current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
+    q = (db.query(Activite, TraceGPS.distance_km, TraceGPS.dplus_m)
+         .join(TraceGPS, TraceGPS.activite_id == Activite.id)
+         .filter(Activite.utilisateur_id == current_user.id)
+         .order_by(Activite.debut.desc()).limit(40))
+    return [{"id": a.id, "date": a.debut.date().isoformat(), "titre": a.titre, "sport": a.sport,
+             "distance_km": round(d, 2) if d is not None else a.distance_km, "dplus_m": dp} for a, d, dp in q]
 
 
 @router.get("/api/itineraires/allures", summary="Allure habituelle par sport (temps estimé des parcours)")
