@@ -1066,11 +1066,14 @@ export default function Itineraires() {
                 </h2>
                 {!resultat.favori && HORS_BITUME.includes(resultat.sport) && Math.min(...resultats.map((r) => r.repartition?.bitume ?? 0)) > 30 && (
                   <p className="mb-2 rounded-[12px] bg-ios-orange/15 px-4 py-2.5 text-[13px] text-label">
-                    Peu de chemins dans cette zone : toutes les boucles ont plus de 30 % de bitume.
+                    Peu de chemins dans cette zone : toutes les boucles ont plus de 30 % de bitume.{" "}
                     {resultat.boucle && resultat.rayon < 15
                       ? "Élargis « Départ jusqu'à » ou place le départ plus près des sentiers avec « Sur la carte »."
                       : "Place le départ plus près des sentiers (parc, colline, lisière) avec « Sur la carte »."}
                   </p>
+                )}
+                {!resultat.favori && resultat.avertissement && (
+                  <p className="mb-2 rounded-[12px] bg-ios-orange/15 px-4 py-2.5 text-[13px] text-label">{resultat.avertissement}</p>
                 )}
                 <div className="card py-0.5">
                   {affichees.map((r, i) => (

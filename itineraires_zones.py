@@ -268,13 +268,15 @@ def departs(depart: list[float], rayon_km: float, distance_km: float, dplus_m: O
 
     # Relief des meilleures zones quand un D+ est visé (une montée tous les 5 km environ)
     if dplus_m and zones:
-        tete = zones[:8]
+        tete = zones[:16]  # 80 altitudes : la limite d'un appel OpenTopoData est 100
         besoin = dplus_m / max(1.0, distance_km / 5)
         for z, rel in zip(tete, _reliefs([mesures[z["case"]]["centre"] for z in tete])):
             if rel is not None:
                 z["relief"] = rel
                 z["score"] *= min(1.0, (rel + 20) / max(besoin, 40)) ** 0.7
-        zones = sorted(tete, key=lambda z: -z["score"]) + zones[8:]
+                # Relief bien plus fort que le D+ visé : la boucle grimperait trop
+                z["score"] *= min(1.0, 2 * max(besoin, 40) / max(rel, 1))
+        zones = sorted(tete, key=lambda z: -z["score"]) + zones[16:]
 
     ecart = max(2.5, rayon_km / 3)
     choisies: list[dict] = []

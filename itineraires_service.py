@@ -332,10 +332,14 @@ def _dist(a: list, b: list) -> float:
 def _ecart(r: dict, distance_km: Optional[float], dplus_m: Optional[int], bitume: float = 0) -> float:
     part = (r.get("repartition") or {}).get("bitume", 0)
     e = bitume * (part + 2 * max(0, part - _BITUME_SEUIL)) / 100
+    # Au-delà de 15 % d'écart, chaque point compte triple : la première proposition doit coller
+    # à la demande, pas seulement être la moins mauvaise sur un critère
     if distance_km:
-        e += abs(r["distance_km"] - distance_km) / distance_km
+        x = abs(r["distance_km"] - distance_km) / distance_km
+        e += x + 2 * max(0, x - 0.15)
     if dplus_m is not None:
-        e += abs(r["dplus_m"] - dplus_m) / max(dplus_m, 150)
+        x = abs(r["dplus_m"] - dplus_m) / max(dplus_m, 150)
+        e += x + 2 * max(0, x - 0.15)
     return e
 
 
@@ -354,7 +358,7 @@ def proposer(sport: str, depart: list[float], arrivee: Optional[list[float]], di
     bitume = max(_BITUME.get(sport, 0), 1.5 if eviter_routes else 0)
     try:
         res = _proposer_br(sport, depart, arrivee, distance_km, sentiers or eviter_routes, essai,
-                           _departs(depart, None if arrivee else rayon_km, distance_km, dplus_m))
+                           _departs(depart, None if arrivee else rayon_km, distance_km, dplus_m), dplus_m)
     except ItineraireErreur as e:
         if not cle():
             raise
@@ -371,6 +375,14 @@ def proposer(sport: str, depart: list[float], arrivee: Optional[list[float]], di
             gardees.append(r)
         if len(gardees) >= nombre:
             break
+    for r in gardees:
+        r.pop("_reglage", None)
+    if dplus_m and gardees and _ecart_dplus(gardees[0], dplus_m) > 0.25:
+        plus = gardees[0]["dplus_m"] > dplus_m
+        res["avertissement"] = (f"Le relief autour de ce départ ne permet pas d'approcher {dplus_m} m D+ "
+                                f"sur cette distance : la boucle la plus proche en fait {gardees[0]['dplus_m']}. "
+                                + ("Essaie un départ en vallée ou un D+ plus élevé." if plus
+                                   else "Essaie un départ plus près du relief ou un rayon plus grand."))
     return {**res, "propositions": gardees}
 
 
@@ -466,7 +478,8 @@ def _boucles(source: str, profil: str, distance_km: float, essai: int, calcul, w
     return toutes
 
 
-def _proposer_br(sport, depart, arrivee, distance_km, sentiers, essai, departs: list[dict]) -> dict:
+def _proposer_br(sport, depart, arrivee, distance_km, sentiers, essai, departs: list[dict],
+                 dplus_m: Optional[int] = None) -> dict:
     profil = PROFILS_BR.get(sport, PROFILS_BR["course"])[1 if sentiers else 0]
     a = f"{depart[1]:.6f},{depart[0]:.6f}"  # BRouter : lon,lat
     source = {"source": "BRouter", "profil": profil}
@@ -491,6 +504,17 @@ def _proposer_br(sport, depart, arrivee, distance_km, sentiers, essai, departs: 
             raise erreurs[0] if erreurs else ItineraireErreur("Aucun itinéraire trouvé entre ces deux points.")
         return {**source, "toutes": toutes, "calculs": 3}
 
+    def calculer(pos: list[float], direction: float, longueur_km: float, essais: int = 3) -> Optional[dict]:
+        r = _lire_br(_brouter(essais=essais, params={"lonlats": f"{pos[1]:.6f},{pos[0]:.6f}", "profile": profil,
+                               "alternativeidx": 0, "engineMode": 4,
+                               "roundTripDistance": round(longueur_km * 1000), "direction": round(direction) % 360,
+                               **reglage}))
+        if r:
+            r["depart"] = pos
+            r["approche_km"] = round(itineraires_zones._dist_km(depart, pos), 1)
+            r["_reglage"] = (pos, direction, longueur_km)
+        return r
+
     def boucle(longueur_km: float, graine: int) -> Optional[dict]:
         # Les six calculs se répartissent entre les départs retenus. Sans zone visée : six directions
         # autour du départ ; vers une zone de chemins : partir vers son cœur, de part et d'autre.
@@ -500,17 +524,56 @@ def _proposer_br(sport, depart, arrivee, distance_km, sentiers, essai, departs: 
             direction = (tour * 360 // max(1, 6 // len(departs))) + (graine // 6) * 23
         else:
             direction = d["direction"] + (-35 if tour % 2 else 35) + (graine // 6) * 23
-        r = _lire_br(_brouter({"lonlats": f"{d['pos'][1]:.6f},{d['pos'][0]:.6f}", "profile": profil,
-                               "alternativeidx": 0, "engineMode": 4,
-                               "roundTripDistance": round(longueur_km * 1000), "direction": direction % 360,
-                               **reglage}))
-        if r:
-            r["depart"] = d["pos"]
-            r["approche_km"] = round(itineraires_zones._dist_km(depart, d["pos"]), 1)
-        return r
+        return calculer(d["pos"], direction, longueur_km)
 
     # Serveur public partagé : il freine les calculs simultanés, on les enchaîne
-    return {**source, "toutes": _boucles("br", profil, distance_km, essai, boucle, 1), "calculs": 6}
+    toutes = _boucles("br", profil, distance_km, essai, boucle, 1)
+    calculs = 6
+    if dplus_m:
+        toutes += _affiner(toutes, distance_km, dplus_m, calculer)
+        calculs = len(toutes)
+    return {**source, "toutes": toutes, "calculs": calculs}
+
+
+def _ecart_dplus(r: dict, dplus_m: int) -> float:
+    return abs(r["dplus_m"] - dplus_m) / max(dplus_m, 150)
+
+
+def _affiner(toutes: list[dict], distance_km: float, dplus_m: int, calculer) -> list[dict]:
+    """Tours supplémentaires quand aucune boucle n'approche le D+ visé : le relief change beaucoup
+    d'une direction à l'autre (vallée ou versant). À chaque tour on repart des deux boucles les
+    plus proches de la demande en tournant de moins en moins, longueur recalée sur la distance."""
+    def proche(r):
+        return _ecart_dplus(r, dplus_m) + abs(r["distance_km"] - distance_km) / distance_km
+
+    def bonne(r):
+        return _ecart_dplus(r, dplus_m) <= 0.15 and abs(r["distance_km"] - distance_km) / distance_km <= 0.12
+
+    # Au plus quatre calculs de plus : le serveur public freine au-delà d'une dizaine d'affilée
+    res, faits, debut = [], set(), time.monotonic()
+    for decalage in (35, 15):
+        if any(bonne(r) for r in toutes + res) or len(faits) >= 4 or time.monotonic() - debut > 25:
+            break
+        meilleures = sorted((r for r in toutes + res if r.get("_reglage") and r["distance_km"]), key=proche)[:2]
+        for r in meilleures:
+            pos, direction, longueur = r["_reglage"]
+            longueur *= max(0.7, min(1.4, distance_km / r["distance_km"]))
+            for d in (direction - decalage, direction + decalage):
+                cle_e = (tuple(pos), round(d) % 360, round(longueur, 1))
+                if cle_e in faits or len(faits) >= 4:
+                    continue
+                faits.add(cle_e)
+                try:
+                    n = calculer(pos, d, longueur, essais=2)
+                except _Surcharge:
+                    return res
+                except ItineraireErreur as e:
+                    _log.info("Boucle d'affinage refusée : %s", e)
+                    continue
+                if n:
+                    res.append(n)
+    _log.info("Affinage D+ %s m : %d boucles de plus en %.1f s", dplus_m, len(res), time.monotonic() - debut)
+    return res
 
 
 def _proposer_ors(sport, depart, arrivee, distance_km, sentiers, essai) -> dict:
