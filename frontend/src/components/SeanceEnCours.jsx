@@ -235,7 +235,7 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
     if (etat.decompteFin) {
       const r = Math.ceil((etat.decompteFin - now) / 1000);
       if (r <= 0) {
-        bipLong();
+        bipLong("go");
         setGoJusqua(Date.now() + 700);
         setEtat((st) => (etape.type === "emom"
           ? { ...st, decompteFin: null, emomDebut: st.decompteFin }
@@ -245,7 +245,9 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
       const r = Math.ceil((etat.minuteurFin - now) / 1000);
       if (r <= 0) {
         if (bipUneFois(`f${etat.minuteurFin}`)) {
-          bipLong();
+          // fin du repos → on repart ; fin d'un exercice chronométré → repos ;
+          // fin de la pause avant un EMOM : simple bip (l'EMOM a son propre décompte avec « go »)
+          bipLong(etape.type !== "repos" ? "repos" : etape.avantEmom ? "bip" : "go");
           if (etape.type === "repos") suivant();
           else if (etape.type === "serie") validerSerie(etape.i);
         }
@@ -253,11 +255,11 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
     } else if (etape.type === "emom" && etat.emomDebut) {
       const ecoule = now - etat.emomDebut;
       if (ecoule >= ex.series * 60000) {
-        if (bipUneFois(`e-fin${etat.emomDebut}`)) { bipLong(); finEmom(ex.series); }
+        if (bipUneFois(`e-fin${etat.emomDebut}`)) { bipLong("repos"); finEmom(ex.series); }
       } else {
         const m = Math.floor(ecoule / 60000);
         const r = Math.ceil((60000 - (ecoule % 60000)) / 1000);
-        if (m > 0 && bipUneFois(`g${etat.emomDebut}-${m}`)) bipLong();
+        if (m > 0 && bipUneFois(`g${etat.emomDebut}-${m}`)) bipLong("go");
         else if (r <= 3 && bipUneFois(`e${etat.emomDebut}-${m}-${r}`)) bipCourt(r);
       }
     }

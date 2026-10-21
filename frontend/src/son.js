@@ -34,10 +34,10 @@ function wav(frequence, duree, volume = 0.9) {
   return encoderWav(ech);
 }
 
-// Voix du décompte (fichiers de public/voix, voix d'homme « Henri » générée une fois
+// Voix du décompte (fichiers de public/voix : trois, deux, un, go, repos ; voix d'homme « Henri » générée une fois
 // par synthèse neuronale) : silence de tête et de queue coupé, volume poussé au maximum
 // pour que le mot tombe pile sur la seconde.
-const VOIX = { 3: "trois", 2: "deux", 1: "un", 0: "zero" };
+const VOIX = { 3: "trois", 2: "deux", 1: "un", go: "go", repos: "repos" };
 let voix = null; // { trois: <audio>, ... }
 
 async function preparerVoix() {
@@ -157,7 +157,7 @@ function jouer(nom, secours = nom) {
   bipWebAudio(...SONS[secours]);
 }
 
-// 3, 2, 1 : « trois », « deux », « un » ; GO (ou fin du repos) : « zéro ».
+// 3, 2, 1 : « trois », « deux », « un » ; puis « go » au début d'un effort, « repos » à la fin.
 // Tant que la voix n'est pas prête (ou introuvable) : bip court, puis bip long plus aigu.
 export const bipCourt = (reste) => jouer(VOIX[reste] ?? "court", "court");
-export const bipLong = () => jouer(VOIX[0], "long");
+export const bipLong = (mot = "go") => jouer(VOIX[mot] ?? "long", "long");
