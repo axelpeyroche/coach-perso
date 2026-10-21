@@ -2,8 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import Page from "../components/Page";
-import { Carte, km, nomSport, SPORTS, TACTILE, telecharger } from "../components/CarteItineraire";
-import Profil, { profil, TERRAINS } from "../components/ProfilAltitude";
+import { BarreSurfaces, Carte, Chiffre, km, nomSport, SPORTS, TACTILE, telecharger } from "../components/CarteItineraire";
+import Profil, { profil } from "../components/ProfilAltitude";
 import { Interrupteur, Segmente } from "../components/ui";
 import {
   creerFavoriItineraire, getAlluresItineraire, getSortiesItineraire, getTerrains, getTrace,
@@ -20,8 +20,6 @@ const A_PIED = ["course", "trail", "randonnee"];
 const ORANGE = "#FF6B35";
 const VIERGE = { boucle: false, wps: [], segs: [] };
 const MODES = [["chemins", "Suivre les chemins"], ["droite", "Ligne droite"]];
-const SURFACES = ["sentier", "chemin", "bitume", "hors"];
-const LIBELLES = { sentier: "sentier", chemin: "chemin", bitume: "bitume", hors: "hors sentier" };
 
 // ── Modèle : { boucle, wps: [[lat, lon]], segs: [{ pts, ty, mode }] } (voir itineraireTrace) ──
 const nb = T.nbSegments;
@@ -161,36 +159,6 @@ function lireGpx(texte) {
 }
 
 // ── Récap en direct ─────────────────────────────────────────────────────────
-function Chiffre({ titre, valeur, unite }) {
-  return (
-    <div className="min-w-0">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.02em] text-label-2">{titre}</p>
-      <p className="text-[19px] md:text-[21px] font-semibold leading-tight chiffres truncate">
-        {valeur}<span className="text-[12px] font-medium text-label-2 ml-0.5">{unite}</span>
-      </p>
-    </div>
-  );
-}
-
-function BarreSurfaces({ repartition }) {
-  if (!repartition) return null;
-  const parts = SURFACES.map((t) => [t, repartition[t] ?? 0]).filter(([, v]) => v > 0);
-  return (
-    <div className="space-y-1.5">
-      <div className="flex h-2 rounded-full overflow-hidden bg-remplissage" aria-hidden>
-        {parts.map(([t, v]) => <span key={t} style={{ width: `${v}%`, background: TERRAINS[t][1] }} />)}
-      </div>
-      <p className="flex flex-wrap gap-x-3 gap-y-0.5 text-[12px] text-label-2 chiffres">
-        {parts.map(([t, v]) => (
-          <span key={t} className="inline-flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full" style={{ background: TERRAINS[t][1] }} aria-hidden />{v} % {LIBELLES[t]}
-          </span>
-        ))}
-      </p>
-    </div>
-  );
-}
-
 function Recap({ stats, dmoins, temps, dernier, vide }) {
   return (
     <div className="card p-3.5 space-y-2.5">

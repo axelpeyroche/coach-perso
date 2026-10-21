@@ -105,6 +105,40 @@ function morceauxTerrain(s) {
   return res.length ? res : [[s.pts, s.ty[0] ?? null]];
 }
 
+// ── Récap partagé (création, parcours enregistrés) ──
+const SURFACES = ["sentier", "chemin", "bitume", "hors"];
+const LIBELLES = { sentier: "sentier", chemin: "chemin", bitume: "bitume", hors: "hors sentier" };
+
+export function Chiffre({ titre, valeur, unite }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.02em] text-label-2">{titre}</p>
+      <p className="text-[19px] md:text-[21px] font-semibold leading-tight chiffres truncate">
+        {valeur}<span className="text-[12px] font-medium text-label-2 ml-0.5">{unite}</span>
+      </p>
+    </div>
+  );
+}
+
+export function BarreSurfaces({ repartition }) {
+  if (!repartition) return null;
+  const parts = SURFACES.map((t) => [t, repartition[t] ?? 0]).filter(([, v]) => v > 0);
+  return (
+    <div className="space-y-1.5">
+      <div className="flex h-2 rounded-full overflow-hidden bg-remplissage" aria-hidden>
+        {parts.map(([t, v]) => <span key={t} style={{ width: `${v}%`, background: TERRAINS[t][1] }} />)}
+      </div>
+      <p className="flex flex-wrap gap-x-3 gap-y-0.5 text-[12px] text-label-2 chiffres">
+        {parts.map(([t, v]) => (
+          <span key={t} className="inline-flex items-center gap-1">
+            <span className="w-2 h-2 rounded-full" style={{ background: TERRAINS[t][1] }} aria-hidden />{v} % {LIBELLES[t]}
+          </span>
+        ))}
+      </p>
+    </div>
+  );
+}
+
 export const VIDE = { type: "FeatureCollection", features: [] };
 export const ligneGeo = (pts, properties = {}) => ({ type: "Feature", properties, geometry: { type: "LineString", coordinates: pts.map((p) => [p[1], p[0]]) } });
 export const pointGeo = (p, properties = {}) => ({ type: "Feature", properties, geometry: { type: "Point", coordinates: [p[1], p[0]] } });
