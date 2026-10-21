@@ -471,7 +471,7 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
   const ecran = (
     <div className="fixed inset-0 z-[60] flex bg-black text-white font-sans antialiased select-none [&_textarea]:select-text"
       role="dialog" aria-modal="true" aria-label={`Séance en cours : ${s.titre}`}
-      onPointerDown={debloquerSon}>
+      onClickCapture={debloquerSon} onTouchEndCapture={debloquerSon}>
       <div className="relative flex-1 min-w-0 flex flex-col"
         style={{ paddingTop: "max(12px, env(safe-area-inset-top))", paddingBottom: "max(20px, env(safe-area-inset-bottom))" }}>
         {/* Barre du haut : quitter, avancement, chrono de la séance */}

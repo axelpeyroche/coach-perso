@@ -14,6 +14,7 @@ function csp(apiUrl) {
     "font-src 'self' https://fonts.gstatic.com",
     `img-src 'self' data: blob: ${tuiles}`,
     `connect-src 'self' ${api} ${tuiles} https://photon.komoot.io https://api.open-meteo.com https://archive-api.open-meteo.com`,
+    "media-src 'self' blob:",
     "worker-src 'self' blob:",
     "child-src blob:",
     "manifest-src 'self'",
