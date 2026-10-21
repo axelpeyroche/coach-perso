@@ -490,7 +490,7 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
       role="dialog" aria-modal="true" aria-label={`Séance en cours : ${s.titre}`}
       onClickCapture={debloquerSon} onTouchEndCapture={debloquerSon}>
       <div className="relative flex-1 min-w-0 flex flex-col"
-        style={{ paddingTop: "max(12px, env(safe-area-inset-top))", paddingBottom: "max(20px, env(safe-area-inset-bottom))" }}>
+        style={{ paddingTop: "calc(max(12px, env(safe-area-inset-top)) + var(--marge-flou))", paddingBottom: "max(20px, env(safe-area-inset-bottom))" }}>
         {/* Barre du haut : quitter, avancement, chrono de la séance */}
         <div className="flex items-center gap-3 px-4 lg:px-10 pt-1">
           <button type="button" onClick={() => setMenu(true)} aria-label="Options de la séance"

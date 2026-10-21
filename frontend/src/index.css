@@ -11,6 +11,11 @@
 /* ─── Tokens (valeurs RGB, utilisées par tailwind.config.js) ────────────── */
 
 @layer base {
+  /* Haut de page sur téléphone : iOS 26 pose un voile flouté sous la barre
+     d'état, qui déborde de la zone sûre. Les éléments du haut descendent
+     d'autant pour rester lisibles (rien sur ordinateur). */
+  :root { --marge-flou: 0px; --haut-lisible: calc(env(safe-area-inset-top) + var(--marge-flou)); }
+  @media (max-width: 767px) { :root { --marge-flou: 26px; } }
   :root {
     --blue: 0 122 255;
     --green: 52 199 89;
@@ -265,7 +270,7 @@
     left: 0;
     right: 0;
     z-index: 30;
-    padding-top: calc(env(safe-area-inset-top) + 6px); /* un peu sous la barre d'état : évite le flou automatique d'iOS */
+    padding-top: calc(var(--haut-lisible) + 6px); /* sous le voile flouté d'iOS */
     pointer-events: none;
   }
   .barre-nav > * { pointer-events: auto; }
@@ -432,7 +437,7 @@
   }
   .voile.ferme { animation: fonduSortie 0.26s ease-in forwards; }
   .feuille {
-    @apply relative w-full md:max-w-lg max-h-[calc(100dvh-env(safe-area-inset-top)-10px)] overflow-y-auto bg-fond
+    @apply relative w-full md:max-w-lg max-h-[calc(100dvh-var(--haut-lisible)-10px)] overflow-y-auto bg-fond
       md:rounded-carte rounded-t-[34px] shadow-[0_-10px_40px_rgba(0,0,0,0.15)];
     padding-bottom: env(safe-area-inset-bottom);
     overscroll-behavior: contain;
@@ -441,7 +446,7 @@
   .feuille.ferme { animation: descend 0.26s ease-in forwards; }
   /* Grande feuille (fiche d'une séance) : pleine hauteur sur iPhone,
      large fenêtre centrée sur ordinateur */
-  .feuille.feuille-large { height: calc(100dvh - env(safe-area-inset-top) - 10px); }
+  .feuille.feuille-large { height: calc(100dvh - var(--haut-lisible) - 10px); }
   @media (min-width: 768px) {
     .feuille.feuille-large { max-width: 56rem; height: auto; max-height: calc(100dvh - 64px); }
   }
@@ -496,7 +501,7 @@
 @layer utilities {
   .scrollbar-hide::-webkit-scrollbar { display: none; }
   .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
-  .pt-safe { padding-top: env(safe-area-inset-top); }
+  .pt-safe { padding-top: var(--haut-lisible); }
 }
 
 @keyframes fondu { from { opacity: 0; } to { opacity: 1; } }
@@ -514,5 +519,5 @@
 }
 /* Carte en plein écran (pseudo plein écran sur iPhone) : contrôles sous la barre d'état, au-dessus de la barre d'accueil */
 .maplibregl-pseudo-fullscreen { background: #000 !important; border-radius: 0 !important; }
-.maplibregl-pseudo-fullscreen .maplibregl-ctrl-top-right { top: calc(env(safe-area-inset-top) + 8px); }
+.maplibregl-pseudo-fullscreen .maplibregl-ctrl-top-right { top: calc(var(--haut-lisible) + 8px); }
 .maplibregl-pseudo-fullscreen .maplibregl-ctrl-bottom-right { bottom: env(safe-area-inset-bottom); }

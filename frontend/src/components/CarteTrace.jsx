@@ -411,7 +411,7 @@ export default function CarteTrace({ activiteId, position, onPosition }) {
       <div ref={cadre} className="relative h-72 rounded-[14px] overflow-hidden bg-remplissage">
         <div ref={conteneur} className="w-full h-full" />
         {isLoading && <p className="absolute inset-0 grid place-items-center text-[13px] text-label-2">Chargement du tracé…</p>}
-        <div style={plein ? { top: "calc(env(safe-area-inset-top) + 8px)" } : undefined}
+        <div style={plein ? { top: "calc(var(--haut-lisible) + 8px)" } : undefined}
           className={`absolute top-2 left-2 flex flex-col gap-1.5 items-start transition-opacity ${lecture ? "opacity-0 pointer-events-none" : ""}`}>
           <Bascule options={[["plan", "Plan"], ["satellite", "Satellite"]]} valeur={fond} onChange={setFond} />
           <Bascule options={[["2d", "2D"], ["3d", "3D"]]} valeur={vue} onChange={setVue} />
