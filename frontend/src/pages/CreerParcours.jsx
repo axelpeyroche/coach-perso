@@ -390,9 +390,14 @@ export default function CreerParcours() {
 
       <div>
         <h2 className="entete-liste">Sport</h2>
-        <select className="champ" value={sport} onChange={(ev) => setSport(ev.target.value)} aria-label="Sport">
-          {SPORTS.map(([k, l, em]) => <option key={k} value={k}>{em} {l}</option>)}
-        </select>
+        <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="Sport">
+          {SPORTS.map(([k, l, em]) => (
+            <button type="button" key={k} role="radio" aria-checked={sport === k} onClick={() => setSport(k)}
+              className={`h-[54px] rounded-[12px] flex flex-col items-center justify-center gap-0.5 text-[13px] font-semibold transition active:scale-95 ${sport === k ? "bg-brand text-white" : "card text-label"}`}>
+              <span className="text-[17px] leading-5" aria-hidden>{em}</span>{l}
+            </button>
+          ))}
+        </div>
         <p className="px-1 pt-1.5 text-[12px] text-label-2">Choix des chemins pour les prochains tronçons et temps estimé.</p>
       </div>
 
