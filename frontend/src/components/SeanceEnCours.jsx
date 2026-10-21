@@ -312,8 +312,17 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
     if (k == null) return 0;
     if (i < k) return 1;
     if (i > k) return 0;
-    const siennes = etapes.map((et, j) => [et, j]).filter(([et]) => et.k === i);
-    return siennes.filter(([, j]) => j < etat.idx).length / siennes.length;
+    // Seules les étapes d'effort comptent (séries, EMOM) : pas les repos ni le ressenti
+    const siennes = etapes.map((et, j) => [et, j]).filter(([et]) => et.k === i && (et.type === "serie" || et.type === "emom"));
+    if (!siennes.length) return etat.idx > etapes.findIndex((et) => et.k === i) ? 1 : 0;
+    // Étape en cours remplie en temps réel : minutes écoulées de l'EMOM, chrono d'un exercice en durée
+    let enCours = 0;
+    if (etape.type === "emom" && etat.emomDebut) {
+      enCours = Math.min(1, (now - etat.emomDebut) / (ex.series * 60000));
+    } else if (etape.type === "serie" && etat.minuteurFin && etat.minuteurTotal) {
+      enCours = Math.min(1, Math.max(0, 1 - (etat.minuteurFin - now) / (etat.minuteurTotal * 1000)));
+    }
+    return (siennes.filter(([, j]) => j < etat.idx).length + enCours) / siennes.length;
   });
 
   const decompte = etat.decompteFin ? Math.max(1, Math.ceil((etat.decompteFin - now) / 1000)) : null;
