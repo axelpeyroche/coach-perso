@@ -37,11 +37,8 @@ const LYON = [4.835, 45.76];
 // Sorties du carnet qui servent à estimer le temps
 const BASES = { course: "de course", trail: "de trail", randonnee: "de rando", marche: "de marche", velo: "de vélo" };
 const FONDS = [["osm", "Plan"], ["topo", "Topo"], ["ign", "IGN"], ["satellite", "Satellite"]];
-// Fond et vue 2D / 3D retenus d'une visite à l'autre
-const lirePref = (cle, defaut, valides) => {
-  try { const v = localStorage.getItem(cle); return valides.includes(v) ? v : defaut; } catch { return defaut; }
-};
-const ecrirePref = (cle, v) => { try { localStorage.setItem(cle, v); } catch { /* stockage indisponible */ } };
+// La carte s'ouvre toujours en satellite, à plat ; les anciens choix mémorisés sont oubliés
+try { localStorage.removeItem("itineraires-fond"); localStorage.removeItem("itineraires-vue"); } catch { /* stockage indisponible */ }
 const TACTILE = typeof window !== "undefined" && !!window.matchMedia?.("(pointer: coarse)").matches;
 
 // Fonds gratuits et sans clé : OSM, OpenTopoMap (courbes de niveau), Plan IGN (Géoplateforme),
@@ -71,10 +68,10 @@ const STYLE = {
     },
   },
   layers: [
-    { id: "osm", type: "raster", source: "osm" },
+    { id: "osm", type: "raster", source: "osm", layout: { visibility: "none" } },
     { id: "topo", type: "raster", source: "topo", layout: { visibility: "none" } },
     { id: "ign", type: "raster", source: "ign", layout: { visibility: "none" } },
-    { id: "satellite", type: "raster", source: "satellite", layout: { visibility: "none" } },
+    { id: "satellite", type: "raster", source: "satellite" },
   ],
 };
 
@@ -225,8 +222,8 @@ function Carte({ propositions, choisie, onChoisir, depart, arrivee, pointage, on
   const popup = useRef(null);
   const cadrer = useRef(() => {});
   const [prete, setPrete] = useState(false);
-  const [fond, setFond] = useState(() => lirePref("itineraires-fond", "topo", FONDS.map(([k]) => k)));
-  const [vue, setVue] = useState(() => lirePref("itineraires-vue", "2d", ["2d", "3d"]));
+  const [fond, setFond] = useState("satellite");
+  const [vue, setVue] = useState("2d");
   // Valeurs à jour pour les gestionnaires d'événements, branchés une seule fois
   const props = useRef({});
   props.current = { pointage, onPoint, onChoisir, edition, couleurEdition, onOp, traceSurvol, onSurvol };
@@ -417,14 +414,12 @@ function Carte({ propositions, choisie, onChoisir, depart, arrivee, pointage, on
     const m = carte.current;
     if (!prete || !m) return;
     for (const [f] of FONDS) m.setLayoutProperty(f, "visibility", f === fond ? "visible" : "none");
-    ecrirePref("itineraires-fond", fond);
   }, [fond, prete]);
 
   // 3D : relief exagéré et carte inclinée ; en 2D, retour à plat et au nord
   useEffect(() => {
     const m = carte.current;
     if (!prete || !m) return;
-    ecrirePref("itineraires-vue", vue);
     if (vue === "3d") {
       m.setTerrain({ source: "relief", exaggeration: 1.5 });
       m.easeTo({ pitch: 60, duration: 800 });
