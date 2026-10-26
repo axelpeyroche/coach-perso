@@ -43,14 +43,26 @@ export function calculerPassages(traces, cellule = 15) {
   for (const t of traces) {
     const voisinage = new Set();
     let seg = [], px = null, py = null;
-    for (let i = 0; i < t.lat.length; i++) {
-      const cx = Math.floor(t.lon[i] * kx), cy = Math.floor(t.lat[i] * ky), c = cle(cx, cy);
+    const ajouter = (la, lo) => {
+      const cx = Math.floor(lo * kx), cy = Math.floor(la * ky), c = cle(cx, cy);
       const s = somme.get(c);
-      if (s) { s[0] += t.lat[i]; s[1] += t.lon[i]; s[2]++; } else somme.set(c, [t.lat[i], t.lon[i], 1]);
-      if (cx === px && cy === py) continue;
-      if (px !== null && Math.max(Math.abs(cx - px), Math.abs(cy - py)) > 3) { segments.push(seg); seg = []; }
+      if (s) { s[0] += la; s[1] += lo; s[2]++; } else somme.set(c, [la, lo, 1]);
+      if (cx === px && cy === py) return;
       seg.push(c); px = cx; py = cy;
       for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) voisinage.add(c + dx * L + dy);
+    };
+    for (let i = 0; i < t.lat.length; i++) {
+      if (i) {
+        // Perte du signal GPS (sous les arbres…) : le trou est comblé en ligne droite, case par case ;
+        // au-delà de 2 km (trajet en voiture, montre en pause), le tracé est coupé
+        const saut = Math.max(Math.abs(t.lon[i] * kx - t.lon[i - 1] * kx), Math.abs(t.lat[i] * ky - t.lat[i - 1] * ky));
+        if (saut > 2000 / cellule) { segments.push(seg); seg = []; px = py = null; }
+        else for (let k = 1; k < saut; k++) {
+          const f = k / Math.ceil(saut);
+          ajouter(t.lat[i - 1] + (t.lat[i] - t.lat[i - 1]) * f, t.lon[i - 1] + (t.lon[i] - t.lon[i - 1]) * f);
+        }
+      }
+      ajouter(t.lat[i], t.lon[i]);
     }
     segments.push(seg);
     for (const c of voisinage) compte.set(c, (compte.get(c) ?? 0) + 1);
