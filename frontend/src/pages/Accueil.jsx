@@ -92,9 +92,12 @@ export default function Accueil() {
       <FormeTuiles />
 
       <div className="grid gap-6 lg:grid-cols-5">
-        <div className="lg:col-span-3 space-y-6 min-w-0">
+        <div className="lg:col-span-3 min-w-0">
           <ProchainesSeances />
+        </div>
 
+        {/* Sur ordinateur : sous les deux colonnes, sur toute la largeur ; sur mobile : ordre inchangé */}
+        <div className="lg:col-span-5 lg:order-2 space-y-6 min-w-0">
           <Section titre="Dernières activités" lien="/carnet">
             <Card pad={false}>
               {!liste ? (
@@ -128,7 +131,7 @@ export default function Accueil() {
           )}
         </div>
 
-        <div className="lg:col-span-2 space-y-6 min-w-0">
+        <div className="lg:col-span-2 lg:order-1 space-y-6 min-w-0">
           <Section titre="Objectifs" lien="/objectifs" libelleLien="Gérer">
             {actifs.length === 0 ? (
               <Card>
