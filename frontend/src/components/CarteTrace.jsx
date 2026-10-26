@@ -123,11 +123,22 @@ function distM(a, b) {
   const x = (b[0] - a[0]) * RAD * Math.cos(((a[1] + b[1]) / 2) * RAD), y = (b[1] - a[1]) * RAD;
   return 6371000 * Math.hypot(x, y);
 }
-function preparer(points) {
+function preparer(points, dplusTotal) {
   const coords = points.map((p) => [p[1], p[0]]);
   const cumul = [0];
   for (let i = 1; i < coords.length; i++) cumul.push(cumul[i - 1] + distM(coords[i - 1], coords[i]));
-  return { coords, cumul, temps: points.map((p) => p[3] ?? 0), total: cumul.at(-1) };
+  // D+ cumulé (montées de plus de 3 m, pour ignorer le bruit de l'altitude), recalé sur le D+ de la séance
+  const dplus = [0];
+  let ref = points[0]?.[2], monte = 0;
+  for (let i = 1; i < points.length; i++) {
+    const z = points[i][2];
+    if (z != null && ref != null) {
+      if (z - ref >= 3) { monte += z - ref; ref = z; } else if (z < ref) ref = z;
+    } else if (z != null) ref = z;
+    dplus.push(monte);
+  }
+  const k = dplusTotal != null && monte > 0 ? dplusTotal / monte : 1;
+  return { coords, cumul, temps: points.map((p) => p[3] ?? 0), dplus: dplus.map((v) => v * k), total: cumul.at(-1) };
 }
 // Point situé à `d` mètres du départ (interpolé entre deux points du tracé).
 function pointA(g, d) {
@@ -135,7 +146,8 @@ function pointA(g, d) {
   while (hi - lo > 1) { const mi = (lo + hi) >> 1; if (g.cumul[mi] <= d) lo = mi; else hi = mi; }
   const f = Math.min(1, Math.max(0, (d - g.cumul[lo]) / (g.cumul[hi] - g.cumul[lo] || 1)));
   const a = g.coords[lo], b = g.coords[hi];
-  return { i: lo, pos: [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f], t: g.temps[lo] + (g.temps[hi] - g.temps[lo]) * f };
+  return { i: lo, pos: [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f], t: g.temps[lo] + (g.temps[hi] - g.temps[lo]) * f,
+    dp: g.dplus[lo] + (g.dplus[hi] - g.dplus[lo]) * f };
 }
 function cap(a, b) {
   const y = Math.sin((b[0] - a[0]) * RAD) * Math.cos(b[1] * RAD);
@@ -190,7 +202,7 @@ export default function CarteTrace({ activiteId, position, onPosition }) {
   const [vitesse, setVitesse] = useState(1); // ×1 ou ×2
   const vitesseRef = useRef(1);
   const [plein, setPlein] = useState(false);
-  const [progres, setProgres] = useState(null); // { f, km, t } pendant un survol
+  const [progres, setProgres] = useState(null); // { f, km, t, dp } pendant un survol
   const [prete, setPrete] = useState(false);
   const [fond, setFond] = useState("satellite");
   const [vue, setVue] = useState("2d");
@@ -227,7 +239,7 @@ export default function CarteTrace({ activiteId, position, onPosition }) {
     (async () => {
       const maplibregl = await chargerMaplibre();
       if (annule) return;
-      geo.current = preparer(data.points);
+      geo.current = preparer(data.points, data.dplus_m);
       const { coords } = geo.current;
       const bornes = coords.reduce((b, c) => b.extend(c), new maplibregl.LngLatBounds(coords[0], coords[0]));
       const m = new maplibregl.Map({
@@ -380,7 +392,7 @@ export default function CarteTrace({ activiteId, position, onPosition }) {
         pitchDegage(m, loin, altitude(loin), s.cap, cadrage.zoom, cadrage.pitch));
       s.pitch = s.pitch == null ? cible : s.pitch + (cible - s.pitch) * Math.min(1, dt / (cible < s.pitch ? 300 : 1500));
       m.jumpTo({ center: p.pos, elevation: s.alt, bearing: s.cap, zoom: cadrage.zoom, pitch: s.pitch });
-      if (ts - s.maj > 120 || s.d >= g.total) { s.maj = ts; setProgres({ f: s.d / g.total, km: s.d / 1000, t: p.t }); }
+      if (ts - s.maj > 120 || s.d >= g.total) { s.maj = ts; setProgres({ f: s.d / g.total, km: s.d / 1000, t: p.t, dp: p.dp }); }
       if (s.d >= g.total) { terminer(); return; }
       s.raf = requestAnimationFrame(boucle);
     };
@@ -400,7 +412,7 @@ export default function CarteTrace({ activiteId, position, onPosition }) {
     s.d = f * g.total;
     attenuer(true);
     const p = afficher(s.d);
-    setProgres({ f, km: s.d / 1000, t: p.t });
+    setProgres({ f, km: s.d / 1000, t: p.t, dp: p.dp });
     if (!s.actif) carte.current.easeTo({ center: p.pos, elevation: altitude(p.pos), duration: 400 });
   }
 
@@ -437,7 +449,7 @@ export default function CarteTrace({ activiteId, position, onPosition }) {
             )}
             {progres && (
               <span className="rounded-[8px] bg-black/55 backdrop-blur px-2 py-1 text-[12px] font-semibold text-white chiffres">
-                {progres.km.toFixed(1).replace(".", ",")} km · {chrono(progres.t)}
+                {progres.km.toFixed(1).replace(".", ",")} km · {Math.round(progres.dp)} m · {chrono(progres.t)}
               </span>
             )}
           </div>
