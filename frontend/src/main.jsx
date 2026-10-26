@@ -14,6 +14,15 @@ const queryClient = new QueryClient({
 // Réveille l'API dès l'ouverture, en parallèle du chargement de l'interface
 reveillerServeur();
 
+// Pas de zoom au pincement dans l'appli (Safari ignore user-scalable=no) : seules les cartes se zooment
+const surCarte = (e) => e.target instanceof Element && e.target.closest(".maplibregl-map");
+for (const type of ["gesturestart", "gesturechange"]) {
+  document.addEventListener(type, (e) => { if (!surCarte(e)) e.preventDefault(); }, { passive: false });
+}
+document.addEventListener("touchmove", (e) => {
+  if (e.touches.length > 1 && !surCarte(e)) e.preventDefault();
+}, { passive: false });
+
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
