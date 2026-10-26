@@ -85,10 +85,10 @@ const NAV = [
   { to: "/",          label: "Résumé",    IconC: Icon.Accueil },
   { to: "/plan",      label: "Plan",      IconC: Icon.Plan },
   { to: "/carnet",    label: "Carnet",    IconC: Icon.Carnet },
+  { to: "/itineraires", label: "Itinéraires", IconC: Icon.Itineraires, mobileHide: true },
   { to: "/objectifs", label: "Objectifs", IconC: Icon.Objectifs, mobileHide: true },
   { to: "/stats",     label: "Stats",     IconC: Icon.Stats },
   { to: "/analyses",  label: "Analyses",  IconC: Icon.Analyses, mobileHide: true },
-  { to: "/itineraires", label: "Itinéraires", IconC: Icon.Itineraires, mobileHide: true },
   { to: "/sources",   label: "Sources",   IconC: Icon.Sources, mobileHide: true },
   { to: "/profil",    label: "Profil",    IconC: Icon.Profil },
 ];
