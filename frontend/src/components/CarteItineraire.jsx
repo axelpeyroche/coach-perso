@@ -104,6 +104,9 @@ function morceauxTerrain(s) {
   }
   return res.length ? res : [[s.pts, s.ty[0] ?? null]];
 }
+const aSurface = (ty) => ty?.some(Boolean);
+// Liseré sombre sous les tracés colorés par surface : le gris et le brun restent lisibles sur le satellite
+const LISERE = "#000";
 
 // ── Récap partagé (création, parcours enregistrés) ──
 const SURFACES = ["sentier", "chemin", "bitume", "hors"];
@@ -174,10 +177,10 @@ export function Carte({ propositions, choisie, onChoisir, depart, arrivee, point
     const op = g?.bouge ? { type: g.type === "point" ? "deplacer" : "inserer", k: g.k, pos: g.pos } : ed.attente;
     const ap = T.apercu(ed.e, op);
     const masque = (k) => ap.masques.includes(k);
-    // Création : le tracé prend la couleur du terrain, les tronçons en ligne droite sont en tirets
-    m.getSource("edit-segs").setData(collection(ed.surface
+    // Le tracé prend la couleur du terrain quand il est connu, les tronçons en ligne droite sont en tirets
+    m.getSource("edit-segs").setData(collection(ed.surface || ed.e.segs.some((s) => aSurface(s.ty))
       ? ed.e.segs.flatMap((s, k) => morceauxTerrain(s).map(([pts, t]) =>
-        ligneGeo(pts, { k, c: COULEUR_TERRAIN(t), masque: masque(k) || !!s.provisoire, droite: s.mode === "droite" })))
+        ligneGeo(pts, { k, c: t ? COULEUR_TERRAIN(t) : c, masque: masque(k) || !!s.provisoire, droite: s.mode === "droite" })))
       : ed.e.segs.map((s, k) => ligneGeo(s.pts, { k, c, masque: masque(k) }))));
     m.getSource("edit-apercu").setData(collection(ap.lignes.map((l) => ligneGeo(l))));
     const n = ap.wps.length;
@@ -203,7 +206,8 @@ export function Carte({ propositions, choisie, onChoisir, depart, arrivee, point
         const rond = { "line-join": "round", "line-cap": "round" };
         m.addSource("routes", { type: "geojson", data: VIDE });
         m.addLayer({ id: "routes-bord", type: "line", source: "routes", layout: rond,
-          paint: { "line-color": "#fff", "line-width": ["case", ["get", "sel"], 7, 4.5], "line-opacity": ["case", ["get", "sel"], 1, 0.6] } });
+          paint: { "line-color": ["case", ["get", "sel"], LISERE, "#fff"], "line-width": ["case", ["get", "sel"], 8, 4.5],
+            "line-opacity": ["case", ["get", "sel"], 0.55, 0.6] } });
         m.addLayer({ id: "routes", type: "line", source: "routes", layout: { ...rond, "line-sort-key": ["case", ["get", "sel"], 1, 0] },
           paint: { "line-color": ["get", "c"], "line-width": ["case", ["get", "sel"], 4.5, 2.5], "line-opacity": ["case", ["get", "sel"], 1, 0.55] } });
         // Retouche : larges cibles invisibles pour attraper le tracé et les points au doigt
@@ -211,7 +215,7 @@ export function Carte({ propositions, choisie, onChoisir, depart, arrivee, point
         m.addLayer({ id: "edit-segs-cible", type: "line", source: "edit-segs", layout: rond,
           paint: { "line-color": "#000", "line-opacity": 0.01, "line-width": 22 } });
         m.addLayer({ id: "edit-segs-bord", type: "line", source: "edit-segs", layout: rond,
-          paint: { "line-color": "#fff", "line-width": 7.5, "line-opacity": ["case", ["get", "masque"], 0.3, 1] } });
+          paint: { "line-color": LISERE, "line-width": 8, "line-opacity": ["case", ["get", "masque"], 0.15, 0.55] } });
         const plein = ["!=", ["get", "droite"], true];
         m.addLayer({ id: "edit-segs", type: "line", source: "edit-segs", layout: rond, filter: plein,
           paint: { "line-color": ["get", "c"], "line-width": 4.5, "line-opacity": ["case", ["get", "masque"], 0.3, 1] } });
@@ -402,7 +406,13 @@ export function Carte({ propositions, choisie, onChoisir, depart, arrivee, point
   useEffect(() => {
     const m = carte.current;
     if (!prete || !m) return;
-    const f = edition ? [] : (propositions ?? []).map((r, i) => ligneGeo(r.points, { i, c: COULEURS[i % COULEURS.length], sel: i === choisie }));
+    // Tracé choisi coloré par surface (route, chemin, sentier, hors sentier) ; les autres propositions gardent leur couleur
+    const f = edition ? [] : (propositions ?? []).flatMap((r, i) => {
+      const c = COULEURS[i % COULEURS.length], sel = i === choisie;
+      const ty = sel ? T.typesParPoint(r.points, r.terrains) : null;
+      if (!aSurface(ty)) return [ligneGeo(r.points, { i, c, sel })];
+      return morceauxTerrain({ pts: r.points, ty }).map(([pts, t]) => ligneGeo(pts, { i, c: t ? COULEUR_TERRAIN(t) : c, sel }));
+    });
     m.getSource("routes").setData(collection(f));
   }, [propositions, choisie, !!edition, prete]);
 
