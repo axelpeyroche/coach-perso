@@ -278,6 +278,8 @@ def importer_activite(db: Session, user_id: int, source: str, donnees: dict,
             if p.source == source and not _detectee_auto(p):
                 continue  # même source : seul l'id_externe identifie la séance
             det_p = _details_dict(p)
+            if det_p.get("montre_hs") and (famille_sport(p.sport) == fam or "autre" in (p.sport, donnees.get("sport")))                     and not _sans_heure(debut) and abs((p.debut - debut).total_seconds()) <= 15 * 60:
+                return p, "inchange"  # séance refaite depuis un GPX (montre en panne) : l'envoi de la montre n'y ajoute rien
             if source == "intervals" and id_externe and det_p.get("intervals_id") not in (None, str(id_externe)):
                 continue  # déjà associée à une autre séance Intervals : deux sorties distinctes
             if det_p.get("fin") and not _sans_heure(debut) and debut > fin_activite(p) + timedelta(minutes=1):

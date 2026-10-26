@@ -316,6 +316,8 @@ def synchroniser(db: Session, user: Utilisateur, force: bool = False) -> dict:
             cs.fusionner_details(act, {"intervals_id": iid, **({"fin": fin} if fin else {})})
             connues[iid] = act
             bilan["nouvelles" if statut == "cree" else "completees"] += 1
+        if cs._details_dict(act).get("montre_hs"):
+            continue  # séance refaite depuis un GPX (montre en panne) : les flux d'Intervals sont incomplets
         dispo = a.get("stream_types")
         besoin_trace = act.id not in avec_trace and "latlng" in (dispo or ["latlng"]) and not a.get("trainer")
         besoin_fc = (cs._details_dict(act).get("analyse_iv") != VERSION_ANALYSE
@@ -601,7 +603,8 @@ def flux_seance(user: Utilisateur, act: Activite, points_trace: Optional[list]) 
     deja = _CACHE_FLUX.get(cle_cache)
     if deja and datetime.utcnow() - deja[0] < _CACHE_DUREE:
         return deja[1]
-    iid = cs._details_dict(act).get("intervals_id")
+    det = cs._details_dict(act)
+    iid = None if det.get("montre_hs") else det.get("intervals_id")  # montre en panne : le tracé GPX fait foi
     res, avertissement = None, None
     if iid and user.intervals_cle:
         try:
