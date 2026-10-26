@@ -519,5 +519,6 @@
 }
 /* Carte en plein écran (pseudo plein écran sur iPhone) : contrôles sous la barre d'état, au-dessus de la barre d'accueil */
 .maplibregl-pseudo-fullscreen { background: #000 !important; border-radius: 0 !important; }
-.maplibregl-pseudo-fullscreen .maplibregl-ctrl-top-right { top: calc(var(--haut-lisible) + 8px); }
+.maplibregl-pseudo-fullscreen .maplibregl-ctrl-top-right,
+.maplibregl-pseudo-fullscreen .champs-carte { top: calc(var(--haut-lisible) + 8px); }
 .maplibregl-pseudo-fullscreen .maplibregl-ctrl-bottom-right { bottom: env(safe-area-inset-bottom); }

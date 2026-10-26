@@ -224,7 +224,7 @@ export default function CartePassages({ annee: fixe } = {}) {
             <span className="rounded-[8px] bg-black/60 backdrop-blur px-2.5 py-1 text-[13px] font-semibold text-white">Chargement des tracés…</span>
           </div>
         )}
-        <div className="absolute top-2 left-2 right-12 flex flex-wrap items-start gap-1.5">
+        <div className="champs-carte absolute top-2 left-2 right-12 flex flex-wrap items-start gap-1.5">
           <Bascule options={[["plan", "Plan"], ["satellite", "Satellite"]]} valeur={fond} onChange={setFond} />
           {domicile && (
           <button type="button" title="Revenir sur l'adresse du Profil"
