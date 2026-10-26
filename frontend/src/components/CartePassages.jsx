@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getCarteTraces } from "../api";
 import { useAuth } from "../AuthContext";
-import { STYLE, Bascule, chargerMaplibre } from "./CarteTrace";
+import { STYLE, Bascule, chargerMaplibre, controleRotation, tournerALaSouris } from "./CarteTrace";
 import { calculerPassages, decoderTraces } from "../passages";
 
 const SPORTS = [["course", "Course"], ["trail", "Trail"], ["velo", "Vélo"], ["marche", "Marche"], ["randonnee", "Rando"]];
@@ -100,6 +100,7 @@ export default function CartePassages({ annee: fixe } = {}) {
   const [visible, setVisible] = useState(false);
   const [prete, setPrete] = useState(false);
   const [fond, setFond] = useState("satellite");
+  const [vue, setVue] = useState("2d");
   const [sports, setSports] = useState(PAR_DEFAUT);
   const [choisie, setAnnee] = useState(null);   // null = toutes les années
   const annee = fixe ?? choisie;   // année imposée par le Bilan
@@ -137,7 +138,7 @@ export default function CartePassages({ annee: fixe } = {}) {
       const m = new maplibregl.Map({
         container: conteneur.current, style: STYLE,
         ...(centrerDomicile ? { center: centrerDomicile, zoom: ZOOM_DOMICILE } : { center: [2.5, 46.5], zoom: 4.5 }),
-        attributionControl: { compact: true }, cooperativeGestures: true,
+        maxPitch: 75, attributionControl: { compact: true }, cooperativeGestures: true,
         locale: {
           "CooperativeGesturesHandler.WindowsHelpText": "Ctrl + molette pour zoomer",
           "CooperativeGesturesHandler.MacHelpText": "⌘ + molette pour zoomer",
@@ -145,7 +146,9 @@ export default function CartePassages({ annee: fixe } = {}) {
         },
       });
       carte.current = m;
-      m.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+      m.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
+      m.addControl(controleRotation(), "top-right");
+      tournerALaSouris(m, conteneur.current);
       // iPhone : pas de plein écran pour un élément → « pseudo » plein écran (CSS)
       const pseudo = !cadre.current.requestFullscreen && !cadre.current.webkitRequestFullscreen;
       m.addControl(new maplibregl.FullscreenControl({ container: cadre.current, pseudo }), "top-right");
@@ -169,6 +172,19 @@ export default function CartePassages({ annee: fixe } = {}) {
     m.setLayoutProperty("plan", "visibility", fond === "plan" ? "visible" : "none");
     m.setLayoutProperty("satellite", "visibility", fond === "satellite" ? "visible" : "none");
   }, [fond, prete]);
+
+  // 3D : relief et carte inclinée ; retour à plat, nord en haut, en 2D
+  useEffect(() => {
+    const m = carte.current;
+    if (!prete || !m) return;
+    if (vue === "3d") {
+      m.setTerrain({ source: "relief", exaggeration: 1.5 });
+      m.easeTo({ pitch: 60, duration: 800 });
+    } else {
+      m.setTerrain(null);
+      m.easeTo({ pitch: 0, bearing: 0, duration: 800 });
+    }
+  }, [vue, prete]);
 
   // Données : on ne recadre qu'au premier affichage (ou quand l'année imposée change), pas à chaque filtre
   const cadree = useRef(null);
@@ -226,6 +242,7 @@ export default function CartePassages({ annee: fixe } = {}) {
         )}
         <div className="champs-carte absolute top-2 left-2 right-12 flex flex-wrap items-start gap-1.5">
           <Bascule options={[["plan", "Plan"], ["satellite", "Satellite"]]} valeur={fond} onChange={setFond} />
+          <Bascule options={[["2d", "2D"], ["3d", "3D"]]} valeur={vue} onChange={setVue} />
           {domicile && (
           <button type="button" title="Revenir sur l'adresse du Profil"
             onClick={() => carte.current?.flyTo({ center: domicile, zoom: ZOOM_DOMICILE, duration: 800 })}
