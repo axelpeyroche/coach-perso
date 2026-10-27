@@ -17,7 +17,7 @@ DESCENTE_MAX = 0.15       # une descente vaut au mieux 15 % de longueur en moins
 FENETRE_PENTE_M = 30      # pente calculée sur ±15 m pour lisser le bruit de l'altitude
 VITESSE_ARRET = 0.3       # m/s : en dessous, le temps n'est pas compté (arrêt, montre en pause)
 SPORTS_GAP = {"course", "trail"}
-SEUIL_DPLUS = 3.0         # m : une montée ou une descente n'est comptée qu'au-delà (bruit de l'altitude)
+SEUIL_DPLUS = 1.0         # m : une montée ou une descente n'est comptée qu'au-delà (altitude déjà lissée)
 
 
 def _num(x) -> bool:
