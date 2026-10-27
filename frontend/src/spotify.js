@@ -115,12 +115,23 @@ export async function mesPlaylists() {
 
 // Lecture : reprend, ou lance une playlist (`uri`), ou les titres likés (`uri` = "likes").
 // Sans appareil actif, on vise le premier appareil disponible (l'appli Spotify ouverte).
+// Ce qui a marché la fois d'avant est retenu, pour éviter les allers-retours inutiles.
+let moiId = null;
+const CLE_LIKES = "spotify-likes";   // "liste" : le contexte « titres likés » est refusé pour ce compte
+const modeLikes = () => { try { return localStorage.getItem(CLE_LIKES); } catch { return null; } };
+
+async function listeLikes() {
+  const likes = await appel("GET", "/me/tracks?limit=50");
+  return { uris: (likes?.items ?? []).map((x) => x.track?.uri ?? x.item?.uri).filter(Boolean) };
+}
+
 export async function lire(uri) {
   let corps;
-  if (uri === "likes") {
+  if (uri === "likes" && modeLikes() === "liste") corps = await listeLikes();
+  else if (uri === "likes") {
     // Sans identifiant (profil refusé), le repli sur la liste des titres prend le relais
-    const moi = await appel("GET", "/me").catch(() => null);
-    corps = { context_uri: `spotify:user:${moi?.id ?? "me"}:collection` };
+    moiId ??= (await appel("GET", "/me").catch(() => null))?.id;
+    corps = { context_uri: `spotify:user:${moiId ?? "me"}:collection` };
   } else if (uri) corps = { context_uri: uri };
   const essayer = async (device) => {
     const chemin = `/me/player/play${device ? `?device_id=${device}` : ""}`;
@@ -128,11 +139,12 @@ export async function lire(uri) {
       return await appel("PUT", chemin, corps);
     } catch (e) {
       // Contexte « titres likés » refusé : on envoie la liste des 50 derniers titres likés
-      if (uri !== "likes" || e.status === 404 || e.status === 401) throw e;
+      if (uri !== "likes" || !corps.context_uri || e.status === 404 || e.status === 401) throw e;
       try {
-        const likes = await appel("GET", "/me/tracks?limit=50");
-        corps = { uris: (likes?.items ?? []).map((x) => x.track?.uri ?? x.item?.uri).filter(Boolean) };
-        return await appel("PUT", chemin, corps);
+        corps = await listeLikes();
+        const r = await appel("PUT", chemin, corps);
+        try { localStorage.setItem(CLE_LIKES, "liste"); } catch { /* rien */ }
+        return r;
       } catch (e2) {
         if (e2.status === 404) throw e2;
         console.warn("Spotify, titres likés :", e.message, "/", e2.message);

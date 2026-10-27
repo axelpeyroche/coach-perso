@@ -35,7 +35,8 @@ function message(e) {
 
 const mmss = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
 
-// État du lecteur, gardé par l'écran de séance (le bandeau, lui, est redessiné à chaque étape)
+// État du lecteur, gardé par l'écran de séance (le bandeau, lui, est redessiné à chaque étape).
+// Les commandes s'affichent tout de suite ; Spotify confirme ensuite.
 export function useSpotify({ autoLancer = true } = {}) {
   const actif = spotifyDisponible && spotifyConnecte();
   const [lecteur, setLecteur] = useState(null);   // état renvoyé par Spotify (null : rien ne joue)
@@ -43,16 +44,29 @@ export function useSpotify({ autoLancer = true } = {}) {
   const [erreur, setErreur] = useState(null);
   const [deplie, setDeplie] = useState(false);
   const [playlists, setPlaylists] = useState([]);
-  const [maintenant, setMaintenant] = useState(Date.now());
+  const [change, setChange] = useState(false);     // morceau en train de changer
   const enAttente = useRef(null);                  // lecture à lancer dès que Spotify se réveille
   const recu = useRef(0);
+  const calme = useRef(0);                         // pas de suivi tant qu'une commande s'applique
+  const finMorceau = useRef(null);
+  const dernier = useRef(null);
+
+  function appliquer(d) {
+    recu.current = Date.now();
+    dernier.current = d?.item ? d : null;
+    setLecteur(dernier.current);
+    if (d?.item) setEndormi(false);
+    // Le morceau suivant s'affiche dès que celui-ci se termine
+    clearTimeout(finMorceau.current);
+    if (d?.is_playing && d.item?.duration_ms) {
+      finMorceau.current = setTimeout(() => rafraichir(), Math.max(500, d.item.duration_ms - (d.progress_ms ?? 0) + 400));
+    }
+  }
 
   async function rafraichir() {
     try {
       const d = await etatLecteur();
-      recu.current = Date.now();
-      setLecteur(d?.item ? d : null);
-      if (d?.item) setEndormi(false);
+      appliquer(d);
       return d;
     } catch (e) {
       if (e.status === 401) setErreur("Reconnecte Spotify depuis Profil");
@@ -60,14 +74,39 @@ export function useSpotify({ autoLancer = true } = {}) {
     }
   }
 
+  // Après une commande, relit l'état jusqu'à ce qu'il reflète le changement attendu
+  async function confirmer(attendu) {
+    for (const delai of [250, 500, 900, 1500]) {
+      await new Promise((r) => setTimeout(r, delai));
+      const d = await rafraichir();
+      if (attendu(d)) break;
+    }
+    setChange(false);
+  }
+
+  function optimiste(maj) {
+    const l = dernier.current;
+    if (!l) return;
+    const n = { ...l, progress_ms: progressionDe(l, recu.current), ...maj };
+    recu.current = Date.now();
+    dernier.current = n;
+    setLecteur(n);
+  }
+
   async function lancer(uri) {
     setErreur(null);
+    calme.current = Date.now() + 4000;
+    const avant = dernier.current;
+    if (uri) setChange(true);
+    else optimiste({ is_playing: true });
     try {
       await lire(uri);
       enAttente.current = null;
       setEndormi(false);
-      setTimeout(rafraichir, 600);
+      confirmer((d) => d?.is_playing && (!uri || d.item?.id !== avant?.item?.id || d.context?.uri !== avant?.context?.uri));
     } catch (e) {
+      setChange(false);
+      rafraichir();
       if (e.endormi) { enAttente.current = { uri }; setEndormi(true); }
       else setErreur(message(e));
     }
@@ -75,8 +114,19 @@ export function useSpotify({ autoLancer = true } = {}) {
 
   async function commande(fn) {
     setErreur(null);
-    try { await fn(); } catch (e) { if (e.status === 404) setEndormi(true); else setErreur(message(e)); }
-    setTimeout(rafraichir, 500);
+    calme.current = Date.now() + 3000;
+    const id = dernier.current?.item?.id;
+    const saut = fn !== pause;
+    if (saut) setChange(true);
+    else optimiste({ is_playing: false });
+    try {
+      await fn();
+      confirmer(saut ? (d) => d?.item?.id !== id : (d) => !d?.is_playing);
+    } catch (e) {
+      setChange(false);
+      rafraichir();
+      if (e.status === 404) setEndormi(true); else setErreur(message(e));
+    }
   }
 
   // Démarrage : état du lecteur, playlists, titres likés si rien ne joue
@@ -92,22 +142,43 @@ export function useSpotify({ autoLancer = true } = {}) {
   // Suivi : toutes les 5 s, et au retour sur la page (après un passage dans l'appli Spotify)
   useEffect(() => {
     if (!actif) return;
-    const t = setInterval(() => { if (!document.hidden) rafraichir(); }, 5000);
-    const s = setInterval(() => setMaintenant(Date.now()), 1000);
+    const t = setInterval(() => { if (!document.hidden && Date.now() > calme.current) rafraichir(); }, 5000);
     const retour = () => {
       if (document.hidden) return;
       if (enAttente.current) lancer(enAttente.current.uri);
       else rafraichir();
     };
     document.addEventListener("visibilitychange", retour);
-    return () => { clearInterval(t); clearInterval(s); document.removeEventListener("visibilitychange", retour); };
+    return () => { clearInterval(t); clearTimeout(finMorceau.current); document.removeEventListener("visibilitychange", retour); };
   }, [actif]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return { actif, lecteur, endormi, erreur, deplie, setDeplie, playlists, maintenant, recu, lancer, commande };
+  return { actif, lecteur, endormi, erreur, deplie, setDeplie, playlists, change, recu, lancer, commande };
+}
+
+const progressionDe = (l, depuis) => Math.min(l.item?.duration_ms ?? 0, (l.progress_ms ?? 0) + (l.is_playing ? Date.now() - depuis : 0));
+
+// Barre de progression : seule à se redessiner chaque seconde
+function Progression({ lecteur, recu }) {
+  const [, tic] = useState(0);
+  useEffect(() => {
+    if (!lecteur?.is_playing) return;
+    const t = setInterval(() => tic((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, [lecteur]);
+  const duree = lecteur.item.duration_ms;
+  const p = progressionDe(lecteur, recu.current);
+  return (
+    <>
+      <div className="mt-3.5 h-1 rounded-full bg-[#3a3a3c] overflow-hidden">
+        <i className="block h-full bg-white rounded-full transition-[width] duration-1000 ease-linear" style={{ width: `${(p / duree) * 100}%` }} />
+      </div>
+      <div className="mt-1 flex justify-between text-[11px] text-white/60 chiffres"><span>{mmss(p)}</span><span>{mmss(duree)}</span></div>
+    </>
+  );
 }
 
 export default function BandeauSpotify({ sp }) {
-  const { actif, lecteur, endormi, erreur, deplie, setDeplie, playlists, maintenant, recu, lancer, commande } = sp;
+  const { actif, lecteur, endormi, erreur, deplie, setDeplie, playlists, change, recu, lancer, commande } = sp;
   if (!actif) return null;
 
   const piste = lecteur?.item;
@@ -117,7 +188,6 @@ export default function BandeauSpotify({ sp }) {
   const artiste = piste?.artists?.map((a) => a.name).join(", ") ?? piste?.show?.name;
   const ctx = lecteur?.context?.uri;
   const nomContexte = ctx?.endsWith(":collection") ? LIKES.nom : playlists.find((p) => p.uri === ctx)?.nom;
-  const progression = piste ? Math.min(piste.duration_ms, (lecteur.progress_ms ?? 0) + (enLecture ? maintenant - recu.current : 0)) : 0;
   const basculer = () => (enLecture ? commande(pause) : lancer(null));
 
   const boutonRond = "w-10 h-10 shrink-0 rounded-full flex items-center justify-center active:bg-white/10";
@@ -137,7 +207,7 @@ export default function BandeauSpotify({ sp }) {
   } else {
     bandeau = (
       <div className="flex items-center gap-2.5 rounded-[14px] bg-[#1c1c1e] pl-2 pr-1 py-1.5">
-        <button type="button" onClick={() => setDeplie(true)} className="flex-1 min-w-0 flex items-center gap-2.5 text-left" aria-label="Ouvrir le lecteur Spotify">
+        <button type="button" onClick={() => setDeplie(true)} className={`flex-1 min-w-0 flex items-center gap-2.5 text-left transition-opacity ${change ? "opacity-40" : ""}`} aria-label="Ouvrir le lecteur Spotify">
           <Pochette src={image} taille={38} />
           <span className="min-w-0">
             <span className={`block text-[14px] font-semibold ${piste ? "truncate" : "line-clamp-2"}`}>{piste?.name ?? (erreur || "Spotify")}</span>
@@ -163,21 +233,14 @@ export default function BandeauSpotify({ sp }) {
             style={{ paddingBottom: "max(16px, env(safe-area-inset-bottom))" }}
             onClick={(ev) => ev.stopPropagation()} role="dialog" aria-label="Lecteur Spotify">
             <button type="button" onClick={() => setDeplie(false)} aria-label="Refermer le lecteur" className="mx-auto mb-3 block w-10 h-[5px] rounded-full bg-[#3a3a3c]" />
-            <div className="flex items-center gap-3">
+            <div className={`flex items-center gap-3 transition-opacity ${change ? "opacity-40" : ""}`}>
               <Pochette src={grande} taille={64} rayon={10} />
               <div className="min-w-0">
                 <p className="text-[16px] font-semibold truncate">{piste?.name ?? "Rien en lecture"}</p>
                 <p className="text-[13px] text-white/60 truncate">{piste ? [artiste, nomContexte].filter(Boolean).join(" · ") : "Choisis une playlist"}</p>
               </div>
             </div>
-            {piste && (
-              <>
-                <div className="mt-3.5 h-1 rounded-full bg-[#3a3a3c] overflow-hidden">
-                  <i className="block h-full bg-white rounded-full" style={{ width: `${(progression / piste.duration_ms) * 100}%` }} />
-                </div>
-                <div className="mt-1 flex justify-between text-[11px] text-white/60 chiffres"><span>{mmss(progression)}</span><span>{mmss(piste.duration_ms)}</span></div>
-              </>
-            )}
+            {piste && <Progression lecteur={lecteur} recu={recu} />}
             <div className="flex items-center justify-center gap-6 my-2">
               <button type="button" onClick={() => commande(precedent)} className="w-12 h-12 rounded-full flex items-center justify-center active:bg-white/10" aria-label="Morceau précédent"><IcoPrecedent c="w-6 h-6" /></button>
               <button type="button" onClick={basculer} className="w-14 h-14 rounded-full bg-white text-black flex items-center justify-center" aria-label={enLecture ? "Pause" : "Lecture"}>
