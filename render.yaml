@@ -51,3 +51,5 @@ services:
     envVars:
       - key: VITE_API_URL
         sync: false
+      - key: VITE_SPOTIFY_CLIENT_ID
+        sync: false

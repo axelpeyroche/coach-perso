@@ -13,7 +13,9 @@ export default function RetourSpotify() {
     fait.current = true;
     terminerConnexion(new URLSearchParams(window.location.search))
       .then(() => navigate("/profil?spotify=ok", { replace: true }))
-      .catch((e) => setErreur(e.message === "access_denied" ? "Connexion annulée." : "La connexion à Spotify a échoué."));
+      .catch((e) => setErreur(e.message === "access_denied" ? "Connexion annulée."
+        : e.message === "état invalide" ? "Cette page s'ouvre seule après la connexion : passe par Profil, groupe Musique, Connecter."
+        : "La connexion à Spotify a échoué."));
   }, [navigate]);
   return (
     <Page titre="Spotify">
