@@ -101,6 +101,82 @@ _ROUTE_OSM = {"motorway", "trunk", "primary", "secondary", "tertiary", "unclassi
               "primary_link", "secondary_link", "tertiary_link"}
 _SENTIER_OSM = {"path", "footway", "steps", "bridleway"}
 
+# Accès (étiquettes OSM access / foot / bicycle). Jamais de voie rapide (autoroute, voie express,
+# route pour automobiles) ni de voie interdite au sport : un tracé qui en emprunte est écarté.
+# Accès tolérés ou réservés (riverains, propriétaire qui laisse passer…) : signalés.
+_RAPIDES_OSM = {"motorway", "motorway_link", "trunk", "trunk_link"}
+_FERME_OSM = {"no", "private", "use_sidepath"}
+_OUVERT_OSM = {"yes", "designated", "official"}
+_TOLERE_OSM = {"permissive", "destination", "customers", "delivery", "agricultural", "forestry", "discouraged"}
+_CHEMINS_OSM = {"track", "path", "bridleway"}
+_INTERDIT_TOLERANCE_M = 15  # bouts de quelques mètres : imprécision de la carte aux carrefours
+_SPORTS_VELO = {"velo", "gravel", "vtt"}
+# Itinéraires balisés (GR, PR, boucles VTT…) : préférés au classement, d'autant plus en nature
+_BALISE_BONUS = {"trail": 0.3, "randonnee": 0.3, "vtt": 0.3, "gravel": 0.2, "course": 0.15, "velo": 0.1}
+
+
+def _balise(tags: dict, sport: str) -> bool:
+    if sport == "velo":
+        prefixes = ("route_bicycle_",)
+    elif sport in _SPORTS_VELO:
+        prefixes = ("route_mtb_", "route_bicycle_")
+    else:
+        prefixes = ("route_hiking_",)
+    return any(k.startswith(prefixes) and v == "yes" for k, v in tags.items())
+
+
+def _acces_voie(tags: dict, sport: str) -> str:
+    """« interdit », « incertain », « inconnu » (chemin sans indication) ou « libre »."""
+    voie = tags.get("highway", "")
+    if voie in _RAPIDES_OSM or tags.get("motorroad") == "yes":
+        return "interdit"
+    mode = tags.get("bicycle" if sport in _SPORTS_VELO else "foot", "")
+    general = tags.get("access", "")
+    if mode in _FERME_OSM:
+        return "interdit"
+    if mode in _OUVERT_OSM:
+        return "libre"
+    if general in ("no", "private"):
+        return "incertain" if mode in _TOLERE_OSM else "interdit"
+    if mode in _TOLERE_OSM or general in _TOLERE_OSM:
+        return "incertain"
+    if voie in _CHEMINS_OSM and not general and not mode:
+        return "inconnu"
+    return "libre"
+
+
+def _acces_br(messages: list, sport: str) -> Optional[dict]:
+    """Longueurs par niveau d'accès et part balisée (%) d'après les étiquettes du tracé."""
+    if not messages or len(messages) < 2:
+        return None
+    entete = messages[0]
+    try:
+        i_dist, i_tags = entete.index("Distance"), entete.index("WayTags")
+    except ValueError:
+        return None
+    km = {"interdit": 0.0, "incertain": 0.0, "inconnu": 0.0, "libre": 0.0}
+    balise = 0.0
+    for ligne in messages[1:]:
+        try:
+            d = float(ligne[i_dist]) / 1000
+        except (ValueError, IndexError):
+            continue
+        tags = dict(x.split("=", 1) for x in ligne[i_tags].split() if "=" in x)
+        km[_acces_voie(tags, sport)] += d
+        if _balise(tags, sport):
+            balise += d
+    total = sum(km.values()) or 1
+    return {"interdit_m": round(km["interdit"] * 1000), "incertain_km": round(km["incertain"], 2),
+            "inconnu_km": round(km["inconnu"], 2), "balise_pct": round(100 * balise / total)}
+
+
+def _verifier_acces(r: Optional[dict], sport: str) -> Optional[dict]:
+    """Écarte un tracé qui emprunte une voie rapide ou interdite au sport."""
+    if r and (r.get("acces") or {}).get("interdit_m", 0) > _INTERDIT_TOLERANCE_M:
+        qui = "aux vélos" if sport in _SPORTS_VELO else "aux piétons"
+        raise ItineraireErreur(f"Ce tracé emprunte une voie rapide ou interdite {qui}.")
+    return r
+
 
 def _brouter(params: dict, essais: int = 3) -> dict:
     """Appel BRouter, relancé après une pause si le serveur public demande d'attendre
@@ -200,7 +276,7 @@ def _repartition_br(terrains: list[list]) -> Optional[dict]:
     return {k: round(100 * v / total) for k, v in parts.items()}
 
 
-def _lire_br(res: dict) -> Optional[dict]:
+def _lire_br(res: dict, sport: str = "course") -> Optional[dict]:
     f = (res.get("features") or [None])[0]
     if not f:
         return None
@@ -211,6 +287,7 @@ def _lire_br(res: dict) -> Optional[dict]:
     dplus = cs.denivele_positif([c[2] for c in coords if len(c) > 2]) or 0
     terrains = _terrains_br(prop.get("messages") or [])
     return {
+        "acces": _acces_br(prop.get("messages") or [], sport),
         "distance_km": round(float(prop.get("track-length") or 0) / 1000, 2),
         "dplus_m": dplus,
         "duree_s": round(float(prop.get("total-time") or 0)),
@@ -274,10 +351,10 @@ def _corps(points: list[list[float]]) -> dict:
     # Pas de pondération « quiet » / « green » : elle prive ORS de son calcul rapide et les
     # boucles dépassent alors le délai. Le bitume est écarté au classement (_ecart).
     return {"coordinates": points, "elevation": True, "instructions": False,
-            "extra_info": ["waytype", "surface"], "options": {}}
+            "extra_info": ["waytype", "surface", "waycategory"], "options": {}}
 
 
-def _lire(feature: dict) -> Optional[dict]:
+def _lire(feature: dict, sport: str = "course") -> Optional[dict]:
     coords = feature.get("geometry", {}).get("coordinates") or []
     if len(coords) < 2:
         return None
@@ -289,6 +366,7 @@ def _lire(feature: dict) -> Optional[dict]:
         "dplus_m": dplus,
         "duree_s": round(prop.get("summary", {}).get("duration") or 0),
         "repartition": _repartition(coords, prop.get("extras") or {}),
+        "acces": _acces_ors(coords, prop.get("extras") or {}),
         "points": [[round(c[1], 6), round(c[0], 6), round(c[2], 1) if len(c) > 2 else None] for c in coords],
     }
 
@@ -324,14 +402,27 @@ def _repartition(coords: list, extras: dict) -> Optional[dict]:
     return {k: round(100 * v / total) for k, v in parts.items()}
 
 
+def _acces_ors(coords: list, extras: dict) -> dict:
+    """ORS respecte déjà les interdictions d'accès ; reste à écarter les voies rapides
+    (catégorie « Highway »). Pas d'indication d'accès toléré ni de balisage chez ORS."""
+    rapide = 0.0
+    for debut, fin, v in _valeurs(extras, "waycategory"):
+        if int(v) & 1:
+            for i in range(int(debut), min(int(fin), len(coords) - 1)):
+                rapide += _dist(coords[i], coords[i + 1])
+    return {"interdit_m": round(rapide), "incertain_km": 0, "inconnu_km": 0, "balise_pct": 0}
+
+
 def _dist(a: list, b: list) -> float:
     x = math.radians(b[0] - a[0]) * math.cos(math.radians((a[1] + b[1]) / 2))
     return 6371000 * math.hypot(x, math.radians(b[1] - a[1]))
 
 
-def _ecart(r: dict, distance_km: Optional[float], dplus_m: Optional[int], bitume: float = 0) -> float:
+def _ecart(r: dict, distance_km: Optional[float], dplus_m: Optional[int], bitume: float = 0,
+           balise: float = 0) -> float:
     part = (r.get("repartition") or {}).get("bitume", 0)
     e = bitume * (part + 2 * max(0, part - _BITUME_SEUIL)) / 100
+    e -= balise * (r.get("acces") or {}).get("balise_pct", 0) / 100
     # Au-delà de 15 % d'écart, chaque point compte triple : la première proposition doit coller
     # à la demande, pas seulement être la moins mauvaise sur un critère
     if distance_km:
@@ -368,7 +459,8 @@ def proposer(sport: str, depart: list[float], arrivee: Optional[list[float]], di
     toutes = res.pop("toutes")
     # À qualité égale, le départ le plus proche du point demandé passe devant
     proche = lambda r: 0.15 * r.get("approche_km", 0) / max(rayon_km, 1)
-    toutes.sort(key=lambda r: _ecart(r, None if arrivee else distance_km, dplus_m, bitume) + proche(r))
+    balise = _BALISE_BONUS.get(sport, 0)
+    toutes.sort(key=lambda r: _ecart(r, None if arrivee else distance_km, dplus_m, bitume, balise) + proche(r))
     gardees: list[dict] = []
     for r in toutes:
         if _differente(r, gardees):
@@ -393,7 +485,7 @@ def tracer(sport: str, points: list[list[float]], sentiers: bool = False) -> dic
     params = {"lonlats": "|".join(f"{p[1]:.6f},{p[0]:.6f}" for p in points), "profile": profil, "alternativeidx": 0}
     if (sport in _SPORTS_CHEMINS or sentiers) and profil in CHEMINS_BR:
         params["profile:path_preference"] = CHEMINS_BR[profil]
-    r = _lire_br(_brouter(params))
+    r = _verifier_acces(_lire_br(_brouter(params), sport), sport)
     if not r:
         raise ItineraireErreur("Aucun tracé trouvé par ces points.")
     r["etapes"] = _etapes(r["points"], points)
@@ -446,7 +538,8 @@ def _departs(depart: list[float], rayon_km: Optional[float], distance_km, dplus_
 _RAPPORT_INITIAL = {"br": 5.2, "ors": 1.0}
 
 
-def _boucles(source: str, profil: str, distance_km: float, essai: int, calcul, workers: int) -> list[dict]:
+def _boucles(source: str, profil: str, distance_km: float, essai: int, calcul, workers: int,
+             sport: str = "course") -> list[dict]:
     """Six boucles en un tour : graines (ou directions) et longueurs étalées autour de la cible."""
     cle_r = f"{source}:{profil}"
     initial = _RAPPORT_INITIAL[source]
@@ -472,7 +565,7 @@ def _boucles(source: str, profil: str, distance_km: float, essai: int, calcul, w
     _log.info("Itinéraires %s %s %.1f km : %d boucles en %.1f s", source, profil, distance_km, len(toutes),
               time.monotonic() - debut)
     if not toutes:
-        raise erreurs[0] if erreurs else ItineraireErreur("Aucune boucle trouvée depuis ce point.")
+        raise _sans_voie_sure(erreurs, sport) or ItineraireErreur("Aucune boucle trouvée depuis ce point.")
     rapport = median(r["distance_km"] / (vise * f) for r, f in paires)
     _RAPPORT[cle_r] = round(min(2 * initial, max(initial / 2, 0.5 * _RAPPORT.get(cle_r, initial) + 0.5 * rapport)), 3)
     return toutes
@@ -492,7 +585,8 @@ def _proposer_br(sport, depart, arrivee, distance_km, sentiers, essai, departs: 
         toutes, erreurs = [], []
         for idx in range(3):  # tracé principal puis deux variantes
             try:
-                r = _lire_br(_brouter({"lonlats": f"{a}|{b}", "profile": profil, "alternativeidx": idx, **reglage}))
+                r = _verifier_acces(_lire_br(_brouter({"lonlats": f"{a}|{b}", "profile": profil,
+                                                       "alternativeidx": idx, **reglage}), sport), sport)
             except ItineraireErreur as e:
                 erreurs.append(e)
                 if isinstance(e, _Surcharge):
@@ -501,14 +595,15 @@ def _proposer_br(sport, depart, arrivee, distance_km, sentiers, essai, departs: 
             if r:
                 toutes.append(r)
         if not toutes:
-            raise erreurs[0] if erreurs else ItineraireErreur("Aucun itinéraire trouvé entre ces deux points.")
+            raise _sans_voie_sure(erreurs, sport) or ItineraireErreur("Aucun itinéraire trouvé entre ces deux points.")
         return {**source, "toutes": toutes, "calculs": 3}
 
     def calculer(pos: list[float], direction: float, longueur_km: float, essais: int = 3) -> Optional[dict]:
         r = _lire_br(_brouter(essais=essais, params={"lonlats": f"{pos[1]:.6f},{pos[0]:.6f}", "profile": profil,
                                "alternativeidx": 0, "engineMode": 4,
                                "roundTripDistance": round(longueur_km * 1000), "direction": round(direction) % 360,
-                               **reglage}))
+                               **reglage}), sport)
+        _verifier_acces(r, sport)
         if r:
             r["depart"] = pos
             r["approche_km"] = round(itineraires_zones._dist_km(depart, pos), 1)
@@ -527,12 +622,23 @@ def _proposer_br(sport, depart, arrivee, distance_km, sentiers, essai, departs: 
         return calculer(d["pos"], direction, longueur_km)
 
     # Serveur public partagé : il freine les calculs simultanés, on les enchaîne
-    toutes = _boucles("br", profil, distance_km, essai, boucle, 1)
+    toutes = _boucles("br", profil, distance_km, essai, boucle, 1, sport)
     calculs = 6
     if dplus_m:
         toutes += _affiner(toutes, distance_km, dplus_m, calculer)
         calculs = len(toutes)
     return {**source, "toutes": toutes, "calculs": calculs}
+
+
+def _sans_voie_sure(erreurs: list, sport: str) -> Optional[ItineraireErreur]:
+    """Erreur à afficher quand aucun tracé n'a été gardé (voies interdites : message dédié)."""
+    if not erreurs:
+        return None
+    if all("voie rapide" in str(e) for e in erreurs):
+        qui = "aux vélos" if sport in _SPORTS_VELO else "aux piétons"
+        return ItineraireErreur(f"Tous les tracés trouvés passaient par une voie rapide ou interdite {qui}. "
+                                "Déplace le départ ou change la distance.")
+    return next((e for e in erreurs if "voie rapide" not in str(e)), erreurs[0])
 
 
 def _ecart_dplus(r: dict, dplus_m: int) -> float:
@@ -584,18 +690,19 @@ def _proposer_ors(sport, depart, arrivee, distance_km, sentiers, essai) -> dict:
     if arrivee:
         corps = _corps([a, [arrivee[1], arrivee[0]]])
         corps["alternative_routes"] = {"target_count": 3, "weight_factor": 1.4 + 0.3 * min(essai, 3), "share_factor": 0.6}
-        toutes = [r for r in map(_lire, _appel(profil, corps).get("features", [])) if r]
+        toutes = [r for r in (_lire(f, sport) for f in _appel(profil, corps).get("features", []))
+                  if r and r["acces"]["interdit_m"] <= _INTERDIT_TOLERANCE_M]
         if not toutes:
-            raise ItineraireErreur("Aucun itinéraire trouvé entre ces deux points.")
+            raise ItineraireErreur("Aucun itinéraire trouvé entre ces deux points sans voie rapide.")
         return {**source, "toutes": toutes, "calculs": 1}
 
     def boucle(longueur_km: float, graine: int) -> Optional[dict]:
         corps = _corps([a])
         corps["options"]["round_trip"] = {"length": round(longueur_km * 1000), "points": 3 + graine % 3, "seed": graine}
         f = _appel(profil, corps).get("features", [])
-        return _lire(f[0]) if f else None
+        return _verifier_acces(_lire(f[0], sport), sport) if f else None
 
-    return {**source, "toutes": _boucles("ors", profil, distance_km, essai, boucle, 4), "calculs": 6}
+    return {**source, "toutes": _boucles("ors", profil, distance_km, essai, boucle, 4, sport), "calculs": 6}
 
 
 # ─────────────────────────── Temps estimé ───────────────────────────

@@ -209,6 +209,22 @@ function Repartition({ r, sport }) {
   );
 }
 
+// Accès toléré ou réservé (riverains, privé ouvert au passage…) et chemins sans indication
+function NoteAcces({ acces }) {
+  if (!acces) return null;
+  const lignes = [];
+  if (acces.incertain_km >= 0.1)
+    lignes.push(`${km(acces.incertain_km)} km sur des voies à accès toléré ou réservé (riverains, terrain privé ouvert au passage…) : respecte les panneaux sur place.`);
+  if (acces.inconnu_km >= 0.5)
+    lignes.push(`Accès non précisé sur la carte pour ${km(acces.inconnu_km)} km de chemins, en général libre.`);
+  if (!lignes.length) return null;
+  return (
+    <div className="pl-6 space-y-0.5">
+      {lignes.map((l) => <p key={l} className="text-[12px] text-label-2">{l}</p>)}
+    </div>
+  );
+}
+
 function IconeGpx() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4" aria-hidden>
@@ -272,6 +288,17 @@ function Proposition({ r, i, choisie, onChoisir, sport, distance, dplus, boucle,
                     Départ à {km(r.approche_km)} km
                   </span>
                 )}
+                {r.acces?.balise_pct >= 15 && (
+                  <span className="inline-flex items-center h-[20px] px-1.5 rounded-md text-[11px] font-semibold whitespace-nowrap bg-ios-green/15 text-ios-green"
+                    title="Part du tracé sur un itinéraire balisé (GR, PR, boucle VTT ou vélo)">
+                    Balisé {r.acces.balise_pct} %
+                  </span>
+                )}
+                {r.acces?.incertain_km >= 0.1 && (
+                  <span className="inline-flex items-center h-[20px] px-1.5 rounded-md text-[11px] font-semibold whitespace-nowrap bg-ios-orange/15 text-ios-orange">
+                    Accès à vérifier · {km(r.acces.incertain_km)} km
+                  </span>
+                )}
                 <Repartition r={r} sport={sport} />
               </span>
             </span>
@@ -289,6 +316,7 @@ function Proposition({ r, i, choisie, onChoisir, sport, distance, dplus, boucle,
           </button>
         )}
       </div>
+      {sel && !enRetouche && <NoteAcces acces={r.acces} />}
       {sel && !enRetouche && (
         <div className="pl-6 pt-1 flex flex-wrap items-center gap-2">
           <button type="button" onClick={onModifier} className="btn-gris btn-sm">
@@ -469,7 +497,7 @@ export default function Itineraires() {
       const t = T.assembler(ed.e), d = T.decrire(t.points, t.types);
       majProposition(ed.i, {
         points: t.points, terrains: d.terrains, repartition: d.repartition, distance_km: d.distance_km, dplus_m: d.dplus_m,
-        etapes: t.etapes, depart: t.points[0].slice(0, 2), modifie: true, retouche: true,
+        etapes: t.etapes, depart: t.points[0].slice(0, 2), modifie: true, retouche: true, acces: null,
       });
     }
     setEdition(null);
@@ -714,7 +742,7 @@ export default function Itineraires() {
                 {erreurFavori && <p className="px-4 pt-2 text-[13px] text-ios-red" role="alert">{erreurFavori}</p>}
                 <div className="flex items-center justify-between gap-3 px-4 pt-2">
                   <p className="text-[12px] text-label-2">
-                    {resultat.favori ? "Données © OpenStreetMap" : `Tracés ${resultat.source ?? "BRouter"} · données © OpenStreetMap`}
+                    {resultat.favori ? "Données © OpenStreetMap" : `Tracés ${resultat.source ?? "BRouter"}, sans voie rapide ni voie interdite · données © OpenStreetMap`}
                   </p>
                   {!resultat.favori && (
                     <button type="button" onClick={() => lancer(essai + 1)} disabled={enCours} className="btn-texte shrink-0">
