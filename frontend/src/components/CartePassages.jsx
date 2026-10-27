@@ -5,6 +5,8 @@ import { useAuth } from "../AuthContext";
 import { STYLE, Bascule, chargerMaplibre, controleRotation, tournerALaSouris } from "./CarteTrace";
 import { calculerPassages, decoderTraces } from "../passages";
 
+const TACTILE = typeof window !== "undefined" && !!window.matchMedia?.("(pointer: coarse)").matches;
+
 const SPORTS = [["course", "Course"], ["trail", "Trail"], ["velo", "Vélo"], ["marche", "Marche"], ["randonnee", "Rando"]];
 const PAR_DEFAUT = ["course", "trail", "velo", "marche", "randonnee"];
 // Paliers de passages (bornes basses) → couleur du trait
@@ -138,12 +140,9 @@ export default function CartePassages({ annee: fixe } = {}) {
       const m = new maplibregl.Map({
         container: conteneur.current, style: STYLE,
         ...(centrerDomicile ? { center: centrerDomicile, zoom: ZOOM_DOMICILE } : { center: [2.5, 46.5], zoom: 4.5 }),
-        maxPitch: 75, attributionControl: { compact: true }, cooperativeGestures: true,
-        locale: {
-          "CooperativeGesturesHandler.WindowsHelpText": "Ctrl + molette pour zoomer",
-          "CooperativeGesturesHandler.MacHelpText": "⌘ + molette pour zoomer",
-          "CooperativeGesturesHandler.MobileHelpText": "Deux doigts pour déplacer la carte",
-        },
+        // Molette seule pour zoomer à la souris ; au doigt, deux doigts pour que la page défile encore
+        maxPitch: 75, attributionControl: { compact: true }, cooperativeGestures: TACTILE,
+        locale: { "CooperativeGesturesHandler.MobileHelpText": "Deux doigts pour déplacer la carte" },
       });
       carte.current = m;
       m.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
