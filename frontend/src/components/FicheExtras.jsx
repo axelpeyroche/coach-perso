@@ -54,7 +54,7 @@ export function Decoupage({ decoupage, sport, onPosition }) {
   if (!decoupage?.splits?.length) return null;
 
   const montrer = (l) => total && onPosition?.(((l.debut_km + l.fin_km) / 2) / total);
-  const cols = ["2.6rem", "3.3rem", "1fr", gap && "3.3rem", fc && "2.4rem", dplus && "2.6rem"].filter(Boolean).join(" ");
+  const cols = ["2.6rem", "3.3rem", "1fr", gap && "3.3rem", fc && "2.4rem", dplus && "2.6rem", dplus && "2.6rem"].filter(Boolean).join(" ");
 
   return (
     <section className="card p-4 space-y-3">
@@ -73,6 +73,7 @@ export function Decoupage({ decoupage, sport, onPosition }) {
           {gap && <span className="text-right" title="Allure ajustée à la pente">Aj.</span>}
           {fc && <span className="text-right">FC</span>}
           {dplus && <span className="text-right">D+</span>}
+          {dplus && <span className="text-right">D−</span>}
         </div>
         {lignes.map((l) => {
           const part = vmax > vmin ? (l.vitesse_kmh - vmin) / (vmax - vmin) : 1;
@@ -98,6 +99,7 @@ export function Decoupage({ decoupage, sport, onPosition }) {
               {gap && <span className="text-right text-label-2">{mmss(l.gap_sec_km)}</span>}
               {fc && <span className="text-right" style={{ color: l.fc ? "#FF375F" : undefined }}>{l.fc ?? "—"}</span>}
               {dplus && <span className="text-right text-label-2">{l.dplus_m ?? "—"}</span>}
+              {dplus && <span className="text-right text-label-2">{l.dmoins_m ? `−${l.dmoins_m}` : l.dmoins_m ?? "—"}</span>}
             </button>
           );
         })}
