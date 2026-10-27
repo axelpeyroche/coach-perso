@@ -138,7 +138,9 @@ def serialiser_activite(a: Activite) -> dict:
     except ValueError:
         details = None
     mouv = details.get("duree_mouvement_sec") if isinstance(details, dict) else None
-    if not (isinstance(mouv, (int, float)) and a.duree_sec and 0 < mouv < a.duree_sec):
+    # Montre en panne (séance refaite depuis un GPX) : son temps en mouvement est faux, il est
+    # recalculé depuis le tracé avec les courbes
+    if not (isinstance(mouv, (int, float)) and a.duree_sec and 0 < mouv < a.duree_sec) or details.get("montre_hs"):
         mouv = None
     return {
         "id": a.id,
