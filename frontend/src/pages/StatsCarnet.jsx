@@ -313,15 +313,15 @@ export default function StatsCarnet() {
                 })}
               </Card>
 
-              <div className="space-y-3 min-w-0">
+              <div className="space-y-3 min-w-0 lg:flex lg:flex-col lg:space-y-0 lg:gap-3">
                 <Card>
                   <p className="text-[13px] font-semibold text-ios-green mb-3">Calendrier · 12 mois</p>
                   <Heatmap calendrier={s.regularite.calendrier} />
                 </Card>
 
-                <Card pad={false} className="py-1">
+                <Card pad={false} className="py-1 lg:flex-1 lg:flex lg:flex-col">
                   {[["7 jours", t["7j"]], ["28 jours", t["28j"]], ["Année", t.annee], ["Depuis le début", t.total]].map(([l, x]) => (
-                    <div key={l} className="ligne">
+                    <div key={l} className="ligne lg:flex-1">
                       <span className="flex-1 text-[15px]">{l}</span>
                       <span className="text-right">
                         <span className="block text-[15px] font-semibold chiffres">{x.nb} séances · {nombre(x.duree_h)} h</span>
