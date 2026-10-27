@@ -256,6 +256,8 @@ const PHASES = [
   { cle: "sommeil_paradoxal", label: "Paradoxal", couleur: CYAN },
 ];
 const aPhases = (p) => PHASES.some((f) => p[f.cle] != null);
+// Temps éveillé pendant la nuit (hors durée de sommeil), empilé au-dessus des phases
+const EVEIL = { cle: "sommeil_eveil", label: "Éveillé", couleur: "#FF7A6B" };
 const hm = (h) => fmtDuree(Math.round(h * 60) * 60);
 
 // Résumé des 28 dernières nuits : une ligne de colonnes sur ordinateur, score en tête sur téléphone
@@ -423,13 +425,15 @@ function Nuits({ r }) {
   const spo2 = nuits.filter((p) => p.spo2 != null);
   const score = nuits.filter((p) => p.score_sommeil != null);
   const aFc = nuits.some((p) => p.fc_sommeil != null);
+  const aEveil = nuits.some((p) => p[EVEIL.cle] != null);
   return (
     <>
       <ResumeNuits s={s} points={r?.points ?? []} />
       <Graphe titre="Durée et FC de la nuit" couleur={INDIGO}
-        sousTitre={`${nuits.length} dernière${nuits.length > 1 ? "s" : ""} nuit${nuits.length > 1 ? "s" : ""} · barres = durée${avecPhases ? " par phase" : ""}, ligne = FC moyenne pendant le sommeil`}
+        sousTitre={`${nuits.length} dernière${nuits.length > 1 ? "s" : ""} nuit${nuits.length > 1 ? "s" : ""} · barres = durée${avecPhases ? " par phase" : ""}${aEveil ? " + temps éveillé en haut" : ""}, ligne = FC moyenne pendant le sommeil`}
         note="Une FC nocturne plus haute que d'habitude signale souvent fatigue, stress, alcool ou maladie qui couve. Repère : 7 h de sommeil (pointillés).">
-        {avecPhases && <Legende items={[...PHASES.map((f) => ({ label: f.label, couleur: f.couleur })), { label: "Sans phase", couleur: GRIS }]} />}
+        {avecPhases && <Legende items={[...PHASES.map((f) => ({ label: f.label, couleur: f.couleur })), { label: "Sans phase", couleur: GRIS },
+          ...(aEveil ? [{ label: EVEIL.label, couleur: EVEIL.couleur }] : [])]} />}
         <ResponsiveContainer width="100%" height={220}>
           <ComposedChart data={nuits} margin={{ left: 0, right: 0, top: 4 }}>
             <CartesianGrid {...grille} />
@@ -443,6 +447,7 @@ function Nuits({ r }) {
               <Bar key={f.cle} yAxisId="h" dataKey={f.cle} name={f.label} stackId="n" fill={f.couleur} maxBarSize={10} />
             ))}
             {avecPhases && <Bar yAxisId="h" dataKey="sommeil_autre" name="Sans phase" stackId="n" fill={GRIS} maxBarSize={10} />}
+            {aEveil && <Bar yAxisId="h" dataKey={EVEIL.cle} name={EVEIL.label} stackId="n" fill={EVEIL.couleur} maxBarSize={10} />}
             {aFc && <Line yAxisId="fc" dataKey="fc_sommeil" name="FC sommeil" stroke={ROSE} strokeWidth={2} dot={{ r: 2, strokeWidth: 0, fill: ROSE }} connectNulls />}
           </ComposedChart>
         </ResponsiveContainer>
