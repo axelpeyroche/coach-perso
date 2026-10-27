@@ -125,7 +125,25 @@ async function listeLikes() {
   return { uris: (likes?.items ?? []).map((x) => x.track?.uri ?? x.item?.uri).filter(Boolean) };
 }
 
-export async function lire(uri) {
+// Titres d'une playlist (ou des titres likés), par pages
+export async function titresPlaylist(uri, offset = 0) {
+  const d = uri === "likes"
+    ? await appel("GET", `/me/tracks?limit=50&offset=${offset}`)
+    : await appel("GET", `/playlists/${uri.split(":").pop()}/items?limit=100&offset=${offset}`);
+  const titres = (d?.items ?? [])
+    .map((x) => x?.item ?? x?.track)
+    .filter((t) => t?.uri && !t.is_local && t.type !== "episode")
+    .map((t) => ({
+      uri: t.uri, nom: t.name, artiste: (t.artists ?? []).map((a) => a.name).join(", "),
+      duree: t.duration_ms, image: t.album?.images?.at(-1)?.url,
+    }));
+  return { titres, total: d?.total ?? titres.length, suite: !!d?.next };
+}
+
+export const aleatoire = (oui) => appel("PUT", `/me/player/shuffle?state=${oui ? "true" : "false"}`);
+
+// `titre` : morceau de départ dans la playlist (la suite de la playlist enchaîne)
+export async function lire(uri, titre) {
   let corps;
   if (uri === "likes" && modeLikes() === "liste") corps = await listeLikes();
   else if (uri === "likes") {
@@ -133,6 +151,12 @@ export async function lire(uri) {
     moiId ??= (await appel("GET", "/me").catch(() => null))?.id;
     corps = { context_uri: `spotify:user:${moiId ?? "me"}:collection` };
   } else if (uri) corps = { context_uri: uri };
+  const placer = (c) => {
+    if (!titre || !c) return c;
+    if (c.context_uri) return { ...c, offset: { uri: titre } };
+    return { uris: c.uris.includes(titre) ? c.uris : [titre, ...c.uris], offset: { uri: titre } };
+  };
+  corps = placer(corps);
   const essayer = async (device) => {
     const chemin = `/me/player/play${device ? `?device_id=${device}` : ""}`;
     try {
@@ -141,7 +165,7 @@ export async function lire(uri) {
       // Contexte « titres likés » refusé : on envoie la liste des 50 derniers titres likés
       if (uri !== "likes" || !corps.context_uri || e.status === 404 || e.status === 401) throw e;
       try {
-        corps = await listeLikes();
+        corps = placer(await listeLikes());
         const r = await appel("PUT", chemin, corps);
         try { localStorage.setItem(CLE_LIKES, "liste"); } catch { /* rien */ }
         return r;

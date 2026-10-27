@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { melangerSon } from "../son";
-import { spotifyDisponible, spotifyConnecte, etatLecteur, lire, pause, suivant, precedent, mesPlaylists } from "../spotify";
+import { spotifyDisponible, spotifyConnecte, etatLecteur, lire, pause, suivant, precedent, mesPlaylists, titresPlaylist, aleatoire } from "../spotify";
 
 // Bandeau Spotify de la séance guidée : titre en cours, pause et suivant ;
-// touché, il se déplie en lecteur avec la liste des playlists. Les « titres
+// touché, il se déplie en lecteur avec la liste des playlists (toucher une playlist
+// la lance, son chevron ouvre ses titres) et l'aléatoire. Les « titres
 // likés » se lancent au début de la séance si rien ne joue déjà.
 
 const VIOLET = "#BF5AF2";
@@ -16,6 +17,10 @@ const IcoPause = ({ c = "w-5 h-5" }) => <svg className={c} {...svg}><rect x="6" 
 const IcoLecture = ({ c = "w-5 h-5" }) => <svg className={c} {...svg}><path d="M7 4.5v15a1 1 0 001.5.86l12-7.5a1 1 0 000-1.72l-12-7.5A1 1 0 007 4.5z" /></svg>;
 const IcoSuivant = ({ c = "w-[18px] h-[18px]" }) => <svg className={c} {...svg}><path d="M5 5.5v13a1 1 0 001.5.85L16 13.5V18a1 1 0 002 0V6a1 1 0 00-2 0v4.5L6.5 4.65A1 1 0 005 5.5z" /></svg>;
 const IcoPrecedent = ({ c }) => <span className="block -scale-x-100"><IcoSuivant c={c} /></span>;
+const trait = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true };
+const IcoAleatoire = ({ c = "w-[22px] h-[22px]" }) => <svg className={c} {...trait}><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5" /></svg>;
+const IcoChevron = ({ c = "w-[18px] h-[18px]", gauche }) => <svg className={c} {...trait}><path d={gauche ? "M15 18l-6-6 6-6" : "M9 6l6 6-6 6"} /></svg>;
+const IcoSon = () => <svg className="w-4 h-4 shrink-0" {...trait}><path d="M11 5L6 9H3v6h3l5 4V5zM15.5 8.5a5 5 0 010 7M18.5 5.5a9 9 0 010 13" /></svg>;
 const IcoNote = () => <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden><path d="M9 18V6l11-2v12" /><circle cx="6.5" cy="18" r="2.5" /><circle cx="17.5" cy="16" r="2.5" /></svg>;
 
 function Pochette({ src, taille, rayon = 7 }) {
@@ -23,6 +28,12 @@ function Pochette({ src, taille, rayon = 7 }) {
     ? <img src={src} alt="" loading="lazy" decoding="async" className="shrink-0 object-cover" style={{ width: taille, height: taille, borderRadius: rayon }} />
     : <span className="shrink-0 flex items-center justify-center bg-[#2c2c2e] text-white/30" style={{ width: taille, height: taille, borderRadius: rayon }}><IcoNote /></span>;
 }
+
+const IconeLikes = ({ taille }) => (
+  <span className="shrink-0 rounded-[6px] flex items-center justify-center" style={{ width: taille, height: taille, background: "linear-gradient(135deg,#450af5,#c4efd9)" }}>
+    <svg style={{ width: taille * 0.45, height: taille * 0.45 }} {...svg}><path d="M12 21s-7.5-4.6-9.5-9.2C1 8.4 3.2 5 6.6 5c2 0 3.4 1.1 4.4 2.5C12 6.1 13.4 5 15.4 5 18.8 5 21 8.4 19.5 11.8 17.5 16.4 12 21 12 21z" /></svg>
+  </span>
+);
 
 // Message lisible, avec la réponse de Spotify pour comprendre un refus
 function message(e) {
@@ -51,6 +62,9 @@ export function useSpotify({ autoLancer = true } = {}) {
   const calme = useRef(0);                         // pas de suivi tant qu'une commande s'applique
   const finMorceau = useRef(null);
   const dernier = useRef(null);
+  const [vue, setVue] = useState(null);            // playlist ouverte dans le lecteur
+  const [titres, setTitres] = useState(null);      // { uri, liste, total, suite, charge, erreur }
+  const cacheTitres = useRef(new Map());
 
   function appliquer(d) {
     recu.current = Date.now();
@@ -104,23 +118,67 @@ export function useSpotify({ autoLancer = true } = {}) {
     setLecteur(n);
   }
 
-  async function lancer(uri) {
+  // `titre` : morceau de départ ; `melange` : aléatoire activé ou non avant de lancer
+  async function lancer(uri, opts = {}) {
+    const { titre, melange } = opts;
     setErreur(null);
     calme.current = Date.now() + 4000;
     const avant = dernier.current;
     if (uri) setChange(true);
     else optimiste({ is_playing: true });
     try {
-      await lire(uri);
+      // Sans appareil actif, l'aléatoire est refusé : il est réglé une fois la lecture lancée
+      let plusTard = false;
+      if (melange != null) {
+        await aleatoire(melange).catch(() => { plusTard = true; });
+        optimiste({ shuffle_state: melange });
+      }
+      await lire(uri, titre);
+      if (plusTard) aleatoire(melange).catch(() => {});
       enAttente.current = null;
       setEndormi(false);
-      confirmer((d) => d?.is_playing && (!uri || d.item?.id !== avant?.item?.id || d.context?.uri !== avant?.context?.uri));
+      confirmer((d) => d?.is_playing && (!uri || (titre ? d.item?.uri === titre : d.item?.id !== avant?.item?.id || d.context?.uri !== avant?.context?.uri)));
     } catch (e) {
       setChange(false);
       rafraichir();
-      if (e.endormi) { enAttente.current = { uri }; setEndormi(true); }
+      if (e.endormi) { enAttente.current = { uri, opts }; setEndormi(true); }
       else signaler(e);
     }
+  }
+
+  async function basculerAleatoire() {
+    const oui = !dernier.current?.shuffle_state;
+    setErreur(null);
+    calme.current = Date.now() + 3000;
+    optimiste({ shuffle_state: oui });
+    try {
+      await aleatoire(oui);
+      confirmer((d) => d?.shuffle_state === oui);
+    } catch (e) {
+      rafraichir();
+      if (e.status === 404) setEndormi(true); else signaler(e);
+    }
+  }
+
+  // Titres d'une playlist, gardés en mémoire pendant la séance ; `suite` : page suivante
+  async function chargerTitres(p, suite = false) {
+    const deja = cacheTitres.current.get(p.uri);
+    if (!suite && deja && !deja.erreur) { setTitres(deja); return; }
+    if (suite && (!deja?.suite || deja.charge)) return;
+    const base = suite ? deja : { uri: p.uri, liste: [], total: 0, suite: false };
+    const pret = (n) => { cacheTitres.current.set(p.uri, n); setTitres((t) => (!t || t.uri === p.uri ? n : t)); };
+    pret({ ...base, charge: true });
+    try {
+      const r = await titresPlaylist(p.uri, base.liste.length);
+      pret({ uri: p.uri, liste: [...base.liste, ...r.titres], total: r.total, suite: r.suite, charge: false });
+    } catch (e) {
+      console.warn("Spotify, titres :", e.status, e.message);
+      pret({ ...base, suite: false, charge: false, erreur: !suite });
+    }
+  }
+  function ouvrir(p) {
+    setVue(p);
+    if (p) { setTitres(null); chargerTitres(p); }
   }
 
   async function commande(fn) {
@@ -157,14 +215,17 @@ export function useSpotify({ autoLancer = true } = {}) {
     const t = setInterval(() => { if (!document.hidden && Date.now() > calme.current) rafraichir(); }, 5000);
     const retour = () => {
       if (document.hidden) return;
-      if (enAttente.current) lancer(enAttente.current.uri);
+      if (enAttente.current) lancer(enAttente.current.uri, enAttente.current.opts);
       else rafraichir();
     };
     document.addEventListener("visibilitychange", retour);
     return () => { clearInterval(t); clearTimeout(finMorceau.current); document.removeEventListener("visibilitychange", retour); melangerSon(false); };
   }, [actif]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return { actif, lecteur, endormi, erreur, deplie, setDeplie, playlists, change, recu, lancer, commande };
+  return {
+    actif, lecteur, endormi, erreur, deplie, setDeplie, playlists, change, recu, lancer, commande,
+    basculerAleatoire, vue, ouvrir, titres, plusDeTitres: () => vue && chargerTitres(vue, true),
+  };
 }
 
 const progressionDe = (l, depuis) => Math.min(l.item?.duration_ms ?? 0, (l.progress_ms ?? 0) + (l.is_playing ? Date.now() - depuis : 0));
@@ -191,13 +252,15 @@ function Progression({ lecteur, recu }) {
 
 export default function BandeauSpotify({ sp }) {
   const [sortie, setSortie] = useState(false);   // feuille en train de se refermer
-  const { actif, lecteur, endormi, erreur, deplie, setDeplie, playlists, change, recu, lancer, commande } = sp;
+  const { actif, lecteur, endormi, erreur, deplie, setDeplie, playlists, change, recu, lancer, commande,
+    basculerAleatoire, vue, ouvrir, titres, plusDeTitres } = sp;
   if (!actif) return null;
   const fermer = () => {
     if (sortie) return;
     setSortie(true);
-    setTimeout(() => { setDeplie(false); setSortie(false); }, 220);
+    setTimeout(() => { setDeplie(false); setSortie(false); ouvrir(null); }, 220);
   };
+  const melange = !!lecteur?.shuffle_state;
 
   const piste = lecteur?.item;
   const enLecture = !!lecteur?.is_playing;
@@ -261,32 +324,85 @@ export default function BandeauSpotify({ sp }) {
               </div>
             </div>
             {piste && <Progression lecteur={lecteur} recu={recu} />}
-            <div className="flex items-center justify-center gap-6 my-2">
+            <div className="flex items-center justify-center gap-5 my-2">
+              <button type="button" onClick={basculerAleatoire} disabled={!piste} aria-pressed={melange}
+                className="relative w-11 h-11 rounded-full flex items-center justify-center active:bg-white/10 disabled:opacity-30"
+                style={{ color: melange ? VERT : "rgba(255,255,255,0.6)" }} aria-label={melange ? "Désactiver la lecture aléatoire" : "Activer la lecture aléatoire"}>
+                <IcoAleatoire />
+                {melange && <i className="absolute bottom-0.5 w-1 h-1 rounded-full" style={{ background: VERT }} />}
+              </button>
               <button type="button" onClick={() => commande(precedent)} className="w-12 h-12 rounded-full flex items-center justify-center active:bg-white/10" aria-label="Morceau précédent"><IcoPrecedent c="w-6 h-6" /></button>
               <button type="button" onClick={basculer} className="w-14 h-14 rounded-full bg-white text-black flex items-center justify-center" aria-label={joue ? "Pause" : "Lecture"}>
                 {joue ? <IcoPause c="w-7 h-7" /> : <IcoLecture c="w-7 h-7" />}
               </button>
               <button type="button" onClick={() => commande(suivant)} className="w-12 h-12 rounded-full flex items-center justify-center active:bg-white/10" aria-label="Morceau suivant"><IcoSuivant c="w-6 h-6" /></button>
+              <span className="w-11 h-11" aria-hidden />
             </div>
             {erreur && <p className="mb-2 text-center text-[13px] text-[#FF453A]">{erreur}</p>}
-            <p className="mt-1 mb-1.5 text-[12px] font-semibold uppercase tracking-[0.06em] text-white/30">Tes playlists</p>
-            <div className="flex-1 min-h-0 overflow-y-auto scrollbar-hide -mx-1">
-              {[LIKES, ...playlists].map((p) => {
-                const enCours = p.uri === "likes" ? ctx?.endsWith(":collection") : p.uri === ctx;
-                return (
-                  <button key={p.uri} type="button" onClick={() => lancer(p.uri)}
-                    className="w-full flex items-center gap-2.5 rounded-[10px] px-1 py-1.5 text-left active:bg-white/10">
-                    {p.uri === "likes"
-                      ? <span className="w-9 h-9 shrink-0 rounded-[6px] flex items-center justify-center" style={{ background: "linear-gradient(135deg,#450af5,#c4efd9)" }}>
-                          <svg className="w-4 h-4" {...svg}><path d="M12 21s-7.5-4.6-9.5-9.2C1 8.4 3.2 5 6.6 5c2 0 3.4 1.1 4.4 2.5C12 6.1 13.4 5 15.4 5 18.8 5 21 8.4 19.5 11.8 17.5 16.4 12 21 12 21z" /></svg>
-                        </span>
-                      : <Pochette src={p.image} taille={36} rayon={6} />}
-                    <span className="flex-1 min-w-0 truncate text-[15px]">{p.nom}</span>
-                    {enCours && <span className="text-[12px] font-semibold" style={{ color: VIOLET }}>{enLecture ? "En cours" : "En pause"}</span>}
+            {vue ? (
+              <>
+                <button type="button" onClick={() => ouvrir(null)} className="mt-1 -ml-1 self-start flex items-center gap-0.5 py-1 text-[15px]" style={{ color: VIOLET }}>
+                  <IcoChevron gauche /> Playlists
+                </button>
+                <div className="mt-1.5 flex items-center gap-3">
+                  {vue.uri === "likes" ? <IconeLikes taille={52} /> : <Pochette src={vue.image} taille={52} rayon={8} />}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[16px] font-semibold truncate">{vue.nom}</p>
+                    <p className="text-[13px] text-white/60">{titres?.uri === vue.uri && titres.total ? `${titres.total} titres` : " "}</p>
+                  </div>
+                </div>
+                <div className="mt-2.5 mb-1.5 flex gap-2">
+                  <button type="button" onClick={() => lancer(vue.uri, { melange: false })} className="flex-1 h-9 rounded-full flex items-center justify-center gap-1.5 text-[14px] font-semibold text-black" style={{ background: VERT }}>
+                    <IcoLecture c="w-4 h-4" /> Lire
                   </button>
-                );
-              })}
-            </div>
+                  <button type="button" onClick={() => lancer(vue.uri, { melange: true })} className="flex-1 h-9 rounded-full flex items-center justify-center gap-1.5 text-[14px] font-semibold bg-[#2c2c2e]">
+                    <IcoAleatoire c="w-4 h-4" /> Aléatoire
+                  </button>
+                </div>
+                <div className="flex-1 min-h-0 overflow-y-auto scrollbar-hide -mx-1"
+                  onScroll={(ev) => { const el = ev.currentTarget; if (el.scrollTop + el.clientHeight > el.scrollHeight - 300) plusDeTitres(); }}>
+                  {titres?.uri === vue.uri && titres.liste.map((t) => {
+                    const courant = piste?.uri === t.uri;
+                    return (
+                      <button key={t.uri} type="button" onClick={() => lancer(vue.uri, { titre: t.uri })}
+                        className="w-full flex items-center gap-2.5 rounded-[10px] px-1 py-1.5 text-left active:bg-white/10">
+                        <Pochette src={t.image} taille={36} rayon={5} />
+                        <span className="flex-1 min-w-0">
+                          <span className="block truncate text-[15px]" style={courant ? { color: VIOLET } : undefined}>{t.nom}</span>
+                          <span className="block truncate text-[12px] text-white/60">{t.artiste} · {mmss(t.duree)}</span>
+                        </span>
+                        {courant && <span style={{ color: VIOLET }}><IcoSon /></span>}
+                      </button>
+                    );
+                  })}
+                  {(!titres || titres.uri !== vue.uri || titres.charge) && <p className="py-3 text-center text-[13px] text-white/40">Chargement…</p>}
+                  {titres?.uri === vue.uri && titres.erreur && <p className="py-3 text-center text-[13px] text-white/40">Titres indisponibles pour cette playlist</p>}
+                  {titres?.uri === vue.uri && !titres.charge && !titres.erreur && !titres.liste.length && <p className="py-3 text-center text-[13px] text-white/40">Aucun titre</p>}
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="mt-1 mb-1.5 text-[12px] font-semibold uppercase tracking-[0.06em] text-white/30">Tes playlists</p>
+                <div className="flex-1 min-h-0 overflow-y-auto scrollbar-hide -mx-1">
+                  {[LIKES, ...playlists].map((p) => {
+                    const enCours = p.uri === "likes" ? ctx?.endsWith(":collection") : p.uri === ctx;
+                    return (
+                      <div key={p.uri} className="flex items-center rounded-[10px] active:bg-white/10">
+                        <button type="button" onClick={() => lancer(p.uri)} className="flex-1 min-w-0 flex items-center gap-2.5 px-1 py-1.5 text-left">
+                          {p.uri === "likes" ? <IconeLikes taille={36} /> : <Pochette src={p.image} taille={36} rayon={6} />}
+                          <span className="flex-1 min-w-0 truncate text-[15px]">{p.nom}</span>
+                          {enCours && <span className="text-[12px] font-semibold" style={{ color: VIOLET }}>{enLecture ? "En cours" : "En pause"}</span>}
+                        </button>
+                        <button type="button" onClick={() => ouvrir(p)} aria-label={`Voir les titres de ${p.nom}`}
+                          className="w-10 h-10 shrink-0 rounded-full flex items-center justify-center text-white/40 active:bg-white/10">
+                          <IcoChevron />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
           </div>
         </div>,
         document.body,
