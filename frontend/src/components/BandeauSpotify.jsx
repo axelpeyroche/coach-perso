@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { melangerSon } from "../son";
-import { spotifyDisponible, spotifyConnecte, etatLecteur, lire, pause, suivant, precedent, mesPlaylists, titresPlaylist, aleatoire } from "../spotify";
+import { spotifyDisponible, spotifyConnecte, etatLecteur, lire, pause, suivant, precedent, mesPlaylists, titresPlaylist, aleatoire, chercher, ajouterFile } from "../spotify";
 
 // Bandeau Spotify de la séance guidée : titre en cours, précédent, pause et suivant ;
 // touché, il se déplie en lecteur avec la liste des playlists (toucher une playlist
@@ -65,6 +65,9 @@ export function useSpotify({ autoLancer = true } = {}) {
   const [vue, setVue] = useState(null);            // playlist ouverte dans le lecteur
   const [titres, setTitres] = useState(null);      // { uri, liste, total, suite, charge, erreur }
   const cacheTitres = useRef(new Map());
+  const [requete, setRequete] = useState("");
+  const [resultats, setResultats] = useState(null);  // { q, liste, charge, erreur }
+  const [ajoutes, setAjoutes] = useState([]);        // titres ajoutés à la file il y a moins de 2 s
 
   function appliquer(d) {
     recu.current = Date.now();
@@ -181,6 +184,32 @@ export function useSpotify({ autoLancer = true } = {}) {
     if (p) { setTitres(null); chargerTitres(p); }
   }
 
+  // Recherche lancée 350 ms après la dernière frappe ; seule la réponse à la dernière requête compte
+  useEffect(() => {
+    const q = requete.trim();
+    if (!q) { setResultats(null); return; }
+    setResultats((r) => ({ q, liste: r?.liste ?? [], charge: true }));
+    const t = setTimeout(() => {
+      chercher(q)
+        .then((liste) => setResultats((r) => (r?.q === q ? { q, liste, charge: false } : r)))
+        .catch((e) => {
+          console.warn("Spotify, recherche :", e.status, e.message);
+          setResultats((r) => (r?.q === q ? { q, liste: [], charge: false, erreur: true } : r));
+        });
+    }, 350);
+    return () => clearTimeout(t);
+  }, [requete]);
+
+  async function ajouter(uri) {
+    try {
+      await ajouterFile(uri);
+      setAjoutes((a) => [...a, uri]);
+      setTimeout(() => setAjoutes((a) => a.filter((x) => x !== uri)), 2000);
+    } catch (e) {
+      if (e.status === 404) setEndormi(true); else signaler(e);
+    }
+  }
+
   async function commande(fn) {
     setErreur(null);
     calme.current = Date.now() + 3000;
@@ -225,6 +254,7 @@ export function useSpotify({ autoLancer = true } = {}) {
   return {
     actif, lecteur, endormi, erreur, deplie, setDeplie, playlists, change, recu, lancer, commande,
     basculerAleatoire, vue, ouvrir, titres, plusDeTitres: () => vue && chargerTitres(vue, true),
+    requete, setRequete, resultats, ajouter, ajoutes,
   };
 }
 
@@ -253,13 +283,14 @@ function Progression({ lecteur, recu }) {
 export default function BandeauSpotify({ sp }) {
   const [sortie, setSortie] = useState(false);   // feuille en train de se refermer
   const { actif, lecteur, endormi, erreur, deplie, setDeplie, playlists, change, recu, lancer, commande,
-    basculerAleatoire, vue, ouvrir, titres, plusDeTitres } = sp;
+    basculerAleatoire, vue, ouvrir, titres, plusDeTitres, requete, setRequete, resultats, ajouter, ajoutes } = sp;
   if (!actif) return null;
   const fermer = () => {
     if (sortie) return;
     setSortie(true);
-    setTimeout(() => { setDeplie(false); setSortie(false); ouvrir(null); }, 220);
+    setTimeout(() => { setDeplie(false); setSortie(false); ouvrir(null); setRequete(""); }, 220);
   };
+  const cherche = !!requete.trim();
   const melange = !!lecteur?.shuffle_state;
 
   const piste = lecteur?.item;
@@ -340,7 +371,54 @@ export default function BandeauSpotify({ sp }) {
               <span className="w-11 h-11" aria-hidden />
             </div>
             {erreur && <p className="mb-2 text-center text-[13px] text-[#FF453A]">{erreur}</p>}
-            {vue ? (
+            <div className="mt-1 mb-2 flex items-center gap-2">
+              <label className="flex-1 min-w-0 h-9 flex items-center gap-2 rounded-[10px] bg-[#2c2c2e] px-2.5 text-white/45">
+                <svg className="w-4 h-4 shrink-0" {...trait}><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
+                {/* 16 px : en dessous, l'iPhone zoome sur le champ */}
+                <input type="search" value={requete} onChange={(ev) => setRequete(ev.target.value)} placeholder="Titre, artiste…"
+                  enterKeyHint="search" autoComplete="off" autoCorrect="off" spellCheck={false}
+                  onKeyDown={(ev) => { if (ev.key === "Enter") ev.currentTarget.blur(); }}
+                  className="flex-1 min-w-0 bg-transparent text-[16px] text-white placeholder:text-white/45 outline-none [&::-webkit-search-cancel-button]:hidden" />
+                {requete && (
+                  <button type="button" onClick={() => setRequete("")} aria-label="Effacer la recherche" className="w-6 h-6 shrink-0 flex items-center justify-center">
+                    <svg className="w-4 h-4" {...trait}><path d="M6 6l12 12M18 6L6 18" /></svg>
+                  </button>
+                )}
+              </label>
+              {cherche && <button type="button" onClick={() => setRequete("")} className="shrink-0 text-[15px]" style={{ color: VIOLET }}>Annuler</button>}
+            </div>
+            {cherche ? (
+              <>
+                <p className="mb-1.5 text-[12px] font-semibold uppercase tracking-[0.06em] text-white/30">Titres</p>
+                <div className="flex-1 min-h-0 overflow-y-auto scrollbar-hide -mx-1">
+                  {resultats?.liste.map((t) => {
+                    const courant = piste?.uri === t.uri;
+                    const ajoute = ajoutes.includes(t.uri);
+                    return (
+                      <div key={t.uri} className="flex items-center rounded-[10px] active:bg-white/10">
+                        <button type="button" onClick={() => lancer(t.album, { titre: t.uri })} className="flex-1 min-w-0 flex items-center gap-2.5 px-1 py-1.5 text-left">
+                          <Pochette src={t.image} taille={36} rayon={5} />
+                          <span className="flex-1 min-w-0">
+                            <span className="block truncate text-[15px]" style={courant ? { color: VIOLET } : undefined}>{t.nom}</span>
+                            <span className="block truncate text-[12px] text-white/60">{t.artiste} · {mmss(t.duree)}</span>
+                          </span>
+                        </button>
+                        <button type="button" onClick={() => ajouter(t.uri)} aria-label={ajoute ? `${t.nom} ajouté à la file` : `Ajouter ${t.nom} à la file d'attente`}
+                          className="w-10 h-10 shrink-0 rounded-full flex items-center justify-center active:bg-white/10" style={{ color: ajoute ? VERT : "rgba(255,255,255,0.6)" }}>
+                          {ajoute
+                            ? <svg className="w-5 h-5" {...trait}><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+                            : <svg className="w-5 h-5" {...trait}><path d="M4 6h11M4 11h11M4 16h7M18 13v6M15 16h6" /></svg>}
+                        </button>
+                      </div>
+                    );
+                  })}
+                  {resultats?.charge && !resultats.liste.length && <p className="py-3 text-center text-[13px] text-white/40">Recherche…</p>}
+                  {resultats?.erreur && <p className="py-3 text-center text-[13px] text-white/40">Recherche indisponible</p>}
+                  {resultats && !resultats.charge && !resultats.erreur && !resultats.liste.length && <p className="py-3 text-center text-[13px] text-white/40">Aucun titre trouvé</p>}
+                  {ajoutes.length > 0 && <p className="py-2 text-center text-[12px]" style={{ color: VERT }}>Ajouté à la file</p>}
+                </div>
+              </>
+            ) : vue ? (
               <>
                 <button type="button" onClick={() => ouvrir(null)} className="mt-1 -ml-1 self-start flex items-center gap-0.5 py-1 text-[15px]" style={{ color: VIOLET }}>
                   <IcoChevron gauche /> Playlists

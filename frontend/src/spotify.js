@@ -140,6 +140,17 @@ export async function titresPlaylist(uri, offset = 0) {
   return { titres, total: d?.total ?? titres.length, suite: !!d?.next };
 }
 
+// Recherche de titres (10 résultats au plus pour une appli en mode développement)
+export async function chercher(q) {
+  const d = await appel("GET", `/search?type=track&limit=10&q=${encodeURIComponent(q)}`);
+  return (d?.tracks?.items ?? []).filter((t) => t?.uri).map((t) => ({
+    uri: t.uri, nom: t.name, artiste: (t.artists ?? []).map((a) => a.name).join(", "),
+    duree: t.duration_ms, image: t.album?.images?.at(-1)?.url, album: t.album?.uri,
+  }));
+}
+
+export const ajouterFile = (uri) => appel("POST", `/me/player/queue?uri=${encodeURIComponent(uri)}`);
+
 export const aleatoire = (oui) => appel("PUT", `/me/player/shuffle?state=${oui ? "true" : "false"}`);
 
 // `titre` : morceau de départ dans la playlist (la suite de la playlist enchaîne)
@@ -151,6 +162,7 @@ export async function lire(uri, titre) {
     moiId ??= (await appel("GET", "/me").catch(() => null))?.id;
     corps = { context_uri: `spotify:user:${moiId ?? "me"}:collection` };
   } else if (uri) corps = { context_uri: uri };
+  else if (titre) corps = { uris: [titre] };
   const placer = (c) => {
     if (!titre || !c) return c;
     if (c.context_uri) return { ...c, offset: { uri: titre } };
