@@ -21,6 +21,7 @@ const Bilan = lazy(() => import("./pages/Bilan"));
 const Itineraires = lazy(() => import("./pages/Itineraires"));
 const Parcours = lazy(() => import("./pages/Parcours"));
 const CreerParcours = lazy(() => import("./pages/CreerParcours"));
+const RetourSpotify = lazy(() => import("./pages/RetourSpotify"));
 
 // ── SVG Icons ──────────────────────────────────────────────────────────────
 const Icon = {
@@ -479,6 +480,7 @@ export default function App() {
                   <Route path="/itineraires/parcours" element={<Parcours />} />
                   <Route path="/itineraires/creer" element={<CreerParcours />} />
                   <Route path="/profil"     element={<Profil theme={theme} setTheme={setTheme} />} />
+                  <Route path="/spotify"    element={<RetourSpotify />} />
                   <Route path="*"           element={<Navigate to="/" replace />} />
                 </Routes>
                 </div>

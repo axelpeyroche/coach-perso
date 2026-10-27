@@ -6,6 +6,7 @@ import { modifierPrevue } from "../api";
 import { useVerrouDefilement } from "../navigation";
 import { construireSeance, prescription, fmtChrono, DIFFICULTES } from "../seanceGuidee";
 import { debloquerSon, bipCourt, bipLong, couperSon } from "../son";
+import BandeauSpotify, { useSpotify } from "./BandeauSpotify";
 
 // Séance de muscu guidée, en plein écran (toujours sombre, comme l'app Forme) :
 // une étape à la fois, un seul gros bouton en bas. Les minuteurs reposent sur
@@ -181,6 +182,8 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
   const [menu, setMenu] = useState(false);
   const [goJusqua, setGoJusqua] = useState(0);
   const dernierBip = useRef(null);
+  const sp = useSpotify();
+  const musique = <BandeauSpotify sp={sp} />;
 
   useEffect(() => { ecrire(s.id, etat); }, [s.id, etat]);
   useEffect(() => {
@@ -297,11 +300,13 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
   else if (etape.type === "repos") principale = suivant;
   else if (etape.type === "ressenti") principale = finExercice;
   else if (etape.type === "fin") principale = enregistrer.isPending ? null : () => enregistrer.mutate();
+  const spDeplie = useRef(false);
+  spDeplie.current = sp.deplie;
   const principaleRef = useRef(principale);
   principaleRef.current = principale;
   useEffect(() => {
     const touche = (ev) => {
-      if (ev.target.closest?.("textarea, input")) return;
+      if (ev.target.closest?.("textarea, input, [aria-label='Lecteur Spotify']") || spDeplie.current) return;
       if (ev.key === " " || ev.key === "Enter") { ev.preventDefault(); debloquerSon(); principaleRef.current?.(); }
       if (ev.key === "ArrowRight" && etapes[etat.idx]?.type === "repos") { ev.preventDefault(); suivant(); }
       if (ev.key === "Escape") setMenu((m) => !m);
@@ -357,6 +362,7 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
         <div className="flex-1" />
         {premier && <Ensuite titre={`${premier.nom} · ${prescription(premier)}`} detail={premier.emom ? `${premier.reps} reps` : premier.charge} />}
         <div className="h-3" />
+        {musique}
         <Bouton onClick={suivant}>Échauffement terminé</Bouton>
       </>
     );
@@ -372,6 +378,7 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
         <div className="flex-1" />
         <Ensuite titre={ensTitre} detail={ensDetail} />
         <div className="h-3" />
+        {musique}
         <div className="flex gap-2.5">
           <Bouton sombre className="!h-12 !text-[15px]" onClick={ajouter15}>+15 s</Bouton>
           <Bouton sombre className="!h-12 !text-[15px]" onClick={suivant}>Passer</Bouton>
@@ -394,6 +401,7 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
         </Anneau>
         <div className="flex-1" />
         <p className="text-center text-[13px] text-white/60 mb-3">Bips automatiques à 3, 2, 1, GO</p>
+        {musique}
         <Bouton sombre onClick={() => finEmom(minute)}>Arrêter l'EMOM</Bouton>
       </>
     ) : (
@@ -411,6 +419,7 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
             {ex.historique && <Puce>Dernière fois <b>{ex.historique}</b></Puce>}
           </div>
         )}
+        {musique}
         <Bouton couleur={ORANGE} onClick={lancerDecompte}><Lecture />Lancer l'EMOM</Bouton>
       </>
     );
@@ -437,6 +446,7 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
             {ex.historique && <Puce>Dernière fois <b>{ex.historique}</b></Puce>}
           </div>
         )}
+        {musique}
         {ex.duree && !chrono ? (
           <Bouton onClick={lancerDecompte}><Lecture />Lancer {ex.reps}</Bouton>
         ) : (

@@ -13,6 +13,7 @@ import ModalPoids from "../components/ModalPoids";
 import { imc } from "../components/Poids";
 import { nombre } from "../carnet";
 import { Chevron, Interrupteur, Segmente, SelecteurHeure } from "../components/ui";
+import { spotifyDisponible, spotifyConnecte, connecterSpotify, deconnecterSpotify } from "../spotify";
 
 // ── Avatar ─────────────────────────────────────────────────────────────────
 // La photo est redimensionnée dans le navigateur avant l'envoi (512 px, JPEG) : n'importe
@@ -537,6 +538,29 @@ function Notifications() {
   );
 }
 
+// Spotify : télécommande de l'appli pendant la séance guidée (compte Premium)
+function Musique() {
+  const [connecte, setConnecte] = useState(spotifyConnecte);
+  const [erreur, setErreur] = useState(false);
+  if (!spotifyDisponible) return null;
+  return (
+    <Groupe titre="Musique"
+      pied={erreur ? "Connexion impossible : réessaie." : connecte
+        ? "Pendant la séance guidée, un bandeau pilote l'appli Spotify ; les titres likés se lancent au début si rien ne joue."
+        : "Compte Premium requis. La musique est jouée par l'appli Spotify, Carnet la pilote pendant la séance guidée."}>
+      <div className="ligne" style={{ "--inset": "3.75rem" }}>
+        <Picto couleur="#1DB954"><path d="M9 18V6l11-2v12" /><circle cx="6.5" cy="18" r="2.5" /><circle cx="17.5" cy="16" r="2.5" /></Picto>
+        <span className="flex-1 text-[17px]">Spotify</span>
+        {connecte ? (
+          <button onClick={() => { deconnecterSpotify(); setConnecte(false); }} className="text-[17px] text-ios-red">Déconnecter</button>
+        ) : (
+          <button onClick={() => connecterSpotify().catch(() => setErreur(true))} className="text-[17px] text-brand">Connecter</button>
+        )}
+      </div>
+    </Groupe>
+  );
+}
+
 function DonneesCompte({ onDeleted }) {
   const [confirmSuppr, setConfirmSuppr] = useState(false);
   const [mdpSuppr, setMdpSuppr] = useState("");
@@ -699,6 +723,8 @@ export default function Profil({ theme, setTheme }) {
         </Groupe>
 
         <Notifications />
+
+        <Musique />
 
         <DonneesCompte onDeleted={logout} />
 
