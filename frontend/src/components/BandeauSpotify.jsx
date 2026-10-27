@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { melangerSon } from "../son";
 import { spotifyDisponible, spotifyConnecte, etatLecteur, lire, pause, suivant, precedent, mesPlaylists } from "../spotify";
 
 // Bandeau Spotify de la séance guidée : titre en cours, pause et suivant ;
@@ -19,7 +20,7 @@ const IcoNote = () => <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" s
 
 function Pochette({ src, taille, rayon = 7 }) {
   return src
-    ? <img src={src} alt="" className="shrink-0 object-cover" style={{ width: taille, height: taille, borderRadius: rayon }} />
+    ? <img src={src} alt="" loading="lazy" decoding="async" className="shrink-0 object-cover" style={{ width: taille, height: taille, borderRadius: rayon }} />
     : <span className="shrink-0 flex items-center justify-center bg-[#2c2c2e] text-white/30" style={{ width: taille, height: taille, borderRadius: rayon }}><IcoNote /></span>;
 }
 
@@ -142,6 +143,7 @@ export function useSpotify({ autoLancer = true } = {}) {
   // Démarrage : état du lecteur, playlists, titres likés si rien ne joue
   useEffect(() => {
     if (!actif) return;
+    melangerSon(true);
     (async () => {
       const d = await rafraichir();
       if (autoLancer && !d?.is_playing) lancer(LIKES.uri);
@@ -159,7 +161,7 @@ export function useSpotify({ autoLancer = true } = {}) {
       else rafraichir();
     };
     document.addEventListener("visibilitychange", retour);
-    return () => { clearInterval(t); clearTimeout(finMorceau.current); document.removeEventListener("visibilitychange", retour); };
+    return () => { clearInterval(t); clearTimeout(finMorceau.current); document.removeEventListener("visibilitychange", retour); melangerSon(false); };
   }, [actif]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return { actif, lecteur, endormi, erreur, deplie, setDeplie, playlists, change, recu, lancer, commande };
@@ -188,8 +190,14 @@ function Progression({ lecteur, recu }) {
 }
 
 export default function BandeauSpotify({ sp }) {
+  const [sortie, setSortie] = useState(false);   // feuille en train de se refermer
   const { actif, lecteur, endormi, erreur, deplie, setDeplie, playlists, change, recu, lancer, commande } = sp;
   if (!actif) return null;
+  const fermer = () => {
+    if (sortie) return;
+    setSortie(true);
+    setTimeout(() => { setDeplie(false); setSortie(false); }, 220);
+  };
 
   const piste = lecteur?.item;
   const enLecture = !!lecteur?.is_playing;
@@ -238,13 +246,13 @@ export default function BandeauSpotify({ sp }) {
 
   return (
     <>
-      <div className="mb-3">{bandeau}</div>
+      <div className="mb-3" data-spotify>{bandeau}</div>
       {deplie && createPortal(
-        <div className="fixed inset-0 z-[70] text-white font-sans antialiased select-none flex items-end lg:items-center justify-center bg-black/60" onClick={() => setDeplie(false)}>
-          <div className="w-full max-w-[480px] max-h-[85vh] flex flex-col rounded-t-[20px] lg:rounded-[20px] bg-[#1c1c1e] px-4 pt-2.5 animate-[fondu_0.2s_ease-out]"
+        <div data-spotify className={`fixed inset-0 z-[70] text-white font-sans antialiased select-none flex items-end lg:items-center justify-center bg-black/60 ${sortie ? "animate-[fonduSortie_0.22s_ease-in_forwards]" : "animate-[fondu_0.2s_ease-out]"}`} onClick={fermer}>
+          <div className={`w-full max-w-[480px] max-h-[85vh] flex flex-col rounded-t-[20px] lg:rounded-[20px] bg-[#1c1c1e] px-4 pt-2.5 will-change-transform ${sortie ? "animate-[descend_0.22s_ease-in_forwards]" : "animate-[monte_0.32s_cubic-bezier(0.32,0.72,0,1)]"}`}
             style={{ paddingBottom: "max(16px, env(safe-area-inset-bottom))" }}
             onClick={(ev) => ev.stopPropagation()} role="dialog" aria-label="Lecteur Spotify">
-            <button type="button" onClick={() => setDeplie(false)} aria-label="Refermer le lecteur" className="mx-auto mb-3 block w-10 h-[5px] rounded-full bg-[#3a3a3c]" />
+            <button type="button" onClick={fermer} aria-label="Refermer le lecteur" className="mx-auto mb-3 block w-10 h-[5px] rounded-full bg-[#3a3a3c]" />
             <div className={`flex items-center gap-3 transition-opacity ${change ? "opacity-40" : ""}`}>
               <Pochette src={grande} taille={64} rayon={10} />
               <div className="min-w-0">

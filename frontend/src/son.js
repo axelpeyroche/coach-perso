@@ -135,9 +135,18 @@ function preparer() {
   } catch { elements = null; }
 }
 
+// Avec Spotify, la session « ambient » mêle les bips à la musique ; « playback »
+// prendrait la main sur le son du téléphone et mettrait Spotify en pause.
+let melange = false;
+const typeSession = () => {
+  try { if (navigator.audioSession) navigator.audioSession.type = melange ? "ambient" : "playback"; } catch { /* non pris en charge */ }
+};
+export function melangerSon(oui) { melange = oui; typeSession(); }
+
 export function debloquerSon() {
   // Safari 17+ : la page se comporte comme un lecteur, le bouton silencieux ne coupe plus les bips
-  try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch { /* non pris en charge */ }
+  // (sauf en mode mélangé avec Spotify, où le bouton silencieux coupe les bips)
+  typeSession();
 
   preparer();
   if (elements) {

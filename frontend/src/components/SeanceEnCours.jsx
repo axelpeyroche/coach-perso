@@ -508,10 +508,13 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
     );
   }
 
+  // Les touchers du lecteur Spotify ne débloquent pas le son (inutile, et ça coupait la musique)
+  const debloquer = (ev) => { if (!ev.target.closest?.("[data-spotify]")) debloquerSon(); };
+
   const ecran = (
     <div className="fixed inset-0 z-[60] flex bg-black text-white font-sans antialiased select-none [&_textarea]:select-text"
       role="dialog" aria-modal="true" aria-label={`Séance en cours : ${s.titre}`}
-      onClickCapture={debloquerSon} onTouchEndCapture={debloquerSon}>
+      onClickCapture={debloquer} onTouchEndCapture={debloquer}>
       <div className="relative flex-1 min-w-0 flex flex-col"
         style={{ paddingTop: "calc(max(12px, env(safe-area-inset-top)) + var(--marge-flou))", paddingBottom: "max(20px, env(safe-area-inset-bottom))" }}>
         {/* Barre du haut : quitter, avancement, chrono de la séance */}
