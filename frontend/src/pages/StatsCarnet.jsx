@@ -83,7 +83,7 @@ function Heatmap({ calendrier }) {
 
   return (
     // Les cases se resserrent pour que les 53 semaines tiennent dans la largeur de la carte
-    <div className="grid gap-[2px] max-w-[742px]" style={{ gridTemplateColumns: `repeat(${cols.length}, minmax(0, 1fr))` }}>
+    <div className="grid gap-[2px] md:gap-[3px]" style={{ gridTemplateColumns: `repeat(${cols.length}, minmax(0, 1fr))` }}>
       {cols.map((col, i) => (
         <div key={i} className="flex flex-col gap-[2px]">
           {col.map((c) => (
@@ -321,24 +321,23 @@ export default function StatsCarnet() {
                 })}
               </Card>
 
-              <div className="space-y-3 min-w-0">
-                <Card>
-                  <p className="text-[13px] font-semibold text-ios-green mb-3">Calendrier · 12 mois</p>
-                  <Heatmap calendrier={s.regularite.calendrier} />
-                </Card>
+              {/* Sur ordinateur, le calendrier prend toute la largeur au-dessus des deux cartes */}
+              <Card className="lg:col-span-2 lg:order-first">
+                <p className="text-[13px] font-semibold text-ios-green mb-3">Calendrier · 12 mois</p>
+                <Heatmap calendrier={s.regularite.calendrier} />
+              </Card>
 
-                <Card pad={false} className="py-1">
-                  {[["7 jours", t["7j"]], ["28 jours", t["28j"]], ["Année", t.annee], ["Depuis le début", t.total]].map(([l, x]) => (
-                    <div key={l} className="ligne">
-                      <span className="flex-1 text-[15px]">{l}</span>
-                      <span className="text-right">
-                        <span className="block text-[15px] font-semibold chiffres">{x.nb} séances · {nombre(x.duree_h)} h</span>
-                        <span className="block text-[12px] text-label-2 chiffres">{nombre(x.distance_km)} km · {x.dplus_m} m D+</span>
-                      </span>
-                    </div>
-                  ))}
-                </Card>
-              </div>
+              <Card pad={false} className="py-1 lg:flex lg:flex-col">
+                {[["7 jours", t["7j"]], ["28 jours", t["28j"]], ["Année", t.annee], ["Depuis le début", t.total]].map(([l, x]) => (
+                  <div key={l} className="ligne lg:flex-1">
+                    <span className="flex-1 text-[15px]">{l}</span>
+                    <span className="text-right">
+                      <span className="block text-[15px] font-semibold chiffres">{x.nb} séances · {nombre(x.duree_h)} h</span>
+                      <span className="block text-[12px] text-label-2 chiffres">{nombre(x.distance_km)} km · {x.dplus_m} m D+</span>
+                    </span>
+                  </div>
+                ))}
+              </Card>
             </div>
           </Section>
         </>
