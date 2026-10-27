@@ -1039,6 +1039,14 @@ MESURES = {
     "sommeil_eveil":     {"label": "Éveillé pendant la nuit", "unite": "h", "min": 0.01, "max": 16},
     # Pas de la journée (Santé → Intervals Companion → champ wellness « steps »)
     "pas":               {"label": "Pas", "unite": "pas", "min": 1, "max": 100000},
+    # Nouveautés d'Intervals Companion (champs perso, sauf la VFC rMSSD, champ natif « hrv »)
+    "vfc_rmssd":     {"label": "VFC (rMSSD)", "unite": "ms", "min": 5, "max": 300},
+    "recup_fc":      {"label": "Récupération FC 1 min", "unite": "bpm", "min": 1, "max": 120},
+    "temps_au_lit":  {"label": "Temps au lit", "unite": "h", "min": 0.5, "max": 20},
+    # Heures du coucher (après minuit : 24 + h, pour que les moyennes restent justes) et du lever
+    "coucher":       {"label": "Coucher (heure, 24,5 = 0 h 30)", "unite": "h", "min": 12, "max": 40},
+    "lever":         {"label": "Lever (heure)", "unite": "h", "min": 0, "max": 24},
+    "asymetrie_marche": {"label": "Asymétrie de marche", "unite": "%", "min": 0, "max": 100},
 }
 _ALIAS_MESURES = {
     "fc_repos": "fc_repos", "fcrepos": "fc_repos", "restingheartrate": "fc_repos", "fc_au_repos": "fc_repos",
@@ -1054,6 +1062,12 @@ _ALIAS_MESURES = {
     "sommeil_paradoxal": "sommeil_paradoxal", "remsleep": "sommeil_paradoxal",
     "sommeil_eveil": "sommeil_eveil", "awaketime": "sommeil_eveil", "awake": "sommeil_eveil", "awakesleep": "sommeil_eveil",
     "pas": "pas", "steps": "pas", "stepcount": "pas", "nombre_de_pas": "pas",
+    "vfc_rmssd": "vfc_rmssd", "rmssd": "vfc_rmssd",
+    "recup_fc": "recup_fc", "hrrecoveryonemin": "recup_fc",
+    "temps_au_lit": "temps_au_lit", "timeinbedsecs": "temps_au_lit",
+    "coucher": "coucher", "sleepstartlocal": "coucher",
+    "lever": "lever", "sleependlocal": "lever",
+    "asymetrie_marche": "asymetrie_marche", "walkingasymmetry": "asymetrie_marche",
 }
 
 

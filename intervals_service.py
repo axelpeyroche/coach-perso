@@ -223,6 +223,23 @@ def synchroniser_wellness(db: Session, user: Utilisateur, depuis, jusqu_a, compl
             if w.get(cle):
                 recus[t] = recus.get(t, 0) + 1
                 items.append((t, jour, float(w[cle])))
+        # Nouveautés de Companion : VFC rMSSD (champ natif « hrv »), récupération FC, temps au lit,
+        # asymétrie de marche (en %) ; coucher et lever en heure locale « 2026-10-25T22:16:51 »
+        for cle, t, div in (("hrv", "vfc_rmssd", 1), ("hrrecoveryonemin", "recup_fc", 1),
+                            ("timeinbedsecs", "temps_au_lit", 3600), ("walkingasymmetry", "asymetrie_marche", 1)):
+            if isinstance(champs.get(cle), (int, float)) and champs[cle] > 0:
+                recus[t] = recus.get(t, 0) + 1
+                items.append((t, jour, champs[cle] / div))
+        for cle, t in (("sleepstartlocal", "coucher"), ("sleependlocal", "lever")):
+            try:
+                h = datetime.fromisoformat(str(champs.get(cle)))
+            except ValueError:
+                continue
+            heure = h.hour + h.minute / 60 + h.second / 3600
+            if t == "coucher" and h.date() >= jour:  # endormi après minuit
+                heure += 24
+            recus[t] = recus.get(t, 0) + 1
+            items.append((t, jour, heure))
         for cle, t in (("restingHR", "fc_repos"), ("hrvSDNN", "vfc"), ("vo2max", "vo2max")):
             if w.get(cle):
                 recus[t] += 1
