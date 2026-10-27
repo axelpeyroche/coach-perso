@@ -77,8 +77,9 @@ function preparer(flux, sport) {
     s.moy = vals.reduce((a, b) => a + b, 0) / (vals.length || 1);
     s.min = tri[0];
     s.max = tri[tri.length - 1];
-    // Échelle resserrée (les arrêts et les pics isolés n'écrasent pas la courbe)
-    let bas = quantile(tri, 0.02), haut = quantile(tri, 0.98);
+    // Le haut du graphe va jusqu'au pic (la courbe ne déborde pas) ; le bas reste resserré pour que
+    // les arrêts n'écrasent pas la courbe (en allure, axe inversé : le haut est l'allure la plus rapide)
+    let bas = s.allure ? s.min : quantile(tri, 0.02), haut = s.allure ? quantile(tri, 0.98) : s.max;
     const marge = (haut - bas) * 0.1 || Math.abs(haut) * 0.05 || 1;
     bas -= marge; haut += marge;
     if (s.min >= 0) bas = Math.max(0, bas);
