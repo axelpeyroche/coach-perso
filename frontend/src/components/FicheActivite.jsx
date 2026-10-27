@@ -234,6 +234,8 @@ export default function FicheActivite({ activite: initiale, onClose }) {
   // Données essentielles seulement ; foulée, pas, dérive… restent dans les analyses
   // Comme Strava : temps et allure en mouvement (pauses enlevées), puis le temps total
   const mv = enMouvement(a, flux);
+  // Moyenne d'allure / de vitesse des courbes = celle des tuiles (distance / temps de déplacement)
+  const moyenne = (serie) => (serie.cle === "allure" && mv.allure) || (serie.cle === "vitesse" && mv.vitesse) || serie.moy;
   const tuiles = [
     ["Distance", a.distance_km != null ? nombre(a.distance_km, 2) : null, "km"],
     [mv.pause ? "Temps de déplacement" : "Durée", mv.duree ? fmtDuree(mv.duree) : null],
@@ -308,12 +310,12 @@ export default function FicheActivite({ activite: initiale, onClose }) {
                       </h3>
                       <p className="text-[12px] text-label-2 chiffres shrink-0">
                         {point ? "" : serie.allure
-                          ? `moy. ${mmss(serie.moy)} · meilleure ${mmss(serie.min)}`
-                          : `moy. ${fmtVal(serie, serie.moy)} · max ${fmtVal(serie, serie.max)}`}
+                          ? `moy. ${mmss(moyenne(serie))} · meilleure ${mmss(serie.min)}`
+                          : `moy. ${fmtVal(serie, moyenne(serie))} · max ${fmtVal(serie, serie.max)}`}
                       </p>
                     </div>
                     <p className="text-[24px] font-semibold leading-tight chiffres">
-                      {fmtVal(serie, point ? v : serie.moy)}
+                      {fmtVal(serie, point ? v : moyenne(serie))}
                       <span className="text-[13px] font-medium text-label-2 ml-1">{serie.unite}</span>
                     </p>
                     <Graphe s={serie} lignes={prepa.lignes} axe={axeEff} ticksX={ticksX} onSurvol={onSurvol}
