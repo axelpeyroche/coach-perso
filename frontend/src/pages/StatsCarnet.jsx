@@ -82,17 +82,16 @@ function Heatmap({ calendrier }) {
   const niveau = (v) => (v === 0 ? 0 : v < max * 0.25 ? 1 : v < max * 0.5 ? 2 : v < max * 0.75 ? 3 : 4);
 
   return (
-    <div className="overflow-x-auto scrollbar-hide -mx-4 px-4 md:mx-0 md:px-0" dir="rtl">
-      <div className="flex gap-[3px] w-max" dir="ltr">
-        {cols.map((col, i) => (
-          <div key={i} className="flex flex-col gap-[3px]">
-            {col.map((c) => (
-              <div key={c.iso} title={`${fmtDate(c.iso)} : ${c.v} min`}
-                className={clsx("w-[11px] h-[11px] rounded-[3px]", c.futur ? "opacity-0" : NIVEAUX[niveau(c.v)])} />
-            ))}
-          </div>
-        ))}
-      </div>
+    // Les cases se resserrent pour que les 53 semaines tiennent dans la largeur de la carte
+    <div className="grid gap-[2px] max-w-[742px]" style={{ gridTemplateColumns: `repeat(${cols.length}, minmax(0, 1fr))` }}>
+      {cols.map((col, i) => (
+        <div key={i} className="flex flex-col gap-[2px]">
+          {col.map((c) => (
+            <div key={c.iso} title={`${fmtDate(c.iso)} : ${c.v} min`}
+              className={clsx("aspect-square rounded-[2px]", c.futur ? "opacity-0" : NIVEAUX[niveau(c.v)])} />
+          ))}
+        </div>
+      ))}
     </div>
   );
 }
