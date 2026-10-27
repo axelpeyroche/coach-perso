@@ -55,42 +55,34 @@ function Tuile({ label, value, sub }) {
 
 const NIVEAUX = ["bg-remplissage", "bg-ios-green/25", "bg-ios-green/50", "bg-ios-green/75", "bg-ios-green"];
 
+const COLONNES = 53;
+
 function Heatmap({ calendrier }) {
-  // 53 colonnes (semaines) × 7 lignes (lun→dim), se terminant aujourd'hui
-  const { cols, max } = useMemo(() => {
+  // Les 365 derniers jours, jour après jour de gauche à droite puis ligne suivante, jusqu'à aujourd'hui
+  const { jours, max } = useMemo(() => {
     const auj = new Date();
     auj.setHours(12, 0, 0, 0);
-    const fin = new Date(auj);
-    fin.setDate(fin.getDate() + (7 - ((fin.getDay() + 6) % 7) - 1)); // dimanche courant
-    const cols = [];
+    const jours = [];
     let max = 0;
-    for (let w = 52; w >= 0; w--) {
-      const col = [];
-      for (let d = 6; d >= 0; d--) {
-        const j = new Date(fin);
-        j.setDate(fin.getDate() - w * 7 - d);
-        const iso = `${j.getFullYear()}-${String(j.getMonth() + 1).padStart(2, "0")}-${String(j.getDate()).padStart(2, "0")}`;
-        const v = calendrier[iso] ?? 0;
-        max = Math.max(max, v);
-        col.push({ iso, v, futur: j > auj });
-      }
-      cols.push(col);
+    for (let n = 364; n >= 0; n--) {
+      const j = new Date(auj);
+      j.setDate(auj.getDate() - n);
+      const iso = `${j.getFullYear()}-${String(j.getMonth() + 1).padStart(2, "0")}-${String(j.getDate()).padStart(2, "0")}`;
+      const v = calendrier[iso] ?? 0;
+      max = Math.max(max, v);
+      jours.push({ iso, v });
     }
-    return { cols, max };
+    return { jours, max };
   }, [calendrier]);
 
   const niveau = (v) => (v === 0 ? 0 : v < max * 0.25 ? 1 : v < max * 0.5 ? 2 : v < max * 0.75 ? 3 : 4);
 
   return (
-    // Les cases se resserrent pour que les 53 semaines tiennent dans la largeur de la carte
-    <div className="grid gap-[2px] max-w-[742px]" style={{ gridTemplateColumns: `repeat(${cols.length}, minmax(0, 1fr))` }}>
-      {cols.map((col, i) => (
-        <div key={i} className="flex flex-col gap-[2px]">
-          {col.map((c) => (
-            <div key={c.iso} title={`${fmtDate(c.iso)} : ${c.v} min`}
-              className={clsx("aspect-square rounded-[2px]", c.futur ? "opacity-0" : NIVEAUX[niveau(c.v)])} />
-          ))}
-        </div>
+    // Les cases se resserrent pour que l'année tienne dans la largeur de la carte
+    <div className="grid gap-[2px] max-w-[742px]" style={{ gridTemplateColumns: `repeat(${COLONNES}, minmax(0, 1fr))` }}>
+      {jours.map((c) => (
+        <div key={c.iso} title={`${fmtDate(c.iso)} : ${c.v} min`}
+          className={clsx("aspect-square rounded-[2px]", NIVEAUX[niveau(c.v)])} />
       ))}
     </div>
   );
