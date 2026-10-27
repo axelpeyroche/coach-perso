@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { melangerSon } from "../son";
 import { spotifyDisponible, spotifyConnecte, etatLecteur, lire, pause, suivant, precedent, mesPlaylists, titresPlaylist, aleatoire } from "../spotify";
 
-// Bandeau Spotify de la séance guidée : titre en cours, pause et suivant ;
+// Bandeau Spotify de la séance guidée : titre en cours, précédent, pause et suivant ;
 // touché, il se déplie en lecteur avec la liste des playlists (toucher une playlist
 // la lance, son chevron ouvre ses titres) et l'aléatoire. Les « titres
 // likés » se lancent au début de la séance si rien ne joue déjà.
@@ -299,6 +299,7 @@ export default function BandeauSpotify({ sp }) {
             </span>
           </span>
         </button>
+        <button type="button" onClick={() => commande(precedent)} className={boutonRond} aria-label="Morceau précédent"><IcoPrecedent c="w-[18px] h-[18px]" /></button>
         <button type="button" onClick={basculer} className={boutonRond} aria-label={joue ? "Pause" : "Lecture"}>
           {joue ? <IcoPause /> : <IcoLecture />}
         </button>
