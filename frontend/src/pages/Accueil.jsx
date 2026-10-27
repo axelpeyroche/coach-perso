@@ -12,6 +12,7 @@ import CartePassages from "../components/CartePassages";
 import { FormeTuiles } from "../components/Forme";
 import FormeJour from "../components/FormeJour";
 import SommeilNuit from "../components/SommeilNuit";
+import { AlerteMarche } from "../components/MesuresCompanion";
 import { axeX, axeY, grille, curseur, InfoBulle } from "../components/graphiques";
 import { ObjectifCarte } from "./Objectifs";
 import { ProchainesSeances } from "./Plan";
@@ -74,6 +75,8 @@ export default function Accueil() {
           <SommeilNuit />
         </div>
       )}
+
+      {!vide && <AlerteMarche />}
 
       {t && !vide && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">

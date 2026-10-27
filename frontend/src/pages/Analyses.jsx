@@ -10,6 +10,7 @@ import Page from "../components/Page";
 import { Section, Segmente } from "../components/ui";
 import { axeX, axeY, grille, curseur, InfoBulle, Legende, GRIS } from "../components/graphiques";
 import PoidsAnalyse from "../components/Poids";
+import { RegulariteSommeil, RecupFc, AsymetrieMarche } from "../components/MesuresCompanion";
 import api, { getAnalyses } from "../api";
 import { fmtAllureSec, fmtDate, fmtDuree, nombre, sportInfo } from "../carnet";
 
@@ -1321,9 +1322,11 @@ export default function Analyses() {
         <div className="grid gap-3 lg:grid-cols-2">
           <SignauxNuit s={a.signaux_nuit} />
           <Pas p={a.pas} />
+          <RecupFc />
+          <AsymetrieMarche />
         </div>
       </Section>
-      <Section titre="Sommeil"><DetteSommeil s={a.sommeil} /><Nuits r={a.recuperation} /></Section>
+      <Section titre="Sommeil"><DetteSommeil s={a.sommeil} /><Nuits r={a.recuperation} /><RegulariteSommeil /></Section>
       <Section titre="Poids"><PoidsAnalyse /></Section>
       <Section titre="Intensité"><Zones z={a.zones} /></Section>
       <Section titre="Course à pied">

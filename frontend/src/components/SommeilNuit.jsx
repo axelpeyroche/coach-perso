@@ -15,6 +15,11 @@ export const PHASES = [
 // Temps éveillé pendant la nuit (champ « Awake Time » d'Intervals Companion) : hors des phases
 export const EVEIL = { cle: "sommeil_eveil", label: "Éveillé", couleur: "#FF7A6B" };
 export const hm = (h) => fmtDuree(Math.round(h * 60) * 60).replace(/^(\d+)h(\d+)$/, "$1 h $2");
+// Heure de la journée (le coucher après minuit est stocké en 24 + h)
+export const heure = (h) => {
+  const m = Math.round(h * 60) % 1440;
+  return `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}`;
+};
 
 // Niveaux de l'app Santé
 function niveau(score) {
@@ -56,7 +61,7 @@ export default function SommeilNuit() {
   const { data } = useMesures();
   const [infos, setInfos] = useState(false);
   if (!data) return null;
-  const derniers = ["sommeil", "score_sommeil", ...PHASES.map((f) => f.cle), EVEIL.cle]
+  const derniers = ["sommeil", "score_sommeil", ...PHASES.map((f) => f.cle), EVEIL.cle, "coucher", "lever"]
     .map((t) => data[t]?.derniere?.jour).filter(Boolean).sort();
   const jour = derniers.at(-1);
   // Seulement la nuit récente (3 jours) : l'historique est dans Analyses
@@ -66,11 +71,14 @@ export default function SommeilNuit() {
   const score = du("score_sommeil");
   const duree = du("sommeil");
   const phases = PHASES.map((f) => ({ ...f, h: du(f.cle) })).filter((f) => f.h != null);
+  const eveil = du(EVEIL.cle);
+  // Parts de la nuit : les phases et le temps éveillé
+  if (phases.length && eveil) phases.push({ ...EVEIL, h: eveil });
   const totalPhases = phases.reduce((t, f) => t + f.h, 0);
   const parts = phases.map((f) => ({ ...f, part: f.h / totalPhases }));
   const moy = data.sommeil?.moy_28j;
   const fc = du("fc_sommeil");
-  const eveil = du(EVEIL.cle);
+  const coucher = du("coucher"), lever = du("lever");
 
   const ecartMoy = moy != null && duree != null ? Math.round((duree - moy) * 60) : null;
 
@@ -92,11 +100,22 @@ export default function SommeilNuit() {
         </StatTile>
 
         <StatTile label="Nuit" color="indigo">
-          <p className="font-rounded text-[22px] md:text-[26px] lg:text-[30px] leading-8 lg:leading-9 font-bold tracking-[-0.02em] chiffres truncate">{duree != null ? hm(duree) : "—"}</p>
-          <p className="text-[12px] lg:text-[13px] text-label-2 truncate">
-            {[ecartMoy == null ? null : Math.abs(ecartMoy) < 5 ? "= moy. 28 j" : `${ecartMoy > 0 ? "+" : "−"}${hm(Math.abs(ecartMoy) / 60)} / 28 j`,
-              fc != null ? `FC ${nombre(fc, 0)}` : null].filter(Boolean).join(" · ")}
-          </p>
+          <div className="flex items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <p className="font-rounded text-[22px] md:text-[26px] lg:text-[30px] leading-8 lg:leading-9 font-bold tracking-[-0.02em] chiffres truncate">{duree != null ? hm(duree) : "—"}</p>
+              <p className="text-[12px] lg:text-[13px] text-label-2 truncate">
+                {[ecartMoy == null ? null : Math.abs(ecartMoy) < 5 ? "= moy. 28 j" : `${ecartMoy > 0 ? "+" : "−"}${hm(Math.abs(ecartMoy) / 60)} / 28 j`,
+                  fc != null ? `FC ${nombre(fc, 0)}` : null].filter(Boolean).join(" · ")}
+              </p>
+            </div>
+            {(coucher != null || lever != null) && (
+              <p className="shrink-0 text-[11px] leading-[16px] lg:text-[13px] lg:leading-[19px] chiffres whitespace-nowrap">
+                {[["C", coucher, "Coucher"], ["R", lever, "Réveil"]].map(([l, h, titre]) => h != null && (
+                  <span key={l} className="block" title={titre}><span className="inline-block w-3 lg:w-3.5 text-label-2">{l}</span><span className="font-semibold">{heure(h)}</span></span>
+                ))}
+              </p>
+            )}
+          </div>
           {phases.length > 0 && (
             <div className="mt-auto pt-2 lg:pt-3">
               <div className="flex h-1.5 lg:h-2 gap-0.5 rounded-full overflow-hidden" aria-hidden>
@@ -105,26 +124,19 @@ export default function SommeilNuit() {
               <ul className="text-[12px] leading-[17px] lg:text-[14px] lg:leading-[30px] mt-0.5 lg:mt-2">
                 {phases.map((f) => {
                   const pct = (100 * f.h) / totalPhases;
-                  const hors = pct < f.repere[0] || pct > f.repere[1];
+                  const hors = f.repere && (pct < f.repere[0] || pct > f.repere[1]);
                   return (
                     <li key={f.cle} className="flex justify-between gap-1">
                       <span className="flex items-center gap-1 truncate">
                         <span className="w-1.5 h-1.5 lg:w-2 lg:h-2 rounded-full shrink-0" style={{ background: f.couleur }} aria-hidden />{f.label}
                       </span>
-                      <span className={hors ? "text-ios-orange chiffres" : "chiffres"} title={`${Math.round(pct)} % · repère ${f.repere[0]} à ${f.repere[1]} %`}>
-                        {hm(f.h)}<span className="hidden lg:inline text-label-2"> · {Math.round(pct)} %</span>
+                      <span className={hors ? "text-ios-orange chiffres" : "chiffres"} style={f.repere ? undefined : { color: f.couleur }}
+                        title={f.repere ? `${Math.round(pct)} % · repère ${f.repere[0]} à ${f.repere[1]} %` : "Temps éveillé entre l'endormissement et le réveil"}>
+                        {hm(f.h)}<span className="hidden lg:inline text-label-2"> · {Math.max(Math.round(pct), 1)} %</span>
                       </span>
                     </li>
                   );
                 })}
-                {eveil != null && (
-                  <li className="flex justify-between gap-1" title="Temps éveillé entre l'endormissement et le réveil">
-                    <span className="flex items-center gap-1 truncate">
-                      <span className="w-1.5 h-1.5 lg:w-2 lg:h-2 rounded-full shrink-0" style={{ background: EVEIL.couleur }} aria-hidden />{EVEIL.label}
-                    </span>
-                    <span className="chiffres">{hm(eveil)}</span>
-                  </li>
-                )}
               </ul>
             </div>
           )}
@@ -139,8 +151,9 @@ export default function SommeilNuit() {
             <p>Repères chez l'adulte (part de la nuit) : profond 13 à 23 %, léger 45 à 60 %, paradoxal 20 à 25 %. Une durée en orange sort de son repère.
               Profond : récupération physique et immunité. Paradoxal : mémoire et équilibre émotionnel. Léger : transition entre les deux.</p>
             <p>Apple ne partage son propre score avec aucune autre app : celui-ci est calculé par Intervals Companion,
-              il peut différer de quelques points de l'app Santé, et le détail « Coucher » et « Interruptions » n'est pas disponible.
-              Le temps « Éveillé » (champ « Awake Time » de Companion) n'est pas compté dans les phases ni dans la durée de la nuit.</p>
+              il peut différer de quelques points de l'app Santé, et le détail « Interruptions » n'est pas disponible.
+              Le temps « Éveillé » (champ « Awake Time » de Companion, en rouge) n'est pas compté dans la durée de la nuit ;
+              ses pourcentages se calculent sur la nuit entière, éveil compris. C = heure du coucher, R = heure du réveil.</p>
             <Link to="/analyses" onClick={() => setInfos(false)} className="inline-block text-brand">Voir l'évolution dans Analyses →</Link>
           </div>
         </Feuille>
