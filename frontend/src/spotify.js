@@ -89,10 +89,12 @@ async function appel(methode, chemin, corps) {
     body: corps ? JSON.stringify(corps) : undefined,
   });
   if (r.status === 204 || r.status === 202) return null;
-  const texte = await r.text();
-  const d = texte ? JSON.parse(texte) : null;
+  // Certaines commandes répondent 200 avec un corps vide ou non JSON : ce n'est pas une erreur
+  const texte = await r.text().catch(() => "");
+  let d = null;
+  try { d = texte ? JSON.parse(texte) : null; } catch { /* corps non JSON */ }
   if (!r.ok) {
-    const e = new Error(d?.error?.message || `Spotify ${r.status}`);
+    const e = new Error(d?.error?.message || d?.error_description || `HTTP ${r.status}`);
     e.status = r.status;
     e.raison = d?.error?.reason;
     throw e;
@@ -116,8 +118,9 @@ export async function mesPlaylists() {
 export async function lire(uri) {
   let corps;
   if (uri === "likes") {
-    const moi = await appel("GET", "/me");
-    corps = { context_uri: `spotify:user:${moi.id}:collection` };
+    // Sans identifiant (profil refusé), le repli sur la liste des titres prend le relais
+    const moi = await appel("GET", "/me").catch(() => null);
+    corps = { context_uri: `spotify:user:${moi?.id ?? "me"}:collection` };
   } else if (uri) corps = { context_uri: uri };
   const essayer = async (device) => {
     const chemin = `/me/player/play${device ? `?device_id=${device}` : ""}`;
@@ -126,9 +129,15 @@ export async function lire(uri) {
     } catch (e) {
       // Contexte « titres likés » refusé : on envoie la liste des 50 derniers titres likés
       if (uri !== "likes" || e.status === 404 || e.status === 401) throw e;
-      const likes = await appel("GET", "/me/tracks?limit=50");
-      corps = { uris: (likes?.items ?? []).map((x) => x.track?.uri).filter(Boolean) };
-      return appel("PUT", chemin, corps);
+      try {
+        const likes = await appel("GET", "/me/tracks?limit=50");
+        corps = { uris: (likes?.items ?? []).map((x) => x.track?.uri ?? x.item?.uri).filter(Boolean) };
+        return await appel("PUT", chemin, corps);
+      } catch (e2) {
+        if (e2.status === 404) throw e2;
+        console.warn("Spotify, titres likés :", e.message, "/", e2.message);
+        throw e;
+      }
     }
   };
   try {

@@ -23,6 +23,16 @@ function Pochette({ src, taille, rayon = 7 }) {
     : <span className="shrink-0 flex items-center justify-center bg-[#2c2c2e] text-white/30" style={{ width: taille, height: taille, borderRadius: rayon }}><IcoNote /></span>;
 }
 
+// Message lisible, avec la réponse de Spotify pour comprendre un refus
+function message(e) {
+  console.warn("Spotify :", e.status, e.raison, e.message);
+  if (!e.status) return "Spotify injoignable (réseau)";
+  if (e.status === 401) return "Reconnecte Spotify depuis Profil";
+  if (e.status === 403 && e.raison === "PREMIUM_REQUIRED") return "Compte Premium requis";
+  if (e.status === 429) return "Trop de commandes, réessaie dans un instant";
+  return `Spotify a refusé (${e.status}) : ${e.message}`;
+}
+
 const mmss = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
 
 // État du lecteur, gardé par l'écran de séance (le bandeau, lui, est redessiné à chaque étape)
@@ -59,13 +69,13 @@ export function useSpotify({ autoLancer = true } = {}) {
       setTimeout(rafraichir, 600);
     } catch (e) {
       if (e.endormi) { enAttente.current = { uri }; setEndormi(true); }
-      else setErreur(e.status === 403 ? "Commande refusée (compte Premium requis)" : "Spotify ne répond pas");
+      else setErreur(message(e));
     }
   }
 
   async function commande(fn) {
     setErreur(null);
-    try { await fn(); } catch (e) { if (e.status === 404) setEndormi(true); else setErreur("Spotify ne répond pas"); }
+    try { await fn(); } catch (e) { if (e.status === 404) setEndormi(true); else setErreur(message(e)); }
     setTimeout(rafraichir, 500);
   }
 
@@ -130,7 +140,7 @@ export default function BandeauSpotify({ sp }) {
         <button type="button" onClick={() => setDeplie(true)} className="flex-1 min-w-0 flex items-center gap-2.5 text-left" aria-label="Ouvrir le lecteur Spotify">
           <Pochette src={image} taille={38} />
           <span className="min-w-0">
-            <span className="block text-[14px] font-semibold truncate">{piste?.name ?? (erreur || "Spotify")}</span>
+            <span className={`block text-[14px] font-semibold ${piste ? "truncate" : "line-clamp-2"}`}>{piste?.name ?? (erreur || "Spotify")}</span>
             <span className="block text-[12px] text-white/60 truncate">
               {piste ? [artiste, nomContexte].filter(Boolean).join(" · ") : erreur ? "Touche pour les playlists" : "Rien en lecture · touche pour choisir"}
             </span>
