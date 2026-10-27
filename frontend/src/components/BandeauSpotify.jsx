@@ -63,6 +63,16 @@ export function useSpotify({ autoLancer = true } = {}) {
     }
   }
 
+  // « Restriction violated » : la commande ne s'applique pas à l'état réel (lecture
+  // déjà en cours, déjà en pause…). L'état relu remet l'écran d'accord, sans alerte.
+  const effacer = useRef(null);
+  function signaler(e) {
+    if (e.status === 403 && /restriction/i.test(e.message)) return;
+    setErreur(message(e));
+    clearTimeout(effacer.current);
+    effacer.current = setTimeout(() => setErreur(null), 6000);
+  }
+
   async function rafraichir() {
     try {
       const d = await etatLecteur();
@@ -87,7 +97,7 @@ export function useSpotify({ autoLancer = true } = {}) {
   function optimiste(maj) {
     const l = dernier.current;
     if (!l) return;
-    const n = { ...l, progress_ms: progressionDe(l, recu.current), ...maj };
+    const n = { ...l, progress_ms: progressionDe(l, recu.current), actions: undefined, ...maj };
     recu.current = Date.now();
     dernier.current = n;
     setLecteur(n);
@@ -108,7 +118,7 @@ export function useSpotify({ autoLancer = true } = {}) {
       setChange(false);
       rafraichir();
       if (e.endormi) { enAttente.current = { uri }; setEndormi(true); }
-      else setErreur(message(e));
+      else signaler(e);
     }
   }
 
@@ -125,7 +135,7 @@ export function useSpotify({ autoLancer = true } = {}) {
     } catch (e) {
       setChange(false);
       rafraichir();
-      if (e.status === 404) setEndormi(true); else setErreur(message(e));
+      if (e.status === 404) setEndormi(true); else signaler(e);
     }
   }
 
@@ -188,7 +198,9 @@ export default function BandeauSpotify({ sp }) {
   const artiste = piste?.artists?.map((a) => a.name).join(", ") ?? piste?.show?.name;
   const ctx = lecteur?.context?.uri;
   const nomContexte = ctx?.endsWith(":collection") ? LIKES.nom : playlists.find((p) => p.uri === ctx)?.nom;
-  const basculer = () => (enLecture ? commande(pause) : lancer(null));
+  // Spotify indique ce qui est permis : si reprendre est interdit, c'est que ça joue déjà
+  const joue = enLecture || !!lecteur?.actions?.disallows?.resuming;
+  const basculer = () => (joue ? commande(pause) : lancer(null));
 
   const boutonRond = "w-10 h-10 shrink-0 rounded-full flex items-center justify-center active:bg-white/10";
 
@@ -216,8 +228,8 @@ export default function BandeauSpotify({ sp }) {
             </span>
           </span>
         </button>
-        <button type="button" onClick={basculer} className={boutonRond} aria-label={enLecture ? "Pause" : "Lecture"}>
-          {enLecture ? <IcoPause /> : <IcoLecture />}
+        <button type="button" onClick={basculer} className={boutonRond} aria-label={joue ? "Pause" : "Lecture"}>
+          {joue ? <IcoPause /> : <IcoLecture />}
         </button>
         <button type="button" onClick={() => commande(suivant)} className={boutonRond} aria-label="Morceau suivant"><IcoSuivant /></button>
       </div>
@@ -243,8 +255,8 @@ export default function BandeauSpotify({ sp }) {
             {piste && <Progression lecteur={lecteur} recu={recu} />}
             <div className="flex items-center justify-center gap-6 my-2">
               <button type="button" onClick={() => commande(precedent)} className="w-12 h-12 rounded-full flex items-center justify-center active:bg-white/10" aria-label="Morceau précédent"><IcoPrecedent c="w-6 h-6" /></button>
-              <button type="button" onClick={basculer} className="w-14 h-14 rounded-full bg-white text-black flex items-center justify-center" aria-label={enLecture ? "Pause" : "Lecture"}>
-                {enLecture ? <IcoPause c="w-7 h-7" /> : <IcoLecture c="w-7 h-7" />}
+              <button type="button" onClick={basculer} className="w-14 h-14 rounded-full bg-white text-black flex items-center justify-center" aria-label={joue ? "Pause" : "Lecture"}>
+                {joue ? <IcoPause c="w-7 h-7" /> : <IcoLecture c="w-7 h-7" />}
               </button>
               <button type="button" onClick={() => commande(suivant)} className="w-12 h-12 rounded-full flex items-center justify-center active:bg-white/10" aria-label="Morceau suivant"><IcoSuivant c="w-6 h-6" /></button>
             </div>
