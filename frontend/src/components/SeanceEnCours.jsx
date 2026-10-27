@@ -5,7 +5,7 @@ import clsx from "clsx";
 import { modifierPrevue } from "../api";
 import { useVerrouDefilement } from "../navigation";
 import { construireSeance, prescription, fmtChrono, DIFFICULTES } from "../seanceGuidee";
-import { debloquerSon, bipCourt, bipLong } from "../son";
+import { debloquerSon, bipCourt, bipLong, couperSon } from "../son";
 
 // Séance de muscu guidée, en plein écran (toujours sombre, comme l'app Forme) :
 // une étape à la fois, un seul gros bouton en bas. Les minuteurs reposent sur
@@ -185,7 +185,7 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
   useEffect(() => { ecrire(s.id, etat); }, [s.id, etat]);
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 200);
-    return () => clearInterval(t);
+    return () => { clearInterval(t); couperSon(); };
   }, []);
 
   const etape = etapes[etat.idx] ?? etapes[etapes.length - 1];
@@ -227,7 +227,7 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
     });
   }
   const lancerDecompte = () => { debloquerSon(); setEtat((st) => ({ ...st, decompteFin: Date.now() + 3000 })); };
-  const ajouter15 = () => setEtat((st) => ({ ...st, minuteurFin: st.minuteurFin + 15000, minuteurTotal: st.minuteurTotal + 15 }));
+  const ajouter15 = () => couperSon() || setEtat((st) => ({ ...st, minuteurFin: st.minuteurFin + 15000, minuteurTotal: st.minuteurTotal + 15 }));
 
   // Bips et fins de minuteur
   const bipUneFois = (c) => { if (dernierBip.current !== c) { dernierBip.current = c; return true; } return false; };
@@ -240,18 +240,19 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
         setEtat((st) => (etape.type === "emom"
           ? { ...st, decompteFin: null, emomDebut: st.decompteFin }
           : { ...st, decompteFin: null, minuteurFin: st.decompteFin + ex.duree * 1000, minuteurTotal: ex.duree }));
-      } else if (r <= 3 && bipUneFois(`d${etat.decompteFin}-${r}`)) bipCourt(r);
+      } else if (r <= 3 && bipUneFois(`d${etat.decompteFin}-${r}`)) bipCourt(r, "go", etat.decompteFin - now);
     } else if (etat.minuteurFin) {
       const r = Math.ceil((etat.minuteurFin - now) / 1000);
+      // fin du repos → on repart ; fin d'un exercice chronométré → repos ;
+      // fin de la pause avant un EMOM : simple bip (l'EMOM a son propre décompte avec « go »)
+      const motFin = etape.type !== "repos" ? "repos" : etape.avantEmom ? "bip" : "go";
       if (r <= 0) {
         if (bipUneFois(`f${etat.minuteurFin}`)) {
-          // fin du repos → on repart ; fin d'un exercice chronométré → repos ;
-          // fin de la pause avant un EMOM : simple bip (l'EMOM a son propre décompte avec « go »)
-          bipLong(etape.type !== "repos" ? "repos" : etape.avantEmom ? "bip" : "go");
+          bipLong(motFin);
           if (etape.type === "repos") suivant();
           else if (etape.type === "serie") validerSerie(etape.i);
         }
-      } else if (r <= 3 && bipUneFois(`m${etat.minuteurFin}-${r}`)) bipCourt(r);
+      } else if (r <= 3 && bipUneFois(`m${etat.minuteurFin}-${r}`)) bipCourt(r, motFin, etat.minuteurFin - now);
     } else if (etape.type === "emom" && etat.emomDebut) {
       const ecoule = now - etat.emomDebut;
       if (ecoule >= ex.series * 60000) {
@@ -260,7 +261,8 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
         const m = Math.floor(ecoule / 60000);
         const r = Math.ceil((60000 - (ecoule % 60000)) / 1000);
         if (m > 0 && bipUneFois(`g${etat.emomDebut}-${m}`)) bipLong("go");
-        else if (r <= 3 && bipUneFois(`e${etat.emomDebut}-${m}-${r}`)) bipCourt(r);
+        else if (r <= 3 && bipUneFois(`e${etat.emomDebut}-${m}-${r}`))
+          bipCourt(r, m === ex.series - 1 ? "repos" : "go", 60000 - (ecoule % 60000));
       }
     }
   }, [now]); // eslint-disable-line react-hooks/exhaustive-deps
