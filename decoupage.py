@@ -17,6 +17,7 @@ DESCENTE_MAX = 0.15       # une descente vaut au mieux 15 % de longueur en moins
 FENETRE_PENTE_M = 30      # pente calculée sur ±15 m pour lisser le bruit de l'altitude
 VITESSE_ARRET = 0.3       # m/s : en dessous, le temps n'est pas compté (arrêt, montre en pause)
 SPORTS_GAP = {"course", "trail"}
+SEUIL_DPLUS = 3.0         # m : une montée ou une descente n'est comptée qu'au-delà (bruit de l'altitude)
 
 
 def _num(x) -> bool:
@@ -83,6 +84,10 @@ class Seance:
         for i in range(1, n):  # distance jamais décroissante
             d[i] = max(d[i], d[i - 1])
         self.dist = d
+        # Altitudes à 0 en attendant le baromètre (début de séance) : non mesurées, sinon le saut
+        # 0 → altitude réelle compterait comme une montée
+        if alt and any(_num(x) and x != 0 for x in alt):
+            alt = [None if x == 0 else x for x in alt]
         alt_c = _combler(alt, n)
         self.alt = _lisser(alt_c) if alt_c else None
         self.fc = fc if fc and len(fc) == n else None
@@ -102,6 +107,7 @@ class Seance:
             return None
         duree = dist = plat = 0.0
         dplus = dmoins = 0.0
+        haut = bas = self.alt[a] if self.alt else 0.0  # hystérésis : repères de la dernière montée / descente
         fc_s = fc_t = cad_s = cad_t = 0.0
         for i in range(a + 1, b + 1):
             t = self._mobile(i)
@@ -111,9 +117,17 @@ class Seance:
             if self.gap:
                 plat += dd * facteur_pente(self.pente[i])
             if self.alt:
-                da = self.alt[i] - self.alt[i - 1]
-                dplus += max(0.0, da)
-                dmoins += max(0.0, -da)
+                h = self.alt[i]
+                if h > bas + SEUIL_DPLUS:
+                    dplus += h - bas
+                    bas = h
+                elif h < bas:
+                    bas = h
+                if h < haut - SEUIL_DPLUS:
+                    dmoins += haut - h
+                    haut = h
+                elif h > haut:
+                    haut = h
             if t and self.fc and _num(self.fc[i]):
                 fc_s += self.fc[i] * t
                 fc_t += t
