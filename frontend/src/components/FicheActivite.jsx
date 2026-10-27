@@ -7,7 +7,7 @@ import Feuille from "./Feuille";
 import CarteTrace from "./CarteTrace";
 import ModalActivite from "./ModalActivite";
 import EnteteFiche, { ancre } from "./EnteteFiche";
-import { allureAjustee, Decoupage, MemeParcours, Partager, SegmentsSeance } from "./FicheExtras";
+import { allureAjustee, Decoupage, enMouvement, MemeParcours, Partager, SegmentsSeance } from "./FicheExtras";
 import { Segmente } from "./ui";
 import { axeX, axeY, grille } from "./graphiques";
 
@@ -75,6 +75,8 @@ function preparer(flux, sport) {
     const vals = s.data.filter((x) => x != null);
     const tri = [...vals].sort((a, b) => a - b);
     s.moy = vals.reduce((a, b) => a + b, 0) / (vals.length || 1);
+    // Allure moyenne = distance / temps : moyenne des vitesses, pas des allures instantanées
+    if (s.allure) s.moy = 3600 / (vals.reduce((a, b) => a + 3600 / b, 0) / (vals.length || 1));
     s.min = tri[0];
     s.max = tri[tri.length - 1];
     // Le haut du graphe va jusqu'au pic (la courbe ne déborde pas) ; le bas reste resserré pour que
@@ -230,14 +232,18 @@ export default function FicheActivite({ activite: initiale, onClose }) {
 
   const pied = PIED.has(a.sport);
   // Données essentielles seulement ; foulée, pas, dérive… restent dans les analyses
+  // Comme Strava : temps et allure en mouvement (pauses enlevées), puis le temps total
+  const mv = enMouvement(a, flux);
   const tuiles = [
-    ["Durée", a.duree_sec ? fmtDuree(a.duree_sec) : null],
     ["Distance", a.distance_km != null ? nombre(a.distance_km, 2) : null, "km"],
-    pied ? ["Allure moy.", a.allure_sec_km ? mmss(a.allure_sec_km) : null, "/km"]
-      : ["Vitesse moy.", a.vitesse_kmh ? nombre(a.vitesse_kmh) : null, "km/h"],
+    [mv.pause ? "Temps de déplacement" : "Durée", mv.duree ? fmtDuree(mv.duree) : null],
+    pied ? ["Allure moy.", mv.allure ? mmss(mv.allure) : null, "/km"]
+      : ["Vitesse moy.", mv.vitesse ? nombre(mv.vitesse) : null, "km/h"],
+    ["Dénivelé +", a.dplus_m || null, "m"],
+    ["Calories", a.calories ? nombre(a.calories, 0) : null, "kcal"],
+    ["Temps total", mv.pause ? fmtDuree(a.duree_sec) : null],
     // Équivalent sur le plat (course et trail avec altitude)
     ["Allure ajustée", allureAjustee(a, flux) ? mmss(allureAjustee(a, flux)) : null, "/km"],
-    ["Dénivelé +", a.dplus_m || null, "m"],
     ["FC moyenne", a.fc_moyenne_bpm, "bpm", "#FF375F"],
     ["FC max", a.fc_max_bpm, "bpm", "#FF375F"],
     ["Effort", a.rpe != null ? a.rpe : null, "/10"],

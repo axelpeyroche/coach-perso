@@ -200,6 +200,8 @@ def decouper(s: Seance, intervalles: Optional[list] = None) -> dict:
         # Un seul « tour » couvrant la séance n'apprend rien de plus
         "tours": [{**t, "numero": i + 1} for i, t in enumerate(tours)] if len(tours) >= 2 else [],
         "gap_sec_km": resume.get("gap_sec_km") if resume else None,
+        # Temps en mouvement recalculé (à défaut de celui de la montre)
+        "duree_mouvement_sec": resume["duree_sec"] if resume else None,
         # Rapport allure ajustée / allure réelle : appliqué à l'allure de la montre, il évite
         # l'écart dû au temps « en mouvement » recalculé depuis le tracé (dérive GPS à l'arrêt)
         "gap_ratio": round(resume["gap_sec_km"] / resume["allure_sec_km"], 4)

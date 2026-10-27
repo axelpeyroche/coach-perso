@@ -362,9 +362,23 @@ export function SegmentsSeance({ activite, avecTrace }) {
 // ───────────────────────── Image à partager ─────────────────────────
 
 // Allure ramenée au plat : allure × ratio, cohérente avec la durée de la montre
+// Durée, allure et vitesse en mouvement (pauses enlevées, comme Strava) : temps de la montre,
+// sinon recalculé depuis les flux ; à défaut, la durée totale
+export function enMouvement(a, flux) {
+  const recalc = flux?.decoupage?.duree_mouvement_sec;
+  const duree = a.duree_mouvement_sec ?? (recalc && a.duree_sec && recalc < a.duree_sec ? recalc : a.duree_sec);
+  const ok = duree && a.distance_km > 0;
+  return {
+    duree,
+    pause: duree && a.duree_sec > duree,
+    allure: ok && a.allure_sec_km ? duree / a.distance_km : null,
+    vitesse: ok && a.vitesse_kmh ? a.distance_km / (duree / 3600) : null,
+  };
+}
+
 export function allureAjustee(a, flux) {
-  const d = flux?.decoupage;
-  return d?.gap_ratio && a.allure_sec_km ? a.allure_sec_km * d.gap_ratio : d?.gap_sec_km ?? null;
+  const d = flux?.decoupage, allure = enMouvement(a, flux).allure;
+  return d?.gap_ratio && allure ? allure * d.gap_ratio : d?.gap_sec_km ?? null;
 }
 
 // Intensité de 0 à 1 : temps passé dans les zones cardiaques, sinon effort ressenti
@@ -436,10 +450,10 @@ async function dessinerImage(a, points, flux) {
   // Résumé : distance en grand (sinon la durée), puis durée, allure, allure ajustée, D+
   const pied = PIED.has(a.sport);
   const avecDistance = a.distance_km > 0;
-  const ajustee = allureAjustee(a, flux);
+  const ajustee = allureAjustee(a, flux), mv = enMouvement(a, flux);
   const stats = [
-    avecDistance && a.duree_sec && [chrono(a.duree_sec), "Durée"],
-    pied ? avecDistance && a.allure_sec_km && [mmss(a.allure_sec_km), "Allure /km"] : a.vitesse_kmh && [nombre(a.vitesse_kmh, 1), "km/h"],
+    avecDistance && mv.duree && [chrono(mv.duree), "Durée"],
+    pied ? avecDistance && mv.allure && [mmss(mv.allure), "Allure /km"] : mv.vitesse && [nombre(mv.vitesse, 1), "km/h"],
     ajustee && [mmss(ajustee), "Ajustée /km", "#30D158"],
     a.dplus_m > 0 && [`${nombre(a.dplus_m, 0)} m`, "D+"],
     !avecDistance && a.fc_moyenne_bpm && [String(a.fc_moyenne_bpm), "FC moy."],

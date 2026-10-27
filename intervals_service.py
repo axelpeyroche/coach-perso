@@ -316,6 +316,10 @@ def synchroniser(db: Session, user: Utilisateur, force: bool = False) -> dict:
             cs.fusionner_details(act, {"intervals_id": iid, **({"fin": fin} if fin else {})})
             connues[iid] = act
             bilan["nouvelles" if statut == "cree" else "completees"] += 1
+        # Temps en mouvement (pauses enlevées), calculé par la montre : durée et allure « à la Strava »
+        mv, tot = a.get("moving_time"), a.get("elapsed_time")
+        if mv and tot and 0 < mv < tot and cs._details_dict(act).get("duree_mouvement_sec") != int(mv):
+            cs.fusionner_details(act, {"duree_mouvement_sec": int(mv)}, ecraser=True)
         if cs._details_dict(act).get("montre_hs"):
             continue  # séance refaite depuis un GPX (montre en panne) : les flux d'Intervals sont incomplets
         dispo = a.get("stream_types")

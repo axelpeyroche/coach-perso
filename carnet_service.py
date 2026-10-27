@@ -137,6 +137,9 @@ def serialiser_activite(a: Activite) -> dict:
         details = json.loads(a.details) if a.details else None
     except ValueError:
         details = None
+    mouv = details.get("duree_mouvement_sec") if isinstance(details, dict) else None
+    if not (isinstance(mouv, (int, float)) and a.duree_sec and 0 < mouv < a.duree_sec):
+        mouv = None
     return {
         "id": a.id,
         "source": a.source,
@@ -155,6 +158,8 @@ def serialiser_activite(a: Activite) -> dict:
         "fc_moyenne_bpm": a.fc_moyenne_bpm,
         "fc_max_bpm": a.fc_max_bpm,
         "calories": a.calories,
+        # Temps en mouvement (pauses enlevées) reçu de la montre, quand il est connu
+        "duree_mouvement_sec": mouv,
         "rpe": a.rpe,
         "ressenti": a.ressenti,
         "notes": a.notes,
