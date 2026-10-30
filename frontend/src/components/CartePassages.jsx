@@ -142,7 +142,7 @@ export default function CartePassages({ annee: fixe } = {}) {
         ...(centrerDomicile ? { center: centrerDomicile, zoom: ZOOM_DOMICILE } : { center: [2.5, 46.5], zoom: 4.5 }),
         // Molette seule pour zoomer à la souris ; au doigt, deux doigts pour que la page défile encore
         maxPitch: 75, attributionControl: { compact: true }, cooperativeGestures: TACTILE,
-        locale: { "CooperativeGesturesHandler.MobileHelpText": "Deux doigts pour déplacer la carte" },
+        locale: { "CooperativeGesturesHandler.MobileHelpText": "Pince ou tape deux fois pour zoomer, deux doigts pour déplacer" },
       });
       carte.current = m;
       m.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "top-right");
@@ -150,7 +150,18 @@ export default function CartePassages({ annee: fixe } = {}) {
       tournerALaSouris(m, conteneur.current);
       // iPhone : pas de plein écran pour un élément → « pseudo » plein écran (CSS)
       const pseudo = !cadre.current.requestFullscreen && !cadre.current.webkitRequestFullscreen;
-      m.addControl(new maplibregl.FullscreenControl({ container: cadre.current, pseudo }), "top-right");
+      const ecran = new maplibregl.FullscreenControl({ container: cadre.current, pseudo });
+      m.addControl(ecran, "top-right");
+      if (TACTILE) {
+        // Plein écran : plus de page à faire défiler, un doigt déplace la carte
+        ecran.on("fullscreenstart", () => m.cooperativeGestures.disable());
+        ecran.on("fullscreenend", () => m.cooperativeGestures.enable());
+        // Dès que deux doigts sont posés, le geste revient à la carte : sans ça, Safari
+        // fait défiler la page (ou la zoome) si le second doigt arrive un peu après le premier.
+        const deuxDoigts = (e) => { if (e.touches.length > 1 && e.cancelable) e.preventDefault(); };
+        conteneur.current.addEventListener("touchstart", deuxDoigts, { passive: false, capture: true });
+        conteneur.current.addEventListener("touchmove", deuxDoigts, { passive: false, capture: true });
+      }
       m.on("load", () => {
         m.addSource("passages", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
         m.addLayer({ id: "passages-bord", type: "line", source: "passages",
