@@ -97,11 +97,20 @@ export function tournerALaSouris(m, el, auDebut) {
     if (e.altKey) m.setPitch(Math.max(0, Math.min(m.getMaxPitch(), m.getPitch() - d * 0.15)));
     else m.setBearing(m.getBearing() + d * 0.2);
   }, { capture: true, passive: false });
-  let cap0 = 0;
-  el.addEventListener("gesturestart", (e) => { e.preventDefault(); auDebut?.(); cap0 = m.getBearing(); });
+  // Rotation au pavé tactile du Mac (événements gesture de Safari). Sur iPhone et iPad, Safari émet
+  // aussi ces événements pour deux doigts posés : on les laisse à MapLibre, sinon le cap imposé ici
+  // coupe le pincement en cours (zoom saccadé, aléatoire).
+  let cap0 = 0, doigts = 0, actif = false;
+  const compter = (e) => { doigts = e.touches.length; };
+  for (const t of ["touchstart", "touchend", "touchcancel"]) el.addEventListener(t, compter, { capture: true, passive: true });
+  el.addEventListener("gesturestart", (e) => {
+    e.preventDefault(); // jamais de zoom de la page entière
+    actif = doigts === 0;
+    if (actif) { auDebut?.(); cap0 = m.getBearing(); }
+  });
   el.addEventListener("gesturechange", (e) => {
     e.preventDefault();
-    if (Math.abs(e.rotation) > 3) m.setBearing(cap0 - e.rotation);
+    if (actif && Math.abs(e.rotation) > 3) m.setBearing(cap0 - e.rotation);
   });
 }
 export function Bascule({ options, valeur, onChange }) {
