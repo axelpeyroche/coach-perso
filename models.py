@@ -438,3 +438,19 @@ class Segment(Base):
     points: Mapped[str] = mapped_column(Text, nullable=False)
     activite_id: Mapped[Optional[int]] = mapped_column(ForeignKey("activites.id", ondelete="SET NULL"))
     cree_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class Pictogramme(Base):
+    """
+    Pictogramme d'un exercice de muscu ajouté par le plan hebdomadaire (voir pictogrammes.py).
+    `cle` = mots du nom sans accents ; `traces` = JSON [d SVG, …] dans un carré 24 × 24.
+    """
+    __tablename__ = "pictogrammes"
+    __table_args__ = (UniqueConstraint("utilisateur_id", "cle", name="uq_pictogramme_cle"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    utilisateur_id: Mapped[int] = mapped_column(ForeignKey("utilisateurs.id", ondelete="CASCADE"), nullable=False, index=True)
+    cle: Mapped[str] = mapped_column(String(200), nullable=False)
+    nom: Mapped[str] = mapped_column(String(200), nullable=False)
+    traces: Mapped[str] = mapped_column(Text, nullable=False)
+    cree_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

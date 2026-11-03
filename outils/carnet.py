@@ -14,6 +14,7 @@ Exemples :
     python outils/carnet.py envoyer plan.json       # crée / met à jour (id_externe)
     python outils/carnet.py envoyer plan.json --remplacer 2026-10-05 2026-10-11
     python outils/carnet.py supprimer 2026-10-07-seuil
+    python outils/carnet.py pictos                  # pictogrammes d'exercices déjà connus
 
 Format de plan.json : une liste de séances, ou {"seances": [...], "remplacer": {"depuis", "jusqu_a"}}.
 Séance : sport, titre, et au choix jour (AAAA-MM-JJ), description, duree_min,
@@ -22,6 +23,11 @@ distance_km, dplus_m, rpe_cible (1-10), ordre, id_externe, objectif_id.
 absent = semaine en cours) : l'athlète choisit lui-même ses jours. `ordre` donne
 l'ordre conseillé dans la semaine. Une séance est validée par une activité de la
 même semaine et de la même famille de sport (durée >= 40 % de la durée prévue).
+
+Pictogrammes : {"seances": [...], "pictogrammes": {"Nom de l'exercice": ["M3 3h18", ...]}}
+donne le dessin d'un nouvel exercice de muscu (tracés SVG au trait dans un carré
+24 × 24, tête = cercle en arcs « a »). `envoyer` liste les exercices encore sans pictogramme
+et ceux qui empruntent celui d'un exercice voisin.
 """
 
 from __future__ import annotations
@@ -137,6 +143,21 @@ def cmd_envoyer(a):
         corps["remplacer"] = {"depuis": a.remplacer[0], "jusqu_a": a.remplacer[1]}
     res = _appel("POST", "/claude/plan", corps=corps)
     print(f"{res['cree']} créée(s), {res['maj']} mise(s) à jour, {res['supprime']} supprimée(s)")
+    if res.get("pictogrammes"):
+        print(f"{res['pictogrammes']} pictogramme(s) enregistré(s)")
+    if res.get("pictogrammes_manquants"):
+        print("Exercices sans pictogramme (à ajouter dans \"pictogrammes\" puis renvoyer) :")
+        for nom in res["pictogrammes_manquants"]:
+            print(f"  - {nom}")
+    if res.get("pictogrammes_approchants"):
+        print("Exercices qui reprennent le pictogramme d'un voisin (à dessiner si le mouvement diffère) :")
+        for x in res["pictogrammes_approchants"]:
+            print(f"  - {x['nom']} → « {x['pictogramme']} »")
+
+
+def cmd_pictos(a):
+    for cle, traces in sorted(_appel("GET", "/claude/pictogrammes").items()):
+        print(f"{cle} : {json.dumps(traces)}" if a.traces else cle)
 
 
 def cmd_supprimer(a):
@@ -166,6 +187,10 @@ def main():
     en.add_argument("--remplacer", nargs=2, metavar=("DEPUIS", "JUSQU_A"),
                     help="Supprime les séances à venir de la période absentes du fichier")
     en.set_defaults(f=cmd_envoyer)
+
+    pi = sp.add_parser("pictos", help="Liste les pictogrammes d'exercices connus")
+    pi.add_argument("--traces", action="store_true", help="Affiche aussi les tracés SVG")
+    pi.set_defaults(f=cmd_pictos)
 
     su = sp.add_parser("supprimer", help="Supprime une séance prévue")
     su.add_argument("id_externe")

@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 import carnet_service as cs
+import pictogrammes as pg
 from database import obtenir_session
 from deps import get_current_user
 from models import Activite, Objectif, SeancePrevue, Utilisateur
@@ -55,6 +56,8 @@ class PeriodeSchema(BaseModel):
 class EnvoiPlanSchema(BaseModel):
     seances: list[SeancePrevueSchema]
     remplacer: Optional[PeriodeSchema] = None
+    # Nom d'exercice → tracés SVG (24 × 24) de son pictogramme, pour les nouveaux exercices
+    pictogrammes: dict[str, list[str]] = Field(default_factory=dict, max_length=60)
 
 
 class ImportPlanSchema(BaseModel):
@@ -220,6 +223,11 @@ def activites_proches(
     return [cs.serialiser_activite(a) for a in acts]
 
 
+@router.get("/api/pictogrammes", summary="Pictogrammes des exercices de muscu (séance guidée)")
+def lister_pictogrammes(current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
+    return {"pictogrammes": pg.catalogue(db, current_user.id), "generique": pg.GENERIQUE}
+
+
 @router.delete("/api/plan/{prevue_id}", summary="Supprime une séance prévue")
 def supprimer_prevue(
     prevue_id: int,
@@ -300,12 +308,23 @@ def claude_envoyer_plan(
 ):
     if payload.remplacer and payload.remplacer.jusqu_a < payload.remplacer.depuis:
         raise HTTPException(400, "Période de remplacement invalide")
+    try:
+        pictos = pg.enregistrer(db, user.id, payload.pictogrammes)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     bilan = cs.enregistrer_plan(
         db, user.id, _items(db, user, payload.seances),
         remplacer=(payload.remplacer.depuis, payload.remplacer.jusqu_a) if payload.remplacer else None,
     )
+    manquants, approchants = pg.a_verifier(db, user.id, [x.description for x in payload.seances])
     db.commit()
-    return {"ok": True, **bilan}
+    return {"ok": True, **bilan, "pictogrammes": pictos,
+            "pictogrammes_manquants": manquants, "pictogrammes_approchants": approchants}
+
+
+@router.get("/api/claude/pictogrammes", summary="Catalogue des pictogrammes d'exercices — token Claude")
+def claude_pictogrammes(user: Utilisateur = Depends(utilisateur_claude), db: Session = Depends(obtenir_session)):
+    return pg.catalogue(db, user.id)
 
 
 @router.delete("/api/claude/plan/{id_externe}", summary="Supprime une séance prévue par id_externe — token Claude")

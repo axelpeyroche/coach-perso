@@ -5,6 +5,7 @@ import clsx from "clsx";
 import { modifierPrevue } from "../api";
 import { useVerrouDefilement } from "../navigation";
 import { construireSeance, prescription, fmtChrono, DIFFICULTES } from "../seanceGuidee";
+import { Pictogramme, tracesExercice, usePictogrammes } from "../pictogrammes";
 import { debloquerSon, bipCourt, bipLong, couperSon, lancerDecompteSon, prechargerSon } from "../son";
 import BandeauSpotify, { useSpotify } from "./BandeauSpotify";
 
@@ -173,6 +174,8 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
   useEcranAllume();
   useBarreEtatNoire();
   const { exercices, etapes } = useMemo(() => construireSeance(contenu), [contenu]);
+  const catalogue = usePictogrammes();
+  const pictos = useMemo(() => exercices.map((e) => tracesExercice(e.nom, catalogue)), [exercices, catalogue]);
 
   const [etat, setEtat] = useState(() => lire(s.id, etapes.length) ?? {
     v: 1, n: etapes.length, idx: 0, debut: Date.now(),
@@ -523,11 +526,17 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
         <div className="flex items-center gap-3 px-4 lg:px-10 pt-1">
           <button type="button" onClick={() => setMenu(true)} aria-label="Options de la séance"
             className="w-[30px] h-[30px] shrink-0 rounded-full bg-[#2c2c2e] text-white/60 flex items-center justify-center"><Croix /></button>
-          <div className="flex-1 flex gap-[3px]">
+          {/* Un segment par exercice, son pictogramme dessous (hors de l'alignement de la barre) :
+              fait estompé, en cours violet, à venir gris */}
+          <div className="flex-1 flex gap-[3px] -mb-[18px] lg:-mb-[21px]">
             {avancement.map((p, i) => (
-              <i key={i} className="flex-1 h-1 rounded-full bg-[#2c2c2e] overflow-hidden">
-                <i className="block h-full rounded-full transition-[width] duration-300" style={{ width: `${p * 100}%`, background: VIOLET }} />
-              </i>
+              <div key={i} className="flex-1 min-w-0 flex flex-col items-center gap-[5px]" title={exercices[i].nom}>
+                <i className="block w-full h-1 rounded-full bg-[#2c2c2e] overflow-hidden">
+                  <i className="block h-full rounded-full transition-[width] duration-300" style={{ width: `${p * 100}%`, background: VIOLET }} />
+                </i>
+                <Pictogramme traces={pictos[i]} className="w-[13px] h-[13px] lg:w-4 lg:h-4 shrink-0 transition-colors duration-300"
+                  style={{ color: i === k && etape.type !== "fin" ? VIOLET : p >= 1 ? "rgba(255,255,255,0.28)" : "rgba(255,255,255,0.55)" }} />
+              </div>
             ))}
           </div>
           <span className="font-rounded text-[13px] lg:text-[15px] font-semibold text-white/60 chiffres shrink-0">{fmtChrono((now - etat.debut) / 1000)}</span>
