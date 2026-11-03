@@ -1,10 +1,11 @@
-// Bips de la séance guidée, sans fichier son : de petits WAV générés à la volée
-// et joués par des éléments <audio>. Sur iPhone, c'est la voie la plus fiable
+// Sons de la séance guidée : voix du décompte et bips (petits WAV générés à la volée),
+// tous joués par UN SEUL élément <audio>. Sur iPhone, c'est la voie la plus fiable
 // (catégorie « lecture » comme une vidéo, non coupée par le bouton silencieux) ;
+// plusieurs éléments joués en même temps s'interrompaient (mots coupés, bips mêlés à la voix).
 // Web Audio reste en secours.
 // iOS n'autorise un son qu'après un geste : `debloquerSon()` est appelé dans le
-// clic qui lance la séance, puis à chaque toucher de l'écran de séance. Chaque
-// élément <audio> joué une fois pendant un geste peut ensuite rejouer seul.
+// clic qui lance la séance, puis à chaque toucher de l'écran de séance ; le décompte
+// lancé au doigt part directement dans le geste (`lancerDecompteSon`).
 
 const TAUX = 44100;
 
@@ -46,9 +47,15 @@ let urls = {};       // mot ou décompte → URL du WAV
 let lecteur = null;  // l'unique <audio> des voix
 let lecteurDebloque = false;
 let sequenceFin = 0; // instant de fin du décompte en cours : les mots suivants sont déjà dedans
+let chargement = null;
 
-async function preparerVoix() {
-  if (morceaux || typeof Audio === "undefined") return;
+function preparerVoix() {
+  if (!chargement) chargement = chargerVoix();
+  return chargement;
+}
+
+async function chargerVoix() {
+  if (typeof Audio === "undefined") return;
   morceaux = {};
   const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
   if (!OAC) return;
@@ -94,15 +101,19 @@ function urlDecompte(final) {
   return urls[cle];
 }
 
-function lireVoix(url, depart = 0) {
-  if (!lecteur || !lecteurDebloque || !url) return false;
+function lireVoix(url, depart = 0, geste = false) {
+  if (!lecteur || !url || (!lecteurDebloque && !geste)) return false;
   try {
     lecteur.pause();
     lecteur.muted = false;
-    if (lecteur.src !== url) lecteur.src = url;
-    lecteur.currentTime = depart;
+    if (lecteur.src !== url) {
+      lecteur.src = url;
+      // avant le chargement, iOS ignore la position demandée
+      if (depart > 0) lecteur.addEventListener("loadedmetadata", () => { lecteur.currentTime = depart; }, { once: true });
+    } else lecteur.currentTime = depart;
     const p = lecteur.play();
-    if (p?.catch) p.catch(() => {});
+    if (p?.then) p.then(() => { lecteurDebloque = true; }).catch(() => {});
+    else lecteurDebloque = true;
     return true;
   } catch { return false; }
 }
@@ -114,25 +125,23 @@ export function couperSon() {
 }
 
 const SONS = { court: [880, 0.18], long: [1320, 0.65] };
-let elements = null; // { court: <audio>, long: <audio> }
-const debloques = new Set();
 let ctx = null;
 
 function preparer() {
-  preparerVoix();
-  if (elements || typeof Audio === "undefined") return;
+  const voix = preparerVoix();
+  if (lecteur || typeof Audio === "undefined") return voix;
   try {
-    elements = {};
-    for (const [nom, [f, d]] of Object.entries(SONS)) {
-      const a = new Audio(wav(f, d));
-      a.preload = "auto";
-      a.setAttribute("playsinline", "");
-      elements[nom] = a;
-    }
-    lecteur = new Audio(elements.court.src);
+    for (const [nom, [f, d]] of Object.entries(SONS)) urls[`bip-${nom}`] = wav(f, d);
+    lecteur = new Audio(urls["bip-court"]);
     lecteur.preload = "auto";
     lecteur.setAttribute("playsinline", "");
-  } catch { elements = null; }
+  } catch { lecteur = null; }
+  return voix;
+}
+
+// À l'ouverture de la séance : voix chargées et décomptes assemblés avant le premier « trois »
+export function prechargerSon() {
+  Promise.resolve(preparer()).then(() => { urlDecompte("go"); urlDecompte("repos"); urlDecompte("bip"); }).catch(() => {});
 }
 
 // Avec Spotify, la session « ambient » mêle les bips à la musique ; « playback »
@@ -149,18 +158,8 @@ export function debloquerSon() {
   typeSession();
 
   preparer();
-  if (elements) {
-    for (const [nom, a] of Object.entries(elements)) {
-      if (debloques.has(nom)) continue;
-      // lecture muette pendant le geste : l'élément est ensuite autorisé à jouer seul
-      a.muted = true;
-      const p = a.play();
-      // (si un bip a déjà démarré entre-temps, l'élément n'est plus muet : on le laisse jouer)
-      const fin = () => { if (a.muted) { a.pause(); a.currentTime = 0; a.muted = false; } };
-      if (p?.then) p.then(() => { debloques.add(nom); fin(); }).catch(fin);
-      else { debloques.add(nom); fin(); }
-    }
-  }
+  // lecture muette pendant le geste : le lecteur est ensuite autorisé à jouer seul
+  // (si un son a démarré entre-temps, il n'est plus muet : on le laisse jouer)
   if (lecteur && !lecteurDebloque && lecteur.paused) {
     lecteur.muted = true;
     const p = lecteur.play();
@@ -184,6 +183,17 @@ export function debloquerSon() {
   } catch { ctx = null; }
 }
 
+// Décompte « trois, deux, un, go » lancé au doigt : joué tout de suite, dans le geste, d'un seul bloc.
+// Les appels de `bipCourt` pendant ce décompte sont ensuite ignorés.
+export function lancerDecompteSon(final = "go") {
+  preparer();
+  typeSession();
+  const lance = lireVoix(urlDecompte(final), 0, true);
+  if (lance) sequenceFin = Date.now() + 3000 + (VOIX[final] ? 600 : -150);
+  debloquerSon(); // Web Audio en secours (le lecteur, déjà en train de jouer, n'est pas touché)
+  return lance;
+}
+
 function bipWebAudio(frequence, duree) {
   if (!ctx || ctx.state !== "running") return false;
   try {
@@ -203,18 +213,8 @@ function bipWebAudio(frequence, duree) {
   } catch { return false; }
 }
 
-function jouer(nom, secours = nom) {
-  const a = elements?.[nom];
-  if (a && debloques.has(nom)) {
-    try {
-      a.muted = false;
-      a.currentTime = 0;
-      const p = a.play();
-      if (p?.catch) p.catch(() => bipWebAudio(...SONS[secours]));
-      return;
-    } catch { /* secours ci-dessous */ }
-  }
-  bipWebAudio(...SONS[secours]);
+function jouer(nom) {
+  if (!lireVoix(urls[`bip-${nom}`])) bipWebAudio(...SONS[nom]);
 }
 
 // 3, 2, 1 : « trois », « deux », « un » ; puis « go » au début d'un effort, « repos » à la fin.

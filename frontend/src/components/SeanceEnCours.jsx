@@ -5,7 +5,7 @@ import clsx from "clsx";
 import { modifierPrevue } from "../api";
 import { useVerrouDefilement } from "../navigation";
 import { construireSeance, prescription, fmtChrono, DIFFICULTES } from "../seanceGuidee";
-import { debloquerSon, bipCourt, bipLong, couperSon } from "../son";
+import { debloquerSon, bipCourt, bipLong, couperSon, lancerDecompteSon, prechargerSon } from "../son";
 import BandeauSpotify, { useSpotify } from "./BandeauSpotify";
 
 // Séance de muscu guidée, en plein écran (toujours sombre, comme l'app Forme) :
@@ -187,6 +187,7 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
 
   useEffect(() => { ecrire(s.id, etat); }, [s.id, etat]);
   useEffect(() => {
+    prechargerSon();
     const t = setInterval(() => setNow(Date.now()), 200);
     return () => { clearInterval(t); couperSon(); };
   }, []);
@@ -229,7 +230,8 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
         { ...st.ex, [k]: { ...st.ex[k], passe: true, fin: Date.now() } });
     });
   }
-  const lancerDecompte = () => { debloquerSon(); setEtat((st) => ({ ...st, decompteFin: Date.now() + 3000 })); };
+  // Le décompte sonore part dans le geste lui-même, d'un bloc (sinon « trois » pouvait tomber en bip, puis les mots un à un)
+  const lancerDecompte = () => { lancerDecompteSon("go"); setEtat((st) => ({ ...st, decompteFin: Date.now() + 3000 })); };
   const ajouter15 = () => couperSon() || setEtat((st) => ({ ...st, minuteurFin: st.minuteurFin + 15000, minuteurTotal: st.minuteurTotal + 15 }));
 
   // Bips et fins de minuteur
