@@ -18,6 +18,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+import animations as an
 import carnet_service as cs
 import pictogrammes as pg
 from database import obtenir_session
@@ -58,6 +59,8 @@ class EnvoiPlanSchema(BaseModel):
     remplacer: Optional[PeriodeSchema] = None
     # Nom d'exercice → tracés SVG (24 × 24) de son pictogramme, pour les nouveaux exercices
     pictogrammes: dict[str, list[str]] = Field(default_factory=dict, max_length=60)
+    # Nom d'exercice → animation 3D du mannequin (voir animations.py), pour les nouveaux exercices
+    animations: dict[str, dict] = Field(default_factory=dict, max_length=60)
 
 
 class ImportPlanSchema(BaseModel):
@@ -228,6 +231,11 @@ def lister_pictogrammes(current_user: Utilisateur = Depends(get_current_user), d
     return {"pictogrammes": pg.catalogue(db, current_user.id), "generique": pg.GENERIQUE}
 
 
+@router.get("/api/animations", summary="Animations 3D des exercices de muscu (séance guidée)")
+def lister_animations(current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
+    return an.catalogue(db, current_user.id)
+
+
 @router.delete("/api/plan/{prevue_id}", summary="Supprime une séance prévue")
 def supprimer_prevue(
     prevue_id: int,
@@ -310,21 +318,31 @@ def claude_envoyer_plan(
         raise HTTPException(400, "Période de remplacement invalide")
     try:
         pictos = pg.enregistrer(db, user.id, payload.pictogrammes)
+        anims = an.enregistrer(db, user.id, payload.animations)
     except ValueError as e:
         raise HTTPException(400, str(e))
     bilan = cs.enregistrer_plan(
         db, user.id, _items(db, user, payload.seances),
         remplacer=(payload.remplacer.depuis, payload.remplacer.jusqu_a) if payload.remplacer else None,
     )
-    manquants, approchants = pg.a_verifier(db, user.id, [x.description for x in payload.seances])
+    descriptions = [x.description for x in payload.seances]
+    manquants, approchants = pg.a_verifier(db, user.id, descriptions)
+    anims_manquantes, anims_approchantes = an.a_verifier(db, user.id, descriptions)
     db.commit()
     return {"ok": True, **bilan, "pictogrammes": pictos,
-            "pictogrammes_manquants": manquants, "pictogrammes_approchants": approchants}
+            "pictogrammes_manquants": manquants, "pictogrammes_approchants": approchants,
+            "animations": anims, "animations_manquantes": anims_manquantes,
+            "animations_approchantes": anims_approchantes}
 
 
 @router.get("/api/claude/pictogrammes", summary="Catalogue des pictogrammes d'exercices — token Claude")
 def claude_pictogrammes(user: Utilisateur = Depends(utilisateur_claude), db: Session = Depends(obtenir_session)):
     return pg.catalogue(db, user.id)
+
+
+@router.get("/api/claude/animations", summary="Catalogue des animations 3D d'exercices — token Claude")
+def claude_animations(user: Utilisateur = Depends(utilisateur_claude), db: Session = Depends(obtenir_session)):
+    return an.catalogue(db, user.id)
 
 
 @router.delete("/api/claude/plan/{id_externe}", summary="Supprime une séance prévue par id_externe — token Claude")

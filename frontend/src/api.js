@@ -179,6 +179,7 @@ export const creerPrevue = (payload) => api.post("/plan", payload).then((r) => r
 export const importerPlan = (payload) => api.post("/plan/import", payload).then((r) => r.data);
 export const modifierPrevue = (id, payload) => api.patch(`/plan/${id}`, payload).then((r) => r.data);
 export const getPictogrammes = () => api.get("/pictogrammes").then((r) => r.data);
+export const getAnimations = () => api.get("/animations").then((r) => r.data);
 export const supprimerPrevue = (id) => api.delete(`/plan/${id}`).then((r) => r.data);
 export const getActivitesProches = (id) => api.get(`/plan/${id}/activites`).then((r) => r.data);
 export const getClaudeToken = () => api.get("/claude/token").then((r) => r.data);

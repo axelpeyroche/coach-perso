@@ -15,6 +15,7 @@ Exemples :
     python outils/carnet.py envoyer plan.json --remplacer 2026-10-05 2026-10-11
     python outils/carnet.py supprimer 2026-10-07-seuil
     python outils/carnet.py pictos                  # pictogrammes d'exercices déjà connus
+    python outils/carnet.py animations --json       # animations 3D d'exercices déjà connues
 
 Format de plan.json : une liste de séances, ou {"seances": [...], "remplacer": {"depuis", "jusqu_a"}}.
 Séance : sport, titre, et au choix jour (AAAA-MM-JJ), description, duree_min,
@@ -28,6 +29,10 @@ Pictogrammes : {"seances": [...], "pictogrammes": {"Nom de l'exercice": ["M3 3h1
 donne le dessin d'un nouvel exercice de muscu (tracés SVG au trait dans un carré
 24 × 24, tête = cercle en arcs « a »). `envoyer` liste les exercices encore sans pictogramme
 et ceux qui empruntent celui d'un exercice voisin.
+
+Animations : {"seances": [...], "animations": {"Nom de l'exercice": {"poses": ..., "phases": ...}}}
+donne le mouvement 3D d'un nouvel exercice (format décrit dans animations.py, exemples avec
+`animations --json`). `envoyer` liste de même les exercices sans animation.
 """
 
 from __future__ import annotations
@@ -153,11 +158,30 @@ def cmd_envoyer(a):
         print("Exercices qui reprennent le pictogramme d'un voisin (à dessiner si le mouvement diffère) :")
         for x in res["pictogrammes_approchants"]:
             print(f"  - {x['nom']} → « {x['pictogramme']} »")
+    if res.get("animations"):
+        print(f"{res['animations']} animation(s) enregistrée(s)")
+    if res.get("animations_manquantes"):
+        print("Exercices sans animation 3D (à ajouter dans \"animations\" puis renvoyer) :")
+        for nom in res["animations_manquantes"]:
+            print(f"  - {nom}")
+    if res.get("animations_approchantes"):
+        print("Exercices qui reprennent l'animation d'un voisin (à créer si le mouvement diffère) :")
+        for x in res["animations_approchantes"]:
+            print(f"  - {x['nom']} → « {x['animation']} »")
 
 
 def cmd_pictos(a):
     for cle, traces in sorted(_appel("GET", "/claude/pictogrammes").items()):
         print(f"{cle} : {json.dumps(traces)}" if a.traces else cle)
+
+
+def cmd_animations(a):
+    cat = _appel("GET", "/claude/animations")
+    if a.json:
+        print(json.dumps(cat, ensure_ascii=False, indent=1))
+    else:
+        for cle in sorted(cat):
+            print(cle)
 
 
 def cmd_supprimer(a):
@@ -191,6 +215,10 @@ def main():
     pi = sp.add_parser("pictos", help="Liste les pictogrammes d'exercices connus")
     pi.add_argument("--traces", action="store_true", help="Affiche aussi les tracés SVG")
     pi.set_defaults(f=cmd_pictos)
+
+    an = sp.add_parser("animations", help="Liste les animations 3D d'exercices connues")
+    an.add_argument("--json", action="store_true", help="Affiche le détail de chaque animation")
+    an.set_defaults(f=cmd_animations)
 
     su = sp.add_parser("supprimer", help="Supprime une séance prévue")
     su.add_argument("id_externe")

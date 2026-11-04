@@ -454,3 +454,19 @@ class Pictogramme(Base):
     nom: Mapped[str] = mapped_column(String(200), nullable=False)
     traces: Mapped[str] = mapped_column(Text, nullable=False)
     cree_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class Animation(Base):
+    """
+    Animation 3D d'un exercice de muscu ajoutée par le plan hebdomadaire (voir animations.py).
+    `cle` = mots du nom sans accents ; `donnees` = JSON {poses, phases, consignes, decor, camera}.
+    """
+    __tablename__ = "animations"
+    __table_args__ = (UniqueConstraint("utilisateur_id", "cle", name="uq_animation_cle"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    utilisateur_id: Mapped[int] = mapped_column(ForeignKey("utilisateurs.id", ondelete="CASCADE"), nullable=False, index=True)
+    cle: Mapped[str] = mapped_column(String(200), nullable=False)
+    nom: Mapped[str] = mapped_column(String(200), nullable=False)
+    donnees: Mapped[str] = mapped_column(Text, nullable=False)
+    cree_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())

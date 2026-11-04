@@ -8,6 +8,8 @@ import { construireSeance, prescription, fmtChrono, DIFFICULTES } from "../seanc
 import { Pictogramme, tracesExercice, usePictogrammes } from "../pictogrammes";
 import { debloquerSon, bipCourt, bipLong, couperSon, lancerDecompteSon, prechargerSon } from "../son";
 import BandeauSpotify, { useSpotify } from "./BandeauSpotify";
+import LecteurMouvement from "./LecteurMouvement";
+import { animationExercice, useAnimations } from "../animations";
 
 // Séance de muscu guidée, en plein écran (toujours sombre, comme l'app Forme) :
 // une étape à la fois, un seul gros bouton en bas. Les minuteurs reposent sur
@@ -164,6 +166,18 @@ const Croix = () => (
 const Lecture = ({ className = "w-3.5 h-3.5" }) => (
   <svg viewBox="0 0 12 14" className={className} aria-hidden><path d="M1 1.5v11a1 1 0 0 0 1.5.86l9-5.5a1 1 0 0 0 0-1.72l-9-5.5A1 1 0 0 0 1 1.5z" fill="currentColor" /></svg>
 );
+// Ouvre le lecteur 3D du mouvement : bien visible à la première série, discret ensuite
+function VoirMouvement({ discret, onClick }) {
+  return (
+    <button type="button" onClick={onClick}
+      className={clsx("mt-3 self-start inline-flex items-center gap-1.5 rounded-full font-semibold active:scale-95 transition-transform",
+        discret ? "px-2.5 py-1 text-[13px] text-white/60 bg-[#1c1c1e]" : "px-3.5 py-2 text-[14px] lg:text-[15px]")}
+      style={discret ? undefined : { background: "rgba(175,82,222,.18)", color: "#D9A6F0" }}>
+      <Lecture className="w-2.5 h-3" />Voir le mouvement
+    </button>
+  );
+}
+
 const Coche = ({ className = "w-[18px] h-[18px]" }) => (
   <svg viewBox="0 0 16 16" className={className} aria-hidden><path d="M3 8.5l3.2 3.2L13 5" stroke="currentColor" strokeWidth="2.4" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
 );
@@ -175,6 +189,11 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
   useBarreEtatNoire();
   const { exercices, etapes } = useMemo(() => construireSeance(contenu), [contenu]);
   const catalogue = usePictogrammes();
+  const catalogueAnim = useAnimations();
+  const anims = useMemo(() => exercices.map((e) => animationExercice(e.nom, catalogueAnim)), [exercices, catalogueAnim]);
+  const [mouvement, setMouvement] = useState(null);
+  const mouvementRef = useRef(null);
+  mouvementRef.current = mouvement;
   const pictos = useMemo(() => exercices.map((e) => tracesExercice(e.nom, catalogue)), [exercices, catalogue]);
 
   const [etat, setEtat] = useState(() => lire(s.id, etapes.length) ?? {
@@ -311,7 +330,7 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
   principaleRef.current = principale;
   useEffect(() => {
     const touche = (ev) => {
-      if (ev.target.closest?.("textarea, input, [aria-label='Lecteur Spotify']") || spDeplie.current) return;
+      if (ev.target.closest?.("textarea, input, [aria-label='Lecteur Spotify']") || spDeplie.current || mouvementRef.current != null) return;
       if (ev.key === " " || ev.key === "Enter") { ev.preventDefault(); debloquerSon(); principaleRef.current?.(); }
       if (ev.key === "ArrowRight" && etapes[etat.idx]?.type === "repos") { ev.preventDefault(); suivant(); }
       if (ev.key === "Escape") setMenu((m) => !m);
@@ -414,6 +433,7 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
         <Surtitre couleur={ORANGE}>EMOM · {ex.series} min</Surtitre>
         <Nom>{ex.nom}</Nom>
         {ex.consigne && <p className="mt-2 text-[14px] leading-5 text-white/60 line-clamp-3">{ex.consigne}</p>}
+        {anims[k] && <VoirMouvement onClick={() => setMouvement(k)} />}
         <div className="flex-1" />
         <GrandNombre e={ex} />
         <p className="text-center text-[14px] text-white/60 mt-1">au début de chaque minute</p>
@@ -435,6 +455,7 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
         <Surtitre>{ex.series > 1 ? `Série ${etape.i} sur ${ex.series}` : ex.section ?? "Exercice"}</Surtitre>
         <Nom>{ex.nom}</Nom>
         {ex.consigne && <p className="mt-2 text-[14px] leading-5 text-white/60 line-clamp-3">{ex.consigne}</p>}
+        {anims[k] && !chrono && <VoirMouvement discret={etape.i > 1} onClick={() => setMouvement(k)} />}
         <div className="flex-1" />
         {chrono ? (
           <Anneau part={reste / etat.minuteurTotal} couleur={VIOLET}>
@@ -598,6 +619,9 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
         })}
         <p className="mt-auto pt-6 mx-2 text-[12px] leading-5 text-white/30">Espace : valider · → : passer le repos · Échap : options</p>
       </aside>
+      {mouvement != null && anims[mouvement] && (
+        <LecteurMouvement nom={exercices[mouvement].nom} animation={anims[mouvement]} onClose={() => setMouvement(null)} />
+      )}
     </div>
   );
   return createPortal(ecran, document.body);
