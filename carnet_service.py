@@ -131,8 +131,6 @@ def charge(a: Activite) -> float:
 
 
 def serialiser_activite(a: Activite) -> dict:
-    allure = allure_sec_km(a)
-    v = vitesse_kmh(a)
     try:
         details = json.loads(a.details) if a.details else None
     except ValueError:
@@ -142,6 +140,14 @@ def serialiser_activite(a: Activite) -> dict:
     # recalculé depuis le tracé avec les courbes
     if not (isinstance(mouv, (int, float)) and a.duree_sec and 0 < mouv < a.duree_sec) or details.get("montre_hs"):
         mouv = None
+    # Allure et vitesse sur le temps en mouvement (pauses enlevées), comme la fiche de l'activité
+    allure = allure_sec_km(a)
+    v = vitesse_kmh(a)
+    if mouv and a.distance_km:
+        if allure:
+            allure = mouv / a.distance_km
+        if v:
+            v = a.distance_km / (mouv / 3600)
     return {
         "id": a.id,
         "source": a.source,
