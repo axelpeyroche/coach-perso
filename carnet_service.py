@@ -719,7 +719,19 @@ def _cell(v) -> str:
 def _markdown_analyses(r: Optional[dict]) -> list[str]:
     if not r:
         return []
-    l = ["## Analyses (forme, récupération, intensité, plan)", ""]
+    l = []
+    ze = r.get("zones_entrainement")
+    if ze:
+        l += ["## Zones d'entraînement (recalculées automatiquement)", "",
+              f"Méthode : {ze['methode']} · FC au seuil {ze['fc_seuil'] or '—'} bpm · FC max {ze['fc_max'] or '—'} · "
+              f"FC repos {ze['fc_repos'] or '—'}"
+              + (f" · allure critique {ze['allure_critique']} /km" if ze.get("allure_critique") else "")
+              + (f" · VMA {ze['vma_kmh']} km/h" if ze.get("vma_kmh") else ""), ""]
+        l += [f"- {z['zone']} : {z['fc']}" + (f" · {z['allure']}" if z.get("allure") else "") for z in ze["zones"]]
+        for c in (r.get("zones_changements") or [])[-3:]:
+            l.append(f"- Évolution : FC au seuil {c['avant']} → {c['apres']} bpm (semaine du {c['semaine']})")
+        l.append("")
+    l += ["## Analyses (forme, récupération, intensité, plan)", ""]
     f = r.get("forme")
     if f:
         l.append(f"- Forme de fond CTL (42 j) : {f['ctl']} · fatigue ATL (7 j) : {f['atl']} · fraîcheur TSB : {f['tsb']}"
@@ -1183,12 +1195,60 @@ def _moyenne_ponderee(points: list[tuple[datetime, float]], fin: datetime) -> tu
     return sum(v * p for (_, v), p in zip(points, poids)) / total, poids
 
 
-def _zones_fc(points, poids, fc_max: Optional[int], fc_repos: Optional[int]) -> Optional[list[dict]]:
-    """5 zones de Karvonen (50-60-70-80-90 % de la FC de réserve), en minutes."""
-    if not fc_max or not fc_repos or fc_max <= fc_repos:
+def bornes_utilisateur(user: Utilisateur) -> Optional[list[int]]:
+    """4 bornes des zones de FC : Friel (85-90-95-100 % de la FC au seuil), à défaut Karvonen."""
+    from zones_service import bornes_fc
+    return bornes_fc(getattr(user, "fc_seuil", None), user.fc_max, user.fc_repos)[0]
+
+
+def fc_soutenue(points: list[tuple[float, float]], fenetres=(20, 60)) -> Optional[dict]:
+    """Meilleure FC moyenne tenue sur 20 et 60 min (points (secondes, bpm), pondérés par le temps).
+
+    Une mesure vaut jusqu'à la suivante (30 s au plus) : rééchantillonnage à la seconde puis
+    sommes cumulées, donc linéaire en durée de séance.
+    """
+    pts = sorted((float(t), float(v)) for t, v in points if v and 30 <= v <= 230)
+    if len(pts) < 10:
         return None
-    res = fc_max - fc_repos
-    bornes = [round(fc_repos + p * res) for p in (0.6, 0.7, 0.8, 0.9)]
+    t0 = pts[0][0]
+    n = int(pts[-1][0] - t0) + 1
+    if n < min(fenetres) * 60:
+        return None
+    vals = [None] * n
+    for i, (t, v) in enumerate(pts):
+        debut = int(t - t0)
+        fin = int(pts[i + 1][0] - t0) if i + 1 < len(pts) else debut + 1
+        for k in range(debut, min(fin, debut + 30, n)):
+            vals[k] = v
+    cum, cnt = [0.0], [0]
+    for v in vals:
+        cum.append(cum[-1] + (v or 0))
+        cnt.append(cnt[-1] + (1 if v is not None else 0))
+    out = {}
+    for m in fenetres:
+        w = m * 60
+        if n < w:
+            continue
+        meilleur = None
+        for i in range(0, n - w + 1, 5):
+            c = cnt[i + w] - cnt[i]
+            if c >= 0.9 * w:
+                moy = (cum[i + w] - cum[i]) / c
+                if meilleur is None or moy > meilleur:
+                    meilleur = moy
+        if meilleur:
+            out[str(m)] = round(meilleur, 1)
+    return out or None
+
+
+def _zones_fc(points, poids, fc_max: Optional[int], fc_repos: Optional[int],
+              bornes: Optional[list[int]] = None) -> Optional[list[dict]]:
+    """Minutes passées dans les 5 zones (bornes du profil ; à défaut Karvonen 60-70-80-90 %)."""
+    if not bornes:
+        if not fc_max or not fc_repos or fc_max <= fc_repos:
+            return None
+        res = fc_max - fc_repos
+        bornes = [round(fc_repos + p * res) for p in (0.6, 0.7, 0.8, 0.9)]
     minutes = [0.0] * 5
     for (_, v), p in zip(points, poids):
         minutes[sum(v >= b for b in bornes)] += p / 60
@@ -1259,7 +1319,9 @@ def enrichir_activites(db: Session, user: Utilisateur, ech: dict[str, list[tuple
             colonne("fc_moyenne_bpm", round(moy))
             colonne("fc_max_bpm", round(max(v for _, v in fc)))
             detail("fc_min_bpm", round(min(v for _, v in fc)))
-            detail("zones_fc", _zones_fc(fc, poids, user.fc_max, user.fc_repos))
+            detail("zones_fc", _zones_fc(fc, poids, user.fc_max, user.fc_repos, bornes_utilisateur(user)))
+            if a.sport in SPORTS_PIED:
+                detail("fc_soutenue", fc_soutenue([((d - fc[0][0]).total_seconds(), v) for d, v in fc]))
         for t, cle_moy, cle_max in (("puissance", "puissance_moy_w", "puissance_max_w"),
                                     ("vitesse", "vitesse_moy_kmh", None), ("foulee", "foulee_m", None),
                                     ("oscillation", "oscillation_cm", None), ("contact_sol", "contact_sol_ms", None)):
@@ -1860,7 +1922,14 @@ def physiologie_auto(db: Session, user: Utilisateur) -> dict:
         echantillon = recentes or [mesures[0][1]]
         fc_repos, nb_repos = round(sum(echantillon) / len(echantillon)), len(echantillon)
 
-    return {"fc_max": fc_max, "fc_repos": fc_repos, "nb_jours_fc_repos": nb_repos}
+    from zones_service import candidats_seuil, fc_seuil_au
+    acts = db.query(Activite).filter(Activite.utilisateur_id == user.id,
+                                     Activite.sport.in_(SPORTS_PIED),
+                                     Activite.debut >= datetime.now() - timedelta(days=2 * 366)).all()
+    seuil = fc_seuil_au(candidats_seuil(acts), date.today(), fc_max)
+
+    return {"fc_max": fc_max, "fc_repos": fc_repos, "nb_jours_fc_repos": nb_repos,
+            "fc_seuil": seuil and seuil["valeur"], "seuil_reference": seuil}
 
 
 def synchroniser_physiologie(db: Session, user: Utilisateur) -> dict:
@@ -1870,7 +1939,7 @@ def synchroniser_physiologie(db: Session, user: Utilisateur) -> dict:
     """
     auto = physiologie_auto(db, user)
     change = False
-    for champ in ("fc_max", "fc_repos"):
+    for champ in ("fc_max", "fc_repos", "fc_seuil"):
         v = auto[champ]
         if v is not None and getattr(user, champ) != v:
             setattr(user, champ, v)

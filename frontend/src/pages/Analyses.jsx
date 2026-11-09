@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   BarChart, Bar, LineChart, Line, ComposedChart, Area, ScatterChart, Scatter, ZAxis,
@@ -175,6 +175,142 @@ function Zones({ z }) {
             </BarChart>
           </ResponsiveContainer>
           <Legende items={[1, 2, 3, 4, 5].map((i) => ({ label: `Z${i}`, couleur: ZONES_COUL[i - 1] }))} />
+        </Graphe>
+      </div>
+    </div>
+  );
+}
+
+// ── Évolution des zones (FC au seuil, FC max, allure critique) ─────────────
+const NOMS_ZONES = ["Récupération", "Endurance (EF)", "Tempo", "Seuil", "VMA"];
+const mmss = (sec) => (sec == null ? "—" : `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, "0")}`);
+
+function ZonesEvolution({ e, actuelles }) {
+  const [vue, setVue] = useState("fc");
+  const [periode, setPeriode] = useState(52);
+  const pts = useMemo(() => (e?.points ?? []).slice(-periode), [e, periode]);
+  const fc = useMemo(() => {
+    const ok = pts.filter((p) => p.bornes);
+    if (!ok.length) return { data: [], bas: 0, haut: 0 };
+    const bas = Math.floor((Math.min(...ok.map((p) => p.bornes[0])) - 12) / 5) * 5;
+    const haut = Math.ceil(Math.max(...ok.map((p) => p.fc_max || p.bornes[3] + 15)) / 5) * 5;
+    return {
+      bas, haut,
+      data: ok.map((p) => {
+        const b = p.bornes, top = Math.max(p.fc_max || b[3] + 15, b[3] + 5);
+        return { label: court(p.semaine), p, base: bas, z1: b[0] - bas, z2: b[1] - b[0], z3: b[2] - b[1], z4: b[3] - b[2], z5: top - b[3] };
+      }),
+    };
+  }, [pts]);
+  const allure = useMemo(() => {
+    const ok = pts.filter((p) => p.allures);
+    if (!ok.length) return { data: [], bas: 0, haut: 0 };
+    const bas = Math.floor((Math.min(...ok.map((p) => p.allures[3])) - 30) / 15) * 15;
+    const haut = Math.ceil((Math.max(...ok.map((p) => p.allures[0])) + 45) / 15) * 15;
+    const pas = haut - bas > 240 ? 60 : 30, ticks = [];
+    for (let t = Math.ceil(bas / pas) * pas; t <= haut; t += pas) ticks.push(t);
+    return {
+      bas, haut, ticks,
+      data: ok.map((p) => {
+        const a = p.allures;
+        return { label: court(p.semaine), p, base: bas, z5: a[3] - bas, z4: a[2] - a[3], z3: a[1] - a[2], z2: a[0] - a[1], z1: haut - a[0] };
+      }),
+    };
+  }, [pts]);
+
+  const tous = e?.points ?? [];
+  if (!tous.length) return <Card><Vide>Pas encore assez de séances pour suivre tes zones.</Vide></Card>;
+  const ilYa = (sem) => tous[tous.length - 1 - sem];
+  const now = tous[tous.length - 1];
+  const s3 = ilYa(13)?.fc_seuil, s12 = ilYa(52)?.fc_seuil;
+  const seuilNow = actuelles?.fc_seuil ?? now?.fc_seuil;
+  const d3 = seuilNow != null && s3 != null ? seuilNow - s3 : null;
+  const d12 = seuilNow != null && s12 != null ? seuilNow - s12 : null;
+  const ac = actuelles?.allure_critique_sec_km ?? now?.allure_critique, ac12 = ilYa(52)?.allure_critique;
+
+  const g = vue === "fc" ? fc : allure;
+  const ordre = vue === "fc" ? [1, 2, 3, 4, 5] : [5, 4, 3, 2, 1];
+
+  const Bulle = ({ active, payload }) => {
+    if (!active || !payload?.length) return null;
+    const p = payload[0].payload.p;
+    const lignes = vue === "fc"
+      ? [`< ${p.bornes[0]}`, `${p.bornes[0]}–${p.bornes[1] - 1}`, `${p.bornes[1]}–${p.bornes[2] - 1}`, `${p.bornes[2]}–${p.bornes[3] - 1}`, `≥ ${p.bornes[3]}`]
+      : [`> ${mmss(p.allures[0])}`, `${mmss(p.allures[0])}–${mmss(p.allures[1])}`, `${mmss(p.allures[1])}–${mmss(p.allures[2])}`, `${mmss(p.allures[2])}–${mmss(p.allures[3])}`, `< ${mmss(p.allures[3])}`];
+    return (
+      <div className="glass rounded-xl px-3 py-2 text-[12px] min-w-[170px]">
+        <p className="text-label-2 mb-1">Semaine du {fmtDate(p.semaine, { day: "numeric", month: "short", year: "numeric" })}</p>
+        {[4, 3, 2, 1, 0].map((i) => (
+          <p key={i} className="flex items-center justify-between gap-3">
+            <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ background: ZONES_COUL[i] }} />Z{i + 1}</span>
+            <span className="font-semibold chiffres">{lignes[i]}{vue === "fc" ? " bpm" : " /km"}</span>
+          </p>
+        ))}
+        <p className="text-label-2 mt-1 chiffres">
+          {vue === "fc" ? `Seuil ${p.fc_seuil ?? "—"} · FC max ${p.fc_max ?? "—"}` : `Allure critique ${mmss(p.allure_critique)} /km`}
+        </p>
+      </div>
+    );
+  };
+
+  return (
+    <div className="grid gap-3 lg:grid-cols-3">
+      <Card>
+        <p className="text-[13px] font-semibold text-label-2">FC au seuil</p>
+        <div className="grid grid-cols-3 gap-2 mt-2">
+          <Tuile label="Aujourd'hui" value={seuilNow ?? "—"} sub="bpm" />
+          <Tuile label="vs 3 mois" value={signe(d3)} sub={s3 ? `${s3} bpm` : null} />
+          <Tuile label="vs 1 an" value={signe(d12)} sub={s12 ? `${s12} bpm` : null} />
+        </div>
+        <p className="text-[13px] font-semibold text-label-2 mt-4">Allure critique</p>
+        <div className="grid grid-cols-2 gap-2 mt-2">
+          <Tuile label="Aujourd'hui" value={ac ? `${mmss(ac)} /km` : "—"} />
+          <Tuile label="Il y a 1 an" value={ac12 ? `${mmss(ac12)} /km` : "—"}
+            sub={ac && ac12 ? (ac < ac12 ? `${Math.round(ac12 - ac)} s/km plus rapide` : ac > ac12 ? `${Math.round(ac - ac12)} s/km plus lent` : "stable") : null} />
+        </div>
+        {actuelles?.reference && (
+          <p className="text-[12px] text-label-2 mt-3">
+            Seuil tiré de « {actuelles.reference.titre || "séance"} » ({fmtDate(actuelles.reference.date)})
+            {actuelles.reference.nb_efforts > 1 ? `, confirmé par ${actuelles.reference.nb_efforts - 1} autre(s) effort(s) soutenu(s)` : ""}.
+          </p>
+        )}
+        {(e.changements ?? []).length > 0 && (
+          <div className="mt-3 space-y-1">
+            {e.changements.slice(-4).reverse().map((c) => (
+              <p key={c.semaine} className="text-[12px] text-label-2 chiffres">
+                {fmtDate(c.semaine, { day: "numeric", month: "short", year: "numeric" })} · seuil {c.avant} → <b className="text-label">{c.apres}</b> bpm
+              </p>
+            ))}
+          </div>
+        )}
+        <p className="text-[11px] text-label-3 mt-3">
+          Friel : Z2 85 %, Z3 90 %, Z4 95 %, Z5 100 % de la FC au seuil. Allures : 72, 80, 90 et 98 % de la vitesse critique.
+        </p>
+      </Card>
+      <div className="lg:col-span-2 min-w-0">
+        <Graphe className="h-full" titre="Évolution des zones" couleur={ROUGE}
+          sousTitre={vue === "fc" ? "Bornes de FC chaque semaine (bpm)" : "Bornes d'allure chaque semaine (min/km)"}
+          action={<div className="flex gap-2 flex-wrap justify-end">
+            <Segmente options={[["fc", "FC"], ["allure", "Allure"]]} valeur={vue} onChange={setVue} />
+            <Segmente options={[[26, "6 m"], [52, "1 an"], [104, "2 ans"]]} valeur={periode} onChange={setPeriode} />
+          </div>}>
+          {g.data.length ? (
+            <ResponsiveContainer width="100%" height={260}>
+              <ComposedChart data={g.data} margin={{ left: 0, right: 0, top: 4 }}>
+                <CartesianGrid {...grille} />
+                <XAxis dataKey="label" {...axeX} minTickGap={28} />
+                <YAxis {...axeY} domain={[g.bas, g.haut]} reversed={vue === "allure"} allowDataOverflow width={vue === "fc" ? 32 : 40}
+                  tickFormatter={vue === "fc" ? undefined : mmss} ticks={vue === "fc" ? undefined : g.ticks} />
+                <Tooltip cursor={curseur} content={<Bulle />} />
+                <Area dataKey="base" stackId="z" stroke="none" fill="transparent" isAnimationActive={false} type="stepAfter" />
+                {ordre.map((i) => (
+                  <Area key={i} dataKey={`z${i}`} name={`Z${i}`} stackId="z" type="stepAfter" isAnimationActive={false}
+                    stroke={ZONES_COUL[i - 1]} strokeWidth={1} fill={ZONES_COUL[i - 1]} fillOpacity={0.55} />
+                ))}
+              </ComposedChart>
+            </ResponsiveContainer>
+          ) : <Vide>{vue === "fc" ? "Pas encore de FC." : "Pas encore assez de meilleurs efforts GPS pour l'allure critique."}</Vide>}
+          <Legende items={[1, 2, 3, 4, 5].map((i) => ({ label: `Z${i} ${NOMS_ZONES[i - 1]}`, couleur: ZONES_COUL[i - 1] }))} />
         </Graphe>
       </div>
     </div>
@@ -1315,6 +1451,23 @@ function Correlation({ c }) {
 // ── Page ──────────────────────────────────────────────────────────────────
 export default function Analyses() {
   const { data: a, isLoading, isError } = useQuery({ queryKey: ["analyses"], queryFn: getAnalyses, staleTime: 5 * 60_000 });
+  useEffect(() => {
+    if (!a || !window.location.hash) return;
+    const el = document.getElementById(window.location.hash.slice(1));
+    if (!el) return;
+    // Les graphiques au-dessus grandissent en se dessinant : on recale jusqu'à stabilité
+    let essais = 0;
+    const id = setInterval(() => {
+      const haut = el.getBoundingClientRect().top;
+      if (Math.abs(haut - 96) > 4) el.scrollIntoView({ block: "start" });
+      else if (++essais > 3) clearInterval(id);
+    }, 120);
+    const stop = () => clearInterval(id);
+    const fin = setTimeout(stop, 3000);
+    window.addEventListener("wheel", stop, { once: true });
+    window.addEventListener("touchstart", stop, { once: true });
+    return () => { stop(); clearTimeout(fin); window.removeEventListener("wheel", stop); window.removeEventListener("touchstart", stop); };
+  }, [a]);
 
   if (isLoading) return <Page titre="Analyses"><p className="text-[15px] text-label-2">Calcul en cours…</p></Page>;
   if (isError || !a) return <Page titre="Analyses"><Card><Vide>Impossible de charger les analyses.</Vide></Card></Page>;
@@ -1333,6 +1486,9 @@ export default function Analyses() {
       </Section>
       <Section titre="Sommeil"><DetteSommeil s={a.sommeil} /><Nuits r={a.recuperation} /><RegulariteSommeil /></Section>
       <Section titre="Poids"><PoidsAnalyse /></Section>
+      <div id="zones" className="scroll-mt-24">
+        <Section titre="Évolution des zones"><ZonesEvolution e={a.zones_evolution} actuelles={a.zones_entrainement} /></Section>
+      </div>
       <Section titre="Intensité"><Zones z={a.zones} /></Section>
       <Section titre="Course à pied">
         <Vma v={a.vma} />

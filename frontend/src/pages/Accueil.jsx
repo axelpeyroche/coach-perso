@@ -13,13 +13,14 @@ import { FormeTuiles } from "../components/Forme";
 import FormeJour from "../components/FormeJour";
 import SommeilNuit from "../components/SommeilNuit";
 import { AlerteMarche } from "../components/MesuresCompanion";
+import ZonesCardiaques from "../components/ZonesCardiaques";
 import { axeX, axeY, grille, curseur, InfoBulle } from "../components/graphiques";
 import { ObjectifCarte } from "./Objectifs";
 import { ProchainesSeances } from "./Plan";
 import { useAuth } from "../AuthContext";
 import { getActivites, getObjectifs, getStatsCarnet } from "../api";
 import { nombre } from "../carnet";
-import { Section, BoutonAjout, Chevron } from "../components/ui";
+import { Section, BoutonAjout } from "../components/ui";
 
 // Lundi de la semaine en cours (heure locale), au format AAAA-MM-JJ
 function lundiCourant() {
@@ -148,14 +149,9 @@ export default function Accueil() {
             )}
           </Section>
 
-          <Link to="/sources#ia" className="card flex items-center gap-3 p-4 active:opacity-70 transition">
-            <span className="w-10 h-10 rounded-full bg-ios-orange/15 flex items-center justify-center text-[19px] shrink-0">✳️</span>
-            <span className="flex-1 min-w-0">
-              <span className="block text-[15px] font-semibold">Analyse avec ton IA</span>
-              <span className="block text-[13px] text-label-2">ChatGPT, Gemini, Claude… : partage ton carnet pour une analyse approfondie</span>
-            </span>
-            <Chevron />
-          </Link>
+          <Section titre="Zones cardiaques" lien="/analyses#zones" libelleLien="Évolution">
+            <ZonesCardiaques />
+          </Section>
         </div>
       </div>
 

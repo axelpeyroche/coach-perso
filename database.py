@@ -35,6 +35,7 @@ def creer_tables() -> None:
     _migrations = [
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS fc_max INTEGER",
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS fc_repos INTEGER",
+        "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS fc_seuil INTEGER",
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS poids_kg FLOAT",
         # Auth + onboarding
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS password_hash VARCHAR(255)",

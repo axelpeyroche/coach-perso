@@ -67,6 +67,12 @@ def get_profil_fc(current_user: Utilisateur = Depends(get_current_user), db: Ses
     synchroniser_physiologie(db, current_user)  # FC max / FC repos calculées depuis les données importées
     return {"fc_max": current_user.fc_max, "fc_repos": current_user.fc_repos, "poids_kg": current_user.poids_kg}
 
+@router.get("/api/utilisateur/zones", summary="Zones cardiaques et d'allure du jour, recalculées depuis les séances")
+def get_zones(current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
+    import zones_service
+    synchroniser_physiologie(db, current_user)
+    return zones_service.zones_actuelles(db, current_user)
+
 @router.patch("/api/utilisateur/profil-fc", summary="Met à jour fc_max, fc_repos et/ou poids_kg")
 def patch_profil_fc(payload: ProfilFCSchema, current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
     if payload.fc_max is not None: current_user.fc_max = payload.fc_max

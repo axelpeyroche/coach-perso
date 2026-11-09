@@ -36,7 +36,7 @@ FENETRE_JOURS = 14          # séances relues à chaque synchro (l'iPhone peut e
 PREMIERE_FENETRE_JOURS = 60
 INTERVALLE_MIN = timedelta(minutes=15)  # pas plus d'une synchro automatique par quart d'heure
 PAS_TRACE_M = 10            # comme les GPX importés : un point tous les 10 m
-VERSION_ANALYSE = 3         # zones de FC, dérive cardiaque, durabilité, puissance, foulée, oscillation, contact, ratio vertical, pas
+VERSION_ANALYSE = 4         # FC soutenue 20/60 min (FC au seuil), zones de FC, dérive cardiaque, durabilité, puissance, foulée, oscillation, contact, ratio vertical, pas
 
 
 class IntervalsErreur(Exception):
@@ -131,7 +131,9 @@ def analyse_fc(streams: list, user: Utilisateur, sport: str, duree_sec: Optional
     pts = [(temps[i], v) for i, v in enumerate(fc) if v and i < len(temps) and temps[i] is not None and 30 <= v <= 240]
     if len(pts) >= 10:
         poids = [max(1.0, min(30.0, pts[i + 1][0] - t)) if i + 1 < len(pts) else 1.0 for i, (t, _) in enumerate(pts)]
-        res["zones_fc"] = cs._zones_fc(pts, poids, user.fc_max, user.fc_repos)
+        res["zones_fc"] = cs._zones_fc(pts, poids, user.fc_max, user.fc_repos, cs.bornes_utilisateur(user))
+        if sport in cs.SPORTS_PIED:
+            res["fc_soutenue"] = cs.fc_soutenue(pts)
     if sport in cs.SPORTS_PIED and dist and (duree_sec or 0) >= an.DERIVE_MIN_MIN * 60:
         res["derive_fc"] = an.derive_cardiaque(temps, fc, dist)
     if sport in cs.SPORTS_PIED and dist and (duree_sec or 0) >= an.DURABILITE_MIN_MIN * 60:
@@ -353,6 +355,7 @@ def synchroniser(db: Session, user: Utilisateur, force: bool = False) -> dict:
             # Les valeurs déjà présentes (raccourci, export Santé, saisie) restent
             cs.fusionner_details(act, {"zones_fc": analyse.get("zones_fc"), **resume_flux(streams, act.sport)})
             cs.fusionner_details(act, {"derive_fc": analyse.get("derive_fc"), "durabilite_pct": analyse.get("durabilite_pct"),
+                                       "fc_soutenue": analyse.get("fc_soutenue"),
                                        "analyse_iv": VERSION_ANALYSE}, ecraser=True)
             bilan["analyses"] += 1
         if not besoin_trace:
@@ -379,6 +382,50 @@ def synchroniser(db: Session, user: Utilisateur, force: bool = False) -> dict:
     bilan["dplus_corriges"] = cs.aligner_dplus_traces(db, user.id)
     user.intervals_derniere_synchro = maintenant
     db.flush()
+    return bilan
+
+
+def completer_fc_soutenue(db: Session, user: Utilisateur, depuis, limite: int = 400) -> dict:
+    """Reprise ponctuelle de l'historique : ajoute seulement « fc_soutenue » (meilleures FC moyennes
+    sur 20 et 60 min) aux séances de course et de trail qui ne l'ont pas encore.
+    Les séances sont rapprochées par leur id Intervals ou par leur heure de début (± 2 min).
+    Rien d'autre n'est modifié. Commit à la fin."""
+    tz = ZoneInfo(user.fuseau_horaire or "Europe/Paris")
+    athlete = user.intervals_athlete_id or "0"
+    liste = _appel(user.intervals_cle, f"/athlete/{urllib.parse.quote(athlete)}/activities",
+                   {"oldest": depuis.isoformat()}) or []
+    acts = [a for a in db.query(Activite).filter(
+        Activite.utilisateur_id == user.id, Activite.sport.in_(cs.SPORTS_PIED),
+        Activite.debut >= datetime.combine(depuis, datetime.min.time()) - timedelta(days=1))
+        if not cs._details_dict(a).get("fc_soutenue")]
+    par_id = {str(cs._details_dict(a).get("intervals_id")): a for a in acts if cs._details_dict(a).get("intervals_id")}
+    bilan = {"intervals": len(liste), "a_completer": len(acts), "completees": 0, "sans_fc": 0, "non_rapprochees": 0}
+    faits = set()
+    for a in liste:
+        if bilan["completees"] + bilan["sans_fc"] >= limite:
+            break
+        if not a.get("id") or a.get("deleted") or "heartrate" not in (a.get("stream_types") or ["heartrate"]):
+            continue
+        act = par_id.get(str(a["id"]))
+        if act is None:
+            debut = _heure_locale(a.get("start_date"), tz)
+            proches = [x for x in acts if debut and abs((x.debut - debut).total_seconds()) <= 120]
+            act = proches[0] if proches else None
+        if act is None or act.id in faits:
+            bilan["non_rapprochees"] += act is None
+            continue
+        faits.add(act.id)
+        streams = _appel(user.intervals_cle, f"/activity/{urllib.parse.quote(str(a['id']))}/streams.json",
+                         {"types": "heartrate,time"})
+        par_type = {x.get("type"): (x.get("data") or []) for x in streams or []}
+        fc, temps = par_type.get("heartrate") or [], par_type.get("time") or []
+        fs = cs.fc_soutenue([(temps[i], v) for i, v in enumerate(fc) if v and i < len(temps) and temps[i] is not None])
+        if fs:
+            cs.fusionner_details(act, {"fc_soutenue": fs})
+            bilan["completees"] += 1
+        else:
+            bilan["sans_fc"] += 1
+    db.commit()
     return bilan
 
 

@@ -149,9 +149,8 @@ def _zones_hebdo(acts: list[Activite], user: Utilisateur, auj: date, semaines: i
                 "total_min": sum(l["total_min"] for l in lignes[-n:])}
 
     bornes = None
-    if user.fc_max and user.fc_repos and user.fc_max > user.fc_repos:
-        res = user.fc_max - user.fc_repos
-        b = [round(user.fc_repos + p * res) for p in (0.6, 0.7, 0.8, 0.9)]
+    b = cs.bornes_utilisateur(user)
+    if b:
         lim = [None] + b + [None]
         bornes = [{"zone": i + 1, "min": lim[i], "max": lim[i + 1]} for i in range(5)]
     return {"semaines": lignes, "bilan_4s": bilan(4), "bilan_12s": bilan(12), "bornes": bornes}
@@ -1183,17 +1182,26 @@ def calculer_analyses(db: Session, user: Utilisateur, aujourd_hui: Optional[date
     poids = db.query(PoidsUtilisateur).filter(PoidsUtilisateur.utilisateur_id == user.id).all()
     forme = _forme_fatigue(acts, objectifs, auj)
     serie_complete = courbe_forme(charges_quotidiennes(acts), auj)
+    vma = _vma(db, user, acts, mesures, auj)
+    efforts = _efforts_duree(acts, auj)
+    import zones_service as zs
+    fcr_tout = zs.fc_repos_toutes(db, user.id)
+    reference = zs.fc_seuil_au(zs.candidats_seuil(acts), auj, user.fc_max)
+    zones_jour = zs.zones_profil(user, (efforts.get("vc") or {}).get("vitesse_ms"),
+                                 (vma.get("actuelle") or {}).get("vma"), reference)
     return {
         "genere_le": datetime.utcnow().isoformat(timespec="seconds") + "Z",
         "forme": forme,
         "zones": _zones_hebdo(acts, user, auj),
         "recuperation": _recuperation(mesures, auj),
         "course": _course(acts, auj),
-        "vma": _vma(db, user, acts, mesures, auj),
+        "vma": vma,
         "plan": _respect_plan(db, user.id, auj),
         "annuel": _annuel(acts, auj),
         "correlations": _correlations(acts, mesures, serie_complete, poids, auj),
-        "efforts_duree": _efforts_duree(acts, auj),
+        "efforts_duree": efforts,
+        "zones_entrainement": zones_jour,
+        "zones_evolution": zs.historique(acts, fcr_tout, auj),
         "efficacite": _efficacite(acts, user, mesures, auj),
         "monotonie": _monotonie(acts, auj),
         "foulee": _foulee(acts, auj),
@@ -1202,6 +1210,42 @@ def calculer_analyses(db: Session, user: Utilisateur, aujourd_hui: Optional[date
         "signaux_nuit": _signaux_nuit(mesures, auj),
         "pas": _pas({m.jour: m.valeur for m in db.query(MesureSante.jour, MesureSante.valeur).filter(
             MesureSante.utilisateur_id == user.id, MesureSante.type == "pas")}, auj),
+    }
+
+
+def _mmss(sec: Optional[int]) -> Optional[str]:
+    return f"{sec // 60}:{sec % 60:02d}" if sec else None
+
+
+def _plage_fc(x: dict) -> str:
+    if x["fc_min"] is None:
+        return f"< {x['fc_max'] + 1} bpm"
+    if x["fc_max"] is None:
+        return f"≥ {x['fc_min']} bpm"
+    return f"{x['fc_min']}–{x['fc_max']} bpm"
+
+
+def _plage_allure(x: dict) -> Optional[str]:
+    lente, rapide = _mmss(x.get("allure_lente")), _mmss(x.get("allure_rapide"))
+    if not lente and not rapide:
+        return None
+    if not lente:
+        return f"plus lent que {rapide} /km"
+    if not rapide:
+        return f"plus vite que {lente} /km"
+    return f"{lente}–{rapide} /km"
+
+
+def _zones_export(z: Optional[dict]) -> Optional[dict]:
+    """Zones du jour en clair pour le plan hebdo : FC (bpm) et allures (min/km)."""
+    if not z or not z.get("zones"):
+        return None
+    return {
+        "methode": "Friel, % de la FC au seuil" if z["methode"] == "seuil" else "Karvonen, % de la FC de réserve",
+        "fc_seuil": z["fc_seuil"], "fc_max": z["fc_max"], "fc_repos": z["fc_repos"],
+        "allure_critique": _mmss(z["allure_critique_sec_km"]), "vma_kmh": z["vma_kmh"],
+        "zones": [{"zone": f"Z{x['zone']} {x['nom']}", "fc": _plage_fc(x), "allure": _plage_allure(x)}
+                  for x in z["zones"]],
     }
 
 
@@ -1223,6 +1267,8 @@ def resume(analyses: dict) -> dict:
         "vma": analyses["vma"]["actuelle"] and {"estimee": analyses["vma"]["actuelle"]["vma"],
                                                 "dernier_test": analyses["vma"]["dernier_test"]},
         "allure_critique": analyses["efforts_duree"]["vc"],
+        "zones_entrainement": _zones_export(analyses.get("zones_entrainement")),
+        "zones_changements": (analyses.get("zones_evolution") or {}).get("changements"),
         "efficacite_aerobie": {k: analyses["efficacite"][k] for k in ("recent", "ancien", "tendance_pct")},
         "monotonie": analyses["monotonie"]["actuel"],
         "durabilite_recente": c["durabilites"][-5:],

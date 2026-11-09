@@ -93,6 +93,7 @@ class Utilisateur(Base):
     # Physiologie
     fc_max: Mapped[Optional[int]] = mapped_column(Integer, comment="FC max mesurée (bpm)")
     fc_repos: Mapped[Optional[int]] = mapped_column(Integer, comment="FC de repos (bpm)")
+    fc_seuil: Mapped[Optional[int]] = mapped_column(Integer, comment="FC au seuil estimée (bpm), base des zones")
     poids_kg: Mapped[Optional[float]] = mapped_column(Float, comment="Poids corporel (kg)")
     taille_cm: Mapped[Optional[float]] = mapped_column(Float, comment="Taille (cm), pour l'IMC")
     besoin_sommeil_h: Mapped[Optional[float]] = mapped_column(Float, comment="Besoin de sommeil (h), pour la dette")

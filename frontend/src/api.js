@@ -171,6 +171,7 @@ export const getStatsCarnet = (sport) =>
 
 export const getMesures = (jours = 365) => api.get("/mesures", { params: { jours } }).then((r) => r.data);
 
+export const getZones = () => api.get("/utilisateur/zones").then((r) => r.data);
 export const getAnalyses = () => api.get("/analyses", { timeout: 60000 }).then((r) => r.data);
 
 // --- Plan (séances prévues) ---
