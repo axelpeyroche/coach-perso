@@ -15,10 +15,9 @@ import SommeilNuit from "../components/SommeilNuit";
 import { AlerteMarche } from "../components/MesuresCompanion";
 import ZonesCardiaques from "../components/ZonesCardiaques";
 import { axeX, axeY, grille, curseur, InfoBulle } from "../components/graphiques";
-import { ObjectifCarte } from "./Objectifs";
 import { ProchainesSeances } from "./Plan";
 import { useAuth } from "../AuthContext";
-import { getActivites, getObjectifs, getStatsCarnet } from "../api";
+import { getActivites, getStatsCarnet } from "../api";
 import { nombre } from "../carnet";
 import { Section, BoutonAjout } from "../components/ui";
 
@@ -41,9 +40,6 @@ export default function Accueil() {
     queryKey: ["activites", { semaine: lundi }],
     queryFn: () => getActivites({ depuis: lundi, limit: 100 }),
   });
-  const { data: objectifs = [] } = useQuery({ queryKey: ["objectifs"], queryFn: getObjectifs });
-
-  const actifs = objectifs.filter((o) => o.statut === "actif").slice(0, 2);
   const t = stats?.totaux;
   // Carnet vide = aucune séance du tout (pas seulement cette semaine)
   const vide = t?.total?.nb === 0;
@@ -135,21 +131,8 @@ export default function Accueil() {
           )}
         </div>
 
-        <div className="lg:col-span-2 lg:order-1 space-y-6 min-w-0">
-          <Section titre="Objectifs" lien="/objectifs" libelleLien="Gérer">
-            {actifs.length === 0 ? (
-              <Card>
-                <p className="text-[15px] text-label-2">Aucun objectif actif.</p>
-                <Link to="/objectifs" className="btn-texte mt-1">Ajouter une course ou un défi</Link>
-              </Card>
-            ) : (
-              <div className="space-y-3">
-                {actifs.map((o) => <ObjectifCarte key={o.id} o={o} compact />)}
-              </div>
-            )}
-          </Section>
-
-          <Section titre="Zones cardiaques" lien="/analyses#zones" libelleLien="Évolution">
+        <div className="lg:col-span-2 lg:order-1 min-w-0">
+          <Section titre="Zones cardiaques" lien="/analyses#zones" libelleLien="Évolution" className="h-full flex flex-col">
             <ZonesCardiaques />
           </Section>
         </div>

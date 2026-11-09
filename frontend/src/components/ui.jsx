@@ -4,9 +4,9 @@ import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 
 // En-tête de section façon app Santé : titre en gras et lien à droite
-export function Section({ titre, lien, libelleLien = "Tout voir", action, children }) {
+export function Section({ titre, lien, libelleLien = "Tout voir", action, children, className }) {
   return (
-    <section className="space-y-2.5 min-w-0">
+    <section className={`space-y-2.5 min-w-0 ${className ?? ""}`}>
       <div className="flex items-baseline justify-between px-1">
         <h2 className="titre-section">{titre}</h2>
         {action ?? (lien && <Link to={lien} className="btn-texte">{libelleLien}</Link>)}

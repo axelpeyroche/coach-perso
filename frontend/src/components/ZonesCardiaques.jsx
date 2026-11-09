@@ -29,7 +29,7 @@ export default function ZonesCardiaques() {
   const { data, isLoading } = useQuery({ queryKey: ["zones"], queryFn: getZones, staleTime: 5 * 60 * 1000 });
   const zones = data?.zones ?? [];
   return (
-    <Card pad={false}>
+    <Card pad={false} className="h-full flex flex-col">
       {isLoading ? (
         <p className="p-4 text-[15px] text-label-2">Calcul des zones…</p>
       ) : !zones.length ? (
@@ -38,9 +38,9 @@ export default function ZonesCardiaques() {
         </p>
       ) : (
         <>
-          <ul>
+          <ul className="flex-1 flex flex-col">
             {zones.slice().reverse().map((z) => (
-              <li key={z.zone} className="flex items-center gap-3 px-4 py-2.5 border-b border-separateur last:border-0">
+              <li key={z.zone} className="flex-1 flex items-center gap-3 px-4 py-2.5 border-b border-separateur last:border-0">
                 <span className="w-1.5 self-stretch rounded-full shrink-0" style={{ background: ZONES_COULEURS[z.zone - 1] }} />
                 <span className="flex-1 min-w-0">
                   <span className="block text-[15px] font-semibold leading-tight">

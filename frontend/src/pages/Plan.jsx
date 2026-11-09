@@ -606,8 +606,8 @@ export function ProchainesSeances() {
   const prochaines = (data?.seances ?? []).filter((s) => s.statut !== "realisee" && s.statut !== "sautee");
 
   return (
-    <Section titre="À faire cette semaine" lien="/plan" libelleLien="Plan">
-      <Card pad={false} className="py-1">
+    <Section titre="À faire cette semaine" lien="/plan" libelleLien="Plan" className="h-full flex flex-col">
+      <Card pad={false} className="py-1 flex-1">
         {!data ? (
           <p className="ligne text-[15px] text-label-2">Chargement…</p>
         ) : prochaines.length === 0 ? (
