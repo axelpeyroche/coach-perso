@@ -436,7 +436,7 @@ def _course(acts: list[Activite], auj: date) -> dict:
     foulees = []
     for a in pied:
         det = cs._details_dict(a)
-        cad = det["pas"] / (a.duree_sec / 60) if det.get("pas") and a.duree_sec else None
+        cad = det["pas"] / (cs.duree_mouvement(a) / 60) if det.get("pas") and a.duree_sec else None
         if cad is not None and not 120 <= cad <= 230:
             cad = None
         fl = det.get("foulee_m")
@@ -949,7 +949,7 @@ def _foulee(acts: list[Activite], auj: date) -> dict:
             continue
         det = cs._details_dict(a)
         al = cs.allure_sec_km(a)
-        cad = det["pas"] / (a.duree_sec / 60) if det.get("pas") and a.duree_sec else None
+        cad = det["pas"] / (cs.duree_mouvement(a) / 60) if det.get("pas") and a.duree_sec else None
         v = {"cadence": cad if cad and 120 <= cad <= 230 else None}
         for cle in ("foulee_m", "oscillation_cm", "contact_sol_ms", "ratio_vertical_pct", "puissance_moy_w"):
             x = det.get(cle)

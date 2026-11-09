@@ -109,16 +109,33 @@ def fmt_allure(sec_par_km: Optional[float]) -> Optional[str]:
     return f"{m}:{s:02d}/km"
 
 
+def mouvement_montre(a: Activite) -> Optional[int]:
+    """Temps en mouvement (pauses enlevées) envoyé par la montre, s'il est plausible.
+    Montre en panne (séance refaite depuis un GPX) : son temps en mouvement est faux, on l'ignore."""
+    det = _details_dict(a)
+    mouv = det.get("duree_mouvement_sec")
+    if isinstance(mouv, (int, float)) and a.duree_sec and 0 < mouv < a.duree_sec and not det.get("montre_hs"):
+        return int(mouv)
+    return None
+
+
+def duree_mouvement(a: Activite) -> Optional[int]:
+    """Durée qui sert aux allures, vitesses et cadences : temps en mouvement, sinon durée totale."""
+    return mouvement_montre(a) or a.duree_sec
+
+
 def allure_sec_km(a: Activite) -> Optional[float]:
     if a.sport in SPORTS_PIED or a.sport in ("marche", "randonnee"):
-        if a.duree_sec and a.distance_km and a.distance_km > 0.2:
-            return a.duree_sec / a.distance_km
+        d = duree_mouvement(a)
+        if d and a.distance_km and a.distance_km > 0.2:
+            return d / a.distance_km
     return None
 
 
 def vitesse_kmh(a: Activite) -> Optional[float]:
-    if a.duree_sec and a.distance_km:
-        return a.distance_km / (a.duree_sec / 3600)
+    d = duree_mouvement(a)
+    if d and a.distance_km:
+        return a.distance_km / (d / 3600)
     return None
 
 
@@ -135,19 +152,11 @@ def serialiser_activite(a: Activite) -> dict:
         details = json.loads(a.details) if a.details else None
     except ValueError:
         details = None
-    mouv = details.get("duree_mouvement_sec") if isinstance(details, dict) else None
-    # Montre en panne (séance refaite depuis un GPX) : son temps en mouvement est faux, il est
-    # recalculé depuis le tracé avec les courbes
-    if not (isinstance(mouv, (int, float)) and a.duree_sec and 0 < mouv < a.duree_sec) or details.get("montre_hs"):
-        mouv = None
+    # Temps en mouvement de la montre ; sinon la fiche le recalcule depuis le tracé
+    mouv = mouvement_montre(a)
     # Allure et vitesse sur le temps en mouvement (pauses enlevées), comme la fiche de l'activité
     allure = allure_sec_km(a)
     v = vitesse_kmh(a)
-    if mouv and a.distance_km:
-        if allure:
-            allure = mouv / a.distance_km
-        if v:
-            v = a.distance_km / (mouv / 3600)
     return {
         "id": a.id,
         "source": a.source,
@@ -490,10 +499,10 @@ def calculer_stats(acts: list[Activite], aujourd_hui: Optional[date] = None, spo
     for label, d in DISTANCES_RECORDS:
         cands = [a for a in pied if d * 0.98 <= a.distance_km <= d * 1.15 and (a.dplus_m or 0) < 15 * d]
         if cands:
-            best = min(cands, key=lambda a: a.duree_sec / a.distance_km)
-            t = int(best.duree_sec / best.distance_km * d)
+            best = min(cands, key=lambda a: duree_mouvement(a) / a.distance_km)
+            t = int(duree_mouvement(best) / best.distance_km * d)
             records_dist.append({"label": label, "temps_sec": t, "temps_str": fmt_duree(t),
-                                 "allure_str": fmt_allure(best.duree_sec / best.distance_km),
+                                 "allure_str": fmt_allure(duree_mouvement(best) / best.distance_km),
                                  "date": best.debut.date().isoformat(), "activite_id": best.id})
 
     def record(sel, cle, label, fmt):

@@ -11,6 +11,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
+from carnet_service import duree_mouvement
 from models import Activite, Segment, TraceGPS
 
 R = 6_371_000
@@ -322,6 +323,8 @@ def meme_parcours(db: Session, user_id: int, a: Activite) -> list[dict]:
 
 
 def _ligne(b: Activite) -> dict:
+    # Temps en mouvement (pauses enlevées), comme la fiche : les passages se comparent sans les arrêts
+    duree = duree_mouvement(b)
     return {"id": b.id, "date": b.debut.isoformat(), "titre": b.titre, "sport": b.sport,
-            "distance_km": b.distance_km, "duree_sec": b.duree_sec, "fc": b.fc_moyenne_bpm,
-            "allure_sec_km": round(b.duree_sec / b.distance_km, 1) if b.duree_sec and b.distance_km else None}
+            "distance_km": b.distance_km, "duree_sec": duree, "fc": b.fc_moyenne_bpm,
+            "allure_sec_km": round(duree / b.distance_km, 1) if duree and b.distance_km else None}
