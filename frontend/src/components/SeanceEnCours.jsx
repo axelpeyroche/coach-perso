@@ -304,7 +304,7 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
         exercices: exercices.map((e, i) => {
           const x = etat.ex[i] || {};
           return {
-            numero: e.numero, nom: e.nom, emom: e.emom, prescription: prescription(e), charge: e.charge,
+            numero: e.numero, nom: e.nom, emom: e.emom, prescription: prescription(e), reps: e.reps ?? null, charge: e.charge,
             series_prevues: e.series, series_faites: x.series_faites ?? 0, passe: !!x.passe,
             difficulte: x.difficulte ?? null, ressenti: (x.ressenti || "").trim() || null,
             duree_s: x.debut && x.fin ? Math.round((x.fin - x.debut) / 1000) : null,

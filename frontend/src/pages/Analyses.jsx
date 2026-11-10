@@ -16,6 +16,7 @@ import { GLOSSAIRE } from "../glossaire";
 import { axeX, axeY, grille, curseur, InfoBulle, Legende, GRIS } from "../components/graphiques";
 import PoidsAnalyse from "../components/Poids";
 import { JournalDouleurs, JoursMarques } from "../components/Corps";
+import { ProfilAthlete, RadarProfil, Musculation } from "../components/Capacites";
 import { RegulariteSommeil, RecupFc, AsymetrieMarche } from "../components/MesuresCompanion";
 import {
   TendanceVfc, FenetreSommeil, EffetNuit, TempsRecuperation, Chaleur, TendancesLongues, CompositionCorporelle,
@@ -1554,6 +1555,7 @@ const ONGLETS = [
 const ANCRES = {
   charge: "forme", monotonie: "forme", intensite: "forme",
   efforts: "capacites", efficacite: "capacites", vma: "capacites", zones: "capacites",
+  profil_athlete: "capacites", muscu: "capacites",
   recuperation: "corps", signaux: "corps", pas: "corps", poids: "corps", marqueurs: "corps", douleurs: "corps",
   tendance_vfc: "corps", effet_nuit: "corps", temps_recuperation: "corps", chaleur: "corps", saisons: "corps", composition: "corps",
   dette: "sommeil", regularite: "sommeil", fenetre: "sommeil",
@@ -1638,12 +1640,19 @@ export default function Analyses() {
 
       {onglet === "capacites" && (
         <>
+          <Ancre id="profil_athlete">
+            <Section titre="Profil d'athlète">
+              <ProfilAthlete p={a.capacites?.profil} />
+              <RadarProfil r={a.capacites?.profil?.radar} />
+            </Section>
+          </Ancre>
           <Section titre="Course à pied">
             <Ancre id="vma"><Vma v={a.vma} /></Ancre>
             <Ancre id="efforts" className="space-y-2.5"><EffortsDuree e={a.efforts_duree} /></Ancre>
             <Course c={a.course} />
             <Ancre id="efficacite"><Efficacite ef={a.efficacite} /></Ancre>
           </Section>
+          <Ancre id="muscu"><Section titre="Musculation"><Musculation m={a.capacites?.musculation} /></Section></Ancre>
           <Ancre id="zones">
             <Section titre="Évolution des zones"><ZonesEvolution e={a.zones_evolution} actuelles={a.zones_entrainement} /></Section>
           </Ancre>

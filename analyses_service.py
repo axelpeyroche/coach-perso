@@ -1201,7 +1201,8 @@ def calculer_analyses(db: Session, user: Utilisateur, aujourd_hui: Optional[date
     efforts = _efforts_duree(acts, auj)
     import zones_service as zs
     fcr_tout = zs.fc_repos_toutes(db, user.id)
-    reference = zs.fc_seuil_au(zs.candidats_seuil(acts), auj, user.fc_max)
+    cands_seuil = zs.candidats_seuil(acts)
+    reference = zs.fc_seuil_au(cands_seuil, auj, user.fc_max)
     zones_jour = zs.zones_profil(user, (efforts.get("vc") or {}).get("vitesse_ms"),
                                  (vma.get("actuelle") or {}).get("vma"), reference)
     import corps_service as co
@@ -1231,6 +1232,8 @@ def calculer_analyses(db: Session, user: Utilisateur, aujourd_hui: Optional[date
     import corps_analyses
     res["corps"] = corps_analyses.calculer(db, user, acts, mesures, marqueurs, res["recuperation"], res["sommeil"], auj,
                                            _recuperation(mesures, auj, jours=365, marqueurs=marqueurs))
+    import capacites_service
+    res["capacites"] = capacites_service.calculer(db, user, acts, mesures, vma, efforts, res["course"], cands_seuil, auj)
     import essentiel_service
     res["essentiel"] = essentiel_service.essentiel(res)
     return res
@@ -1300,7 +1303,13 @@ def resume(analyses: dict) -> dict:
         "signaux_nuit": analyses["signaux_nuit"]["actuel"],
         "pas": {k: analyses["pas"][k] for k in ("moy_7j", "moy_28j")},
         "corps": _resume_corps(analyses.get("corps")),
+        "capacites": _resume_capacites(analyses.get("capacites")),
     }
+
+
+def _resume_capacites(c: Optional[dict]) -> Optional[dict]:
+    import capacites_service
+    return capacites_service.resume(c)
 
 
 def _resume_corps(c: Optional[dict]) -> Optional[dict]:

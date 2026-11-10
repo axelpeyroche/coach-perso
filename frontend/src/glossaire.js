@@ -235,4 +235,40 @@ export const GLOSSAIRE = {
     calcul: "Hiver = décembre à février, printemps = mars à mai, été = juin à août, automne = septembre à novembre. « Sur un an » compare la dernière saison à la même un an plus tôt ; la tendance est la pente sur toutes les saisons.",
     lire: "Une FC au repos qui baisse et une VFC qui monte d'une année sur l'autre signent un vrai progrès de fond, au-delà des hauts et des bas de la semaine.",
   },
+  profil_athlete: {
+    titre: "Profil d'athlète",
+    quoi: "Tes repères du moment réunis sur une fiche : VMA, VO2max, seuil, allure critique, réserve anaérobie, endurance, force et poids de forme. Chacun affiche sa tendance sur 3 mois et ce sur quoi il repose.",
+    calcul: "Chaque repère reprend le calcul de son encart (touche la tuile pour y aller). L'endurance est la perte d'efficacité en fin de sortie longue (médiane des 5 dernières). La force est ta meilleure série de tractions sur 3 mois, ou à défaut l'exercice le plus suivi. Le poids de forme est ton poids moyen autour de tes 3 meilleures performances des 2 dernières années.",
+    lire: "Regarde d'abord la pastille : un repère « fiable » peut régler tes allures, un repère « fragile » ou « ancien » demande un test avant de s'y fier.",
+  },
+  confiance: {
+    titre: "Confiance et fraîcheur",
+    quoi: "Une estimation vaut ce que valent les efforts dont elle est tirée. Le carnet indique donc combien d'efforts la portent et de quand date le dernier.",
+    calcul: "Fiable : assez d'efforts et un dernier effort récent. Moyenne : peu d'efforts, ou pas de test récent pour la caler. Fragile : un ou deux efforts seulement. Ancienne : le dernier effort date trop (2 mois pour la VMA et l'allure critique, 8 mois pour le seuil, 3 mois pour l'endurance) ; la valeur est alors grisée.",
+    lire: "Quand un repère devient fragile ou ancien, le carnet propose le test qui le rafraîchit. Place-le un jour de forme, loin d'une grosse séance.",
+  },
+  radar_profil: {
+    titre: "Forces et faiblesses",
+    quoi: "Six qualités comparées à tes propres records : vitesse (1 min), VMA (5 min), seuil (20 min), endurance (1 h), montée (vitesse ascensionnelle) et force (musculation).",
+    calcul: "Pour chaque qualité, ta meilleure performance des 3 derniers mois divisée par ton record de tous les temps. Le tracé gris refait le calcul sur les mêmes 3 mois il y a un an. Le centre du radar vaut 25 %.",
+    lire: "Tu n'es comparé qu'à toi-même. Un axe à 100 % est à ton meilleur niveau ; un axe en retrait n'a pas été sollicité à fond récemment, ou a vraiment reculé. Un record dû à une erreur de GPS écrase tout l'axe.",
+  },
+  muscu_volume: {
+    titre: "Volume de musculation",
+    quoi: "Le nombre de séries reçues par chaque groupe musculaire, sur 7 jours et semaine après semaine.",
+    calcul: "Chaque exercice des séances guidées (ou, à défaut, des notes du type « Dips 4x8 ») est rattaché à ses muscles : une série compte 1 pour le muscle principal, 0,5 pour un muscle secondaire. L'habitude est la moyenne des 4 semaines précédentes.",
+    lire: "Pour progresser, vise en gros 8 à 15 séries par semaine et par groupe. Un groupe qui reste gris plusieurs semaines est délaissé ; un groupe très foncé juste avant une grosse sortie mérite du repos.",
+  },
+  muscu_progression: {
+    titre: "Progression par exercice",
+    quoi: "L'évolution d'un exercice séance après séance.",
+    calcul: "Avec une charge : 1RM estimé = charge × (1 + répétitions ÷ 30). Au poids du corps : la meilleure série de la séance (les répétitions par minute pour un EMOM). Gainage : la durée tenue. Pour les tractions, dips et pompes, le lest équivalent est poids du corps × répétitions ÷ 30.",
+    lire: "La courbe doit monter par paliers. Trois séances sans progrès sur un exercice : change la charge, le nombre de séries ou le temps de repos.",
+  },
+  muscu_echec: {
+    titre: "Séries proches de l'échec",
+    quoi: "La part de tes séries terminées près de la limite, d'après le ressenti que tu notes à la fin de chaque exercice en séance guidée.",
+    calcul: "Séries des exercices notés « dur » ou « échec » ÷ toutes les séries notées, sur 4 semaines.",
+    lire: "Entre 15 et 45 %, le dosage est bon. En dessous, tu progresseras peu en force ; au-dessus, la fatigue s'accumule et déborde sur la course.",
+  },
 };

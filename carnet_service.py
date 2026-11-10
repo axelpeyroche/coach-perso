@@ -776,6 +776,8 @@ def _markdown_analyses(r: Optional[dict]) -> list[str]:
     l.append("")
     import corps_analyses
     l += corps_analyses.markdown(r.get("corps"))
+    import capacites_service
+    l += capacites_service.markdown(r.get("capacites"))
     return l
 
 
