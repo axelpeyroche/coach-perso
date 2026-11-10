@@ -31,7 +31,14 @@ CORREL_MIN = 8           # points minimum pour calculer une corrélation
 EFFORTS = [("1 km", 1000), ("5 km", 5000), ("10 km", 10000), ("Semi", 21097.5)]
 DUREES_EFFORTS = [1, 3, 5, 10, 20, 30, 60]    # minutes : meilleure distance couverte sur chaque durée
 DUREES_CS = (3, 5, 10, 20)                    # durées retenues pour l'allure critique
-VERSION_EFFORTS = 2
+VERSION_EFFORTS = 3
+DUREES_SECONDES = [10, 20, 30, 120, 5400, 7200, 10800]   # complètent DUREES_EFFORTS pour la courbe allure–durée
+DUREES_VAM = [5, 10, 20, 30, 60]              # minutes : meilleure montée (m/h) sur chaque durée
+VITESSE_SPRINT_MAX = 9.5                      # m/s (34 km/h) : au-delà sur 10 à 30 s, c'est le GPS
+VITESSE_SAUT = 12.5                           # m/s entre deux points : saut GPS
+# Classes de pente (clé, borne basse incluse, borne haute exclue)
+CLASSES_PENTE = [("m3", 0.15, 9), ("m2", 0.08, 0.15), ("m1", 0.03, 0.08), ("p", -0.03, 0.03),
+                 ("d1", -0.08, -0.03), ("d2", -0.15, -0.08), ("d3", -9, -0.15)]
 SPORTS_EFFORTS = cs.SPORTS_PIED | {"randonnee"}
 DURABILITE_MIN_MIN = 75  # durée minimale d'une sortie pour mesurer la durabilité
 BESOIN_SOMMEIL_H = 8.0
@@ -246,17 +253,67 @@ def _recuperation(mesures: dict[str, dict[date, float]], auj: date, jours: int =
 # Course à pied : meilleurs efforts, dérive cardiaque, prédictions, cadence
 # ---------------------------------------------------------------------------
 
+def _meilleure_distance(cumul: list, temps: list, d_s: float, vmax: float, sauts: Optional[list] = None,
+                        etire: float = 0) -> Optional[float]:
+    """Plus grande distance couverte en `d_s` secondes (fenêtre de temps glissante), ramenée à la durée exacte.
+    `sauts` : cumul des tronçons aberrants (saut GPS) ; une fenêtre qui en contient un est écartée.
+    `etire` : écart toléré au-delà de la durée (tracés peu denses), 0 = sans limite."""
+    meilleur, i = None, 0
+    for j in range(1, len(temps)):
+        while i + 1 < j and temps[j] - temps[i + 1] >= d_s:
+            i += 1
+        dt = temps[j] - temps[i]
+        if dt < d_s or (etire and dt > d_s * etire) or (sauts and sauts[j] - sauts[i]):
+            continue
+        dist = (cumul[j] - cumul[i]) * d_s / dt
+        if dist / d_s <= vmax and (meilleur is None or dist > meilleur):
+            meilleur = dist
+    return meilleur
+
+
+def _pentes(points: list, cumul: list, temps: list) -> dict:
+    """Distance, temps et dénivelé cumulés par classe de pente, sur des tronçons d'environ 100 m
+    (arrêts et sauts GPS écartés). Sert à comparer montée, plat et descente."""
+    out = {c: [0.0, 0.0, 0.0] for c, _, _ in CLASSES_PENTE}
+    k = 0
+    for j in range(1, len(points)):
+        dist = cumul[j] - cumul[k]
+        if dist < 100:
+            continue
+        a0, a1, dt = points[k][2], points[j][2], temps[j] - temps[k]
+        k = j
+        if not isinstance(a0, (int, float)) or not isinstance(a1, (int, float)) or dt <= 0 or dist > 400:
+            continue
+        v = dist / dt
+        if not 0.3 <= v <= 1000 / ALLURE_MIN_PLAUSIBLE:
+            continue
+        pente = (a1 - a0) / dist
+        if abs(pente) > 0.5:
+            continue
+        for c, bas, haut in CLASSES_PENTE:
+            if bas <= pente < haut:
+                out[c][0] += dist
+                out[c][1] += dt
+                out[c][2] += a1 - a0
+                break
+    return {c: [round(v[0]), round(v[1]), round(v[2])] for c, v in out.items() if v[0] >= 100}
+
+
 def meilleurs_efforts(points: list[list]) -> dict:
     """Meilleur temps sur chaque distance et meilleure distance sur chaque durée, par fenêtre
     glissante sur le tracé ([[lat, lon, alt, secondes], …]), plus la vitesse ascensionnelle
-    (VAM) des montées. Le temps est ramené à la distance exacte."""
+    (VAM) des montées, la meilleure montée par durée, le détail par classe de pente et le D−.
+    Le temps est ramené à la distance exacte."""
     points = [p for p in points if len(p) >= 4 and isinstance(p[3], (int, float))]
     if len(points) < 2:
         return {}
-    cumul, temps = [0.0], [points[0][3]]
+    cumul, temps, sauts = [0.0], [points[0][3]], [0]
     for a, b in zip(points, points[1:]):
-        cumul.append(cumul[-1] + cs._distance_m(a, b))
+        d = cs._distance_m(a, b)
+        dt = b[3] - a[3]
+        cumul.append(cumul[-1] + d)
         temps.append(b[3])
+        sauts.append(sauts[-1] + (1 if (dt > 0 and d / dt > VITESSE_SAUT) or (dt <= 0 and d > 15) else 0))
     res = {}
     for label, d in EFFORTS:
         if cumul[-1] < d:
@@ -278,22 +335,26 @@ def meilleurs_efforts(points: list[list]) -> dict:
     duree = temps[-1] - temps[0]
     par_duree = {}
     for m in DUREES_EFFORTS:
-        d_s = m * 60
-        if duree < d_s:
+        if duree < m * 60:
             continue
-        meilleur, i = None, 0
-        for j in range(1, len(temps)):
-            while i + 1 < j and temps[j] - temps[i + 1] >= d_s:
-                i += 1
-            dt = temps[j] - temps[i]
-            if dt >= d_s:
-                dist = (cumul[j] - cumul[i]) * d_s / dt
-                if dist / d_s <= vmax and (meilleur is None or dist > meilleur):
-                    meilleur = dist
+        meilleur = _meilleure_distance(cumul, temps, m * 60, vmax)
         if meilleur:
             par_duree[str(m)] = int(round(meilleur))
     if par_duree:
         res["d"] = par_duree
+
+    # Durées complémentaires de la courbe allure–durée (en secondes) : sprints et très longs efforts
+    par_sec = {}
+    for sec in DUREES_SECONDES:
+        if duree < sec:
+            continue
+        court = sec <= 30
+        meilleur = _meilleure_distance(cumul, temps, sec, VITESSE_SPRINT_MAX if court else vmax,
+                                       sauts if sec <= 120 else None, 1.6 if court else 0)
+        if meilleur:
+            par_sec[str(sec)] = int(round(meilleur))
+    if par_sec:
+        res["s"] = par_sec
 
     # VAM : tronçons de ~200 m dont la pente dépasse 5 %
     gain = t_montee = 0.0
@@ -311,19 +372,50 @@ def meilleurs_efforts(points: list[list]) -> dict:
     if gain >= 50 and t_montee > 0:
         res["vam"] = int(round(gain / t_montee * 3600))
         res["montee_m"] = int(round(gain))
+
+    # Meilleure montée par durée : plus grand gain d'altitude sur 5 à 60 min (m/h)
+    alt = [(t, p[2]) for t, p in zip(temps, points) if isinstance(p[2], (int, float))]
+    if len(alt) >= 2 and max(a for _, a in alt) - min(a for _, a in alt) >= 1:
+        vam_d = {}
+        for m in DUREES_VAM:
+            d_s = m * 60
+            if alt[-1][0] - alt[0][0] < d_s:
+                continue
+            meilleur, i = None, 0
+            for j in range(1, len(alt)):
+                while i + 1 < j and alt[j][0] - alt[i + 1][0] >= d_s:
+                    i += 1
+                dt = alt[j][0] - alt[i][0]
+                if dt >= d_s:
+                    g = (alt[j][1] - alt[i][1]) * d_s / dt
+                    if meilleur is None or g > meilleur:
+                        meilleur = g
+            if meilleur and meilleur >= 30 and meilleur / d_s * 3600 <= 2200:
+                vam_d[str(m)] = int(round(meilleur / d_s * 3600))
+        if vam_d:
+            res["vam_d"] = vam_d
+        pentes = _pentes(points, cumul, temps)
+        if pentes:
+            res["pentes"] = pentes
+        dmoins = cs.denivele_positif([-a for _, a in alt])
+        if dmoins is not None:
+            res["dmoins"] = int(dmoins)
     return res
 
 
-def maj_efforts(db: Session, user_id: int, acts: list[Activite]) -> int:
-    """Calcule (une fois par tracé) les meilleurs efforts des séances de course. Retourne le nombre calculé."""
+def maj_efforts(db: Session, user_id: int, acts: list[Activite], limite: int = 150) -> int:
+    """Calcule (une fois par tracé) les meilleurs efforts des séances de course. Retourne le nombre calculé.
+    Au plus `limite` tracés par appel, les plus récents d'abord : après un changement de version,
+    le rattrapage s'étale sur quelques ouvertures au lieu de bloquer la première."""
     pied = {a.id: a for a in acts if a.sport in SPORTS_EFFORTS}
     if not pied:
         return 0
     traces = dict(db.query(TraceGPS.activite_id, TraceGPS.id)
                   .filter(TraceGPS.utilisateur_id == user_id, TraceGPS.activite_id.in_(list(pied))).all())
-    a_faire = [tid for aid, tid in traces.items()
+    a_faire = [(pied[aid].debut, tid) for aid, tid in traces.items()
                if (cs._details_dict(pied[aid]).get("efforts") or {}).get("trace") != tid
                or (cs._details_dict(pied[aid]).get("efforts") or {}).get("v") != VERSION_EFFORTS]
+    a_faire = [tid for _, tid in sorted(a_faire, reverse=True)[:limite]]
     n = 0
     for i in range(0, len(a_faire), 50):
         for t in db.query(TraceGPS).filter(TraceGPS.id.in_(a_faire[i:i + 50])):
@@ -1234,6 +1326,9 @@ def calculer_analyses(db: Session, user: Utilisateur, aujourd_hui: Optional[date
                                            _recuperation(mesures, auj, jours=365, marqueurs=marqueurs))
     import capacites_service
     res["capacites"] = capacites_service.calculer(db, user, acts, mesures, vma, efforts, res["course"], cands_seuil, auj)
+    import capacites_avancees
+    res["capacites"].update(capacites_avancees.calculer(db, user, acts, mesures, vma, efforts, zones_jour, serie_complete,
+                                                        objectifs, auj))
     import essentiel_service
     res["essentiel"] = essentiel_service.essentiel(res)
     return res

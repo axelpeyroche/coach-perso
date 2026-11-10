@@ -17,6 +17,7 @@ import { axeX, axeY, grille, curseur, InfoBulle, Legende, GRIS } from "../compon
 import PoidsAnalyse from "../components/Poids";
 import { JournalDouleurs, JoursMarques } from "../components/Corps";
 import { ProfilAthlete, RadarProfil, Musculation } from "../components/Capacites";
+import { CourbeAllure, ProfilVitesse, EquilibreCharges, Pentes, SeuilAerobie, Reperes, Simulateur } from "../components/CapacitesAvancees";
 import { RegulariteSommeil, RecupFc, AsymetrieMarche } from "../components/MesuresCompanion";
 import {
   TendanceVfc, FenetreSommeil, EffetNuit, TempsRecuperation, Chaleur, TendancesLongues, CompositionCorporelle,
@@ -1066,7 +1067,7 @@ function DetteSommeil({ s }) {
 }
 
 // ── Courbe des meilleurs efforts et allure critique ────────────────────────
-function EffortsDuree({ e }) {
+function EffortsDuree({ e, courbe }) {
   const data = useMemo(() => (e?.courbe ?? []).map((c) => ({
     label: c.label, actuel: c.actuel?.allure_sec_km ?? null,
     an_dernier: c.an_dernier?.allure_sec_km ?? null, record: c.record?.allure_sec_km ?? null,
@@ -1104,8 +1105,8 @@ function EffortsDuree({ e }) {
           D′ est la distance que tu peux courir plus vite avant d'être à bout.
         </p>
       </Card>
-      <div className="lg:col-span-2 min-w-0">
-        <Graphe className="h-full" titre="Courbe des meilleurs efforts" couleur={ORANGE} sousTitre="Meilleure allure tenue sur chaque durée (passages GPS)"
+      <div id="courbe_allure" className="lg:col-span-2 min-w-0 scroll-mt-24">
+        {courbe?.points?.length ? <CourbeAllure c={courbe} className="h-full" /> : <Graphe className="h-full" titre="Courbe des meilleurs efforts" couleur={ORANGE} sousTitre="Meilleure allure tenue sur chaque durée (passages GPS)"
           note="Une courbe actuelle proche du record sur les durées longues traduit une bonne endurance ; un écart sur les durées courtes, un manque de vitesse.">
           <ResponsiveContainer width="100%" height={240}>
             <LineChart data={data} margin={{ left: 0, right: 8, top: 4 }}>
@@ -1120,7 +1121,7 @@ function EffortsDuree({ e }) {
             </LineChart>
           </ResponsiveContainer>
           <Legende items={[{ label: "90 derniers jours", couleur: ORANGE }, { label: "Il y a un an", couleur: CYAN }, { label: "Record", couleur: GRIS }]} />
-        </Graphe>
+        </Graphe>}
       </div>
     </div>
   );
@@ -1555,7 +1556,8 @@ const ONGLETS = [
 const ANCRES = {
   charge: "forme", monotonie: "forme", intensite: "forme",
   efforts: "capacites", efficacite: "capacites", vma: "capacites", zones: "capacites",
-  profil_athlete: "capacites", muscu: "capacites",
+  profil_athlete: "capacites", muscu: "capacites", courbe_allure: "capacites", profil_vitesse: "capacites",
+  charges_equilibre: "capacites", pentes: "capacites", seuil_aerobie: "capacites", reperes: "capacites", simulateur: "capacites",
   recuperation: "corps", signaux: "corps", pas: "corps", poids: "corps", marqueurs: "corps", douleurs: "corps",
   tendance_vfc: "corps", effet_nuit: "corps", temps_recuperation: "corps", chaleur: "corps", saisons: "corps", composition: "corps",
   dette: "sommeil", regularite: "sommeil", fenetre: "sommeil",
@@ -1644,13 +1646,21 @@ export default function Analyses() {
             <Section titre="Profil d'athlète">
               <ProfilAthlete p={a.capacites?.profil} />
               <RadarProfil r={a.capacites?.profil?.radar} />
+              <Ancre id="reperes"><Reperes r={a.capacites?.reperes} /></Ancre>
             </Section>
           </Ancre>
           <Section titre="Course à pied">
             <Ancre id="vma"><Vma v={a.vma} /></Ancre>
-            <Ancre id="efforts" className="space-y-2.5"><EffortsDuree e={a.efforts_duree} /></Ancre>
+            <Ancre id="efforts" className="space-y-2.5"><EffortsDuree e={a.efforts_duree} courbe={a.capacites?.courbe} /></Ancre>
+            <Ancre id="profil_vitesse"><ProfilVitesse v={a.capacites?.vitesse} /></Ancre>
+            <Ancre id="seuil_aerobie"><SeuilAerobie s={a.capacites?.seuil_aerobie} /></Ancre>
+            <Ancre id="pentes"><Pentes p={a.capacites?.pentes} /></Ancre>
             <Course c={a.course} />
             <Ancre id="efficacite"><Efficacite ef={a.efficacite} /></Ancre>
+          </Section>
+          <Section titre="Charge et projection">
+            <Ancre id="charges_equilibre"><EquilibreCharges c={a.capacites?.charges} /></Ancre>
+            <Ancre id="simulateur"><Simulateur s={a.capacites?.simulateur} /></Ancre>
           </Section>
           <Ancre id="muscu"><Section titre="Musculation"><Musculation m={a.capacites?.musculation} /></Section></Ancre>
           <Ancre id="zones">

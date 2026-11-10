@@ -10,19 +10,19 @@ import { Chevron } from "./ui";
 import { axeX, axeY, grille, curseur, InfoBulle, Legende, GRIS } from "./graphiques";
 import { fmtDate, nombre } from "../carnet";
 
-const VIOLET = "#AF52DE";
-const INDIGO = "#5856D6";
-const VERT = "#34C759";
-const ORANGE = "#FF9500";
-const ROUGE = "#FF3B30";
-const CYAN = "#32ADE6";
-const BLEU = "#007AFF";
+export const VIOLET = "#AF52DE";
+export const INDIGO = "#5856D6";
+export const VERT = "#34C759";
+export const ORANGE = "#FF9500";
+export const ROUGE = "#FF3B30";
+export const CYAN = "#32ADE6";
+export const BLEU = "#007AFF";
 
 const court = (iso) => fmtDate(iso, { day: "numeric", month: "short" });
 const pluriel = (n, mot) => `${n} ${mot}${n > 1 ? "s" : ""}`;
 const nb = (v) => (v == null ? "—" : nombre(v, Number.isInteger(v) ? 0 : 1));
 
-function Entete({ titre, couleur, sousTitre, aide, action }) {
+export function Entete({ titre, couleur, sousTitre, aide, action }) {
   return (
     <div className="flex items-start justify-between gap-3 mb-3">
       <div className="min-w-0">
@@ -36,7 +36,7 @@ function Entete({ titre, couleur, sousTitre, aide, action }) {
   );
 }
 
-function Tuile({ label, value, sub }) {
+export function Tuile({ label, value, sub }) {
   return (
     <div className="tuile px-3 py-2.5 min-w-0">
       <p className="text-[12px] text-label-2 leading-4">{label}</p>
@@ -46,8 +46,8 @@ function Tuile({ label, value, sub }) {
   );
 }
 
-const Vide = ({ children }) => <p className="text-[15px] text-label-2">{children}</p>;
-const Message = ({ children, ton }) => (
+export const Vide = ({ children }) => <p className="text-[15px] text-label-2">{children}</p>;
+export const Message = ({ children, ton }) => (
   <p className={clsx("rounded-xl px-3 py-2 text-[13px] leading-[18px]",
     ton === "alerte" ? "bg-ios-orange/[0.12] text-ios-orange" : ton === "bien" ? "bg-ios-green/[0.12] text-ios-green" : "bg-remplissage text-label-2")}>
     {children}

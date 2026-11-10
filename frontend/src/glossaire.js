@@ -271,4 +271,46 @@ export const GLOSSAIRE = {
     calcul: "Séries des exercices notés « dur » ou « échec » ÷ toutes les séries notées, sur 4 semaines.",
     lire: "Entre 15 et 45 %, le dosage est bon. En dessous, tu progresseras peu en force ; au-dessus, la fatigue s'accumule et déborde sur la course.",
   },
+  courbe_allure: {
+    titre: "Courbe allure–durée",
+    quoi: "La meilleure allure que tu as tenue sur chaque durée, de 10 secondes à 3 heures : ta signature de coureur.",
+    calcul: "Pour chaque durée, le carnet cherche dans tes tracés GPS le passage le plus rapide. « Cette saison » couvre les 12 derniers mois, « saison précédente » les 12 d'avant, « record » tout l'historique. Le modèle prolonge ton allure critique et ta réserve D′ : vitesse = allure critique + D′ ÷ durée.",
+    lire: "Une courbe de saison collée au record : tu es à ton meilleur niveau. Un creux sur les durées courtes traduit un manque de vitesse, sur les longues un manque d'endurance. Un point orange creux signale une durée sans effort franc depuis 90 jours : la courbe y est peut-être en retard sur ton niveau réel.",
+  },
+  profil_vitesse: {
+    titre: "Profil de vitesse",
+    quoi: "Le rapport entre ta vitesse maximale sur un sprint et ta VMA, qui dit si tu es plutôt endurant ou plutôt rapide.",
+    calcul: "Vitesse max = ton meilleur passage sur 10 s (à défaut 20 s, 30 s ou 1 min) dans tes tracés. Réserve de vitesse = vitesse max − VMA. Sous 1,45 fois la VMA le profil est endurant, au-delà de 1,6 il est rapide.",
+    lire: "Un profil rapide supporte bien les fractions courtes et intenses, mais se fatigue plus vite sur les efforts longs ; un profil endurant l'inverse. Sans vrai sprint dans tes séances, la vitesse max est sous-estimée : quelques lignes droites lancées suffisent à la mesurer.",
+  },
+  equilibre_charges: {
+    titre: "Équilibre des charges",
+    quoi: "La charge répartie par discipline, et ce que tes jambes encaissent comparé à ce que ton cœur fournit.",
+    calcul: "Jambes = kilomètres à pied + dénivelé négatif ÷ 100 (100 m de descente comptent comme 1 km). Cœur = durée × effort ressenti des séances hors musculation. Chaque tranche de 7 jours est ramenée en base 100 par rapport à ta moyenne des tranches précédentes.",
+    lire: "Les deux courbes doivent monter ensemble. Les jambes qui grimpent nettement plus vite que le cœur (beaucoup de descente, reprise de la course après du vélo) : c'est là que naissent les blessures de surcharge, même si la fatigue générale paraît faible.",
+  },
+  pentes: {
+    titre: "Montée et descente",
+    quoi: "Ton allure selon la pente, et ta meilleure vitesse d'ascension sur plusieurs durées.",
+    calcul: "Chaque tracé est découpé en tronçons classés par pente. Pour chaque classe : allure moyenne sur 12 mois, exprimée en % de ta vitesse sur le plat. La vitesse d'ascension (m/h) est le meilleur dénivelé positif gagné sur la durée indiquée.",
+    lire: "En montée raide, tomber vers 50 à 60 % de la vitesse du plat est normal. En descente, rester sous 100 % montre un frein technique ou musculaire : c'est du temps facile à gagner. L'écart sur 3 mois dit si tu progresses dans cette pente.",
+  },
+  seuil_aerobie: {
+    titre: "Seuil aérobie",
+    quoi: "La fréquence cardiaque jusqu'à laquelle tu peux courir longtemps sans que le cœur s'emballe : le plafond de l'endurance fondamentale.",
+    calcul: "Sur chaque sortie continue de 40 min ou plus, la dérive cardiaque compare la seconde moitié à la première. Une sortie est stable sous 5 % de dérive. Le seuil est la FC moyenne en haut des sorties stables (80e centile), sur 12 mois.",
+    lire: "Si le seuil est au-dessus du haut de ta zone 2, tes zones sont prudentes et peuvent être relevées. S'il est en dessous, tes sorties faciles sont un peu trop rapides. « ≥ » signifie qu'aucune sortie n'a encore dérivé : le vrai seuil est peut-être plus haut. La chaleur et la déshydratation augmentent la dérive.",
+  },
+  reperes_age: {
+    titre: "Âge de forme et repères",
+    quoi: "Où tu te situes par rapport aux personnes de ton âge et de ton sexe. Un repère pour se situer, pas une note.",
+    calcul: "VO2max : comparée aux valeurs de référence par décennie (registre FRIEND) ; l'âge de forme est l'âge dont ta VO2max est la médiane. FC de repos : comparée aux plages habituelles des adultes. 10 km : ton meilleur temps de l'année en % du record du monde, corrigé de l'âge après 35 ans.",
+    lire: "Ces repères viennent de populations générales, pas de sportifs : être au-dessus de la médiane est courant quand on s'entraîne. Suis surtout leur évolution d'une année sur l'autre. La VO2max d'une montre est une estimation à quelques points près.",
+  },
+  simulateur: {
+    titre: "Simulateur « et si »",
+    quoi: "Une projection de ta forme et de ta fraîcheur jusqu'à ton objectif, selon le volume et l'affûtage choisis.",
+    calcul: "Même calcul que la courbe de forme : la forme suit la charge sur 42 jours, la fatigue sur 7 jours, la fraîcheur est leur différence. Les séances du plan sont reprises, puis ta charge habituelle. Affûtage 1 semaine : −40 % les 7 derniers jours. Affûtage 2 semaines : −25 % puis −50 %.",
+    lire: "Le jour d'une course, vise « frais » : une fraîcheur positive sans perdre plus de 5 à 10 % de forme. « Très frais » avec une forme qui chute signifie un affûtage trop long. C'est un modèle simple : il ignore le sommeil, le stress et la qualité des séances.",
+  },
 };
