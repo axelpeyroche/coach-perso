@@ -173,13 +173,19 @@ def _statut(score: Optional[float]) -> Optional[str]:
     return "vert" if score >= -0.5 else "orange" if score >= -1.5 else "rouge"
 
 
-def _recuperation(mesures: dict[str, dict[date, float]], auj: date, jours: int = 90) -> dict:
+def _recuperation(mesures: dict[str, dict[date, float]], auj: date, jours: int = 90,
+                  marqueurs: Optional[dict[date, list[str]]] = None) -> dict:
+    """`marqueurs` : jours marqués par l'athlète (malade, voyage…). Ceux qui faussent la mesure sont
+    écartés de la référence personnelle, et chaque point porte ses marqueurs pour les graphiques."""
+    import corps_service as co
+    marqueurs = marqueurs or {}
+    exclus = co.jours_exclus(marqueurs)
     vfc, fcr, som = mesures.get("vfc", {}), mesures.get("fc_repos", {}), mesures.get("sommeil", {})
     nuit = {t: mesures.get(t, {}) for t in ("fc_sommeil", "score_sommeil", "spo2", "respiration",
                                              "sommeil_profond", "sommeil_leger", "sommeil_paradoxal", "sommeil_eveil")}
 
     def reference(serie: dict[date, float], j: date):
-        vals = [v for d, v in serie.items() if j - timedelta(days=REF_RECUP_JOURS) <= d < j]
+        vals = [v for d, v in serie.items() if j - timedelta(days=REF_RECUP_JOURS) <= d < j and d not in exclus]
         if len(vals) < REF_RECUP_MIN:
             return None, None
         sd = pstdev(vals)
@@ -190,6 +196,8 @@ def _recuperation(mesures: dict[str, dict[date, float]], auj: date, jours: int =
         j = auj - timedelta(days=k)
         p = {"jour": j.isoformat(), "vfc": vfc.get(j), "fc_repos": fcr.get(j), "sommeil": som.get(j),
              **{t: serie.get(j) for t, serie in nuit.items()}}
+        if j in marqueurs:
+            p["marqueurs"] = marqueurs[j]
         fen7 = [vfc[d] for d in vfc if j - timedelta(days=6) <= d <= j]
         p["vfc_moy7"] = _r(_moy(fen7))
         zs = []
@@ -1173,6 +1181,11 @@ def _mesures_par_type(db: Session, user_id: int, depuis: date) -> dict[str, dict
     return out
 
 
+def _marqueurs(db: Session, user_id: int, auj: date) -> dict[date, list[str]]:
+    import corps_service as co
+    return co.marqueurs_par_jour(db, user_id, auj - timedelta(days=90 + REF_RECUP_JOURS))
+
+
 def calculer_analyses(db: Session, user: Utilisateur, aujourd_hui: Optional[date] = None) -> dict:
     auj = aujourd_hui or date.today()
     acts = (db.query(Activite).filter(Activite.utilisateur_id == user.id, Activite.debut
@@ -1195,7 +1208,7 @@ def calculer_analyses(db: Session, user: Utilisateur, aujourd_hui: Optional[date
         "genere_le": datetime.utcnow().isoformat(timespec="seconds") + "Z",
         "forme": forme,
         "zones": _zones_hebdo(acts, user, auj),
-        "recuperation": _recuperation(mesures, auj),
+        "recuperation": _recuperation(mesures, auj, marqueurs=_marqueurs(db, user.id, auj)),
         "course": _course(acts, auj),
         "vma": vma,
         "plan": _respect_plan(db, user.id, auj),

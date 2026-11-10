@@ -37,6 +37,24 @@ export const GLOSSAIRE = {
     calcul: "FC au seuil estimée depuis tes efforts soutenus (20 à 60 min) des 12 derniers mois ; zones à 85, 90, 95 et 100 % du seuil. Allures à 72, 80, 90 et 98 % de ton allure critique.",
     lire: "Z1 récupération, Z2 endurance (tu peux parler), Z3 tempo, Z4 seuil (tenable 30 à 60 min), Z5 VMA.",
   },
+  marqueurs: {
+    titre: "Jours marqués",
+    quoi: "Le contexte que la montre ne voit pas : malade, en voyage, alcool, gros stress, courbatures.",
+    calcul: "Les jours malade, voyage, alcool et stress sont retirés du calcul de ta normale (VFC, FC de repos, signaux de la nuit). Les courbatures sont seulement notées.",
+    lire: "Marque le jour même, en un toucher depuis la forme du matin. Ta référence reste propre et une mauvaise nuit expliquée ne déclenche pas de fausse alerte les semaines suivantes.",
+  },
+  ressenti: {
+    titre: "Ressenti du matin",
+    quoi: "Quatre notes de 1 à 5 : énergie, jambes, humeur, motivation.",
+    calcul: "Moyenne des notes saisies. Elle complète les mesures de la montre et part dans l'export pour le plan de la semaine.",
+    lire: "Quand le ressenti et les mesures se contredisent plusieurs jours de suite, c'est le ressenti qui a le plus souvent raison.",
+  },
+  douleurs: {
+    titre: "Journal des douleurs",
+    quoi: "Chaque gêne suivie par zone, avec son intensité jour après jour (0 à 10).",
+    calcul: "À l'ouverture, le carnet compare ta charge des 14 jours précédents à ta charge habituelle sur 14 jours : une hausse de plus de 30 % est signalée.",
+    lire: "Une douleur qui apparaît après une forte hausse de charge est souvent une surcharge. Au-delà de 3/10 pendant l'effort ou si elle dure plus de quelques jours, consulte.",
+  },
   recuperation: {
     titre: "Score de récupération",
     quoi: "Compare ta VFC et ta FC de repos du matin à ta propre normale.",

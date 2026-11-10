@@ -210,3 +210,14 @@ export const testerPush = () => api.post("/push/test").then((r) => r.data);
 export const changerHeurePush = (heure) => api.put("/push/heure", { heure }).then((r) => r.data);
 export const changerRappelPoids = (jour) => api.put("/push/rappel-poids", { jour }).then((r) => r.data);
 export const garderSeulPush = (endpoint) => api.post("/push/garder-seul", { endpoint }).then((r) => r.data);
+
+// --- Corps : marqueurs de journée, ressenti du matin, douleurs, adaptation du plan ---
+export const getMarqueurs = () => api.get("/corps/marqueurs").then((r) => r.data);
+export const basculerMarqueur = (type, actif, jour) => api.put("/corps/marqueurs", { type, actif, jour }).then((r) => r.data);
+export const noterRessenti = (valeurs) => api.put("/corps/ressenti", valeurs).then((r) => r.data);
+export const getDouleurs = () => api.get("/corps/douleurs").then((r) => r.data);
+export const creerDouleur = (payload) => api.post("/corps/douleurs", payload).then((r) => r.data);
+export const modifierDouleur = (id, payload) => api.patch(`/corps/douleurs/${id}`, payload).then((r) => r.data);
+export const releverDouleur = (id, payload) => api.put(`/corps/douleurs/${id}/releve`, payload).then((r) => r.data);
+export const supprimerDouleur = (id) => api.delete(`/corps/douleurs/${id}`).then((r) => r.data);
+export const adapterPrevue = (id, action) => api.post(`/plan/${id}/adapter`, { action }).then((r) => r.data);

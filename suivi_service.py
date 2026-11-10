@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 import analyses_service as an
 import carnet_service as cs
+import corps_service as co
 from models import Activite, PoidsUtilisateur, PushSubscription, SeancePrevue, Utilisateur
 
 _log = logging.getLogger(__name__)
@@ -81,6 +82,9 @@ MALADIE_CHARGE_MAX = 0.8  # …alors que la charge de la semaine est faible : la
 NIVEAU_MALADIE = ("Signes de maladie possible",
                   "Ta FC de repos est nettement au-dessus de ta normale alors que tu t'es peu entraîné : "
                   "repos ou marche, pas de séance dure tant que ça ne revient pas.")
+
+NIVEAU_MALADE = ("Malade", "Tu as marqué ce jour comme malade : repos complet. Les mesures d'aujourd'hui "
+                 "ne compteront pas dans ta référence.")
 
 NIVEAUX = {
     "vert": ("En forme", "Feu vert : tu peux faire la séance la plus exigeante de la semaine."),
@@ -164,7 +168,8 @@ def _intensite(p: SeancePrevue) -> float:
 def forme_du_jour(db: Session, user: Utilisateur, auj: Optional[date] = None) -> dict:
     auj = auj or aujourdhui(user)
     mesures = an._mesures_par_type(db, user.id, auj - timedelta(days=an.REF_RECUP_JOURS + 30))
-    rec = an._recuperation(mesures, auj, jours=21)
+    marqueurs = co.marqueurs_par_jour(db, user.id, auj - timedelta(days=an.REF_RECUP_JOURS + 30))
+    rec = an._recuperation(mesures, auj, jours=21, marqueurs=marqueurs)
     pts = rec["points"]
     dernier = next((p for p in reversed(pts) if p["score"] is not None), None)
     frais = dernier if dernier and date.fromisoformat(dernier["jour"]) >= auj - timedelta(days=1) else None
@@ -177,6 +182,13 @@ def forme_du_jour(db: Session, user: Utilisateur, auj: Optional[date] = None) ->
                          SeancePrevue.jour <= lundi + timedelta(days=6), SeancePrevue.activite_id.is_(None),
                          SeancePrevue.statut != "sautee")
                  .order_by(SeancePrevue.jour, SeancePrevue.ordre, SeancePrevue.id).all())
+    # Pour l'adaptation : les séances des prochains jours, semaine suivante comprise
+    proches = (db.query(SeancePrevue)
+               .filter(SeancePrevue.utilisateur_id == user.id, SeancePrevue.jour >= auj,
+                       SeancePrevue.jour <= auj + timedelta(days=4), SeancePrevue.activite_id.is_(None),
+                       SeancePrevue.statut != "sautee")
+               .order_by(SeancePrevue.jour, SeancePrevue.ordre, SeancePrevue.id).all())
+    proches = [p for p in proches if not (cs.lire_deroule(p) or {}).get("fin")]
     faite_auj = db.query(Activite.id).filter(
         Activite.utilisateur_id == user.id,
         Activite.debut >= datetime.combine(auj, datetime.min.time()),
@@ -184,9 +196,11 @@ def forme_du_jour(db: Session, user: Utilisateur, auj: Optional[date] = None) ->
 
     statut = frais["statut"] if frais else None
     ratio = _ratio_charge(db, user.id, auj)
-    maladie = bool(frais) and _maladie_possible(pts, ratio)
+    malade = "malade" in marqueurs.get(auj, [])          # déclaré par l'athlète
+    maladie = malade or (bool(frais) and _maladie_possible(pts, ratio))
     if maladie:
         statut = "rouge"
+    niveau_maladie = NIVEAU_MALADE if malade else NIVEAU_MALADIE
     conseil, suggestion = None, None
     if restantes:
         tri = sorted(restantes, key=_intensite)
@@ -210,9 +224,14 @@ def forme_du_jour(db: Session, user: Utilisateur, auj: Optional[date] = None) ->
     return {
         "jour": auj.isoformat(),
         "statut": statut,
-        "label": NIVEAU_MALADIE[0] if maladie else NIVEAUX[statut][0] if statut else None,
-        "message": NIVEAU_MALADIE[1] if maladie else NIVEAUX[statut][1] if statut else None,
+        "label": niveau_maladie[0] if maladie else NIVEAUX[statut][0] if statut else None,
+        "message": niveau_maladie[1] if maladie else NIVEAUX[statut][1] if statut else None,
         "maladie_possible": maladie,
+        "malade": malade,
+        "marqueurs": marqueurs.get(auj, []),
+        "types_marqueurs": co.TYPES_MARQUEURS,
+        "ressenti": co.ressenti_du(db, user.id, auj),
+        "adaptation": co.proposition_adaptation(proches, auj, statut, malade, marqueurs, _intensite),
         "charge_ratio": ratio,
         "explication": _explication(frais, ratio, maladie) if frais else [],
         "mesure_du": frais["jour"] if frais else None,

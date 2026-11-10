@@ -15,6 +15,7 @@ import Feuille from "../components/Feuille";
 import { GLOSSAIRE } from "../glossaire";
 import { axeX, axeY, grille, curseur, InfoBulle, Legende, GRIS } from "../components/graphiques";
 import PoidsAnalyse from "../components/Poids";
+import { JournalDouleurs, JoursMarques } from "../components/Corps";
 import { RegulariteSommeil, RecupFc, AsymetrieMarche } from "../components/MesuresCompanion";
 import api, { getAnalyses } from "../api";
 import { fmtAllureSec, fmtDate, fmtDuree, nombre, sportInfo } from "../carnet";
@@ -346,6 +347,9 @@ function Recuperation({ r }) {
   }
   const a = r.actuel, s = r.sommeil;
   const st = a?.statut ? RECUP[a.statut] : null;
+  const marques = data.filter((p) => p.marqueurs?.length);
+  const traits = marques.map((p) => <ReferenceLine key={p.jour} x={p.label} stroke={ORANGE} strokeOpacity={0.55} strokeDasharray="2 3" />);
+  const noteMarques = marques.length ? `Traits orange : ${marques.length} jour${marques.length > 1 ? "s" : ""} marqué${marques.length > 1 ? "s" : ""} (malade, voyage…), hors de ta normale.` : null;
   return (
     <>
       <div className="grid gap-3 lg:grid-cols-3">
@@ -368,13 +372,14 @@ function Recuperation({ r }) {
           <p className="text-[12px] text-label-3 mt-3">Écart à ta moyenne des 60 jours précédents (en écarts-types) : VFC haute et FC repos basse = bien récupéré.</p>
         </Card>
         <div className="lg:col-span-2 min-w-0">
-          <Graphe className="h-full" titre="Variabilité cardiaque" couleur={VIOLET} sousTitre="90 jours · bande = ta normale (réf. ± 1 écart-type)">
+          <Graphe className="h-full" titre="Variabilité cardiaque" couleur={VIOLET} sousTitre="90 jours · bande = ta normale (réf. ± 1 écart-type)" note={noteMarques}>
             <ResponsiveContainer width="100%" height={240}>
               <ComposedChart data={data} margin={{ left: 0, right: 0, top: 4 }}>
                 <CartesianGrid {...grille} />
                 <XAxis dataKey="label" {...axeX} minTickGap={32} />
                 <YAxis {...axeY} domain={["auto", "auto"]} />
                 <Tooltip cursor={ligneCurseur} content={<InfoBulle format={(v) => (Array.isArray(v) ? `${nombre(v[0], 0)}–${nombre(v[1], 0)}` : nombre(v, 0))} />} />
+                {traits}
                 <Area dataKey="bande" name="Normale" stroke="none" fill={VIOLET} fillOpacity={0.12} />
                 <Line dataKey="vfc" name="VFC (ms)" stroke={VIOLET} strokeOpacity={0.35} strokeWidth={1} dot={{ r: 1.5, strokeWidth: 0, fill: VIOLET }} connectNulls />
                 <Line dataKey="vfc_moy7" name="Moyenne 7 j" stroke={VIOLET} strokeWidth={2.5} dot={false} connectNulls />
@@ -390,6 +395,7 @@ function Recuperation({ r }) {
               <XAxis dataKey="label" {...axeX} minTickGap={32} />
               <YAxis {...axeY} domain={["dataMin - 2", "dataMax + 2"]} />
               <Tooltip cursor={ligneCurseur} content={<InfoBulle format={(v) => `${nombre(v, 0)} bpm`} />} />
+              {traits}
               <Line dataKey="fc_ref" name="Référence" stroke={GRIS} strokeDasharray="4 4" dot={false} connectNulls />
               <Line dataKey="fc_repos" name="FC repos" stroke={ROSE} strokeWidth={2} dot={false} connectNulls />
             </LineChart>
@@ -1545,7 +1551,7 @@ const ONGLETS = [
 const ANCRES = {
   charge: "forme", monotonie: "forme", intensite: "forme",
   efforts: "capacites", efficacite: "capacites", vma: "capacites", zones: "capacites",
-  recuperation: "corps", signaux: "corps", pas: "corps", poids: "corps",
+  recuperation: "corps", signaux: "corps", pas: "corps", poids: "corps", marqueurs: "corps", douleurs: "corps",
   dette: "sommeil", regularite: "sommeil",
   foulee: "technique", denivele: "technique",
   plan: "bilan", annuel: "bilan", correlations: "bilan",
@@ -1650,7 +1656,9 @@ export default function Analyses() {
               <RecupFc />
               <AsymetrieMarche />
             </div>
+            <Ancre id="marqueurs"><JoursMarques /></Ancre>
           </Section>
+          <Ancre id="douleurs"><Section titre="Douleurs"><JournalDouleurs /></Section></Ancre>
           <Ancre id="poids"><Section titre="Poids"><PoidsAnalyse /></Section></Ancre>
         </>
       )}

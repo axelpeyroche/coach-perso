@@ -471,3 +471,60 @@ class Animation(Base):
     nom: Mapped[str] = mapped_column(String(200), nullable=False)
     donnees: Mapped[str] = mapped_column(Text, nullable=False)
     cree_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+# ---------------------------------------------------------------------------
+# Corps : marqueurs de journée, ressenti du matin, journal des douleurs
+# ---------------------------------------------------------------------------
+
+class MarqueurJour(Base):
+    """Contexte d'une journée (malade, voyage, alcool, stress, courbatures) : explique une mesure
+    inhabituelle et l'écarte de la référence personnelle (voir corps_service)."""
+    __tablename__ = "marqueurs_jour"
+    __table_args__ = (UniqueConstraint("utilisateur_id", "jour", "type", name="uq_marqueur_jour"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    utilisateur_id: Mapped[int] = mapped_column(ForeignKey("utilisateurs.id", ondelete="CASCADE"), nullable=False, index=True)
+    jour: Mapped[date] = mapped_column(Date, nullable=False)
+    type: Mapped[str] = mapped_column(String(20), nullable=False)
+    cree_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class RessentiMatin(Base):
+    """Ressenti noté au réveil, de 1 (très mauvais) à 5 (excellent)."""
+    __tablename__ = "ressentis_matin"
+    __table_args__ = (UniqueConstraint("utilisateur_id", "jour", name="uq_ressenti_jour"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    utilisateur_id: Mapped[int] = mapped_column(ForeignKey("utilisateurs.id", ondelete="CASCADE"), nullable=False, index=True)
+    jour: Mapped[date] = mapped_column(Date, nullable=False)
+    energie: Mapped[Optional[int]] = mapped_column(Integer)
+    jambes: Mapped[Optional[int]] = mapped_column(Integer)
+    humeur: Mapped[Optional[int]] = mapped_column(Integer)
+    motivation: Mapped[Optional[int]] = mapped_column(Integer)
+
+
+class Douleur(Base):
+    """Une gêne ou une blessure suivie dans le temps : zone du corps, dates, notes (kiné)."""
+    __tablename__ = "douleurs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    utilisateur_id: Mapped[int] = mapped_column(ForeignKey("utilisateurs.id", ondelete="CASCADE"), nullable=False, index=True)
+    zone: Mapped[str] = mapped_column(String(30), nullable=False)
+    cote: Mapped[Optional[str]] = mapped_column(String(10))          # gauche | droite | None
+    debut: Mapped[date] = mapped_column(Date, nullable=False)
+    fin: Mapped[Optional[date]] = mapped_column(Date)                 # None = en cours
+    notes: Mapped[Optional[str]] = mapped_column(Text)
+    cree_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class ReleveDouleur(Base):
+    """Intensité d'une douleur un jour donné (0 = rien, 10 = insupportable)."""
+    __tablename__ = "releves_douleur"
+    __table_args__ = (UniqueConstraint("douleur_id", "jour", name="uq_releve_douleur_jour"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    douleur_id: Mapped[int] = mapped_column(ForeignKey("douleurs.id", ondelete="CASCADE"), nullable=False, index=True)
+    jour: Mapped[date] = mapped_column(Date, nullable=False)
+    intensite: Mapped[int] = mapped_column(Integer, nullable=False)
+    note: Mapped[Optional[str]] = mapped_column(String(500))

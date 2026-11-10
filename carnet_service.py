@@ -698,7 +698,9 @@ def construire_export(db: Session, user: Utilisateur) -> dict:
     )
     stats = calculer_stats(acts)
     import analyses_service  # import local : le module d'analyses s'appuie sur celui-ci
+    import corps_service
     return {
+        "corps": corps_service.export(db, user.id),
         "genere_le": datetime.utcnow().isoformat(timespec="seconds") + "Z",
         "profil": _profil(db, user),
         "objectifs": [progression_objectif(o, acts) for o in objectifs],
@@ -817,6 +819,10 @@ def export_markdown(data: dict) -> str:
         if o.get("notes"):
             l.append(f"  - Notes : {_cell(o['notes'])}")
     l.append("")
+
+    if data.get("corps"):
+        import corps_service
+        l += corps_service.markdown(data["corps"])
 
     s = data["stats"]
     l += ["## Synthèse", "", "| Période | Séances | Distance (km) | Durée (h) | D+ (m) | Charge (min×RPE) |",

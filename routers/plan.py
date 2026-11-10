@@ -170,6 +170,28 @@ def importer_plan(
     return {"ok": True, **bilan}
 
 
+class AdapterSchema(BaseModel):
+    action: str = Field(..., pattern="^(alleger|decaler|sauter)$")
+
+
+@router.post("/api/plan/{prevue_id}/adapter", summary="Allège, décale ou saute une séance (forme du matin)")
+def adapter_prevue(
+    prevue_id: int,
+    payload: AdapterSchema,
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(obtenir_session),
+):
+    import corps_service as co
+    import suivi_service as sv
+    p = _prevue(db, current_user, prevue_id)
+    if p.activite_id or (cs.lire_deroule(p) or {}).get("fin"):
+        raise HTTPException(400, "Séance déjà réalisée")
+    message = co.adapter_seance(db, p, payload.action, sv.aujourdhui(current_user))
+    db.commit()
+    db.refresh(p)
+    return {"message": message, "seance": _une(db, p)}
+
+
 @router.patch("/api/plan/{prevue_id}", summary="Statut (sautée), commentaire ou rattachement à une activité")
 def modifier_prevue(
     prevue_id: int,
