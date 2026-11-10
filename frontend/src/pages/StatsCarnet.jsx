@@ -10,15 +10,15 @@ import Page from "../components/Page";
 import StatTile from "../components/StatTile";
 import { FormeGraphiques } from "../components/Forme";
 import Jalons from "../components/Jalons";
-import { Section, Segmente } from "../components/ui";
-import { axeX, axeY, grille, curseur, InfoBulle, Legende } from "../components/graphiques";
+import { Section, Segmente, Squelettes } from "../components/ui";
+import { axeX, axeY, grille, curseur, InfoBulle, Legende, zoom } from "../components/graphiques";
 import api, { getStatsCarnet } from "../api";
 import { SPORTS, sportInfo, fmtAllureSec, fmtDate, nombre, fmtDistance } from "../carnet";
 
-const BLEU = "#007AFF";
-const ORANGE = "#FF9500";
-const VERT = "#34C759";
-const CYAN = "#32ADE6";
+const BLEU = "rgb(var(--blue))";
+const ORANGE = "rgb(var(--orange))";
+const VERT = "rgb(var(--green))";
+const CYAN = "rgb(var(--cyan))";
 
 const ZONES = {
   "sous-charge": { label: "Sous-charge", color: "blue", txt: "Charge de la semaine bien en dessous de ta moyenne : tu peux relancer." },
@@ -139,7 +139,7 @@ export default function StatsCarnet() {
   );
 
   if (isLoading || !s) {
-    return <Page titre="Statistiques">{filtres}<p className="text-[15px] text-label-2">Chargement…</p></Page>;
+    return <Page titre="Statistiques">{filtres}<Squelettes forme="page" n={4} label="Chargement des statistiques" /></Page>;
   }
 
   const t = s.totaux;
@@ -175,6 +175,7 @@ export default function StatsCarnet() {
                     <BarChart data={s.semaines} margin={{ left: 0, right: 0, top: 4 }}>
                       <CartesianGrid {...grille} />
                       <XAxis dataKey="label" {...axeX} interval={3} />
+                      {zoom(s.semaines)}
                       <YAxis {...axeY} width={32} />
                       <Tooltip cursor={curseur} content={<InfoBulle />} />
                       {metrique === "heures" && sportsPresents.map((k, i) => (
@@ -220,6 +221,7 @@ export default function StatsCarnet() {
                 <BarChart data={s.mois} margin={{ left: 0, right: 0, top: 4 }} barGap={2}>
                   <CartesianGrid {...grille} />
                   <XAxis dataKey="label" {...axeX} />
+                  {zoom(s.mois)}
                   <YAxis {...axeY} width={32} />
                   <Tooltip cursor={curseur} content={<InfoBulle />} />
                   <Bar dataKey="duree_h" name="Heures" fill={BLEU} radius={[4, 4, 4, 4]} maxBarSize={12} />
@@ -240,9 +242,10 @@ export default function StatsCarnet() {
                     <LineChart data={allures} margin={{ left: 0, right: 0, top: 4 }}>
                       <CartesianGrid {...grille} />
                       <XAxis dataKey="label" {...axeX} minTickGap={28} />
+                      {zoom(allures)}
                       <YAxis {...axeY} reversed domain={["dataMin - 15", "dataMax + 15"]} width={40}
                         tickFormatter={(v) => fmtAllureSec(v).replace("/km", "")} />
-                      <Tooltip cursor={{ stroke: "#8E8E93", strokeOpacity: 0.3 }} content={<InfoBulle format={(v) => fmtAllureSec(v)} />} />
+                      <Tooltip cursor={{ stroke: "rgb(var(--gray))", strokeOpacity: 0.3 }} content={<InfoBulle format={(v) => fmtAllureSec(v)} />} />
                       <Line dataKey="allure_sec_km" name="Allure" stroke={ORANGE} strokeOpacity={0.3} dot={{ r: 1.5, strokeWidth: 0, fill: ORANGE, fillOpacity: 0.4 }} strokeWidth={1} />
                       <Line dataKey="tendance" name="Tendance" stroke={ORANGE} dot={false} strokeWidth={2.5} strokeLinecap="round" />
                     </LineChart>
@@ -257,8 +260,9 @@ export default function StatsCarnet() {
                     <LineChart data={allures.filter((p) => p.efficacite)} margin={{ left: 0, right: 0, top: 4 }}>
                       <CartesianGrid {...grille} />
                       <XAxis dataKey="label" {...axeX} minTickGap={28} />
+                      {zoom(allures.filter((p) => p.efficacite))}
                       <YAxis {...axeY} domain={["auto", "auto"]} width={40} />
-                      <Tooltip cursor={{ stroke: "#8E8E93", strokeOpacity: 0.3 }} content={<InfoBulle />} />
+                      <Tooltip cursor={{ stroke: "rgb(var(--gray))", strokeOpacity: 0.3 }} content={<InfoBulle />} />
                       <Line dataKey="efficacite_moy" name="m/battement" stroke={VERT} dot={false} strokeWidth={2.5} strokeLinecap="round" />
                     </LineChart>
                   </ResponsiveContainer>

@@ -10,13 +10,13 @@ import { Chevron } from "./ui";
 import { axeX, axeY, grille, curseur, InfoBulle, Legende, GRIS } from "./graphiques";
 import { fmtDate, nombre } from "../carnet";
 
-export const VIOLET = "#AF52DE";
-export const INDIGO = "#5856D6";
-export const VERT = "#34C759";
-export const ORANGE = "#FF9500";
-export const ROUGE = "#FF3B30";
-export const CYAN = "#32ADE6";
-export const BLEU = "#007AFF";
+export const VIOLET = "rgb(var(--purple))";
+export const INDIGO = "rgb(var(--indigo))";
+export const VERT = "rgb(var(--green))";
+export const ORANGE = "rgb(var(--orange))";
+export const ROUGE = "rgb(var(--red))";
+export const CYAN = "rgb(var(--cyan))";
+export const BLEU = "rgb(var(--blue))";
 
 const court = (iso) => fmtDate(iso, { day: "numeric", month: "short" });
 const pluriel = (n, mot) => `${n} ${mot}${n > 1 ? "s" : ""}`;

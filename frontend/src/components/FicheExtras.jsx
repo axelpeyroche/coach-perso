@@ -94,10 +94,10 @@ export function Decoupage({ decoupage, sport, onPosition }) {
               <span className="h-2.5 rounded-full bg-remplissage overflow-hidden">
                 <span className="block h-full rounded-full" title={vue === "tours" ? `${fmtDistance(l.distance_km, 2)} · ${chrono(l.duree_sec)}` : undefined}
                   style={{ width: `${l.partiel ? 30 + 70 * Math.max(0, Math.min(1, part)) : 30 + 70 * part}%`,
-                    background: l === record ? "rgb(var(--blue))" : effort ? "#FF9F0A" : "#64D2FF", opacity: l.partiel ? 0.5 : 1 }} />
+                    background: l === record ? "rgb(var(--blue))" : effort ? "rgb(var(--orange))" : "rgb(var(--cyan))", opacity: l.partiel ? 0.5 : 1 }} />
               </span>
               {gap && <span className="text-right text-label-2">{mmss(l.gap_sec_km)}</span>}
-              {fc && <span className="text-right" style={{ color: l.fc ? "#FF375F" : undefined }}>{l.fc ?? "—"}</span>}
+              {fc && <span className="text-right" style={{ color: l.fc ? "rgb(var(--pink))" : undefined }}>{l.fc ?? "—"}</span>}
               {dplus && <span className="text-right text-label-2">{l.dplus_m ?? "—"}</span>}
               {dplus && <span className="text-right text-label-2">{l.dmoins_m ? `−${l.dmoins_m}` : l.dmoins_m ?? "—"}</span>}
             </button>
@@ -217,7 +217,7 @@ export function MemeParcours({ activite, onOuvrir }) {
           stroke="currentColor" strokeOpacity={0.3} strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
         {avecTemps.map((l, i) => (
           <circle key={l.id} cx={x(i)} cy={y(val(l))} r={l.courante ? 4 : 2.5}
-            fill={l.courante ? "rgb(var(--blue))" : l === meilleur ? "#FFD60A" : "currentColor"} fillOpacity={l.courante || l === meilleur ? 1 : 0.45} />
+            fill={l.courante ? "rgb(var(--blue))" : l === meilleur ? "rgb(var(--yellow))" : "currentColor"} fillOpacity={l.courante || l === meilleur ? 1 : 0.45} />
         ))}
       </svg>
       <ul className="divide-y divide-separateur text-[14px]">
@@ -229,7 +229,7 @@ export function MemeParcours({ activite, onOuvrir }) {
               {l === meilleur && <span aria-label="Meilleure">🏆</span>}
               <span className="w-16 text-right">{chrono(l.duree_sec)}</span>
               <span className="w-14 text-right text-label-2">{pied ? mmss(l.allure_sec_km) : `${nombre(3600 / l.allure_sec_km, 1)}`}</span>
-              <span className="w-9 text-right" style={{ color: l.fc ? "#FF375F" : undefined }}>{l.fc ?? ""}</span>
+              <span className="w-9 text-right" style={{ color: l.fc ? "rgb(var(--pink))" : undefined }}>{l.fc ?? ""}</span>
             </button>
           </li>
         ))}

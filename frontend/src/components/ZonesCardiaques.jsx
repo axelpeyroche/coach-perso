@@ -4,7 +4,7 @@ import Card from "./Card";
 import { Chevron } from "./ui";
 import { getZones } from "../api";
 
-export const ZONES_COULEURS = ["#8E8E93", "#007AFF", "#34C759", "#FF9500", "#FF3B30"];
+export const ZONES_COULEURS = ["rgb(var(--gray))", "rgb(var(--blue))", "rgb(var(--green))", "rgb(var(--orange))", "rgb(var(--red))"];
 
 export const mmss = (sec) => (sec ? `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, "0")}` : null);
 

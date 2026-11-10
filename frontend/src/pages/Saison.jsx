@@ -14,8 +14,8 @@ import { fmtDate, nombre, fmtDistance } from "../carnet";
 // avec la charge réalisée contre la charge prévue et les semaines allégées.
 
 const COULEURS = {
-  base: "#007AFF", specifique: "#FF9500", affutage: "#AF52DE", course: "#FF3B30",
-  recuperation: "#34C759", entretien: "#8E8E93",
+  base: "rgb(var(--blue))", specifique: "rgb(var(--orange))", affutage: "rgb(var(--purple))", course: "rgb(var(--red))",
+  recuperation: "rgb(var(--green))", entretien: "rgb(var(--gray))",
 };
 const court = (iso) => fmtDate(iso, { day: "numeric", month: "short" });
 const dimanche = (iso) => {

@@ -9,10 +9,10 @@ import { EVEIL, heure, hm } from "./SommeilNuit";
 import { fmtDate, nombre } from "../carnet";
 
 // Données ajoutées par Intervals Companion : coucher et réveil, récupération FC 1 min, asymétrie de marche
-const INDIGO = "#5856D6";
-const ORANGE = "#FF9500";
-const ROSE = "#FF2D55";
-const VERT = "#34C759";
+const INDIGO = "rgb(var(--indigo))";
+const ORANGE = "rgb(var(--orange))";
+const ROSE = "rgb(var(--pink))";
+const VERT = "rgb(var(--green))";
 const SEUIL_ASYM = 8;  // % : au-delà, une démarche asymétrique de façon durable mérite attention
 
 const court = (iso) => fmtDate(iso, { day: "numeric", month: "short" });

@@ -5,15 +5,15 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import clsx from "clsx";
 import Card from "../components/Card";
 import Page from "../components/Page";
-import { Section, Segmente } from "../components/ui";
+import { Section, Segmente, Squelettes } from "../components/ui";
 import { axeX, axeY, grille, InfoBulle, GRIS } from "../components/graphiques";
 import { getRecords, getSegment, getSegments, renommerSegment, supprimerSegment } from "../api";
 import ConfirmDialog from "../components/ConfirmDialog";
 import Feuille from "../components/Feuille";
 import { SPORTS, fmtDate, nombre } from "../carnet";
 
-const ORANGE = "#FF9500";
-const VIOLET = "#AF52DE";
+const ORANGE = "rgb(var(--orange))";
+const VIOLET = "rgb(var(--purple))";
 
 const court = (iso) => fmtDate(iso, { day: "numeric", month: "short" });
 const hms = (s) => {
@@ -306,7 +306,7 @@ export default function Records() {
   return (
     <Page titre="Records" large>
       {isLoading || !r ? (
-        <p className="text-[15px] text-label-2">Chargement…</p>
+        <Squelettes forme="page" n={2} label="Chargement des records" />
       ) : (
         <div className="space-y-7">
           <EntreeBilan />

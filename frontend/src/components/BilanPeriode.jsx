@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import clsx from "clsx";
 import Card from "./Card";
 import Aide from "./Aide";
-import { Section } from "./ui";
+import { Section, Squelettes } from "./ui";
 import { Actions, Faits, Ligne, ORANGE, Repartition, court, duree, teinte } from "./BilanBlocs";
 import { ExplorationMois } from "./Exploration";
 import { getBilanPeriode } from "../api";
@@ -176,7 +176,7 @@ export default function BilanPeriode({ type, refp, onRef, ouvrir, onSemaine }) {
     staleTime: 2 * 60_000, placeholderData: (prec) => (prec?.type === type ? prec : undefined),
   });
   if (isError) return <p className="text-[15px] text-label-2">Le bilan n'a pas pu être calculé. Réessaie dans un instant.</p>;
-  if (isLoading || !b) return <p className="text-[15px] text-label-2">Calcul du bilan…</p>;
+  if (isLoading || !b) return <Squelettes forme="page" n={2} label="Calcul du bilan" />;
   const s = b.sommeil;
   return (
     <>

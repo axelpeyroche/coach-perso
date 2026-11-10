@@ -6,7 +6,7 @@ import Card from "../components/Card";
 import Page from "../components/Page";
 import Feuille from "../components/Feuille";
 import ConfirmDialog from "../components/ConfirmDialog";
-import { BoutonAjout, Segmente } from "../components/ui";
+import { BoutonAjout, Segmente, Squelettes } from "../components/ui";
 import { getObjectifs, creerObjectif, modifierObjectif, supprimerObjectif } from "../api";
 import {
   SPORTS, sportInfo, fmtDate, parseDuree, dureeVersTexte, nombre, inputCls, fmtDistance,
@@ -342,7 +342,7 @@ export default function Objectifs() {
       action={<BoutonAjout onClick={() => setModal(null)} label="Nouvel objectif" />}>
 
       {isLoading ? (
-        <p className="text-[15px] text-label-2">Chargement…</p>
+        <Squelettes n={3} label="Chargement des objectifs" />
       ) : objectifs.length === 0 ? (
         <Card>
           <div className="text-center py-8 space-y-3">

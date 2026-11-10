@@ -10,17 +10,17 @@ import Card from "./Card";
 import Feuille from "./Feuille";
 import Aide from "./Aide";
 import { Segmente } from "./ui";
-import { axeX, axeY, grille, curseur, InfoBulle, Legende, GRIS } from "./graphiques";
+import { axeX, axeY, grille, curseur, InfoBulle, Legende, GRIS, zoom } from "./graphiques";
 import { getMensurations, putMensurations, completerMeteo } from "../api";
 import { fmtAllureSec, fmtDate, nombre } from "../carnet";
 
-const VIOLET = "#AF52DE";
-const INDIGO = "#5856D6";
-const VERT = "#34C759";
-const ORANGE = "#FF9500";
-const ROUGE = "#FF3B30";
-const CYAN = "#32ADE6";
-const BLEU = "#007AFF";
+const VIOLET = "rgb(var(--purple))";
+const INDIGO = "rgb(var(--indigo))";
+const VERT = "rgb(var(--green))";
+const ORANGE = "rgb(var(--orange))";
+const ROUGE = "rgb(var(--red))";
+const CYAN = "rgb(var(--cyan))";
+const BLEU = "rgb(var(--blue))";
 
 const court = (iso) => fmtDate(iso, { day: "numeric", month: "short" });
 const signe = (v, d = 0) => (v == null ? "—" : `${v > 0 ? "+" : v < 0 ? "−" : ""}${nombre(Math.abs(v), d)}`);
@@ -120,6 +120,7 @@ export function TendanceVfc({ t }) {
                 <LineChart data={data} margin={{ left: 0, right: 0, top: 4 }}>
                   <CartesianGrid {...grille} />
                   <XAxis dataKey="label" {...axeX} minTickGap={40} />
+                  {zoom(data)}
                   <YAxis {...axeY} width={30} domain={[0, "auto"]} tickFormatter={(v) => nombre(v, 0)} />
                   <Tooltip cursor={{ stroke: GRIS, strokeOpacity: 0.3 }} content={<InfoBulle format={(v) => `${nombre(v, 1)} %`} />} />
                   {t.cv_habituel != null && <ReferenceLine y={t.cv_habituel} stroke={GRIS} strokeDasharray="4 4" />}
@@ -380,7 +381,7 @@ export function Chaleur({ c }) {
 }
 
 // ── 1.12 Tendances longues, saison par saison ─────────────────────────────
-const COULEURS_LONGUES = { fc_repos: "#FF2D55", vfc: VIOLET, vo2max: BLEU, poids: INDIGO };
+const COULEURS_LONGUES = { fc_repos: "rgb(var(--pink))", vfc: VIOLET, vo2max: BLEU, poids: INDIGO };
 const COURTS_LONGUES = { fc_repos: "FC repos", vfc: "VFC", vo2max: "VO2max", poids: "Poids" };
 
 export function TendancesLongues({ t }) {
@@ -568,6 +569,7 @@ export function CompositionCorporelle() {
               <LineChart data={serie} margin={{ left: 0, right: 8, top: 6 }}>
                 <CartesianGrid {...grille} />
                 <XAxis dataKey="label" {...axeX} minTickGap={28} interval="preserveStartEnd" padding={{ left: 12, right: 12 }} />
+                {zoom(serie)}
                 <YAxis {...axeY} width={34} domain={[(v) => Math.floor(v - 1), (v) => Math.ceil(v + 1)]} allowDecimals={false} tickFormatter={(v) => nombre(v, 0)} />
                 <Tooltip cursor={{ stroke: GRIS, strokeOpacity: 0.3 }} content={<InfoBulle format={(v) => `${nombre(v, 1)} ${type.unite}`} />} />
                 <Line dataKey="valeur" name={type.label} stroke={VIOLET} strokeWidth={2.5} dot={{ r: 3, fill: VIOLET, strokeWidth: 0 }} isAnimationActive={false} />

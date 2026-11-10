@@ -10,7 +10,7 @@ import { axeX, axeY, grille, GRIS, InfoBulle, Legende } from "./graphiques";
 import { getActivite, getJalons } from "../api";
 import { fmtDate, nombre } from "../carnet";
 
-const BLEU = "rgb(var(--blue))", ORANGE = "#FF9500";
+const BLEU = "rgb(var(--blue))", ORANGE = "rgb(var(--orange))";
 const court = (iso) => fmtDate(iso, { day: "numeric", month: "short" });
 const long = (iso) => fmtDate(iso, { day: "numeric", month: "short", year: "numeric" });
 const val = (v, unite) => `${nombre(v, 0)}${unite ? ` ${unite}` : ""}`;

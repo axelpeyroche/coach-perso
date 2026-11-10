@@ -159,7 +159,7 @@ function Tuile({ label, valeur, unite, couleur }) {
   );
 }
 
-const COULEURS_ZONES = ["#8E8E93", "#0A84FF", "#30D158", "#FF9F0A", "#FF375F"];
+const COULEURS_ZONES = ["rgb(var(--gray))", "rgb(var(--blue))", "rgb(var(--green))", "rgb(var(--orange))", "rgb(var(--red))"];
 
 function ZonesFC({ zones }) {
   const total = zones.reduce((a, z) => a + (z.min_passees || 0), 0);
@@ -198,7 +198,41 @@ function Squelette() {
 // Fiche détaillée d'une séance : chiffres clés, carte, zones et toutes les
 // courbes synchronisées (FC, allure, cadence, altitude, oscillation, foulée…).
 // Toucher ou survoler une courbe affiche la valeur au même instant sur toutes.
-export default function FicheActivite({ activite: initiale, onClose }) {
+// Passer d'une séance à l'autre sans refermer la fiche : boutons, ou balayage horizontal de l'en-tête
+function Voisines({ id, voisines, onChanger, children }) {
+  const depart = useRef(null);
+  const i = voisines?.findIndex((v) => v.id === id) ?? -1;
+  const recente = i > 0 ? voisines[i - 1] : null;
+  const ancienne = i >= 0 && i < voisines.length - 1 ? voisines[i + 1] : null;
+  if (!onChanger || (!recente && !ancienne)) return children;
+  const bouton = (cible, libelle, sens) => (
+    <button type="button" disabled={!cible} onClick={() => onChanger(cible)}
+      className="h-9 px-3 rounded-full bg-remplissage text-[13px] font-medium disabled:opacity-35 active:scale-95 transition flex items-center gap-1">
+      {sens < 0 && <span aria-hidden>‹</span>}{libelle}{sens > 0 && <span aria-hidden>›</span>}
+    </button>
+  );
+  return (
+    <div className="space-y-2.5" style={{ touchAction: "pan-y" }}
+      onTouchStart={(e) => { const t = e.touches[0]; depart.current = [t.clientX, t.clientY]; }}
+      onTouchEnd={(e) => {
+        if (!depart.current) return;
+        const t = e.changedTouches[0], dx = t.clientX - depart.current[0], dy = t.clientY - depart.current[1];
+        depart.current = null;
+        if (Math.abs(dx) < 60 || Math.abs(dx) < 2 * Math.abs(dy)) return;
+        const cible = dx < 0 ? ancienne : recente;
+        if (cible) onChanger(cible);
+      }}>
+      {children}
+      <div className="flex items-center justify-between gap-2 no-print">
+        {bouton(recente, "Plus récente", -1)}
+        <span className="text-[12px] text-label-2 chiffres">{i + 1} / {voisines.length}</span>
+        {bouton(ancienne, "Plus ancienne", 1)}
+      </div>
+    </div>
+  );
+}
+
+export default function FicheActivite({ activite: initiale, onClose, voisines, onChanger }) {
   const [a, setA] = useState(initiale);
   const [edition, setEdition] = useState(false);
   const [axe, setAxe] = useState("d");
@@ -273,8 +307,8 @@ export default function FicheActivite({ activite: initiale, onClose }) {
     ["Temps total", mv.pause ? fmtDuree(a.duree_sec) : null],
     // Équivalent sur le plat (course et trail avec altitude)
     ["Allure ajustée", allureAjustee(a, flux) ? mmss(allureAjustee(a, flux)) : null, "/km"],
-    ["FC moyenne", a.fc_moyenne_bpm, "bpm", "#FF375F"],
-    ["FC max", a.fc_max_bpm, "bpm", "#FF375F"],
+    ["FC moyenne", a.fc_moyenne_bpm, "bpm", "rgb(var(--pink))"],
+    ["FC max", a.fc_max_bpm, "bpm", "rgb(var(--pink))"],
     ["Effort", a.rpe != null ? a.rpe : null, "/10"],
     // Puissance : utile à vélo seulement (estimée par la montre en course)
     ["Puissance moy.", !pied && det.puissance_moy_w ? Math.round(det.puissance_moy_w) : null, "W"],
@@ -285,7 +319,7 @@ export default function FicheActivite({ activite: initiale, onClose }) {
       <Feuille large onClose={onClose} titre={a.titre || a.sport_label || s.label}
         action={<button type="button" className="btn-texte" onClick={() => setEdition(true)}>Modifier</button>}>
 
-        <EnteteFiche a={a} />
+        <Voisines id={a.id} voisines={voisines} onChanger={onChanger}><EnteteFiche a={a} /></Voisines>
 
         <BilanSeance a={a} onChange={setA} />
 

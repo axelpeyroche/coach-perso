@@ -7,7 +7,7 @@ import Feuille from "./Feuille";
 import ConfirmDialog from "./ConfirmDialog";
 import Aide from "./Aide";
 import { Segmente, Chevron } from "./ui";
-import { axeX, axeY, grille, InfoBulle } from "./graphiques";
+import { axeX, axeY, grille, InfoBulle, zoom } from "./graphiques";
 import {
   getDouleurs, creerDouleur, modifierDouleur, releverDouleur, supprimerDouleur,
   getMarqueurs, basculerMarqueur,
@@ -19,11 +19,11 @@ const NEUTRE = "rgb(var(--fill) / 0.22)";
 
 // 0 vert, 1–3 jaune, 4–6 orange, 7–10 rouge
 export function couleurIntensite(i) {
-  if (i == null) return "#8E8E93";
-  if (i === 0) return "#34C759";
-  if (i <= 3) return "#FFCC00";
-  if (i <= 6) return "#FF9500";
-  return "#FF3B30";
+  if (i == null) return "rgb(var(--gray))";
+  if (i === 0) return "rgb(var(--green))";
+  if (i <= 3) return "rgb(var(--yellow))";
+  if (i <= 6) return "rgb(var(--orange))";
+  return "rgb(var(--red))";
 }
 const motIntensite = (i) => (i == null ? "non notée" : i === 0 ? "plus rien" : i <= 3 ? "légère" : i <= 6 ? "gênante" : "forte");
 
@@ -209,9 +209,10 @@ function DetailDouleur({ d, jour, onClose, onJournal }) {
                 <LineChart data={data} margin={{ left: 0, right: 6, top: 6 }}>
                   <CartesianGrid {...grille} />
                   <XAxis dataKey="label" {...axeX} minTickGap={28} />
+                  {zoom(data)}
                   <YAxis {...axeY} domain={[0, 10]} ticks={[0, 5, 10]} width={24} />
                   <Tooltip content={<InfoBulle format={(v) => `${v}/10`} />} />
-                  <Line dataKey="intensite" name="Intensité" stroke="#FF9500" strokeWidth={2.5} dot={{ r: 3, strokeWidth: 0, fill: "#FF9500" }} isAnimationActive={false} />
+                  <Line dataKey="intensite" name="Intensité" stroke="rgb(var(--orange))" strokeWidth={2.5} dot={{ r: 3, strokeWidth: 0, fill: "rgb(var(--orange))" }} isAnimationActive={false} />
                 </LineChart>
               </ResponsiveContainer>
             </div>

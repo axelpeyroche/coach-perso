@@ -267,3 +267,24 @@ export function SelecteurHeure({ libelle, valeur, valeurs, onChange }) {
     </div>
   );
 }
+
+// Squelettes de chargement : la forme de ce qui arrive, plutôt qu'un texte « Chargement… ».
+// forme : "liste" (lignes d'une liste), "lignes" (dans une carte), "tuiles", "graphique", "page" (tuiles + graphiques)
+export function Squelettes({ forme = "liste", n = 4, label = "Chargement", className }) {
+  const blocs = (k, classe) => Array.from({ length: k }, (_, i) => <div key={i} className={clsx("squelette", classe)} />);
+  return (
+    <div role="status" aria-busy="true" aria-label={label} className={clsx("space-y-3", className)}>
+      {forme === "liste" && blocs(n, "h-[68px] rounded-2xl")}
+      {forme === "lignes" && <div className="px-4 py-3 space-y-3">{blocs(n, "h-5 rounded-lg")}</div>}
+      {forme === "tuiles" && <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">{blocs(n, "h-24 rounded-2xl")}</div>}
+      {forme === "graphique" && blocs(n, "h-56 rounded-2xl")}
+      {forme === "page" && (
+        <>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">{blocs(4, "h-24 rounded-2xl")}</div>
+          <div className="grid grid-cols-1 2xl:grid-cols-2 gap-3">{blocs(n, "h-56 rounded-2xl")}</div>
+        </>
+      )}
+      <span className="sr-only">{label}…</span>
+    </div>
+  );
+}

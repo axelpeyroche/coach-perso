@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { debutSemaine } from "../preferences";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import Card from "../components/Card";
 import Page from "../components/Page";
 import Feuille from "../components/Feuille";
@@ -16,7 +16,7 @@ import { courseGuidable } from "../seanceCourse";
 import { resumeSeance, analyserDescription } from "../seance";
 import { DIFFICULTES, fmtChrono } from "../seanceGuidee";
 import { debloquerSon } from "../son";
-import { Section, BoutonAjout } from "../components/ui";
+import { Section, BoutonAjout, Squelettes } from "../components/ui";
 import {
   getPlan, getActivites, creerPrevue, modifierPrevue, supprimerPrevue, getActivitesProches, getSeancesTypes,
 } from "../api";
@@ -63,7 +63,7 @@ function ChoixActivite({ prevue, onChoix, onClose }) {
         <p className="text-[13px] font-semibold text-label-2">Activités de la semaine</p>
         <button className="btn-texte text-[13px]" onClick={onClose}>Fermer</button>
       </div>
-      {isLoading ? <p className="text-[13px] text-label-2 px-4 pb-2">Chargement…</p>
+      {isLoading ? <Squelettes forme="lignes" n={2} label="Chargement des activités" />
         : !data?.length ? <p className="text-[13px] text-label-2 px-4 pb-2">Aucune activité cette semaine.</p>
         : data.map((a) => <ActiviteLigne key={a.id} a={a} onClick={() => onChoix(a.id)} />)}
     </div>
@@ -254,9 +254,9 @@ function CommentaireSeance({ s }) {
 
 // ── Séance prévue (ligne de la liste de la semaine) ────────────────────────
 // Sport, intitulé et durée estimée ; le reste s'affiche dans la feuille de détail.
-function CarteSeance({ s, onOuvrirActivite }) {
+function CarteSeance({ s, onOuvrirActivite, ouverte = false }) {
   const qc = useQueryClient();
-  const [detail, setDetail] = useState(false);
+  const [detail, setDetail] = useState(ouverte);
   const [choix, setChoix] = useState(false);
   const [confirmSuppr, setConfirmSuppr] = useState(false);
   const info = sportInfo(s.sport);
@@ -375,7 +375,7 @@ function SeancesTypes({ onClose, onChoisir }) {
 
   return (
     <Feuille titre="Séances types" onClose={onClose} large>
-      {isLoading && <p className="py-8 text-center text-[15px] text-label-2">Chargement…</p>}
+      {isLoading && <Squelettes n={4} label="Chargement des séances types" />}
       {isError && <p className="py-8 text-center text-[15px] text-ios-red">Bibliothèque indisponible pour le moment.</p>}
       {data && (
         <>
@@ -568,6 +568,13 @@ function BilanSports({ seances, activites, courante }) {
 }
 
 export default function Plan() {
+  const [params, setParams] = useSearchParams();
+  const [guidee] = useState(() => !!params.get("guidee"));
+  useEffect(() => {
+    if (!params.get("guidee")) return;
+    const p = new URLSearchParams(params); p.delete("guidee");
+    setParams(p, { replace: true });
+  }, []);   // eslint-disable-line react-hooks/exhaustive-deps
   const [lundi, setLundi] = useState(() => debutDe(new Date()));
   const [modalActivite, setModalActivite] = useState(undefined);
   const [ajout, setAjout] = useState(false);
@@ -595,6 +602,8 @@ export default function Plan() {
   // Aucun jour affiché : c'est l'athlète qui place ses séances dans la semaine.
   const aFaire = seances.filter((s) => s.statut !== "realisee" && s.statut !== "sautee");
   const sautees = seances.filter((s) => s.statut === "sautee");
+  // Raccourci « Séance guidée » : la séance prévue aujourd'hui, sinon la première à faire
+  const aOuvrir = (aFaire.find((s) => s.jour === iso(new Date())) ?? aFaire[0])?.id;
   const faites = [
     ...realisees.map((s) => ({ cle: `p${s.id}`, debut: s.activite?.debut ?? "", prevue: s })),
     ...horsPlan.map((a) => ({ cle: `a${a.id}`, debut: a.debut ?? "", activite: a })),
@@ -636,11 +645,11 @@ export default function Plan() {
       {!isLoading && <BilanSports seances={seances} activites={activites} courante={courante} />}
 
       {isLoading ? (
-        <p className="text-[15px] text-label-2">Chargement…</p>
+        <Squelettes n={4} label="Chargement du plan" />
       ) : (
         <div className="space-y-5">
           {seances.length > 0 && groupe(`À faire · ${aFaire.length}`,
-            aFaire.length ? aFaire.map((s) => <CarteSeance key={s.id} s={s} onOuvrirActivite={setModalActivite} />)
+            aFaire.length ? aFaire.map((s) => <CarteSeance key={s.id} s={s} onOuvrirActivite={setModalActivite} ouverte={guidee && courante && s.id === aOuvrir} />)
               : <p className="ligne text-[15px] text-label-2">Tout est fait 🎉</p>)}
           {faites.length > 0 && groupe(`Faites · ${faites.length}`, faites.map((f) => (f.prevue
             ? <CarteSeance key={f.cle} s={f.prevue} onOuvrirActivite={setModalActivite} />
@@ -680,7 +689,7 @@ export function ProchainesSeances() {
     <Section titre="À faire cette semaine" lien="/plan" libelleLien="Plan" className="h-full flex flex-col">
       <Card pad={false} className="py-1 flex-1">
         {!data ? (
-          <p className="ligne text-[15px] text-label-2">Chargement…</p>
+          <Squelettes forme="lignes" n={3} label="Chargement du plan" />
         ) : prochaines.length === 0 ? (
           <p className="ligne text-[15px] text-label-2">Plus rien à faire cette semaine.</p>
         ) : (

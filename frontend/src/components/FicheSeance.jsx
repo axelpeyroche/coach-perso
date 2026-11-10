@@ -147,12 +147,12 @@ export function Intervalles({ intervalles, total, onPosition }) {
               <span className={clsx("text-right font-semibold", x === meilleure && reps.length > 1 && "text-brand")}>{mmss(x.allure_sec_km)}</span>
               <span className="h-2.5 rounded-full bg-remplissage overflow-hidden">
                 <span className="block h-full rounded-full"
-                  style={{ width: `${30 + 70 * part}%`, background: x === meilleure ? "rgb(var(--blue))" : "#FF9F0A" }} />
+                  style={{ width: `${30 + 70 * part}%`, background: x === meilleure ? "rgb(var(--blue))" : "rgb(var(--orange))" }} />
               </span>
               <span className="text-right text-label-2 hidden sm:block">
                 {r.cotes ? (x.dplus_m != null ? `${Math.round(x.dplus_m)} m` : "—") : mmss(x.gap_sec_km)}
               </span>
-              <span className="text-right" style={{ color: x.fc ? "#FF375F" : undefined }}>{x.fc ?? "—"}</span>
+              <span className="text-right" style={{ color: x.fc ? "rgb(var(--pink))" : undefined }}>{x.fc ?? "—"}</span>
               <span className="text-right text-label-2">{x.recup_sec != null ? court(x.recup_sec) : "—"}</span>
             </button>
           );
@@ -177,7 +177,7 @@ const ETATS = {
 // Anneau de la note d'exécution (sur 100)
 function Note({ note }) {
   const c = 2 * Math.PI * 19;
-  const couleur = note >= 85 ? "#30D158" : note >= 65 ? "#FF9F0A" : "#FF453A";
+  const couleur = note >= 85 ? "rgb(var(--green))" : note >= 65 ? "rgb(var(--orange))" : "rgb(var(--red))";
   return (
     <span className="relative w-[52px] h-[52px] shrink-0 grid place-items-center">
       <svg viewBox="0 0 44 44" className="absolute inset-0 -rotate-90">

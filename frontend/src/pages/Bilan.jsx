@@ -4,7 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import clsx from "clsx";
 import Card from "../components/Card";
 import Page from "../components/Page";
-import { Section, Segmente } from "../components/ui";
+import { Section, Segmente, Squelettes } from "../components/ui";
 import CartePassages from "../components/CartePassages";
 import FicheActivite from "../components/FicheActivite";
 import BilanPeriode from "../components/BilanPeriode";
@@ -163,7 +163,7 @@ function Marquantes({ b, ouvrir }) {
     l && <Ligne key="l" ico={sportInfo(l.sport).emoji} fond={teinte("rgb(var(--green))")} titre="Plus longue sortie"
       sous={`${l.titre || sportInfo(l.sport).label} · ${court(l.date)}`} valeur={`${fmtDistance(l.distance_km, 1)}`}
       detail={l.dplus_m ? `${nombre(l.dplus_m, 0)} m D+` : hms(l.duree_sec)} onClick={() => ouvrir(l.id)} />,
-    d && <Ligne key="d" ico="⛰️" fond={teinte("#AF52DE")} titre="Plus gros dénivelé"
+    d && <Ligne key="d" ico="⛰️" fond={teinte("rgb(var(--purple))")} titre="Plus gros dénivelé"
       sous={`${d.titre || sportInfo(d.sport).label} · ${court(d.date)}`} valeur={`${nombre(d.dplus_m, 0)} m`}
       detail={d.distance_km ? `${fmtDistance(d.distance_km, 1)}` : null} onClick={() => ouvrir(d.id)} />,
     t && t.id !== l?.id && <Ligne key="t" ico="⏱️" fond={teinte("rgb(var(--blue))")} titre="Plus longue séance"
@@ -192,7 +192,7 @@ function BilanAnnee({ demandee, onAnnee, ouvrir }) {
     placeholderData: (prec) => prec,
   });
   if (isError) return <p className="text-[15px] text-label-2">Le bilan n'a pas pu être calculé. Réessaie dans un instant.</p>;
-  if (isLoading || !b) return <p className="text-[15px] text-label-2">Calcul du bilan…</p>;
+  if (isLoading || !b) return <Squelettes forme="page" n={2} label="Calcul du bilan" />;
   return (
     <>
       {b.annees.length > 1 && (

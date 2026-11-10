@@ -6,7 +6,7 @@ import { fmtDate, nombre, sportInfo } from "../carnet";
 import { dessinerCarte, partagerImage } from "../partageImage";
 
 // Blocs communs aux bilans de l'année, du mois et de la semaine
-export const ORANGE = "#FF9500";
+export const ORANGE = "rgb(var(--orange))";
 export const court = (iso) => fmtDate(iso, { day: "numeric", month: "short" });
 export const heures = (s) => `${nombre(Math.round((s || 0) / 3600), 0)} h`;
 export const hms = (s) => {

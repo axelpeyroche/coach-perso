@@ -183,7 +183,7 @@ export function EquilibreCharges({ c }) {
   const data = useMemo(() => (c?.semaines ?? []).map((s) => ({ ...s, label: court(s.fin) })), [c]);
   if (!c) return null;
   if (!data.length) {
-    return <Card><Entete titre="Équilibre des charges" couleur={ORANGE} aide="equilibre_charges" /><Vide>Pas de séance sur les 12 dernières semaines.</Vide></Card>;
+    return <Card><Entete titre="Équilibre des charges" couleur={ORANGE} aide="equilibre_charges" /><Vide>Il manque des séances sur les 12 dernières semaines : l'équilibre se calcule dès qu'elles sont enregistrées.</Vide></Card>;
   }
   const d = c.dernier;
   const maxIdx = Math.max(...data.map((s) => Math.max(s.idx_meca ?? 0, s.idx_cardio ?? 0)));
@@ -453,7 +453,7 @@ export function Reperes({ r }) {
       )}
       {r.lignes.length > 0
         ? <div className="grid gap-2 md:grid-cols-3">{r.lignes.map((l) => <Repere key={l.cle} l={l} />)}</div>
-        : !r.manque && <Vide>Pas encore de VO2max, de FC de repos ni de 10 km à situer.</Vide>}
+        : !r.manque && <Vide>Il manque une VO2max, une FC de repos ou un 10 km : ils arrivent avec la montre (Intervals.icu) ou une course chronométrée.</Vide>}
       {r.manque && <div className="mt-2"><Message>{r.manque}</Message></div>}
     </Card>
   );
@@ -519,7 +519,7 @@ export function Simulateur({ s }) {
   }, [scenarios, affutage, s]);
   if (!s) return null;
   if (!s.disponible) {
-    return <Card><Entete titre="Simulateur « et si »" couleur={BLEU} aide="simulateur" /><Vide>Il faut un historique de séances pour projeter ta forme.</Vide></Card>;
+    return <Card><Entete titre="Simulateur « et si »" couleur={BLEU} aide="simulateur" /><Vide>Il manque un historique : il faut quelques semaines de séances enregistrées pour projeter ta forme.</Vide></Card>;
   }
   const choisi = scenarios[Number(affutage)];
   const surcharge = choisi.find((p) => p.surcharge);

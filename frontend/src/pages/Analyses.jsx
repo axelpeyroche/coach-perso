@@ -4,16 +4,16 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   BarChart, Bar, LineChart, Line, ComposedChart, Area, ScatterChart, Scatter, ZAxis,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, ReferenceArea, Cell,
 } from "recharts";
 import clsx from "clsx";
 import Card from "../components/Card";
 import Page from "../components/Page";
-import { Section, Segmente, Onglets, Chevron } from "../components/ui";
+import { Section, Segmente, Onglets, Chevron, Squelettes } from "../components/ui";
 import Aide, { FicheAide } from "../components/Aide";
 import Feuille from "../components/Feuille";
 import { GLOSSAIRE } from "../glossaire";
-import { axeX, axeY, grille, curseur, InfoBulle, Legende, GRIS } from "../components/graphiques";
+import { axeX, axeY, grille, curseur, InfoBulle, Legende, GRIS, zoom, plageHabituelle } from "../components/graphiques";
 import PoidsAnalyse from "../components/Poids";
 import { JournalDouleurs, JoursMarques } from "../components/Corps";
 import { ProfilAthlete, RadarProfil, Musculation } from "../components/Capacites";
@@ -26,15 +26,15 @@ import {
 import api, { getAnalyses } from "../api";
 import { fmtAllureSec, fmtDate, fmtDuree, nombre, sportInfo, fmtDistance } from "../carnet";
 
-const BLEU = "#007AFF";
-const ORANGE = "#FF9500";
-const VERT = "#34C759";
-const CYAN = "#32ADE6";
-const ROUGE = "#FF3B30";
-const VIOLET = "#AF52DE";
-const ROSE = "#FF2D55";
-const INDIGO = "#5856D6";
-const ZONES_COUL = ["#8E8E93", BLEU, VERT, ORANGE, ROUGE];
+const BLEU = "rgb(var(--blue))";
+const ORANGE = "rgb(var(--orange))";
+const VERT = "rgb(var(--green))";
+const CYAN = "rgb(var(--cyan))";
+const ROUGE = "rgb(var(--red))";
+const VIOLET = "rgb(var(--purple))";
+const ROSE = "rgb(var(--pink))";
+const INDIGO = "rgb(var(--indigo))";
+const ZONES_COUL = ["rgb(var(--gray))", BLEU, VERT, ORANGE, ROUGE];
 const ANNEES_COUL = [GRIS, CYAN, VIOLET, ORANGE];
 const ligneCurseur = { stroke: GRIS, strokeOpacity: 0.3 };
 
@@ -104,7 +104,7 @@ const Vide = ({ children }) => <p className="text-[15px] text-label-2">{children
 function FormeFatigue({ f }) {
   const [periode, setPeriode] = useState(180);
   const data = useMemo(() => (f?.points ?? []).slice(-periode).map((p) => ({ ...p, label: court(p.jour) })), [f, periode]);
-  if (!f?.actuel) return <Card><Vide>Pas encore assez de séances pour calculer la forme.</Vide></Card>;
+  if (!f?.actuel) return <Card><Vide>Il manque des séances avec une durée et un ressenti (RPE) ou la FC : la forme se calcule dès deux semaines d'entraînement enregistrées.</Vide></Card>;
   const a = f.actuel;
   return (
     <div className="grid gap-3 lg:grid-cols-3">
@@ -129,6 +129,7 @@ function FormeFatigue({ f }) {
             <ComposedChart data={data} margin={{ left: 0, right: 0, top: 4 }}>
               <CartesianGrid {...grille} />
               <XAxis dataKey="label" {...axeX} minTickGap={32} />
+              {zoom(data)}
               <YAxis {...axeY} />
               <Tooltip cursor={ligneCurseur} content={<InfoBulle format={(v) => nombre(v, 0)} />} />
               <ReferenceLine y={0} stroke={GRIS} strokeOpacity={0.5} />
@@ -156,7 +157,7 @@ function Zones({ z }) {
     s.zones_min.forEach((m, i) => { l[`z${i + 1}`] = t ? Math.round((m / t) * 100) : 0; });
     return l;
   }), [z]);
-  if (!data.length) return <Card><Vide>Aucune séance avec la fréquence cardiaque détaillée pour l'instant.</Vide></Card>;
+  if (!data.length) return <Card><Vide>Il manque la fréquence cardiaque détaillée : elle arrive avec les séances enregistrées à la montre et synchronisées par Intervals.icu (Profil › Sources).</Vide></Card>;
   const b4 = z.bilan_4s, b12 = z.bilan_12s;
   const verdict = b4.bas_pct == null ? null
     : b4.bas_pct >= 75 ? "Répartition polarisée respectée : l'essentiel en endurance facile."
@@ -190,6 +191,7 @@ function Zones({ z }) {
             <BarChart data={data} margin={{ left: 0, right: 0, top: 4 }}>
               <CartesianGrid {...grille} />
               <XAxis dataKey="label" {...axeX} minTickGap={24} />
+              {zoom(data)}
               <YAxis {...axeY} domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} unit="%" />
               <Tooltip cursor={curseur} content={<InfoBulle format={(v) => `${v} %`} />} />
               <ReferenceLine y={80} stroke={GRIS} strokeDasharray="4 4" />
@@ -244,7 +246,7 @@ function ZonesEvolution({ e, actuelles }) {
   }, [pts]);
 
   const tous = e?.points ?? [];
-  if (!tous.length) return <Card><Vide>Pas encore assez de séances pour suivre tes zones.</Vide></Card>;
+  if (!tous.length) return <Card><Vide>Il manque des séances avec la FC enregistrée à la montre : le temps passé par zone se remplit à chaque synchro.</Vide></Card>;
   const ilYa = (sem) => tous[tous.length - 1 - sem];
   const now = tous[tous.length - 1];
   const s3 = ilYa(13)?.fc_seuil, s12 = ilYa(52)?.fc_seuil;
@@ -324,6 +326,7 @@ function ZonesEvolution({ e, actuelles }) {
               <ComposedChart data={g.data} margin={{ left: 0, right: 0, top: 4 }}>
                 <CartesianGrid {...grille} />
                 <XAxis dataKey="label" {...axeX} minTickGap={28} />
+                {zoom(g.data)}
                 <YAxis {...axeY} domain={[g.bas, g.haut]} reversed={vue === "allure"} allowDataOverflow width={vue === "fc" ? 32 : 40}
                   tickFormatter={vue === "fc" ? undefined : mmss} ticks={vue === "fc" ? undefined : g.ticks} />
                 <Tooltip cursor={curseur} content={<Bulle />} />
@@ -334,7 +337,7 @@ function ZonesEvolution({ e, actuelles }) {
                 ))}
               </ComposedChart>
             </ResponsiveContainer>
-          ) : <Vide>{vue === "fc" ? "Pas encore de FC." : "Pas encore assez de meilleurs efforts GPS pour l'allure critique."}</Vide>}
+          ) : <Vide>{vue === "fc" ? "Il manque des séances avec la FC enregistrée à la montre." : "Il manque des efforts soutenus de 3 à 20 min avec le GPS (une séance de fractionné ou une course suffit) pour estimer l'allure critique."}</Vide>}
           <Legende items={[1, 2, 3, 4, 5].map((i) => ({ label: `Z${i} ${NOMS_ZONES[i - 1]}`, couleur: ZONES_COUL[i - 1] }))} />
         </Graphe>
       </div>
@@ -348,8 +351,9 @@ function Recuperation({ r }) {
     ...p, label: court(p.jour),
     bande: p.vfc_bas != null && p.vfc_haut != null ? [p.vfc_bas, p.vfc_haut] : null,
   })), [r]);
+  const plageFc = useMemo(() => plageHabituelle(data.map((p) => p.fc_repos)), [data]);
   if (!data.some((p) => p.vfc != null || p.fc_repos != null || p.sommeil != null)) {
-    return <Card><Vide>Pas encore de VFC, de FC au repos ni de sommeil enregistrés.</Vide></Card>;
+    return <Card><Vide>Il manque la VFC, la FC au repos et le sommeil : porte la montre la nuit, ces mesures arrivent par Intervals.icu à la synchro du matin.</Vide></Card>;
   }
   const a = r.actuel, s = r.sommeil;
   const st = a?.statut ? RECUP[a.statut] : null;
@@ -383,6 +387,7 @@ function Recuperation({ r }) {
               <ComposedChart data={data} margin={{ left: 0, right: 0, top: 4 }}>
                 <CartesianGrid {...grille} />
                 <XAxis dataKey="label" {...axeX} minTickGap={32} />
+                {zoom(data)}
                 <YAxis {...axeY} domain={["auto", "auto"]} />
                 <Tooltip cursor={ligneCurseur} content={<InfoBulle format={(v) => (Array.isArray(v) ? `${nombre(v[0], 0)}–${nombre(v[1], 0)}` : nombre(v, 0))} />} />
                 {traits}
@@ -394,14 +399,16 @@ function Recuperation({ r }) {
           </Graphe>
         </div>
       </div>
-      <Graphe titre="FC au repos" couleur={ROSE} sousTitre="90 jours">
+      <Graphe titre="FC au repos" couleur={ROSE} sousTitre={plageFc ? "90 jours · bande = ta plage habituelle (moyenne ± 1 écart-type)" : "90 jours"}>
           <ResponsiveContainer width="100%" height={180}>
             <LineChart data={data} margin={{ left: 0, right: 0, top: 4 }}>
               <CartesianGrid {...grille} />
               <XAxis dataKey="label" {...axeX} minTickGap={32} />
+              {zoom(data)}
               <YAxis {...axeY} domain={["dataMin - 2", "dataMax + 2"]} />
               <Tooltip cursor={ligneCurseur} content={<InfoBulle format={(v) => `${nombre(v, 0)} bpm`} />} />
               {traits}
+              {plageFc && <ReferenceArea y1={plageFc[0]} y2={plageFc[1]} fill={ROSE} fillOpacity={0.1} stroke="none" ifOverflow="hidden" />}
               <Line dataKey="fc_ref" name="Référence" stroke={GRIS} strokeDasharray="4 4" dot={false} connectNulls />
               <Line dataKey="fc_repos" name="FC repos" stroke={ROSE} strokeWidth={2} dot={false} connectNulls />
             </LineChart>
@@ -604,6 +611,7 @@ function Nuits({ r }) {
           <ComposedChart data={nuits} margin={{ left: 0, right: 0, top: 4 }}>
             <CartesianGrid {...grille} />
             <XAxis dataKey="label" {...axeX} minTickGap={32} />
+            {zoom(nuits)}
             <YAxis yAxisId="h" {...axeY} domain={[0, (m) => Math.max(10, Math.ceil(m))]} allowDecimals={false} />
             {aFc && <YAxis yAxisId="fc" orientation="right" {...axeY} domain={["dataMin - 3", "dataMax + 3"]} />}
             <Tooltip cursor={curseur} content={<InfoBulle format={(v, p) => (p.dataKey === "fc_sommeil" ? `${nombre(v, 0)} bpm` : hm(v))} />} />
@@ -626,13 +634,14 @@ function Nuits({ r }) {
               <LineChart data={spo2} margin={{ left: 0, right: 0, top: 4 }}>
                 <CartesianGrid {...grille} />
                 <XAxis dataKey="label" {...axeX} minTickGap={32} />
+                {zoom(spo2)}
                 <YAxis {...axeY} domain={[(min) => Math.min(Math.floor(min) - 1, 94), 100]} />
                 <Tooltip cursor={ligneCurseur} content={<InfoBulle format={(v) => `${nombre(v, 0)} %`} />} />
                 <ReferenceLine y={95} stroke={GRIS} strokeDasharray="4 4" />
                 <Line dataKey="spo2" name="SpO2" stroke={CYAN} strokeWidth={2} dot={{ r: 2, strokeWidth: 0, fill: CYAN }} connectNulls />
               </LineChart>
             </ResponsiveContainer>
-          ) : <Vide>Pas de SpO2 transmise pour ces nuits.</Vide>}
+          ) : <Vide>Pas de SpO2 pour ces nuits : active sa mesure nocturne sur la montre, elle suivra par Intervals Companion.</Vide>}
         </Graphe>
         <Graphe titre="Score de sommeil" couleur={VIOLET} sousTitre={score.length ? "sur 100, calculé par Intervals Companion" : "pas encore reçu"}
           note="Apple ne partage son propre score avec aucune autre app : celui-ci est calculé par Intervals Companion à partir de la nuit, il peut donc différer de quelques points de celui de l'app Santé.">
@@ -641,6 +650,7 @@ function Nuits({ r }) {
               <BarChart data={score} margin={{ left: 0, right: 0, top: 4 }}>
                 <CartesianGrid {...grille} />
                 <XAxis dataKey="label" {...axeX} minTickGap={32} />
+                {zoom(score)}
                 <YAxis {...axeY} domain={[0, 100]} />
                 <Tooltip cursor={curseur} content={<InfoBulle format={(v) => `${nombre(v, 0)} / 100`} />} />
                 <Bar dataKey="score_sommeil" name="Score" fill={VIOLET} radius={[3, 3, 0, 0]} maxBarSize={10} />
@@ -661,7 +671,7 @@ function Vma({ v }) {
   const [semaines, setSemaines] = useState(52);
   const data = useMemo(() => (v?.points ?? []).slice(-semaines).map((p) => ({ ...p, label: court(p.semaine) })), [v, semaines]);
   if (!v?.actuelle && !v?.tests?.length) {
-    return <Card><Vide>Pas encore assez de sorties (ou de tests demi-Cooper) pour estimer ta VMA.</Vide></Card>;
+    return <Card><Vide>Il manque un effort de référence : planifie un test demi-Cooper depuis l'onglet Capacités, ou cours une sortie rapide de 5 à 10 km avec le GPS.</Vide></Card>;
   }
   const act = v.actuelle?.vma, t = v.dernier_test;
   const kmh = (x) => (x == null ? "—" : `${nombre(x, 1)} km/h`);
@@ -680,6 +690,7 @@ function Vma({ v }) {
         <ComposedChart data={data} margin={{ left: 0, right: 0, top: 8 }}>
           <CartesianGrid {...grille} />
           <XAxis dataKey="label" {...axeX} minTickGap={32} />
+          {zoom(data)}
           <YAxis {...axeY} domain={[(m) => Math.floor(m - 0.5), (m) => Math.ceil(m + 0.5)]} width={36} allowDecimals={false} />
           <Tooltip cursor={ligneCurseur} content={<InfoBulle format={(x) => `${nombre(x, 1)} km/h`} />} />
           <Line dataKey="vma_efforts" name="Meilleurs efforts" stroke={ORANGE} strokeWidth={1.5} strokeOpacity={0.55} strokeDasharray="4 3" dot={false} connectNulls />
@@ -705,7 +716,7 @@ function Course({ c }) {
   const derives = useMemo(() => (c?.derives ?? []).map((d) => ({ ...d, label: court(d.date) })), [c]);
   const labels = c?.distances ?? ["1 km", "5 km", "10 km", "Semi"];
   if (!c || (!Object.keys(c.records ?? {}).length && !derives.length && !c.durabilites?.length)) {
-    return <Card><Vide>Pas encore de sorties course ou trail avec tracé GPS.</Vide></Card>;
+    return <Card><Vide>Il manque des sorties de course ou de trail avec tracé GPS : elles arrivent par la synchro Intervals.icu ou l'import d'un fichier.</Vide></Card>;
   }
   const pointPred = preds[survolPred ?? preds.length - 1];
   return (
@@ -744,6 +755,7 @@ function Course({ c }) {
               <LineChart data={evol} margin={{ left: 0, right: 0, top: 4 }}>
                 <CartesianGrid {...grille} />
                 <XAxis dataKey="label" {...axeX} minTickGap={24} />
+                {zoom(evol)}
                 <YAxis {...axeY} reversed domain={["dataMin - 10", "dataMax + 10"]} width={48} tickFormatter={hms} />
                 <Tooltip cursor={ligneCurseur} content={<InfoBulle format={hms} />} />
                 <Line dataKey={dist} name={dist} stroke={ORANGE} strokeWidth={2.5} dot={{ r: 3, strokeWidth: 0, fill: ORANGE }} connectNulls />
@@ -764,6 +776,7 @@ function Course({ c }) {
                   onMouseMove={(e) => setSurvolPred(e?.activeTooltipIndex ?? null)} onMouseLeave={() => setSurvolPred(null)}>
                   <CartesianGrid {...grille} />
                   <XAxis dataKey="label" {...axeX} minTickGap={32} />
+                  {zoom(preds)}
                   <YAxis hide reversed domain={[(m) => m * 0.97, (m) => m * 1.03]} />
                   <Tooltip cursor={ligneCurseur} content={() => null} />
                   <Line dataKey="10 km" stroke={BLEU} strokeWidth={2.5} dot={false} activeDot={{ r: 5, fill: BLEU, stroke: "white", strokeWidth: 2 }} connectNulls />
@@ -789,6 +802,7 @@ function Course({ c }) {
               <BarChart data={derives} margin={{ left: 0, right: 0, top: 4 }}>
                 <CartesianGrid {...grille} />
                 <XAxis dataKey="label" {...axeX} minTickGap={24} />
+                {zoom(derives)}
                 <YAxis {...axeY} unit="%" />
                 <Tooltip cursor={curseur} content={<InfoBulle format={(v) => `${nombre(v)} %`} />} />
                 <ReferenceLine y={5} stroke={ROUGE} strokeDasharray="4 4" />
@@ -863,6 +877,7 @@ function Monotonie({ m }) {
             <ComposedChart data={data} margin={{ left: 0, right: 0, top: 4 }}>
               <CartesianGrid {...grille} />
               <XAxis dataKey="label" {...axeX} minTickGap={24} />
+              {zoom(data)}
               <YAxis yAxisId="c" {...axeY} width={44} />
               <YAxis yAxisId="m" orientation="right" {...axeY} domain={[0, (x) => Math.max(3, Math.ceil(x))]} width={28} />
               <Tooltip cursor={curseur} content={<InfoBulle format={(v, p) => nombre(v, p.dataKey === "monotonie" ? 1 : 0)} />} />
@@ -922,6 +937,7 @@ function SignauxNuit({ s }) {
           <LineChart data={data} margin={{ left: 0, right: 0, top: 6 }}>
             <CartesianGrid {...grille} />
             <XAxis dataKey="label" {...axeX} minTickGap={32} />
+            {zoom(data)}
             <YAxis {...axeY} domain={["dataMin - 1", "dataMax + 1"]} width={32} tickFormatter={(v) => nombre(v, 0)} />
             <Tooltip cursor={ligneCurseur} content={<InfoBulle format={(v) => `${nombre(v, 1)} ${info.unite}`} />} />
             <Line dataKey={`${cle}_ref`} name="Ta normale" stroke={GRIS} strokeDasharray="4 4" dot={false} connectNulls />
@@ -967,7 +983,7 @@ function Pas({ p }) {
     return (
       <Graphe titre="Pas quotidiens" couleur={VERT}
         note="Dans l'app Santé : Partage › Apps › Intervals Companion, autorise « Pas ». Puis, dans Intervals Companion, active la synchro des pas : ils arrivent avec le reste à la synchro du matin.">
-        <Vide>Aucun nombre de pas reçu pour l'instant.</Vide>
+        <Vide>Aucun nombre de pas reçu : active « Steps » dans Intervals Companion, il arrivera à la synchro suivante.</Vide>
       </Graphe>
     );
   }
@@ -990,6 +1006,7 @@ function Pas({ p }) {
         <ComposedChart data={vue.data} margin={{ left: 0, right: 0, top: 4 }}>
           <CartesianGrid {...grille} />
           <XAxis dataKey="label" {...axeX} minTickGap={32} />
+          {zoom(vue.data)}
           <YAxis {...axeY} width={36} ticks={ticks} domain={[0, ticks[ticks.length - 1]]}
             tickFormatter={(v) => `${nombre(v / 1000, v % 1000 ? 1 : 0)}k`} />
           <Tooltip cursor={curseur} content={<InfoBulle format={(v) => `${milliers(v)} pas${jour ? "" : " / jour"}`} />} />
@@ -1050,6 +1067,7 @@ function DetteSommeil({ s }) {
             <ComposedChart data={data} margin={{ left: 0, right: 0, top: 4 }}>
               <CartesianGrid {...grille} />
               <XAxis dataKey="label" {...axeX} minTickGap={32} />
+              {zoom(data)}
               <YAxis yAxisId="h" {...axeY} domain={[0, (m) => Math.max(10, Math.ceil(m))]} allowDecimals={false} width={28} />
               <YAxis yAxisId="d" orientation="right" {...axeY} width={28} allowDecimals={false} />
               <Tooltip cursor={curseur} content={<InfoBulle format={(v) => hm(v)} />} />
@@ -1094,6 +1112,7 @@ function EffortsDuree({ e, courbe }) {
             <ResponsiveContainer width="100%" height={90}>
               <LineChart data={hist} margin={{ left: 0, right: 0, top: 4 }}>
                 <XAxis dataKey="label" {...axeX} minTickGap={24} />
+                {zoom(hist)}
                 <YAxis hide reversed domain={["dataMin - 5", "dataMax + 5"]} />
                 <Tooltip cursor={ligneCurseur} content={<InfoBulle format={allure} />} />
                 <Line dataKey="allure_sec_km" name="Allure critique" stroke={ORANGE} strokeWidth={2} dot={{ r: 2, strokeWidth: 0, fill: ORANGE }} />
@@ -1174,6 +1193,7 @@ function Durabilite({ d }) {
           <BarChart data={data} margin={{ left: 0, right: 0, top: 4 }}>
             <CartesianGrid {...grille} />
             <XAxis dataKey="label" {...axeX} minTickGap={24} />
+            {zoom(data)}
             <YAxis {...axeY} unit="%" width={36} />
             <Tooltip cursor={curseur} content={({ active, payload }) => {
               if (!active || !payload?.length) return null;
@@ -1284,6 +1304,7 @@ function Denivele({ d }) {
               <ComposedChart data={data} margin={{ left: 0, right: 0, top: 4 }}>
                 <CartesianGrid {...grille} />
                 <XAxis dataKey="label" {...axeX} minTickGap={24} />
+                {zoom(data)}
                 <YAxis yAxisId="m" {...axeY} width={44} />
                 <YAxis yAxisId="km" orientation="right" {...axeY} width={32} />
                 <Tooltip cursor={curseur} content={<InfoBulle format={(v, p) => (p.dataKey === "dplus" ? `${nombre(v, 0)} m` : `${nombre(v, 1)} km`)} />} />
@@ -1321,7 +1342,7 @@ function RespectPlan({ p }) {
     ...s, label: court(s.semaine),
     h_prevue: +(s.duree_prevue_min / 60).toFixed(1), h_reelle: +(s.duree_reelle_min / 60).toFixed(1),
   })), [p]);
-  if (!data.length) return <Card><Vide>Aucune séance prévue sur les 26 dernières semaines.</Vide></Card>;
+  if (!data.length) return <Card><Vide>Aucune séance prévue sur les 26 dernières semaines : ajoute des séances dans le Plan pour comparer le prévu et le réalisé.</Vide></Card>;
   const b4 = p.bilan_4s, b12 = p.bilan_12s;
   return (
     <>
@@ -1338,6 +1359,7 @@ function RespectPlan({ p }) {
               <ComposedChart data={data} margin={{ left: 0, right: 0, top: 4 }}>
                 <CartesianGrid {...grille} />
                 <XAxis dataKey="label" {...axeX} minTickGap={24} />
+                {zoom(data)}
                 <YAxis {...axeY} allowDecimals={false} />
                 <Tooltip cursor={curseur} content={<InfoBulle />} />
                 <Bar dataKey="realisees" name="Réalisées" stackId="s" fill={VERT} maxBarSize={14} />
@@ -1369,6 +1391,7 @@ function RespectPlan({ p }) {
           <BarChart data={data} margin={{ left: 0, right: 0, top: 4 }} barGap={2}>
             <CartesianGrid {...grille} />
             <XAxis dataKey="label" {...axeX} minTickGap={24} />
+            {zoom(data)}
             <YAxis {...axeY} />
             <Tooltip cursor={curseur} content={<InfoBulle format={(v) => `${nombre(v)} h`} />} />
             <Bar dataKey="h_prevue" name="Prévu" fill={GRIS} fillOpacity={0.45} radius={[3, 3, 0, 0]} maxBarSize={10} />
@@ -1389,7 +1412,7 @@ const METRIQUES = [
 
 function Annuel({ y }) {
   const [m, setM] = useState("heures");
-  if (!y?.annees?.length) return <Card><Vide>Pas encore d'historique.</Vide></Card>;
+  if (!y?.annees?.length) return <Card><Vide>Il manque au moins une année de séances : importe ton historique depuis Profil › Sources pour comparer les années.</Vide></Card>;
   const unite = METRIQUES.find((x) => x[0] === m)[2];
   const coul = (i) => (i === y.annees.length - 1 ? BLEU : ANNEES_COUL[(y.annees.length - 1 - i) % ANNEES_COUL.length]);
   const cour = y.a_date[y.a_date.length - 1];
@@ -1472,7 +1495,7 @@ function Correlation({ c }) {
             <Scatter data={c.points} fill={couleur} fillOpacity={0.6} />
           </ScatterChart>
         </ResponsiveContainer>
-      ) : <Vide>Pas encore de données.</Vide>}
+      ) : <Vide>Pas encore de données sur cette période : elles apparaîtront avec tes prochaines séances.</Vide>}
       <p className="text-[11px] text-label-3 mt-1">X : {c.x_label} · Y : {c.y_label}</p>
     </Graphe>
   );
@@ -1606,8 +1629,8 @@ export default function Analyses() {
     return () => { stop(); clearTimeout(fin); window.removeEventListener("wheel", stop); window.removeEventListener("touchstart", stop); };
   }, [a, ancre]);
 
-  if (isLoading) return <Page titre="Analyses"><p className="text-[15px] text-label-2">Calcul en cours…</p></Page>;
-  if (isError || !a) return <Page titre="Analyses"><Card><Vide>Impossible de charger les analyses.</Vide></Card></Page>;
+  if (isLoading) return <Page titre="Analyses"><Squelettes forme="page" n={4} label="Calcul des analyses" /></Page>;
+  if (isError || !a) return <Page titre="Analyses"><Card><Vide>Impossible de charger les analyses : vérifie ta connexion, puis tire la page vers le bas ou recharge-la.</Vide></Card></Page>;
 
   const choisir = (v) => { navigate({ hash: v === "essentiel" ? "" : v }, { replace: true }); window.scrollTo(0, 0); };
   // Un constat ouvre son onglet à la hauteur de l'encart ; « retour » ramène à l'essentiel

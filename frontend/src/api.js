@@ -10,11 +10,87 @@ const api = axios.create({
 let onUnauthorized = null;
 export const setUnauthorizedHandler = (fn) => { onUnauthorized = fn; };
 
+// --- Hors ligne ---
+// Lecture : chaque réponse GET est gardée sur l'appareil (Cache API) et resservie quand il n'y a plus de réseau.
+// Saisie : les écritures simples (ressenti, marqueurs, poids, séance prévue, nouvelle séance) partent
+// dans une file d'attente, rejouée au retour du réseau. Tout est effacé à la déconnexion.
+const CACHE_API = "carnet-api";
+const CLE_FILE = "file-hors-ligne";
+const SECRET = /token|^\/intervals$|^\/push/;
+const EN_FILE = /^\/(corps\/(ressenti|marqueurs|mensurations)|corps\/douleurs\/\d+\/releve|plan\/\d+|utilisateur\/profil-fc|activites)$/;
+const sansReseau = () => typeof navigator !== "undefined" && navigator.onLine === false;
+const cacheDispo = () => typeof caches !== "undefined";
+const cleCache = (c) => "https://carnet.cache/" + encodeURIComponent(`${c.url}?${JSON.stringify(c.params ?? {})}`);
+const signaler = (nom, detail) => { try { window.dispatchEvent(new CustomEvent(nom, { detail })); } catch { /* hors navigateur */ } };
+
+export function fileHorsLigne() {
+  try { const f = JSON.parse(localStorage.getItem(CLE_FILE) || "[]"); return Array.isArray(f) ? f : []; } catch { return []; }
+}
+function ecrireFile(f) {
+  try { f.length ? localStorage.setItem(CLE_FILE, JSON.stringify(f)) : localStorage.removeItem(CLE_FILE); } catch { /* stockage indisponible */ }
+  signaler("carnet:file", { attente: f.length });
+}
+
+// Renvoie les saisies en attente, dans l'ordre. S'arrête si le réseau retombe ; une saisie refusée
+// par le serveur (4xx) est retirée de la file et comptée dans `refusees`.
+let rejeu = null;
+export function rejouerFile() {
+  if (rejeu) return rejeu;
+  rejeu = (async () => {
+    let envoyees = 0, refusees = 0;
+    for (;;) {
+      const file = fileHorsLigne();
+      if (!file.length || sansReseau()) break;
+      const r = file[0];
+      try { await api.request({ method: r.method, url: r.url, data: r.data, rejeu: true }); envoyees += 1; }
+      catch (e) {
+        if (!e?.response || e.response.status >= 500 || e.response.status === 401) break;
+        refusees += 1;
+      }
+      ecrireFile(fileHorsLigne().slice(1));
+    }
+    return { envoyees, refusees };
+  })().finally(() => { rejeu = null; });
+  return rejeu;
+}
+
+export function viderHorsLigne() {
+  try { localStorage.removeItem(CLE_FILE); } catch { /* stockage indisponible */ }
+  if (cacheDispo()) caches.delete(CACHE_API).catch(() => {});
+}
+
 api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error?.response?.status === 401 && error?.config?.url !== "/auth/login") {
+  (response) => {
+    const c = response.config;
+    if (c?.method === "get" && !c.responseType && cacheDispo() && !SECRET.test(c.url) && response.data != null) {
+      const corps = new Response(JSON.stringify(response.data), { headers: { "Content-Type": "application/json", "X-Le": String(Date.now()) } });
+      caches.open(CACHE_API).then((k) => k.put(cleCache(c), corps)).catch(() => {});
+    }
+    return response;
+  },
+  async (error) => {
+    const c = error?.config;
+    if (error?.response?.status === 401 && c?.url !== "/auth/login") {
       onUnauthorized?.();
+    }
+    if (c && !error.response && sansReseau()) {
+      // Lecture : la dernière réponse connue
+      if (c.method === "get" && cacheDispo()) {
+        try {
+          const r = await (await caches.open(CACHE_API)).match(cleCache(c));
+          if (r) {
+            signaler("carnet:cache", { le: Number(r.headers.get("X-Le")) || null });
+            return { data: await r.json(), status: 200, statusText: "hors ligne", headers: {}, config: c, horsLigne: true };
+          }
+        } catch { /* cache illisible */ }
+      }
+      // Saisie : mise en attente
+      if (["put", "patch", "post"].includes(c.method) && !c.rejeu && EN_FILE.test(c.url)) {
+        let data = c.data;
+        try { if (typeof data === "string") data = JSON.parse(data); } catch { /* corps non JSON */ }
+        ecrireFile([...fileHorsLigne(), { method: c.method, url: c.url, data, le: Date.now() }]);
+        return { data: data && typeof data === "object" ? { ...data, en_attente: true } : { en_attente: true }, status: 202, statusText: "en attente", headers: {}, config: c, enAttente: true };
+      }
     }
     return Promise.reject(error);
   }

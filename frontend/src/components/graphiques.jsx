@@ -1,7 +1,34 @@
 // Réglages communs des graphiques recharts, façon app Santé :
 // pas de lignes d'axe, grille horizontale légère, info-bulle en verre.
 
-export const GRIS = "#8E8E93";
+import { Brush } from "recharts";
+
+export const GRIS = "rgb(var(--gray))";
+
+// Une couleur par notion, la même sur toutes les pages. Ce sont des variables : elles suivent
+// le thème sombre et la palette adaptée au daltonisme.
+const v = (nom) => `rgb(var(--${nom}))`;
+export const NOTION = {
+  fc: v("pink"), vfc: v("purple"), allure: v("blue"), charge: v("orange"), sommeil: v("indigo"),
+  denivele: v("green"), poids: v("indigo"), vo2max: v("green"), alerte: v("red"),
+};
+export const ZONES_COULEURS = [GRIS, v("blue"), v("green"), v("orange"), v("red")];
+
+// Zoom : réglette sous le graphique pour resserrer la plage affichée (à partir de 30 points).
+// S'utilise dans un graphique recharts : {zoom(data)}
+export function zoom(data, cle = "label") {
+  if (!data || data.length < 30) return null;
+  return <Brush dataKey={cle} height={18} travellerWidth={14} stroke={GRIS} fill="transparent" tickFormatter={() => ""} />;
+}
+
+// Plage habituelle d'une série (moyenne ± 1 écart-type) : [bas, haut], ou null s'il y a moins de 10 valeurs
+export function plageHabituelle(valeurs) {
+  const x = (valeurs ?? []).filter((n) => n != null && Number.isFinite(n));
+  if (x.length < 10) return null;
+  const m = x.reduce((t, n) => t + n, 0) / x.length;
+  const e = Math.sqrt(x.reduce((t, n) => t + (n - m) ** 2, 0) / x.length);
+  return e > 0 ? [m - e, m + e] : null;
+}
 
 // Enveloppe d'un graphique pour les lecteurs d'écran : le dessin est annoncé comme une image
 // avec son titre et, si on le donne, un résumé en une phrase de ce qu'il montre.
@@ -44,7 +71,7 @@ export const axeY = {
   orientation: "right",
 };
 
-export const grille = { stroke: "#8E8E93", strokeOpacity: 0.2, vertical: false };
+export const grille = { stroke: "rgb(var(--gray))", strokeOpacity: 0.2, vertical: false };
 
 export const curseur = { fill: "rgba(142,142,147,0.12)", radius: 6 };
 

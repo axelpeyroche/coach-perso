@@ -10,6 +10,7 @@ import {
 } from "../api";
 import { nombre } from "../carnet";
 import * as T from "./itineraireTrace";
+import { Squelettes } from "../components/ui";
 
 const EMOJIS = { course: "🏃", trail: "⛰️", randonnee: "🥾", velo: "🚴", gravel: "🚵", vtt: "🚵‍♂️" };
 const COULEUR = COULEURS[0];
@@ -146,7 +147,7 @@ export default function Parcours() {
 
   return (
     <Page titre="Mes parcours" sousTitre="Itinéraires enregistrés">
-      {isLoading && <p className="px-1 text-[14px] text-label-2">Chargement…</p>}
+      {isLoading && <Squelettes n={3} label="Chargement des parcours" />}
       {favoris?.length === 0 && (
         <div className="card p-4 text-[14px] text-label-2">
           Aucun parcours enregistré pour le moment. Enregistre un itinéraire proposé ou créé pour le retrouver ici.

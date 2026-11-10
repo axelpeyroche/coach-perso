@@ -402,6 +402,19 @@
   }
   .btn-sm { @apply h-8 px-3.5 text-[13px]; }
   .squelette { @apply animate-pulse bg-remplissage; }
+
+  /* Bandeau « hors ligne » : au-dessus de la barre d'onglets sur téléphone, en bas sur ordinateur */
+  .bandeau-hors-ligne {
+    @apply fixed z-40 left-0 right-0 flex justify-center px-4 pointer-events-none;
+    bottom: calc(6.25rem + env(safe-area-inset-bottom));
+  }
+  @media (min-width: 768px) { .bandeau-hors-ligne { left: 15rem; bottom: 1rem; } }
+
+  /* Tirer pour synchroniser */
+  .tirage {
+    @apply fixed z-40 left-1/2 w-10 h-10 rounded-full flex items-center justify-center bg-surface shadow-lg;
+    top: calc(env(safe-area-inset-top) - 2.5rem);
+  }
   .btn-primaire { @apply btn bg-brand text-white; }
   .btn-teinte { @apply btn bg-brand/[0.12] text-brand; }
   .btn-gris { @apply btn bg-remplissage text-label; }
@@ -579,4 +592,19 @@
     max-width: none !important; width: 100% !important; height: auto !important; max-height: none !important;
     overflow: visible !important; box-shadow: none !important; border-radius: 0 !important; background: #fff !important;
   }
+}
+
+/* Téléphone tenu en paysage : plus de barre latérale, le contenu et les graphiques prennent toute la largeur,
+   la barre d'onglets reste flottante en bas. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .barre-laterale { display: none !important; }
+  .onglets-mobile { display: block !important; }
+  .onglets-mobile .barre-onglets { max-width: 26rem; margin-inline: auto; }
+  #contenu {
+    margin-left: 0 !important;
+    padding-bottom: calc(5.5rem + env(safe-area-inset-bottom)) !important;
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+  .bandeau-hors-ligne { left: 0; bottom: calc(5rem + env(safe-area-inset-bottom)); }
 }

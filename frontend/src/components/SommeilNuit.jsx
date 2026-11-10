@@ -8,9 +8,9 @@ import { fmtDate, fmtDuree, nombre } from "../carnet";
 // Phases de la nuit (champs personnalisés remplis par Intervals Companion), en heures.
 // Repères : part de la nuit chez l'adulte.
 export const PHASES = [
-  { cle: "sommeil_profond", label: "Profond", couleur: "#5856D6", repere: [13, 23] },
-  { cle: "sommeil_leger", label: "Léger", couleur: "#007AFF", repere: [45, 60] },
-  { cle: "sommeil_paradoxal", label: "Paradoxal", couleur: "#32ADE6", repere: [20, 25] },
+  { cle: "sommeil_profond", label: "Profond", couleur: "rgb(var(--indigo))", repere: [13, 23] },
+  { cle: "sommeil_leger", label: "Léger", couleur: "rgb(var(--blue))", repere: [45, 60] },
+  { cle: "sommeil_paradoxal", label: "Paradoxal", couleur: "rgb(var(--cyan))", repere: [20, 25] },
 ];
 // Temps éveillé pendant la nuit (champ « Awake Time » d'Intervals Companion) : hors des phases
 export const EVEIL = { cle: "sommeil_eveil", label: "Éveillé", couleur: "#FF7A6B" };
@@ -87,7 +87,7 @@ export default function SommeilNuit() {
       <div className="grid grid-cols-2 gap-3 h-full">
         <StatTile label="Score de sommeil" color="indigo">
           <div className="flex-1 flex items-center gap-2 mt-1 lg:flex-col lg:justify-center lg:gap-2">
-            <Anneau score={score} parts={parts.length ? parts : [{ cle: "nuit", couleur: "#5856D6", part: 1 }]} />
+            <Anneau score={score} parts={parts.length ? parts : [{ cle: "nuit", couleur: "rgb(var(--indigo))", part: 1 }]} />
             <div className="min-w-0 lg:text-center">
               <p className="font-rounded text-[18px] md:text-[20px] lg:text-[22px] leading-6 lg:leading-7 font-bold tracking-[-0.02em] truncate">{score != null ? niveau(score) : "—"}</p>
               <p className="text-[12px] text-label-2 truncate">{fmtDate(jour, { weekday: "short", day: "numeric", month: "short" })}</p>

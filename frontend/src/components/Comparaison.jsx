@@ -7,11 +7,11 @@ import Feuille from "./Feuille";
 import Aide from "./Aide";
 import { mmss } from "./FicheExtras";
 import { axeX, axeY, grille } from "./graphiques";
-import { Segmente } from "./ui";
+import { Segmente, Squelettes } from "./ui";
 
 const PIED = new Set(["course", "trail", "marche", "randonnee"]);
 // Cette séance en bleu, l'autre en orange : lisibles en clair comme en sombre
-const COULEUR_A = "#0A84FF", COULEUR_B = "#FF9F0A";
+const COULEUR_A = "rgb(var(--blue))", COULEUR_B = "rgb(var(--orange))";
 const POINTS = 240;
 
 const chrono = (s) => {
@@ -175,7 +175,7 @@ function Choix({ activite, onChoisir }) {
       </p>
       <input type="search" className="champ !py-2" placeholder="Chercher une séance par son titre" value={q}
         onChange={(e) => setQ(e.target.value)} />
-      {isLoading || (isFetching && !liste.length) ? <p className="text-[15px] text-label-2 px-1">Chargement…</p>
+      {isLoading || (isFetching && !liste.length) ? <Squelettes n={3} label="Chargement des séances comparables" />
         : liste.length === 0 ? <p className="text-[15px] text-label-2 px-1">Aucune autre séance de ce sport{q ? " à ce nom" : ""}.</p>
           : (
             <div className="card py-1">

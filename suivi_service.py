@@ -441,8 +441,13 @@ def endpoint_push_autorise(endpoint: str) -> bool:
             and any(hote == h or hote.endswith("." + h) for h in _HOTES_PUSH))
 
 
-def envoyer(db: Session, user_id: int, titre: str, corps: str, url: str = "/", tag: str = "carnet") -> int:
-    """Envoie une notification à tous les appareils abonnés. Retourne le nombre d'envois réussis."""
+def envoyer(db: Session, user_id: int, titre: str, corps: str, url: str = "/", tag: str = "carnet",
+            actions: Optional[list[tuple[str, str]]] = None) -> int:
+    """Envoie une notification à tous les appareils abonnés. Retourne le nombre d'envois réussis.
+    `actions` : boutons (chemin à ouvrir, libellé), affichés là où le système le permet (Android, ordinateur)."""
+    charge = {"title": titre, "body": corps, "url": url, "tag": tag}
+    if actions:
+        charge["actions"] = [{"action": chemin, "title": libelle} for chemin, libelle in actions[:2]]
     if not push_configure():
         return 0
     n = 0
@@ -452,7 +457,7 @@ def envoyer(db: Session, user_id: int, titre: str, corps: str, url: str = "/", t
             continue
         try:
             webpush(subscription_info={"endpoint": s.endpoint, "keys": {"p256dh": s.p256dh, "auth": s.auth}},
-                    data=json.dumps({"title": titre, "body": corps, "url": url, "tag": tag}),
+                    data=json.dumps(charge),
                     vapid_private_key=_VAPID_PRIVEE, vapid_claims={"sub": f"mailto:{_VAPID_EMAIL}"
                                                                    if _VAPID_EMAIL and not _VAPID_EMAIL.startswith("mailto:")
                                                                    else _VAPID_EMAIL or "mailto:carnet@example.com"},
@@ -603,11 +608,13 @@ def notifications_matin(db: Session, user: Utilisateur, depuis: Optional[datetim
         n = len(f["seances_restantes"])
         reste = f"{n} séance{'s' if n > 1 else ''} à faire cette semaine." if n else "Plan de la semaine bouclé."
         corps = " ".join(x for x in [f["conseil"], reste] if x)
-        envoyees += envoyer(db, user.id, titre, corps, "/", "forme")
+        envoyees += envoyer(db, user.id, titre, corps, "/", "forme",
+                            actions=[("/plan", "Voir le plan"), ("/analyses", "Mes analyses")])
     if actif["seance"]:
         seance = seance_du_jour_texte(db, user)
         if seance:
-            envoyees += envoyer(db, user.id, seance[0], seance[1], "/plan", "seance")
+            envoyees += envoyer(db, user.id, seance[0], seance[1], "/plan?guidee=1", "seance",
+                                actions=[("/plan?guidee=1", "Ouvrir la séance"), ("/carnet?nouvelle=1", "Noter une séance")])
     if actif["vfc"] and f["vfc_basse_jours"] >= ALERTE_VFC_JOURS:
         envoyees += envoyer(db, user.id, "VFC en baisse",
                             f"Ta VFC est sous ta normale depuis {f['vfc_basse_jours']} mesures d'affilée : "

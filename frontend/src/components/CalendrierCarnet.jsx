@@ -8,6 +8,7 @@ import { duree } from "./BilanBlocs";
 import { getCalendrier, modifierPrevue } from "../api";
 import { fmtDate, nombre, sportInfo, fmtDistance } from "../carnet";
 import { joursSemaine, usePreferences } from "../preferences";
+import { Squelettes } from "./ui";
 
 // Fond de la case selon la charge du jour (0 = repos … 4 = grosse journée pour toi)
 const FOND = [null, 0.08, 0.16, 0.26, 0.38];
@@ -163,7 +164,7 @@ export default function CalendrierCarnet({ onFiche }) {
     onError: (e) => setErreur(e?.response?.data?.detail || "Le déplacement n'a pas pu être enregistré."),
     onSettled: () => { qc.invalidateQueries({ queryKey: ["calendrier"] }); qc.invalidateQueries({ queryKey: ["plan"] }); },
   });
-  if (isLoading || !c) return <p className="text-[15px] text-label-2">Chargement…</p>;
+  if (isLoading || !c) return <Squelettes forme="graphique" n={1} label="Chargement du calendrier" className="[&>.squelette]:h-[420px]" />;
 
   const labels = Object.fromEntries(c.types_marqueurs.map((m) => [m.type, m]));
   const jours = c.jours.map((j) => ({ ...j, marqueurs: j.marqueurs.map((t) => labels[t] ?? { emoji: "•", label: t }) }));

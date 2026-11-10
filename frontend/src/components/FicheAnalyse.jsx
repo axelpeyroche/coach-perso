@@ -7,13 +7,13 @@ import { cumulKm, mmss } from "./FicheExtras";
 import { TERRAINS } from "./ProfilAltitude";
 import { Segmente } from "./ui";
 
-const COULEURS_ZONES = ["#8E8E93", "#0A84FF", "#30D158", "#FF9F0A", "#FF375F"];
+const COULEURS_ZONES = ["rgb(var(--gray))", "rgb(var(--blue))", "rgb(var(--green))", "rgb(var(--orange))", "rgb(var(--red))"];
 const PENTES = [
-  { cle: "d2", nom: "Descente raide", detail: "plus de −8 %", couleur: "#5E5CE6", max: -8 },
-  { cle: "d1", nom: "Descente", detail: "−8 à −3 %", couleur: "#64D2FF", max: -3 },
-  { cle: "plat", nom: "Plat", detail: "−3 à 3 %", couleur: "#8E8E93", max: 3 },
-  { cle: "m1", nom: "Montée", detail: "3 à 8 %", couleur: "#FF9F0A", max: 8 },
-  { cle: "m2", nom: "Montée raide", detail: "plus de 8 %", couleur: "#FF375F", max: Infinity },
+  { cle: "d2", nom: "Descente raide", detail: "plus de −8 %", couleur: "rgb(var(--indigo))", max: -8 },
+  { cle: "d1", nom: "Descente", detail: "−8 à −3 %", couleur: "rgb(var(--cyan))", max: -3 },
+  { cle: "plat", nom: "Plat", detail: "−3 à 3 %", couleur: "rgb(var(--gray))", max: 3 },
+  { cle: "m1", nom: "Montée", detail: "3 à 8 %", couleur: "rgb(var(--orange))", max: 8 },
+  { cle: "m2", nom: "Montée raide", detail: "plus de 8 %", couleur: "rgb(var(--pink))", max: Infinity },
 ];
 
 // Pas entre deux points consécutifs : durée (pauses plafonnées à 3 fois le pas habituel) et distance
@@ -95,7 +95,7 @@ export function Repartition({ activite, lignes, pied }) {
     const z = zones?.zones;
     if (!pied || !z?.length || !z.some((x) => x.allure_lente || x.allure_rapide)) return null;
     const classes = z.map((x, i) => ({
-      cle: `z${i + 1}`, nom: `Z${i + 1}${x.nom ? ` · ${x.nom}` : ""}`, couleur: COULEURS_ZONES[i] ?? "#8E8E93",
+      cle: `z${i + 1}`, nom: `Z${i + 1}${x.nom ? ` · ${x.nom}` : ""}`, couleur: COULEURS_ZONES[i] ?? "rgb(var(--gray))",
       detail: !x.allure_lente ? `plus lent que ${mmss(x.allure_rapide)}` : !x.allure_rapide ? `plus vite que ${mmss(x.allure_lente)}`
         : `${mmss(x.allure_lente)} à ${mmss(x.allure_rapide)}`,
     }));

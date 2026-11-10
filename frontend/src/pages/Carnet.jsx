@@ -3,7 +3,7 @@ import { useQuery, keepPreviousData } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import Card from "../components/Card";
 import Page from "../components/Page";
-import { BoutonAjout, Segmente } from "../components/ui";
+import { BoutonAjout, Segmente, Squelettes } from "../components/ui";
 import CalendrierCarnet from "../components/CalendrierCarnet";
 import ActiviteLigne from "../components/ActiviteLigne";
 import ModalActivite from "../components/ModalActivite";
@@ -36,6 +36,13 @@ export default function Carnet() {
   const [fiche, setFiche] = useState(null);
   const [params, setParams] = useSearchParams();
   const calendrier = params.get("vue") === "calendrier";
+  // Raccourci d'application « Nouvelle séance » (/carnet?nouvelle=1) : ouvre la saisie
+  useEffect(() => {
+    if (!params.get("nouvelle")) return;
+    setModal(null);
+    const p = new URLSearchParams(params); p.delete("nouvelle");
+    setParams(p, { replace: true });
+  }, [params]);   // eslint-disable-line react-hooks/exhaustive-deps
   const ouvrir = async (id) => {
     try { setFiche(await getActivite(id)); } catch { /* séance supprimée entre-temps */ }
   };
@@ -166,7 +173,7 @@ export default function Carnet() {
       </div>
 
       {isLoading ? (
-        <p className="text-[15px] text-label-2">Chargement…</p>
+        <Squelettes n={6} label="Chargement du carnet" />
       ) : activites.length === 0 ? (
         <Card>
           <div className="text-center py-8 space-y-3">
@@ -216,7 +223,7 @@ export default function Carnet() {
       </>)}
 
       {modal !== undefined && <ModalActivite activite={modal} onClose={() => setModal(undefined)} />}
-      {fiche && <FicheActivite key={fiche.id} activite={fiche} onClose={() => setFiche(null)} />}
+      {fiche && <FicheActivite key={fiche.id} activite={fiche} onClose={() => setFiche(null)} voisines={activites} onChanger={setFiche} />}
     </Page>
   );
 }

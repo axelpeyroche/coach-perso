@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
-import { axeX, axeY, grille, InfoBulle } from "./graphiques";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea } from "recharts";
+import { axeX, axeY, grille, InfoBulle, plageHabituelle } from "./graphiques";
 import Card from "./Card";
 import { Section } from "./ui";
 import StatTile from "./StatTile";
@@ -11,9 +11,9 @@ import { fmtDate, nombre } from "../carnet";
 // sens = 1 si une hausse est bon signe, -1 si une baisse l'est (FC au repos) ;
 // seuil = écart 7 j / 28 j au-delà duquel on alerte
 const META = {
-  fc_repos: { court: "FC repos", couleur: "#FF2D55", tuile: "pink", sens: -1, seuil: 2 },
-  vfc: { court: "VFC", couleur: "#5856D6", tuile: "indigo", sens: 1, seuil: 5 },
-  vo2max: { court: "VO2max", couleur: "#34C759", tuile: "green", sens: 1, seuil: 1 },
+  fc_repos: { court: "FC repos", couleur: "rgb(var(--pink))", tuile: "pink", sens: -1, seuil: 2 },
+  vfc: { court: "VFC", couleur: "rgb(var(--indigo))", tuile: "indigo", sens: 1, seuil: 5 },
+  vo2max: { court: "VO2max", couleur: "rgb(var(--green))", tuile: "green", sens: 1, seuil: 1 },
 };
 
 export function useMesures() {
@@ -59,6 +59,7 @@ function Courbe({ m }) {
     return { ...p, label: fmtDate(p.jour, { day: "numeric", month: "short" }), moy: +(fen.reduce((t, x) => t + x.valeur, 0) / fen.length).toFixed(1) };
   }), [m]);
   const c = META[m.cle].couleur;
+  const plage = useMemo(() => plageHabituelle(m.points.map((p) => p.valeur)), [m]);
   return (
     <div className="min-w-0">
       <p className="text-[13px] font-semibold" style={{ color: c }}>{m.label}</p>
@@ -66,13 +67,14 @@ function Courbe({ m }) {
         <span className="font-rounded text-[26px] font-bold tracking-[-0.02em]">{nombre(m.moy_7j)}</span>
         <span className="text-[13px] text-label-2 ml-1">{m.unite} · moy. 7 j</span>
       </p>
-      <p className="text-[12px] text-label-2 chiffres">28 j : {nombre(m.moy_28j)} · 90 j : {nombre(m.moy_90j)}</p>
+      <p className="text-[12px] text-label-2 chiffres">28 j : {nombre(m.moy_28j)} · 90 j : {nombre(m.moy_90j)}{plage ? ` · habituel ${nombre(plage[0], 0)}–${nombre(plage[1], 0)}` : ""}</p>
       <ResponsiveContainer width="100%" height={140} className="mt-2">
         <LineChart data={pts} margin={{ left: 0, right: 0, top: 4 }}>
           <CartesianGrid {...grille} />
           <XAxis dataKey="label" {...axeX} minTickGap={40} />
           <YAxis {...axeY} domain={["dataMin - 2", "dataMax + 2"]} allowDecimals={false} tickFormatter={(v) => Math.round(v)} />
-          <Tooltip content={<InfoBulle />} cursor={{ stroke: "#8E8E93", strokeOpacity: 0.4 }} />
+          <Tooltip content={<InfoBulle />} cursor={{ stroke: "rgb(var(--gray))", strokeOpacity: 0.4 }} />
+          {plage && <ReferenceArea y1={plage[0]} y2={plage[1]} fill={c} fillOpacity={0.08} stroke="none" ifOverflow="hidden" />}
           <Line dataKey="valeur" name="Jour" stroke={c} strokeOpacity={0.3} dot={false} strokeWidth={1} />
           <Line dataKey="moy" name="Moyenne 7 j" stroke={c} dot={false} strokeWidth={2.5} strokeLinecap="round" activeDot={{ r: 4, strokeWidth: 0 }} />
         </LineChart>

@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import api, { setUnauthorizedHandler, patchFuseauHoraire, avecReveil } from "./api";
+import api, { setUnauthorizedHandler, patchFuseauHoraire, avecReveil, viderHorsLigne } from "./api";
 
 const AuthContext = createContext(null);
 
@@ -35,6 +35,7 @@ export function AuthProvider({ children }) {
   function viderCache() {
     queryClient.cancelQueries();
     queryClient.clear();
+    viderHorsLigne();
   }
 
   function login(tokenStr, userData) {

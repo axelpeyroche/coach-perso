@@ -3,9 +3,10 @@ import { Routes, Route, NavLink, Link, Navigate, useLocation, useNavigate, useNa
 import clsx from "clsx";
 import { useAuth } from "./AuthContext";
 import { useQueryClient } from "@tanstack/react-query";
-import { synchroIntervals } from "./api";
+import { synchroIntervals, fileHorsLigne, rejouerFile } from "./api";
 import Auth from "./pages/Auth";
 import { ONGLETS, ongletDe, estPoussee } from "./navigation";
+import { Squelettes } from "./components/ui";
 
 // Pages chargées à la demande : chaque page (et recharts) dans son propre chunk
 const Accueil = lazy(() => import("./pages/Accueil"));
@@ -273,7 +274,7 @@ function BottomNav() {
   const surligne = glisse ? sous : choisi;
 
   return (
-    <div className="md:hidden fixed bottom-0 left-0 right-0 z-30 px-4 pointer-events-none"
+    <div className="onglets-mobile md:hidden fixed bottom-0 left-0 right-0 z-30 px-4 pointer-events-none"
       style={{ paddingBottom: "max(calc(env(safe-area-inset-bottom) - 8px), 14px)" }}>
       {/* La barre garde sa taille pendant le geste : sinon la lentille se décale du doigt */}
       <nav ref={navRef} aria-label="Onglets"
@@ -391,7 +392,122 @@ function SynchroIntervals() {
   return null;
 }
 
-// Service worker : notifications push uniquement (aucune mise en cache).
+// Hors ligne : l'app affiche les dernières données reçues et garde les saisies en attente.
+// Au retour du réseau, la file est renvoyée puis tout est rafraîchi.
+function HorsLigne() {
+  const qc = useQueryClient();
+  const [enLigne, setEnLigne] = useState(() => navigator.onLine !== false);
+  const [attente, setAttente] = useState(() => fileHorsLigne().length);
+  const [refusees, setRefusees] = useState(0);
+  useEffect(() => {
+    let occupe = false;
+    const envoyer = () => {
+      if (occupe) return Promise.resolve();
+      occupe = true;
+      return rejouerFile().then(({ envoyees, refusees: r }) => {
+        if (r) setRefusees(r);
+        if (envoyees || r) qc.invalidateQueries();
+      }).catch(() => {}).finally(() => { occupe = false; });
+    };
+    // Serveur encore endormi ou réseau instable au retour : nouvel essai toutes les 30 s tant qu'il reste des saisies
+    const relance = setInterval(() => {
+      if (navigator.onLine !== false && fileHorsLigne().length) envoyer();
+    }, 30_000);
+    const retour = () => { setEnLigne(true); envoyer().then(() => qc.invalidateQueries()); };
+    const coupure = () => setEnLigne(false);
+    const file = (e) => setAttente(e.detail?.attente ?? fileHorsLigne().length);
+    window.addEventListener("online", retour);
+    window.addEventListener("offline", coupure);
+    window.addEventListener("carnet:file", file);
+    if (navigator.onLine !== false) envoyer();
+    return () => {
+      clearInterval(relance);
+      window.removeEventListener("online", retour);
+      window.removeEventListener("offline", coupure);
+      window.removeEventListener("carnet:file", file);
+    };
+  }, [qc]);
+  useEffect(() => {
+    if (!refusees) return;
+    const t = setTimeout(() => setRefusees(0), 8_000);
+    return () => clearTimeout(t);
+  }, [refusees]);
+  if (enLigne && !attente && !refusees) return null;
+  const saisies = (n) => `${n} saisie${n > 1 ? "s" : ""}`;
+  const texte = !enLigne
+    ? `Hors ligne · dernières données reçues${attente ? ` · ${saisies(attente)} en attente` : ""}`
+    : attente ? `Envoi de ${saisies(attente)}…`
+    : `${saisies(refusees)} refusée${refusees > 1 ? "s" : ""} par le serveur`;
+  return (
+    <div role="status" className="bandeau-hors-ligne no-print">
+      <span className="glass rounded-full px-3.5 h-9 flex items-center gap-2 text-[13px] font-medium max-w-full">
+        <span aria-hidden className={clsx("w-2 h-2 rounded-full shrink-0", enLigne ? "bg-ios-orange animate-pulse" : "bg-ios-gray")} />
+        <span className="truncate">{texte}</span>
+      </span>
+    </div>
+  );
+}
+
+// Tirer la page vers le bas (au doigt, en haut de page) : relance la synchro de la montre et rafraîchit tout.
+const SEUIL_TIRAGE = 64;
+function TirerPourSynchroniser() {
+  const qc = useQueryClient();
+  const [tirage, setTirage] = useState(0);
+  const [enCours, setEnCours] = useState(false);
+  const etat = useRef({ y: null, x: 0, d: 0, occupe: false });
+  useEffect(() => {
+    const e = etat.current;
+    const debut = (ev) => {
+      e.y = null;
+      if (e.occupe || ev.touches.length !== 1 || window.scrollY > 0) return;
+      if (document.documentElement.classList.contains("verrou")) return;   // feuille ou alerte ouverte
+      if (ev.target.closest?.(".maplibregl-map, .barre-onglets, input, textarea, select, [data-sans-tirage]")) return;
+      e.y = ev.touches[0].clientY; e.x = ev.touches[0].clientX; e.d = 0;
+    };
+    const bouge = (ev) => {
+      if (e.y == null) return;
+      const dy = ev.touches[0].clientY - e.y, dx = ev.touches[0].clientX - e.x;
+      if (window.scrollY > 0 || dy < 0 || Math.abs(dx) > Math.abs(dy)) { e.y = null; e.d = 0; setTirage(0); return; }
+      e.d = Math.min(dy * 0.45, SEUIL_TIRAGE * 1.4);
+      setTirage(e.d);
+    };
+    const fin = () => {
+      if (e.y == null) return;
+      e.y = null;
+      const assez = e.d >= SEUIL_TIRAGE;
+      e.d = 0; setTirage(0);
+      if (!assez) return;
+      e.occupe = true; setEnCours(true);
+      (navigator.onLine === false ? Promise.resolve() : synchroIntervals(true).catch(() => {}))
+        .then(() => qc.invalidateQueries())
+        .finally(() => { e.occupe = false; setEnCours(false); });
+    };
+    window.addEventListener("touchstart", debut, { passive: true });
+    window.addEventListener("touchmove", bouge, { passive: true });
+    window.addEventListener("touchend", fin);
+    window.addEventListener("touchcancel", fin);
+    return () => {
+      window.removeEventListener("touchstart", debut);
+      window.removeEventListener("touchmove", bouge);
+      window.removeEventListener("touchend", fin);
+      window.removeEventListener("touchcancel", fin);
+    };
+  }, [qc]);
+  if (!tirage && !enCours) return null;
+  const pret = tirage >= SEUIL_TIRAGE;
+  return (
+    <div className="tirage no-print" role="status" aria-label={enCours ? "Synchronisation en cours" : "Tirer pour synchroniser"}
+      style={{ transform: `translate(-50%, ${enCours ? SEUIL_TIRAGE * 0.7 : tirage}px)`, opacity: enCours ? 1 : Math.min(tirage / SEUIL_TIRAGE, 1) }}>
+      <svg viewBox="0 0 24 24" className={clsx("w-5 h-5", enCours && "animate-spin", pret ? "text-brand" : "text-label-2")}
+        fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"
+        style={{ transform: enCours ? undefined : `rotate(${tirage * 4}deg)` }}>
+        <path d="M20 12a8 8 0 11-2.6-5.9M20 4v4.5h-4.5" />
+      </svg>
+    </div>
+  );
+}
+
+// Service worker : notifications push, et coquille de l'app en cache (ouverture sans réseau).
 // À l'ouverture de l'app, la pastille de l'icône est effacée.
 function ServiceWorker() {
   useEffect(() => {
@@ -445,12 +561,14 @@ export default function App() {
         <RequireAuth>
             <SynchroIntervals />
             <ServiceWorker />
+            <HorsLigne />
+            <TirerPourSynchroniser />
             <button type="button" className="lien-evitement btn-primaire"
               onClick={() => document.getElementById("contenu")?.focus()}>Aller au contenu</button>
             <div className="min-h-screen flex" style={{ overflowX: "clip" }}>
 
               {/* ── Sidebar desktop ── */}
-              <aside className="hidden md:flex flex-col w-60 shrink-0 border-r-[0.5px] border-separateur bg-surface/70 backdrop-blur-xl px-3 py-6 gap-0.5 fixed top-0 left-0 h-full z-20 overflow-y-auto">
+              <aside className="barre-laterale hidden md:flex flex-col w-60 shrink-0 border-r-[0.5px] border-separateur bg-surface/70 backdrop-blur-xl px-3 py-6 gap-0.5 fixed top-0 left-0 h-full z-20 overflow-y-auto">
                 <NavLink to="/" className="block px-3 mb-5">
                   <h1 className="text-[22px] font-bold tracking-[-0.02em]">Carnet</h1>
                   {user && (
@@ -468,7 +586,7 @@ export default function App() {
                 style={{ overflowX: "clip" }}
               >
                 <MemoireDefilement />
-                <Suspense fallback={<p className="p-8 text-[15px] text-label-2">Chargement…</p>}>
+                <Suspense fallback={<div className="p-4 md:p-8 max-w-3xl"><Squelettes n={5} /></div>}>
                 {/* Transition iOS : glissement depuis la droite pour une page poussée */}
                 <div key={pathname} className={estPoussee(pathname) && typeNav === "PUSH" ? "vue-pousse" : "vue-fondu"}>
                 <Routes>

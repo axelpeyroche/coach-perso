@@ -13,17 +13,17 @@ import { getHistoriquePoids } from "../api";
 import { useAuth } from "../AuthContext";
 import { fmtDate, nombre } from "../carnet";
 
-const VIOLET = "#AF52DE";
-const VERT = "#34C759";
+const VIOLET = "rgb(var(--purple))";
+const VERT = "rgb(var(--green))";
 const JOUR = 86400000;
 const TAU = 10; // jours de mémoire de la tendance
 
 // Classes de l'OMS
 export const ZONES_IMC = [
-  { max: 18.5, label: "insuffisance pondérale", court: "Maigreur", couleur: "#32ADE6" },
+  { max: 18.5, label: "insuffisance pondérale", court: "Maigreur", couleur: "rgb(var(--cyan))" },
   { max: 25, label: "corpulence normale", court: "Normal", couleur: VERT },
-  { max: 30, label: "surpoids", court: "Surpoids", couleur: "#FF9500" },
-  { max: Infinity, label: "obésité", court: "Obésité", couleur: "#FF3B30" },
+  { max: 30, label: "surpoids", court: "Surpoids", couleur: "rgb(var(--orange))" },
+  { max: Infinity, label: "obésité", court: "Obésité", couleur: "rgb(var(--red))" },
 ];
 
 export function imc(poids, tailleCm) {
