@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import clsx from "clsx";
 import Card from "../components/Card";
 import Page from "../components/Page";
@@ -76,7 +77,7 @@ export function ObjectifCarte({ o, onEdit, compact = false }) {
     : null;
 
   return (
-    <div className={clsx("card p-4 space-y-3", o.statut !== "actif" && "opacity-60")}>
+    <div className={clsx("card p-4 space-y-3 min-w-0", o.statut !== "actif" && "opacity-60")}>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className={clsx("text-[13px] font-semibold", o.type === "course" ? "text-ios-orange" : "text-ios-green")}>
@@ -156,6 +157,9 @@ export function ObjectifCarte({ o, onEdit, compact = false }) {
       )}
 
       {!compact && o.notes && <p className="text-[13px] text-label-2 whitespace-pre-line">{o.notes}</p>}
+      {!compact && o.type === "course" && o.statut === "actif" && (
+        <Link to={`/objectifs/preparation?id=${o.id}`} className="btn-teinte btn-sm self-start">Préparer la course</Link>
+      )}
       {!compact && o.url && (
         <a href={o.url} target="_blank" rel="noreferrer" className="btn-texte text-[15px]">Page de la course ↗</a>
       )}

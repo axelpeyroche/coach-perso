@@ -10,12 +10,14 @@ import ConfirmDialog from "../components/ConfirmDialog";
 import ImportPlan from "../components/ImportPlan";
 import ContenuSeance from "../components/ContenuSeance";
 import SeanceEnCours, { seanceSauvegardee } from "../components/SeanceEnCours";
+import CourseEnCours from "../components/CourseEnCours";
+import { courseGuidable } from "../seanceCourse";
 import { resumeSeance, analyserDescription } from "../seance";
 import { DIFFICULTES, fmtChrono } from "../seanceGuidee";
 import { debloquerSon } from "../son";
 import { Section, BoutonAjout } from "../components/ui";
 import {
-  getPlan, getActivites, creerPrevue, modifierPrevue, supprimerPrevue, getActivitesProches,
+  getPlan, getActivites, creerPrevue, modifierPrevue, supprimerPrevue, getActivitesProches, getSeancesTypes,
 } from "../api";
 import { SPORTS, sportInfo, fmtDuree, fmtDate, nombre, inputCls } from "../carnet";
 
@@ -75,7 +77,9 @@ function DetailSeance({ s, onClose, onOuvrirActivite }) {
   const statut = STATUTS[s.statut] ?? STATUTS.a_venir;
   const [enCours, setEnCours] = useState(false);
   const contenu = useMemo(() => (s.description ? analyserDescription(s.description) : null), [s.description]);
-  const guidable = contenu?.type === "muscu" && contenu.sections.some((x) => x.exercices.length) && s.statut !== "realisee";
+  const muscu = contenu?.type === "muscu" && contenu.sections.some((x) => x.exercices.length);
+  const course = !muscu && courseGuidable(contenu);
+  const guidable = (muscu || course) && s.statut !== "realisee";
   const reprise = guidable && seanceSauvegardee(s.id);
   const mesures = [
     ["Durée", s.duree_min != null ? fmtDuree(s.duree_min * 60) : null],
@@ -148,7 +152,8 @@ function DetailSeance({ s, onClose, onOuvrirActivite }) {
 
       <CommentaireSeance s={s} />
 
-      {enCours && (
+      {enCours && course && <CourseEnCours s={s} contenu={contenu} onClose={() => setEnCours(false)} />}
+      {enCours && muscu && (
         <SeanceEnCours s={s} contenu={contenu} onClose={() => setEnCours(false)}
           onEnregistree={() => { setEnCours(false); invaliderPlan(qc); onClose(); }} />
       )}
@@ -357,10 +362,64 @@ function L({ label, className = "", children }) {
   return <label className={`block ${className}`}><span className="libelle">{label}</span>{children}</label>;
 }
 
+// ── Bibliothèque de séances types (cibles calculées sur les zones du moment) ──
+function SeancesTypes({ onClose, onChoisir }) {
+  const { data, isLoading, isError } = useQuery({ queryKey: ["seances-types"], queryFn: getSeancesTypes, staleTime: 300000 });
+  const [categorie, setCategorie] = useState(null);
+  const categories = data?.categories ?? [];
+  const active = categorie ?? categories[0];
+  const liste = (data?.seances ?? []).filter((t) => t.categorie === active);
+
+  return (
+    <Feuille titre="Séances types" onClose={onClose} large>
+      {isLoading && <p className="py-8 text-center text-[15px] text-label-2">Chargement…</p>}
+      {isError && <p className="py-8 text-center text-[15px] text-ios-red">Bibliothèque indisponible pour le moment.</p>}
+      {data && (
+        <>
+          <div className="flex gap-2 overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-0 sm:flex-wrap" role="tablist" aria-label="Catégories">
+            {categories.map((c) => (
+              <button key={c} type="button" role="tab" aria-selected={c === active}
+                className={`puce shrink-0 ${c === active ? "puce-active" : ""}`} onClick={() => setCategorie(c)}>{c}</button>
+            ))}
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {liste.map((t) => {
+              const info = sportInfo(t.sport);
+              return (
+                <button key={t.cle} type="button" onClick={() => onChoisir(t)}
+                  className="card p-4 text-left flex flex-col gap-2 active:opacity-70 hover:bg-remplissage/40 transition-colors">
+                  <span className="flex items-center gap-2.5">
+                    <span className="w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-[18px]"
+                      style={{ backgroundColor: `${info.couleur}26` }}>{info.emoji}</span>
+                    <span className="min-w-0">
+                      <span className="block text-[16px] font-semibold leading-5">{t.titre}</span>
+                      <span className="block text-[13px] text-label-2 chiffres">
+                        {t.duree_min ? fmtDuree(t.duree_min * 60) : "—"}{t.rpe_cible ? ` · RPE ${nombre(t.rpe_cible)}` : ""}
+                      </span>
+                    </span>
+                  </span>
+                  <span className="text-[14px] leading-[19px] text-label-2">{t.resume}</span>
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-[13px] leading-[18px] text-label-2">
+            {data.zones_connues || data.allures_connues
+              ? "Les cibles (fréquence cardiaque, allure) sont calculées sur tes zones du moment : elles suivent tes progrès."
+              : "Tes zones ne sont pas encore connues : les cibles sont données à l’effort ressenti."}
+            {" "}Tout reste modifiable avant d’ajouter la séance.
+          </p>
+        </>
+      )}
+    </Feuille>
+  );
+}
+
 function ModalPrevue({ semaine, onClose }) {
   const qc = useQueryClient();
   const [f, setF] = useState({ sport: "course", titre: "", duree_min: "", distance_km: "", rpe_cible: "", description: "" });
   const [erreur, setErreur] = useState(null);
+  const [biblio, setBiblio] = useState(false);
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
   const num = (v) => (v === "" ? null : Number(String(v).replace(",", ".")));
 
@@ -381,6 +440,14 @@ function ModalPrevue({ semaine, onClose }) {
   return (
     <Feuille as="form" onSubmit={soumettre} onClose={onClose} titre="Séance prévue"
       action={<button type="submit" className="btn-texte font-semibold" disabled={creer.isPending}>{creer.isPending ? "…" : "Ajouter"}</button>}>
+      <button type="button" className="btn-teinte w-full" onClick={() => setBiblio(true)}>Choisir une séance type</button>
+      {biblio && (
+        <SeancesTypes onClose={() => setBiblio(false)}
+          onChoisir={(t) => {
+            setF((p) => ({ ...p, sport: t.sport, titre: t.titre, duree_min: t.duree_min ?? "", rpe_cible: t.rpe_cible ?? "", description: t.description ?? "" }));
+            setBiblio(false);
+          }} />
+      )}
       <div className="grid grid-cols-2 gap-x-3 gap-y-4">
         <L label="Sport" className="col-span-2">
           <select className={inputCls} value={f.sport} onChange={set("sport")}>
@@ -403,7 +470,7 @@ function ModalPrevue({ semaine, onClose }) {
           </select>
         </L>
         <L label="Contenu" className="col-span-2">
-          <textarea rows={4} className={inputCls} value={f.description} onChange={set("description")} />
+          <textarea rows={f.description ? 7 : 4} className={inputCls} value={f.description} onChange={set("description")} />
         </L>
       </div>
       {erreur && <p className="text-[13px] text-ios-red text-center">{erreur}</p>}
@@ -539,7 +606,8 @@ export default function Plan() {
 
   return (
     <Page titre="Plan" sousTitre="Séances prévues"
-      action={<span className="flex items-center gap-2">
+      action={<span className="flex items-center gap-1.5 sm:gap-2 whitespace-nowrap">
+        <Link to="/saison" className="btn-texte">Saison</Link>
         <Link to="/itineraires" className="btn-texte" aria-label="Itinéraires">Itinéraires</Link>
         <button className="btn-texte" onClick={() => setImportIa(true)}>Plan IA</button>
         <BoutonAjout onClick={() => setAjout(true)} label="Ajouter une séance prévue" />

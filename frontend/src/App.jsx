@@ -22,6 +22,9 @@ const Itineraires = lazy(() => import("./pages/Itineraires"));
 const Parcours = lazy(() => import("./pages/Parcours"));
 const CreerParcours = lazy(() => import("./pages/CreerParcours"));
 const RetourSpotify = lazy(() => import("./pages/RetourSpotify"));
+const Saison = lazy(() => import("./pages/Saison"));
+const Alertes = lazy(() => import("./pages/Alertes"));
+const PreparationCourse = lazy(() => import("./pages/PreparationCourse"));
 
 // ── SVG Icons ──────────────────────────────────────────────────────────────
 const Icon = {
@@ -377,7 +380,7 @@ function SynchroIntervals() {
       if (document.visibilityState !== "visible") return;
       synchroIntervals().then((r) => {
         if (r.nouvelles || r.completees || r.traces || r.mesures) {
-          ["activites", "stats-carnet", "objectifs", "plan", "carte-traces", "intervals", "analyses", "mesures", "profil-fc", "forme-jour", "records"].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+          ["activites", "stats-carnet", "objectifs", "plan", "carte-traces", "intervals", "analyses", "mesures", "profil-fc", "forme-jour", "records", "saison", "alertes", "preparation"].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
         }
       }).catch(() => {});
     };
@@ -480,6 +483,9 @@ export default function App() {
                   <Route path="/itineraires/parcours" element={<Parcours />} />
                   <Route path="/itineraires/creer" element={<CreerParcours />} />
                   <Route path="/profil"     element={<Profil theme={theme} setTheme={setTheme} />} />
+                  <Route path="/saison"     element={<Saison />} />
+                  <Route path="/alertes"    element={<Alertes />} />
+                  <Route path="/objectifs/preparation" element={<PreparationCourse />} />
                   <Route path="/spotify"    element={<RetourSpotify />} />
                   <Route path="*"           element={<Navigate to="/" replace />} />
                 </Routes>

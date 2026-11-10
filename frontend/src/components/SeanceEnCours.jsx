@@ -44,7 +44,7 @@ function effacer(id) {
 // Barre d'état noire pendant la séance : iOS teinte le haut de l'écran avec la
 // couleur du thème (gris clair en mode clair), ce qui posait un voile blanc
 // flouté sur l'écran noir de la séance.
-function useBarreEtatNoire() {
+export function useBarreEtatNoire() {
   useEffect(() => {
     const meta = document.querySelector('meta[name="theme-color"]');
     const avant = meta?.getAttribute("content");
@@ -58,7 +58,7 @@ function useBarreEtatNoire() {
 }
 
 // Écran allumé pendant la séance (redemandé au retour sur la page)
-function useEcranAllume() {
+export function useEcranAllume() {
   useEffect(() => {
     let verrou = null;
     let actif = true;
@@ -80,7 +80,7 @@ function useEcranAllume() {
 }
 
 // ── Petits éléments ─────────────────────────────────────────────────────────
-function Anneau({ part, couleur, children, className = "w-[220px] lg:w-[300px]" }) {
+export function Anneau({ part, couleur, children, className = "w-[220px] lg:w-[300px]" }) {
   const c = 2 * Math.PI * 45;
   return (
     <div className={clsx("relative mx-auto aspect-square max-w-full", className)}>
@@ -95,19 +95,19 @@ function Anneau({ part, couleur, children, className = "w-[220px] lg:w-[300px]" 
   );
 }
 
-function Surtitre({ couleur = VIOLET, children }) {
+export function Surtitre({ couleur = VIOLET, children }) {
   return <p className="text-[13px] lg:text-[15px] font-semibold uppercase tracking-[0.06em]" style={{ color: couleur }}>{children}</p>;
 }
 
-function Nom({ children }) {
+export function Nom({ children }) {
   return <h2 className="mt-1.5 text-[28px] lg:text-[40px] font-bold leading-[1.1] tracking-[-0.02em] text-balance">{children}</h2>;
 }
 
-function Puce({ children }) {
+export function Puce({ children }) {
   return <span className="rounded-[10px] bg-[#1c1c1e] px-2.5 py-1.5 text-[13px] lg:text-[15px] text-white/60 [&_b]:font-semibold [&_b]:text-white">{children}</span>;
 }
 
-function Bouton({ couleur = VIOLET, sombre = false, className, children, ...p }) {
+export function Bouton({ couleur = VIOLET, sombre = false, className, children, ...p }) {
   return (
     <button type="button" {...p}
       className={clsx("h-14 w-full rounded-[16px] text-[17px] font-semibold flex items-center justify-center gap-2 active:scale-[0.98] transition-transform focus-visible:outline focus-visible:outline-[3px] focus-visible:outline-offset-2 focus-visible:outline-[#0A84FF]", className)}
@@ -117,7 +117,7 @@ function Bouton({ couleur = VIOLET, sombre = false, className, children, ...p })
   );
 }
 
-function Ensuite({ titre, detail }) {
+export function Ensuite({ titre, detail }) {
   if (!titre) return null;
   return (
     <div className="rounded-[14px] bg-[#1c1c1e] px-4 py-3 flex items-center justify-between gap-3">
@@ -160,10 +160,10 @@ function Points({ total, faites }) {
   );
 }
 
-const Croix = () => (
+export const Croix = () => (
   <svg viewBox="0 0 12 12" className="w-3 h-3" aria-hidden><path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
 );
-const Lecture = ({ className = "w-3.5 h-3.5" }) => (
+export const Lecture = ({ className = "w-3.5 h-3.5" }) => (
   <svg viewBox="0 0 12 14" className={className} aria-hidden><path d="M1 1.5v11a1 1 0 0 0 1.5.86l9-5.5a1 1 0 0 0 0-1.72l-9-5.5A1 1 0 0 0 1 1.5z" fill="currentColor" /></svg>
 );
 // Ouvre le lecteur 3D du mouvement : bien visible à la première série, discret ensuite
@@ -178,7 +178,7 @@ function VoirMouvement({ discret, onClick }) {
   );
 }
 
-const Coche = ({ className = "w-[18px] h-[18px]" }) => (
+export const Coche = ({ className = "w-[18px] h-[18px]" }) => (
   <svg viewBox="0 0 16 16" className={className} aria-hidden><path d="M3 8.5l3.2 3.2L13 5" stroke="currentColor" strokeWidth="2.4" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg>
 );
 

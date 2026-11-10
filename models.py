@@ -117,6 +117,8 @@ class Utilisateur(Base):
     rappel_poids_jour: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     # Filtres du carnet enregistrés : JSON [{nom, criteres}, …]
     filtres_carnet: Mapped[Optional[str]] = mapped_column(Text)
+    # Notifications activées une par une : JSON {forme, vfc, nuit, records, seance, bilan, fc_repos}
+    notifs_reglages: Mapped[Optional[str]] = mapped_column(Text)
 
 
 # ---------------------------------------------------------------------------
@@ -351,6 +353,8 @@ class Objectif(Base):
     statut: Mapped[str] = mapped_column(String(20), default="actif")  # actif | atteint | abandonne
     resultat_temps_sec: Mapped[Optional[int]] = mapped_column(Integer)
     notes: Mapped[Optional[str]] = mapped_column(Text)
+    # Préparation de la course : JSON {coches, ajouts, heure}
+    preparation: Mapped[Optional[str]] = mapped_column(Text)
     cree_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 

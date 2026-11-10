@@ -103,7 +103,24 @@ def statut_push(current_user: Utilisateur = Depends(get_current_user), db: Sessi
     n = db.query(PushSubscription).filter(PushSubscription.utilisateur_id == current_user.id).count()
     return {"configure": sv.push_configure(), "cle_publique": sv.VAPID_PUBLIQUE or None, "appareils": n,
             "heure": sv.heure_notif(current_user), "heures": sv.HEURES_MATIN,
-            "rappel_poids_jour": current_user.rappel_poids_jour if current_user.rappel_poids_jour is not None else 0}
+            "rappel_poids_jour": current_user.rappel_poids_jour if current_user.rappel_poids_jour is not None else 0,
+            "reglages": sv.reglages_notifs(current_user),
+            "types": [{"cle": k, "label": v[0], "texte": v[1]} for k, v in sv.NOTIFS.items()]}
+
+
+class ReglageNotifSchema(BaseModel):
+    cle: str = Field(..., max_length=20)
+    actif: bool
+
+
+@router.put("/api/push/reglages", summary="Active ou coupe un type de notification")
+def changer_reglage(payload: ReglageNotifSchema, current_user: Utilisateur = Depends(get_current_user),
+                    db: Session = Depends(obtenir_session)):
+    if payload.cle not in sv.NOTIFS:
+        raise HTTPException(422, "Type de notification inconnu")
+    res = sv.changer_reglage_notif(current_user, payload.cle, payload.actif)
+    db.commit()
+    return {"reglages": res}
 
 
 class HeureSchema(BaseModel):

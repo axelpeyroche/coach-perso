@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "../api";
-import { exporterDonnees, exporterCarnet, supprimerCompte, getPush, abonnerPush, desabonnerPush, testerPush, garderSeulPush, changerHeurePush, changerRappelPoids } from "../api";
+import { exporterDonnees, exporterCarnet, supprimerCompte, getPush, abonnerPush, desabonnerPush, testerPush, garderSeulPush, changerHeurePush, changerRappelPoids, putReglageNotif } from "../api";
 import { getErrorMessage } from "../utils/errors";
 import ConfirmDialog from "../components/ConfirmDialog";
 import Page from "../components/Page";
@@ -497,11 +497,18 @@ function Notifications() {
     onError: (e) => { setMsg(getErrorMessage(e, "Erreur")); qc.invalidateQueries({ queryKey: ["push"] }); },
   });
 
+  // Chaque type de notification se coupe séparément
+  const reglage = useMutation({
+    mutationFn: ({ cle, actif: on }) => putReglageNotif(cle, on),
+    onMutate: ({ cle, actif: on }) => qc.setQueryData(["push"], (e) => (e ? { ...e, reglages: { ...e.reglages, [cle]: on } } : e)),
+    onError: (e) => { setMsg(getErrorMessage(e, "Erreur")); qc.invalidateQueries({ queryKey: ["push"] }); },
+  });
+
   const pied = msg || (!etat?.configure
     ? "Notifications non configurées sur le serveur (clés VAPID manquantes)."
     : !pushPossible || (estIOS && !installee)
     ? "Sur iPhone, ajoute d'abord le carnet à l'écran d'accueil (Partager → Sur l'écran d'accueil) puis ouvre-le depuis l'icône."
-    : `Chaque matin vers ${etat?.heure ?? "7:30"} après la synchro : forme du jour et séance conseillée, alerte si la VFC baisse plusieurs jours, records battus${etat?.rappel_poids_jour >= 0 ? `, et le ${JOURS[etat.rappel_poids_jour].toLowerCase()} un rappel pour te peser si tu ne l'as pas fait dans la semaine` : ""}.`);
+    : `Envoyées vers ${etat?.heure ?? "7:30"}, après la synchro du matin. Coupe une par une celles qui ne te servent pas${etat?.rappel_poids_jour >= 0 ? ` ; le ${JOURS[etat.rappel_poids_jour].toLowerCase()}, un rappel de pesée si tu ne t'es pas pesé dans la semaine` : ""}.`);
 
   const disponible = etat?.configure && pushPossible;
   return (
@@ -516,6 +523,15 @@ function Notifications() {
       {disponible && actif && etat?.heures && (
         <SelecteurHeure libelle="Heure d'envoi" valeur={etat.heure} valeurs={etat.heures} onChange={(h) => heure.mutate(h)} />
       )}
+      {disponible && actif && (etat?.types ?? []).map((t) => (
+        <div key={t.cle} className="ligne">
+          <span className="flex-1 min-w-0">
+            <span className="block text-[17px]">{t.label}</span>
+            <span className="block text-[13px] leading-[17px] text-label-2">{t.texte}</span>
+          </span>
+          <Interrupteur actif={etat.reglages?.[t.cle] !== false} onChange={(on) => reglage.mutate({ cle: t.cle, actif: on })} label={t.label} />
+        </div>
+      ))}
       {disponible && actif && (
         <div className="ligne">
           <span className="flex-1 text-[17px]">Rappel de pesée</span>

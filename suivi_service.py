@@ -106,6 +106,23 @@ def _alerte_vfc(points: list[dict]) -> int:
     return n
 
 
+ALERTE_FC_JOURS = 2     # matins consécutifs avec une FC de repos nettement au-dessus de la référence
+ALERTE_FC_ECART = 5     # battements au-dessus de la référence
+
+
+def _alerte_fc(points: list[dict]) -> int:
+    """Nombre de mesures consécutives (les plus récentes) où la FC de repos dépasse la référence de 5 bpm ou plus."""
+    n = 0
+    for p in reversed(points):
+        if p.get("fc_repos") is None or p.get("fc_ref") is None:
+            continue
+        if p["fc_repos"] - p["fc_ref"] >= ALERTE_FC_ECART:
+            n += 1
+        else:
+            break
+    return n
+
+
 def _ratio_charge(db: Session, user_id: int, auj: date) -> Optional[float]:
     """Charge des 7 derniers jours rapportée à la moyenne hebdomadaire des 28 derniers (≈ ACWR)."""
     acts = (db.query(Activite).filter(Activite.utilisateur_id == user_id,
@@ -245,6 +262,7 @@ def forme_du_jour(db: Session, user: Utilisateur, auj: Optional[date] = None) ->
         and frais.get("fc_ref") is not None else None,
         "derniere_mesure": dernier["jour"] if dernier else None,
         "vfc_basse_jours": _alerte_vfc(pts),
+        "fc_haute_jours": _alerte_fc(pts),
         "alertes_nuit": an.alertes_nuit(mesures, auj),
         "historique": [{"jour": p["jour"], "statut": p["statut"]} for p in pts[-7:]],
         "seances_restantes": [{"id": p.id, "titre": p.titre, "sport": p.sport, "duree_min": p.duree_min,
@@ -465,33 +483,154 @@ def rappel_poids_du(db: Session, user: Utilisateur) -> bool:
         PoidsUtilisateur.enregistre_le >= datetime.utcnow() - timedelta(days=6)).first()
 
 
+# Notifications réglables une par une (toutes actives par défaut)
+NOTIFS = {
+    "forme": ("Forme du matin", "Ton état du jour et le conseil pour la séance."),
+    "seance": ("Séance du jour", "Ce qui est prévu aujourd'hui, avec les zones à viser."),
+    "bilan": ("Bilan de la semaine", "Le lundi matin : la semaine écoulée en quelques chiffres."),
+    "fc_repos": ("FC de repos qui décroche", "Deux matins de suite à 5 battements ou plus au-dessus de ta normale."),
+    "vfc": ("VFC en baisse", "Trois mesures d'affilée sous ta normale."),
+    "nuit": ("Nuit inhabituelle", "Température, respiration ou FC nocturne qui sortent de tes habitudes."),
+    "records": ("Records battus", "Dès qu'une séance bat un de tes records."),
+}
+
+
+def reglages_notifs(user: Utilisateur) -> dict[str, bool]:
+    try:
+        d = json.loads(user.notifs_reglages) if user.notifs_reglages else {}
+    except ValueError:
+        d = {}
+    if not isinstance(d, dict):
+        d = {}
+    return {k: bool(d.get(k, True)) for k in NOTIFS}
+
+
+def changer_reglage_notif(user: Utilisateur, cle: str, actif: bool) -> dict[str, bool]:
+    r = reglages_notifs(user)
+    r[cle] = bool(actif)
+    user.notifs_reglages = json.dumps(r)
+    return r
+
+
+def _zone_texte(zones: dict, bas: int, haut: int) -> str:
+    """« Z1–Z2, sous 150 bpm » : la zone à viser d'après les zones du moment."""
+    nom = f"Z{bas}–Z{haut}"
+    zb, zh = zones.get(bas), zones.get(haut)
+    if not zb or not zh:
+        return nom
+    fmin, fmax = zb.get("fc_min"), zh.get("fc_max")
+    if bas == 1 and fmax:
+        return f"{nom}, sous {fmax + 1} bpm"
+    if fmin and fmax:
+        return f"{nom}, {fmin}–{fmax} bpm"
+    if fmin:
+        return f"{nom}, au-dessus de {fmin} bpm"
+    return nom
+
+
+def seance_du_jour_texte(db: Session, user: Utilisateur, auj: Optional[date] = None) -> Optional[tuple[str, str]]:
+    """(titre, corps) de la notification « séance du jour », ou None si rien n'est prévu."""
+    auj = auj or aujourdhui(user)
+    prevues = (db.query(SeancePrevue)
+               .filter(SeancePrevue.utilisateur_id == user.id, SeancePrevue.jour == auj,
+                       SeancePrevue.statut != "sautee", SeancePrevue.activite_id.is_(None))
+               .order_by(SeancePrevue.ordre, SeancePrevue.id).all())
+    if not prevues:
+        return None
+    endurance = [p for p in prevues if p.sport in cs.SPORTS_PIED or p.sport == "velo"]
+    zones = {}
+    if endurance:
+        try:
+            import zones_service
+            zones = {z["zone"]: z for z in zones_service.zones_actuelles(db, user).get("zones") or []}
+        except Exception:
+            zones = {}
+    lignes = []
+    for p in prevues:
+        duree = f"{p.duree_min} min" if p.duree_min else None
+        cible = None
+        if p in endurance:
+            i = _intensite(p)
+            cible = (_zone_texte(zones, 1, 2) if i <= 3 else _zone_texte(zones, 2, 3) if i < 7
+                     else _zone_texte(zones, 4, 5) + " sur les efforts")
+        lignes.append(" · ".join(x for x in [p.titre, duree, cible] if x))
+    titre = "Séance du jour" if len(prevues) == 1 else f"{len(prevues)} séances aujourd'hui"
+    return titre, "\n".join(lignes)
+
+
+def bilan_semaine_texte(db: Session, user: Utilisateur, auj: Optional[date] = None) -> Optional[tuple[str, str, str]]:
+    """Le lundi : (titre, corps, lien) du bilan de la semaine écoulée, ou None un autre jour ou sans séance."""
+    auj = auj or aujourdhui(user)
+    if auj.weekday() != 0:
+        return None
+    lundi = auj - timedelta(days=7)
+    acts = (db.query(Activite)
+            .filter(Activite.utilisateur_id == user.id,
+                    Activite.debut >= datetime.combine(lundi - timedelta(days=7), datetime.min.time()),
+                    Activite.debut < datetime.combine(auj, datetime.min.time())).all())
+    sem = [a for a in acts if a.debut.date() >= lundi]
+    avant = [a for a in acts if a.debut.date() < lundi]
+    if not sem:
+        return None
+    minutes = round(sum(a.duree_sec or 0 for a in sem) / 60)
+    km = sum(a.distance_km or 0 for a in sem if a.sport in cs.SPORTS_PIED)
+    charge, charge_avant = sum(cs.charge(a) for a in sem), sum(cs.charge(a) for a in avant)
+    parts = [f"{len(sem)} séance{'s' if len(sem) > 1 else ''}", f"{minutes // 60} h {minutes % 60:02d}"]
+    if km >= 1:
+        parts.append(f"{km:.0f} km à pied")
+    if charge_avant:
+        ecart = round((charge / charge_avant - 1) * 100)
+        parts.append(f"charge {'+' if ecart >= 0 else '−'}{abs(ecart)} % par rapport à la semaine d'avant")
+    prevues = (db.query(SeancePrevue)
+               .filter(SeancePrevue.utilisateur_id == user.id, SeancePrevue.jour >= lundi, SeancePrevue.jour < auj).all())
+    if prevues:
+        faites = sum(1 for p in prevues if p.activite_id)
+        parts.append(f"{faites}/{len(prevues)} séances du plan faites")
+    return "Bilan de la semaine", ", ".join(parts) + ".", f"/bilan?vue=semaine&ref={lundi.isoformat()}"
+
+
 def notifications_matin(db: Session, user: Utilisateur, depuis: Optional[datetime] = None) -> dict:
-    """Après la synchro du matin : forme du jour + séance conseillée, alerte VFC, records battus."""
+    """Après la synchro du matin : forme du jour, séance prévue, alertes (VFC, FC de repos, nuit), records,
+    bilan de la semaine le lundi. Chaque type se coupe dans le Profil."""
     if not push_configure() or not db.query(PushSubscription.id).filter(
             PushSubscription.utilisateur_id == user.id).first():
         return {"envoyees": 0}
+    actif = reglages_notifs(user)
     envoyees = 0
     f = forme_du_jour(db, user)
-    if f["seances_restantes"] or f["label"]:
+    if actif["forme"] and (f["seances_restantes"] or f["label"]):
         titre = f"Forme du matin : {f['label']}" if f["label"] else "Ta semaine d'entraînement"
         n = len(f["seances_restantes"])
         reste = f"{n} séance{'s' if n > 1 else ''} à faire cette semaine." if n else "Plan de la semaine bouclé."
         corps = " ".join(x for x in [f["conseil"], reste] if x)
         envoyees += envoyer(db, user.id, titre, corps, "/", "forme")
-    if f["vfc_basse_jours"] >= ALERTE_VFC_JOURS:
+    if actif["seance"]:
+        seance = seance_du_jour_texte(db, user)
+        if seance:
+            envoyees += envoyer(db, user.id, seance[0], seance[1], "/plan", "seance")
+    if actif["vfc"] and f["vfc_basse_jours"] >= ALERTE_VFC_JOURS:
         envoyees += envoyer(db, user.id, "VFC en baisse",
                             f"Ta VFC est sous ta normale depuis {f['vfc_basse_jours']} mesures d'affilée : "
                             "fatigue, stress ou maladie qui couve. Lève le pied quelques jours.", "/stats", "vfc")
+    if actif["fc_repos"] and f["fc_haute_jours"] >= ALERTE_FC_JOURS and f["fc_ecart"] is not None:
+        envoyees += envoyer(db, user.id, "FC de repos en hausse",
+                            f"{f['fc_repos']:g} bpm ce matin, soit +{f['fc_ecart']} par rapport à ta normale, "
+                            f"pour le {f['fc_haute_jours']}ᵉ matin de suite : fatigue, chaleur, alcool ou maladie "
+                            "qui couve. Garde la séance facile aujourd'hui.", "/stats", "fc_repos")
     nuit = f["alertes_nuit"]
-    if nuit and nuit["alerte"]:
+    if actif["nuit"] and nuit and nuit["alerte"]:
         details = ", ".join(f"{s['label']} {s['valeur']:g}{s['unite']} (normale {s['ref']:g})"
                             for s in nuit["signaux"] if s["alerte"] and s["ref"] is not None)
         envoyees += envoyer(db, user.id, "Nuit inhabituelle",
                             f"{nuit['message']}." + (f" {details}." if details else ""), "/", "nuit")
-    recs = records_recents(db, user, depuis or datetime.utcnow() - timedelta(hours=26))
+    recs = records_recents(db, user, depuis or datetime.utcnow() - timedelta(hours=26)) if actif["records"] else []
     if recs:
         envoyees += envoyer(db, user.id, "Nouveau record 🎉" if len(recs) == 1 else f"{len(recs)} nouveaux records 🎉",
                             " · ".join(recs), "/records", "record")
+    if actif["bilan"]:
+        bilan = bilan_semaine_texte(db, user)
+        if bilan:
+            envoyees += envoyer(db, user.id, bilan[0], bilan[1], bilan[2], "bilan")
     poids = rappel_poids_du(db, user)
     if poids:
         envoyees += envoyer(db, user.id, "Pense à te peser ⚖️",

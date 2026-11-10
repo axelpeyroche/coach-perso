@@ -94,6 +94,9 @@ def creer_tables() -> None:
         "ALTER TABLE seances_prevues ADD COLUMN IF NOT EXISTS deroule TEXT",
         # Parcours lié à un objectif de course (prédiction par tronçon)
         "ALTER TABLE objectifs ADD COLUMN IF NOT EXISTS itineraire_id INTEGER",
+        # Notifications réglables une par une, check-list de préparation de course
+        "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS notifs_reglages TEXT",
+        "ALTER TABLE objectifs ADD COLUMN IF NOT EXISTS preparation TEXT",
         # Séance « Autre » rattachée à la main à une séance prévue : elle prend le sport du plan
         "UPDATE activites SET sport = p.sport FROM seances_prevues p "
         "WHERE p.activite_id = activites.id AND p.lien_manuel AND activites.sport = 'autre' AND p.sport <> 'autre'",

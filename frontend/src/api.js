@@ -235,3 +235,9 @@ export const getBilanPeriode = (type, ref) => api.get("/bilan/periode", { params
 export const getCalendrier = (mois) => api.get("/calendrier", { params: { mois } }).then((r) => r.data);
 export const getJalons = () => api.get("/jalons").then((r) => r.data);
 export const getExploration = () => api.get("/exploration").then((r) => r.data);
+export const getSaison = () => api.get("/saison").then((r) => r.data);
+export const getAlertes = () => api.get("/alertes").then((r) => r.data);
+export const getSeancesTypes = () => api.get("/seances-types").then((r) => r.data);
+export const getPreparation = (id) => api.get(`/objectifs/${id}/preparation`).then((r) => r.data);
+export const putPreparation = (id, payload) => api.put(`/objectifs/${id}/preparation`, payload).then((r) => r.data);
+export const putReglageNotif = (cle, actif) => api.put("/push/reglages", { cle, actif }).then((r) => r.data);

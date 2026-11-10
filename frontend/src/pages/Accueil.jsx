@@ -17,9 +17,10 @@ import ZonesCardiaques from "../components/ZonesCardiaques";
 import { axeX, axeY, grille, curseur, InfoBulle } from "../components/graphiques";
 import { ProchainesSeances } from "./Plan";
 import { useAuth } from "../AuthContext";
-import { getActivites, getStatsCarnet } from "../api";
+import { getActivites, getStatsCarnet, getAlertes } from "../api";
+import { PastilleTon } from "./Alertes";
 import { nombre } from "../carnet";
-import { Section, BoutonAjout } from "../components/ui";
+import { Section, BoutonAjout, Chevron } from "../components/ui";
 
 // Lundi de la semaine en cours (heure locale), au format AAAA-MM-JJ
 function lundiCourant() {
@@ -29,6 +30,25 @@ function lundiCourant() {
 }
 
 const ZONE_COULEUR = { "sous-charge": "blue", optimale: "green", vigilance: "orange", risque: "red" };
+
+// Encart du centre d'alertes : la plus importante, et combien d'autres attendent
+function EncartAlertes() {
+  const { data } = useQuery({ queryKey: ["alertes"], queryFn: getAlertes, staleTime: 300000 });
+  const a = data?.alertes?.[0];
+  if (!a) return null;
+  const autres = data.alertes.length - 1;
+  return (
+    <Link to="/alertes" className="card p-4 flex items-center gap-3">
+      <PastilleTon ton={a.ton} />
+      <span className="flex-1 min-w-0">
+        <span className="block text-[16px] font-semibold leading-5">{a.titre}</span>
+        <span className="block text-[14px] leading-[19px] text-label-2 mt-0.5 line-clamp-2">{a.texte}</span>
+        {autres > 0 && <span className="block text-[13px] font-medium text-brand mt-1">+ {autres} autre{autres > 1 ? "s" : ""} point{autres > 1 ? "s" : ""} à voir</span>}
+      </span>
+      <Chevron />
+    </Link>
+  );
+}
 
 export default function Accueil() {
   const { user } = useAuth();
@@ -73,6 +93,7 @@ export default function Accueil() {
         </div>
       )}
 
+      {!vide && <EncartAlertes />}
       {!vide && <AlerteMarche />}
 
       {t && !vide && (
