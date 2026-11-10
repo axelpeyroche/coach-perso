@@ -6,7 +6,7 @@ import clsx from "clsx";
 import {
   creerSegment, enregistrerMeteo, getMemeParcours, getMeteo, getSegmentsActivite, getTrace,
 } from "../api";
-import { fmtDate, fmtDuree, nombre, sportInfo } from "../carnet";
+import { fmtDate, fmtDuree, nombre, sportInfo, fmtDistance } from "../carnet";
 import { Segmente } from "./ui";
 
 const PIED = new Set(["course", "trail", "marche", "randonnee"]);
@@ -92,7 +92,7 @@ export function Decoupage({ decoupage, sport, onPosition }) {
                 {rythme(pied, l.allure_sec_km, l.vitesse_kmh)}
               </span>
               <span className="h-2.5 rounded-full bg-remplissage overflow-hidden">
-                <span className="block h-full rounded-full" title={vue === "tours" ? `${nombre(l.distance_km, 2)} km · ${chrono(l.duree_sec)}` : undefined}
+                <span className="block h-full rounded-full" title={vue === "tours" ? `${fmtDistance(l.distance_km, 2)} · ${chrono(l.duree_sec)}` : undefined}
                   style={{ width: `${l.partiel ? 30 + 70 * Math.max(0, Math.min(1, part)) : 30 + 70 * part}%`,
                     background: l === record ? "rgb(var(--blue))" : effort ? "#FF9F0A" : "#64D2FF", opacity: l.partiel ? 0.5 : 1 }} />
               </span>

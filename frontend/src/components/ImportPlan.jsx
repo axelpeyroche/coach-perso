@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Feuille from "./Feuille";
 import { Interrupteur } from "./ui";
 import { getAnalyseToken, exporterCarnet, importerPlan, urlApiAbsolue } from "../api";
-import { SPORTS, sportInfo, fmtDuree, nombre } from "../carnet";
+import { SPORTS, sportInfo, fmtDuree, nombre, fmtDistance } from "../carnet";
 import { IAS, promptPlan, lirePlanColle } from "../ia";
 
 // Même logique (simplifiée) que normaliser_sport côté serveur, pour l'aperçu
@@ -122,7 +122,7 @@ export default function ImportPlan({ semaine, onClose }) {
                 <div className="card py-0.5">
                   {lu.seances.map((s, i) => {
                     const info = sportInfo(sportApercu(s.sport));
-                    const details = [s.duree_min && fmtDuree(s.duree_min * 60), s.distance_km && `${nombre(s.distance_km)} km`,
+                    const details = [s.duree_min && fmtDuree(s.duree_min * 60), s.distance_km && `${fmtDistance(s.distance_km)}`,
                       s.rpe_cible && `RPE ${nombre(s.rpe_cible)}`].filter(Boolean).join(" · ");
                     return (
                       <div key={i} className="ligne" style={{ "--inset": "3.75rem" }}>

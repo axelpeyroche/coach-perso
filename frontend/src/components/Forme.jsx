@@ -40,6 +40,7 @@ export function FormeTuiles() {
         const e = ecart(m);
         return (
           <StatTile key={m.cle} label={META[m.cle].court} color={META[m.cle].tuile}
+            serie={m.points.slice(-30).map((p) => p.valeur)}
             value={<>
               {nombre(m.derniere.valeur, m.cle === "vo2max" ? 1 : 0)}
               {m.unite !== "ml/kg/min" && <span className="text-[13px] font-semibold text-label-2 ml-0.5">{m.unite}</span>}

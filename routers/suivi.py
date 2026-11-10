@@ -54,10 +54,10 @@ def bilan_periode(type: str = Query("semaine", pattern="^(semaine|mois)$"),
 
 
 @router.get("/api/calendrier", summary="Calendrier d'un mois : séances faites et prévues, charge du jour, marqueurs")
-def calendrier(mois: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}$"),
+def calendrier(mois: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}$"), premier_jour: int = Query(1, ge=0, le=1),
                current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
     try:
-        res = pe.calendrier(db, current_user, mois)
+        res = pe.calendrier(db, current_user, mois, premier_jour)
     except ValueError:
         raise HTTPException(400, "Mois invalide")
     db.commit()  # rapprochements du plan

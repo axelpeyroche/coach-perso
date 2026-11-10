@@ -1,14 +1,14 @@
-import { sportInfo, fmtDateHeure, nombre, SOURCES } from "../carnet";
+import { sportInfo, fmtDateHeure, SOURCES, fmtDistance, fmtAllureSec, fmtVitesse } from "../carnet";
 
 // Ligne compacte d'une activité (liste du carnet, dernières activités de l'accueil)
 export default function ActiviteLigne({ a, onClick }) {
   const s = sportInfo(a.sport);
   const metriques = [
     a.duree_str,
-    a.distance_km != null && `${nombre(a.distance_km, 2)} km`,
+    a.distance_km != null && `${fmtDistance(a.distance_km, 2)}`,
     a.dplus_m ? `${a.dplus_m} m D+` : null,
-    a.allure_sec_km && !a.vitesse_kmh ? a.allure_str : null,
-    a.vitesse_kmh ? `${nombre(a.vitesse_kmh)} km/h` : null,
+    a.allure_sec_km && !a.vitesse_kmh ? fmtAllureSec(a.allure_sec_km) : null,
+    a.vitesse_kmh ? fmtVitesse(a.vitesse_kmh) : null,
     a.fc_moyenne_bpm ? `♥ ${a.fc_moyenne_bpm}` : null,
     a.rpe ? `RPE ${a.rpe}${a.rpe_estime ? " (estimé)" : ""}` : null,
   ].filter(Boolean);

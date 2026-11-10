@@ -6,12 +6,20 @@ import Card from "./Card";
 import Aide from "./Aide";
 import { duree } from "./BilanBlocs";
 import { getCalendrier, modifierPrevue } from "../api";
-import { fmtDate, nombre, sportInfo } from "../carnet";
+import { fmtDate, nombre, sportInfo, fmtDistance } from "../carnet";
+import { joursSemaine, usePreferences } from "../preferences";
 
-const JOURS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
 // Fond de la case selon la charge du jour (0 = repos … 4 = grosse journée pour toi)
 const FOND = [null, 0.08, 0.16, 0.26, 0.38];
 const STATUTS = { a_venir: "À venir", manquee: "Non faite", sautee: "Sautée", realisee: "Faite" };
+// Totaux de la ligne : lien vers le bilan quand la ligne est une semaine du lundi au dimanche
+// (les bilans restent comptés ainsi), simple total sinon
+function LienSemaine({ s, className, children }) {
+  return s.bilan
+    ? <Link to={`/bilan?vue=semaine&ref=${s.lundi}`} title="Bilan de la semaine" className={className}>{children}</Link>
+    : <div className={className}>{children}</div>;
+}
+
 const GRILLE = "grid grid-cols-7 lg:grid-cols-[repeat(7,minmax(0,1fr))_84px] gap-[3px] md:gap-1";
 
 function Fleche({ sens, onClick, label }) {
@@ -97,7 +105,7 @@ function Detail({ j, auj, onFiche, onDeplacer, enDeplacement }) {
               <span className="flex-1 min-w-0">
                 <span className="block text-[15px] leading-[19px]">{a.titre || sportInfo(a.sport).label}</span>
                 <span className="block text-[12px] text-label-2 chiffres">
-                  {[a.type, duree(a.duree_sec), a.distance_km >= 0.5 && `${nombre(a.distance_km, 1)} km`, a.dplus_m >= 50 && `${a.dplus_m} m D+`, a.prevue && "prévue au plan"].filter(Boolean).join(" · ")}
+                  {[a.type, duree(a.duree_sec), a.distance_km >= 0.5 && `${fmtDistance(a.distance_km, 1)}`, a.dplus_m >= 50 && `${a.dplus_m} m D+`, a.prevue && "prévue au plan"].filter(Boolean).join(" · ")}
                 </span>
               </span>
             </button>
@@ -110,7 +118,7 @@ function Detail({ j, auj, onFiche, onDeplacer, enDeplacement }) {
                   <span className={clsx("block text-[15px] leading-[19px]", p.statut === "sautee" && "line-through text-label-2")}>{p.titre}</span>
                   <span className="block text-[12px] text-label-2 chiffres">
                     <span className={p.statut === "manquee" ? "text-ios-red" : undefined}>{STATUTS[p.statut]}</span>
-                    {[p.duree_min && ` · ${duree(p.duree_min * 60)}`, p.distance_km && ` · ${nombre(p.distance_km, 1)} km`].filter(Boolean).join("")}
+                    {[p.duree_min && ` · ${duree(p.duree_min * 60)}`, p.distance_km && ` · ${fmtDistance(p.distance_km, 1)}`].filter(Boolean).join("")}
                   </span>
                 </span>
               </div>
@@ -145,8 +153,9 @@ export default function CalendrierCarnet({ onFiche }) {
   useEffect(() => {
     if (choisi) detail.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [choisi]);
+  const { premierJour } = usePreferences();
   const { data: c, isLoading } = useQuery({
-    queryKey: ["calendrier", mois], queryFn: () => getCalendrier(mois ?? undefined), placeholderData: (prec) => prec,
+    queryKey: ["calendrier", mois, premierJour], queryFn: () => getCalendrier(mois ?? undefined, premierJour), placeholderData: (prec) => prec,
   });
   const bouger = useMutation({
     mutationFn: ({ id, jour }) => modifierPrevue(id, { jour }),
@@ -208,7 +217,7 @@ export default function CalendrierCarnet({ onFiche }) {
       <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_330px] items-start">
         <div className="min-w-0">
           <div className={clsx(GRILLE, "mb-1")}>
-            {JOURS.map((l) => <span key={l} className="text-center text-[11px] md:text-[12px] text-label-2 font-medium">{l}</span>)}
+            {joursSemaine(premierJour).map((l) => <span key={l} className="text-center text-[11px] md:text-[12px] text-label-2 font-medium">{l}</span>)}
             <span className="hidden lg:block text-right text-[12px] text-label-2 font-medium pr-1">Semaine</span>
           </div>
           <div className="space-y-[3px] md:space-y-1">
@@ -218,7 +227,7 @@ export default function CalendrierCarnet({ onFiche }) {
                   <Case key={j.jour} j={j} auj={c.aujourdhui} choisi={!deplace && jourChoisi?.jour === j.jour}
                     cible={!!deplace} survol={survol === j.jour} onChoisir={choisir} glisser={glisser} />
                 ))}
-                <Link to={`/bilan?vue=semaine&ref=${s.lundi}`} title="Bilan de la semaine"
+                <LienSemaine s={s}
                   className="hidden lg:flex flex-col justify-center items-end text-right pr-1 rounded-[10px] hover:bg-remplissage transition chiffres">
                   {s.nb ? (
                     <>
@@ -227,7 +236,7 @@ export default function CalendrierCarnet({ onFiche }) {
                       {s.dplus_m >= 100 && <span className="text-[11px] text-label-2">{nombre(s.dplus_m, 0)} m D+</span>}
                     </>
                   ) : <span className="text-[12px] text-label-3">—</span>}
-                </Link>
+                </LienSemaine>
               </div>
             ))}
           </div>

@@ -1,4 +1,5 @@
 // Constantes et formateurs partagés par les pages du carnet.
+import { enMiles, KM_PAR_MILE } from "./preferences";
 
 export const SPORTS = {
   course:    { label: "Course",          emoji: "🏃", couleur: "#FF9500", distance: true },
@@ -30,10 +31,19 @@ export function fmtDuree(sec) {
 
 export function fmtAllureSec(secKm) {
   if (!secKm) return "—";
-  const m = Math.floor(secKm / 60);
-  const s = Math.round(secKm % 60);
-  return `${m}:${String(s).padStart(2, "0")}/km`;
+  const mi = enMiles();
+  const t = Math.round(mi ? secKm * KM_PAR_MILE : secKm);
+  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}/${mi ? "mi" : "km"}`;
 }
+
+// Distance dans l'unité choisie dans le Profil (les données restent en kilomètres)
+export const uniteDistance = () => (enMiles() ? "mi" : "km");
+export function fmtDistance(km, dec = 1) {
+  if (km == null) return "—";
+  return `${nombre(enMiles() ? km / KM_PAR_MILE : km, dec)} ${uniteDistance()}`;
+}
+
+export const fmtVitesse = (kmh, dec = 1) => `${nombre(enMiles() ? kmh / KM_PAR_MILE : kmh, dec)} ${enMiles() ? "mph" : "km/h"}`;
 
 export function fmtDate(iso, opts = { day: "numeric", month: "short", year: "numeric" }) {
   if (!iso) return "—";

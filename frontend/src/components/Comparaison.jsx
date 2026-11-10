@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { getActivites, getComparables, getFlux } from "../api";
-import { fmtDate, fmtDuree, nombre, sportInfo } from "../carnet";
+import { fmtDate, fmtDuree, nombre, sportInfo, fmtDistance } from "../carnet";
 import Feuille from "./Feuille";
 import Aide from "./Aide";
 import { mmss } from "./FicheExtras";
@@ -107,7 +107,7 @@ function chiffres(a, b, pied) {
   const ta = a.details?.duree_mouvement_sec || a.duree_sec, tb = b.details?.duree_mouvement_sec || b.duree_sec;
   const va = a.distance_km && ta ? (a.distance_km / ta) * 3600 : null, vb = b.distance_km && tb ? (b.distance_km / tb) * 3600 : null;
   return [
-    ["Distance", a.distance_km != null ? `${nombre(a.distance_km, 2)} km` : null, b.distance_km != null ? `${nombre(b.distance_km, 2)} km` : null,
+    ["Distance", a.distance_km != null ? `${fmtDistance(a.distance_km, 2)}` : null, b.distance_km != null ? `${fmtDistance(b.distance_km, 2)}` : null,
       ecart(a.distance_km, b.distance_km, (d) => `${nombre(d, 2)} km`)],
     ["Durée", ta ? fmtDuree(ta) : null, tb ? fmtDuree(tb) : null, ecart(ta, tb, (d) => fmtDuree(Math.round(d)))],
     pied
@@ -149,7 +149,7 @@ function Ligne({ a, onClick, meme }) {
           {meme && a.type_seance && <span className="badge shrink-0 bg-brand/15 text-brand">{a.type_seance.label}</span>}
         </span>
         <span className="block text-[13px] text-label-2 chiffres truncate">
-          {[a.distance_km != null && `${nombre(a.distance_km, 1)} km`, a.duree_str, a.allure_str, a.fc_moyenne_bpm && `♥ ${a.fc_moyenne_bpm}`].filter(Boolean).join(" · ")}
+          {[a.distance_km != null && `${fmtDistance(a.distance_km, 1)}`, a.duree_str, a.allure_str, a.fc_moyenne_bpm && `♥ ${a.fc_moyenne_bpm}`].filter(Boolean).join(" · ")}
         </span>
       </span>
       <span className="text-[12px] text-label-2 shrink-0 chiffres">{fmtDate(a.debut)}</span>

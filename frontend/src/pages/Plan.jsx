@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
+import { debutSemaine } from "../preferences";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import Card from "../components/Card";
@@ -19,11 +20,13 @@ import { Section, BoutonAjout } from "../components/ui";
 import {
   getPlan, getActivites, creerPrevue, modifierPrevue, supprimerPrevue, getActivitesProches, getSeancesTypes,
 } from "../api";
-import { SPORTS, sportInfo, fmtDuree, fmtDate, nombre, inputCls } from "../carnet";
+import { SPORTS, sportInfo, fmtDuree, fmtDate, nombre, inputCls, fmtDistance } from "../carnet";
 
 // ── Dates (jours locaux au format AAAA-MM-JJ) ──────────────────────────────
 const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const ajouter = (d, n) => { const r = new Date(d); r.setDate(r.getDate() + n); return r; };
+// Premier jour de la semaine affichée, selon le réglage du Profil (lundi ou dimanche)
+const debutDe = (d) => new Date(`${debutSemaine(d)}T00:00`);
 const lundiDe = (d) => { const r = new Date(d.getFullYear(), d.getMonth(), d.getDate()); return ajouter(r, -((r.getDay() + 6) % 7)); };
 
 export const STATUTS = {
@@ -37,7 +40,7 @@ export const STATUTS = {
 export function Pastilles({ s }) {
   const items = [
     s.duree_min != null && fmtDuree(s.duree_min * 60),
-    s.distance_km != null && `${nombre(s.distance_km)} km`,
+    s.distance_km != null && `${fmtDistance(s.distance_km)}`,
     s.dplus_m ? `${s.dplus_m} m D+` : null,
     s.rpe_cible != null && `RPE ${nombre(s.rpe_cible)}`,
   ].filter(Boolean);
@@ -83,7 +86,7 @@ function DetailSeance({ s, onClose, onOuvrirActivite }) {
   const reprise = guidable && seanceSauvegardee(s.id);
   const mesures = [
     ["Durée", s.duree_min != null ? fmtDuree(s.duree_min * 60) : null],
-    ["Distance", s.distance_km != null ? `${nombre(s.distance_km)} km` : null],
+    ["Distance", s.distance_km != null ? `${fmtDistance(s.distance_km)}` : null],
     ["Dénivelé", s.dplus_m ? `${s.dplus_m} m` : null],
     ["RPE cible", s.rpe_cible != null ? nombre(s.rpe_cible) : null],
   ].filter(([, v]) => v);
@@ -338,7 +341,7 @@ function LigneFaite({ a, onClick }) {
   const info = sportInfo(a.sport);
   const metriques = [
     a.duree_str,
-    a.distance_km != null && `${nombre(a.distance_km, 2)} km`,
+    a.distance_km != null && `${fmtDistance(a.distance_km, 2)}`,
     a.dplus_m ? `${a.dplus_m} m D+` : null,
     a.rpe ? `RPE ${a.rpe}${a.rpe_estime ? " (estimé)" : ""}` : null,
   ].filter(Boolean);
@@ -565,13 +568,13 @@ function BilanSports({ seances, activites, courante }) {
 }
 
 export default function Plan() {
-  const [lundi, setLundi] = useState(() => lundiDe(new Date()));
+  const [lundi, setLundi] = useState(() => debutDe(new Date()));
   const [modalActivite, setModalActivite] = useState(undefined);
   const [ajout, setAjout] = useState(false);
   const [importIa, setImportIa] = useState(false);
   const depuis = iso(lundi);
   const jusqu = iso(ajouter(lundi, 6));
-  const courante = depuis === iso(lundiDe(new Date()));
+  const courante = depuis === iso(debutDe(new Date()));
 
   const { data: plan, isLoading } = useQuery({ queryKey: ["plan", depuis, jusqu], queryFn: () => getPlan(depuis, jusqu) });
   const { data: acts } = useQuery({
@@ -615,7 +618,7 @@ export default function Plan() {
 
       <BandeauSemaine lundi={depuis} dimanche={jusqu} courante={courante}
         onPrec={() => setLundi(ajouter(lundi, -7))} onSuiv={() => setLundi(ajouter(lundi, 7))}
-        onAujourdhui={() => setLundi(lundiDe(new Date()))} />
+        onAujourdhui={() => setLundi(debutDe(new Date()))} />
 
       <div className="card grid grid-cols-3 divide-x-[0.5px] divide-separateur py-3">
         {[
@@ -659,14 +662,14 @@ export default function Plan() {
 
       {modalActivite !== undefined && <ModalActivite activite={modalActivite} onClose={() => setModalActivite(undefined)} />}
       {ajout && <ModalPrevue semaine={depuis} onClose={() => setAjout(false)} />}
-      {importIa && <ImportPlan semaine={depuis} onClose={() => setImportIa(false)} />}
+      {importIa && <ImportPlan semaine={iso(lundiDe(ajouter(lundi, 1)))} onClose={() => setImportIa(false)} />}
     </Page>
   );
 }
 
 // ── « Prochaines séances » de l'accueil ────────────────────────────────────
 export function ProchainesSeances() {
-  const lundi = lundiDe(new Date());
+  const lundi = debutDe(new Date());
   const depuis = iso(lundi);
   const jusqu = iso(ajouter(lundi, 6));
   const { data } = useQuery({ queryKey: ["plan", depuis, jusqu], queryFn: () => getPlan(depuis, jusqu) });

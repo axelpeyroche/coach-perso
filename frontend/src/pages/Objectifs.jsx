@@ -9,7 +9,7 @@ import ConfirmDialog from "../components/ConfirmDialog";
 import { BoutonAjout, Segmente } from "../components/ui";
 import { getObjectifs, creerObjectif, modifierObjectif, supprimerObjectif } from "../api";
 import {
-  SPORTS, sportInfo, fmtDate, parseDuree, dureeVersTexte, nombre, inputCls,
+  SPORTS, sportInfo, fmtDate, parseDuree, dureeVersTexte, nombre, inputCls, fmtDistance,
 } from "../carnet";
 
 const METRIQUES = {
@@ -101,7 +101,7 @@ export function ObjectifCarte({ o, onEdit, compact = false }) {
 
       {o.type === "course" ? (
         <div className={clsx("grid gap-2", compact ? "grid-cols-2" : "grid-cols-2 sm:grid-cols-4")}>
-          <Tuile label="Distance" value={o.distance_km ? `${nombre(o.distance_km, 2)} km` : "—"} sub={o.dplus_m ? `${o.dplus_m} m D+` : null} />
+          <Tuile label="Distance" value={o.distance_km ? `${fmtDistance(o.distance_km, 2)}` : "—"} sub={o.dplus_m ? `${o.dplus_m} m D+` : null} />
           <Tuile label="Objectif" value={o.temps_cible_sec ? o.temps_cible_str : "—"} sub={o.allure_cible_str} />
           {o.realise ? (
             <>

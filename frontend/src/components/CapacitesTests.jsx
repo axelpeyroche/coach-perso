@@ -9,7 +9,7 @@ import { Chevron } from "./ui";
 import { axeX, axeY, grille, GRIS } from "./graphiques";
 import { Entete, Vide, Message, VERT, ORANGE, ROUGE, CYAN, BLEU, INDIGO } from "./Capacites";
 import { planifierTest, supprimerPrevue, lierParcoursObjectif } from "../api";
-import { fmtAllureSec, fmtDate, nombre } from "../carnet";
+import { fmtAllureSec, fmtDate, nombre, fmtDistance } from "../carnet";
 
 const court = (iso) => fmtDate(iso, { day: "numeric", month: "short" });
 const avecAn = (iso) => fmtDate(iso, { day: "numeric", month: "short", year: "2-digit" });
@@ -296,7 +296,7 @@ export function Prediction({ p }) {
             <select className="champ w-full mt-1" value={o.itineraire_id ?? ""} disabled={lier.isPending}
               onChange={(e) => lier.mutate({ id: o.id, itineraire_id: e.target.value ? Number(e.target.value) : null })}>
               <option value="">Sans tracé</option>
-              {p.parcours.map((f) => <option key={f.id} value={f.id}>{f.nom} · {nombre(f.distance_km, 1)} km, {f.dplus_m} m D+</option>)}
+              {p.parcours.map((f) => <option key={f.id} value={f.id}>{f.nom} · {fmtDistance(f.distance_km, 1)}, {f.dplus_m} m D+</option>)}
             </select>
             <span className="block text-[12px] text-label-2 leading-4 mt-1.5">
               {lier.isPending ? "Calcul en cours…" : (
@@ -331,7 +331,7 @@ export function Prediction({ p }) {
                 })}
               </ul>
               <p className="text-[12px] text-label-2 chiffres leading-4">
-                {nombre(o.distance_km, 1)} km · {o.dplus_m} m D+{o.parcours?.dmoins_m != null && ` · ${o.parcours.dmoins_m} m D−`} · équivaut à {nombre(o.km_effort, 1)} km à plat
+                {fmtDistance(o.distance_km, 1)} · {o.dplus_m} m D+{o.parcours?.dmoins_m != null && ` · ${o.parcours.dmoins_m} m D−`} · équivaut à {nombre(o.km_effort, 1)} km à plat
               </p>
               {o.cible_lecture && (
                 <Message ton={o.cible_ecart_sec >= 0 ? "bien" : o.cible_sec < o.temps.optimiste.sec ? "alerte" : ""}>

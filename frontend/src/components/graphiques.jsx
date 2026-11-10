@@ -3,6 +3,32 @@
 
 export const GRIS = "#8E8E93";
 
+// Enveloppe d'un graphique pour les lecteurs d'écran : le dessin est annoncé comme une image
+// avec son titre et, si on le donne, un résumé en une phrase de ce qu'il montre.
+export function Graphique({ label, resume, children, className }) {
+  return (
+    <div role="img" aria-label={resume ? `${label}. ${resume}` : label} className={className}>
+      {children}
+    </div>
+  );
+}
+
+// Courbe miniature (tuiles) : la forme de la série, sans axes. `valeurs` : nombres, null ignorés.
+export function Miniature({ valeurs, className = "w-full h-6" }) {
+  const v = (valeurs ?? []).filter((x) => x != null);
+  if (v.length < 3) return null;
+  const min = Math.min(...v), max = Math.max(...v), e = max - min || 1;
+  const pts = v.map((x, i) => [(i / (v.length - 1)) * 100, 22 - ((x - min) / e) * 20]);
+  const [dx, dy] = pts[pts.length - 1];
+  return (
+    <svg viewBox="0 0 100 24" preserveAspectRatio="none" aria-hidden className={className}>
+      <polyline points={pts.map((p) => p.map((n) => n.toFixed(1)).join(",")).join(" ")} fill="none" stroke="currentColor"
+        strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" opacity="0.85" />
+      <path d={`M${dx.toFixed(1)} ${dy.toFixed(1)}h0`} stroke="currentColor" strokeWidth="5" strokeLinecap="round" vectorEffect="non-scaling-stroke" />
+    </svg>
+  );
+}
+
 export const axeX = {
   tick: { fontSize: 11, fill: GRIS },
   axisLine: false,

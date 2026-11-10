@@ -232,7 +232,7 @@ export const putMensurations = (payload) => api.put("/corps/mensurations", paylo
 export const completerMeteo = () => api.post("/corps/meteo/completer", null, { timeout: 60000 }).then((r) => r.data);
 export const adapterPrevue =(id, action) => api.post(`/plan/${id}/adapter`, { action }).then((r) => r.data);
 export const getBilanPeriode = (type, ref) => api.get("/bilan/periode", { params: { type, ref } }).then((r) => r.data);
-export const getCalendrier = (mois) => api.get("/calendrier", { params: { mois } }).then((r) => r.data);
+export const getCalendrier = (mois, premierJour = 1) => api.get("/calendrier", { params: { mois, premier_jour: premierJour } }).then((r) => r.data);
 export const getJalons = () => api.get("/jalons").then((r) => r.data);
 export const getExploration = () => api.get("/exploration").then((r) => r.data);
 export const getSaison = () => api.get("/saison").then((r) => r.data);

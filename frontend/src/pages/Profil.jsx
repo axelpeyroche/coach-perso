@@ -13,6 +13,7 @@ import ModalPoids from "../components/ModalPoids";
 import { imc } from "../components/Poids";
 import { nombre } from "../carnet";
 import { Chevron, Interrupteur, Segmente, SelecteurHeure } from "../components/ui";
+import { ACCENTS, usePreferences, modifierPreferences } from "../preferences";
 import { spotifyDisponible, spotifyConnecte, connecterSpotify, deconnecterSpotify } from "../spotify";
 
 // ── Avatar ─────────────────────────────────────────────────────────────────
@@ -141,6 +142,76 @@ function Groupe({ titre, pied, children }) {
       <div className="card py-0.5 overflow-hidden">{children}</div>
       {pied && <p className="px-4 pt-1.5 text-[13px] text-label-2">{pied}</p>}
     </div>
+  );
+}
+
+// Apparence : thème, couleur d'accent, densité, unités, premier jour, aides à la lecture (gardés sur l'appareil)
+function Apparence({ theme, setTheme }) {
+  const p = usePreferences();
+  const maj = (cle) => (v) => modifierPreferences({ [cle]: v });
+  const reglage = "w-[168px] sm:w-[200px] shrink-0";
+  const inset = { "--inset": "3.75rem" };
+  return (
+    <>
+      <Groupe titre="Apparence"
+        pied="Les distances et les allures passent en miles dans les listes, les tuiles et les fiches ; les graphiques, la saisie et les itinéraires restent en kilomètres. Les bilans et les totaux hebdomadaires restent comptés du lundi au dimanche.">
+        <div className="ligne" style={inset}>
+          <Picto couleur="#5856D6"><path d="M20 14.5A8 8 0 019.5 4a8 8 0 1010.5 10.5z" /></Picto>
+          <span className="flex-1 min-w-0 text-[17px] truncate">Thème</span>
+          <Segmente valeur={theme} onChange={setTheme} className="w-[200px] shrink-0" label="Thème"
+            options={[["auto", "Auto"], ["light", "Clair"], ["dark", "Sombre"]]} />
+        </div>
+        <div className="ligne flex-wrap gap-y-2" style={inset}>
+          <Picto couleur="#FF2D55"><path d="M12 3a9 9 0 100 18c1.2 0 2-.9 2-2 0-1.4 1-2 2.2-2H18a3 3 0 003-3c0-6-4-11-9-11z" /></Picto>
+          <span className="flex-1 min-w-[5rem] text-[17px]">Couleur</span>
+          <span className="flex gap-1.5" role="group" aria-label="Couleur d'accent">
+            {ACCENTS.map(([cle, nom, ios]) => (
+              <button key={cle} type="button" aria-label={nom} title={nom} aria-pressed={p.accent === cle}
+                onClick={() => modifierPreferences({ accent: cle })}
+                className="w-8 h-8 rounded-full flex items-center justify-center text-white"
+                style={{ backgroundColor: `rgb(var(--${ios}))` }}>
+                {p.accent === cle && (
+                  <svg viewBox="0 0 24 24" className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={3.2} strokeLinecap="round" strokeLinejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+                )}
+              </button>
+            ))}
+          </span>
+        </div>
+        <div className="ligne" style={inset}>
+          <Picto couleur="#8E8E93"><path d="M4 6h16M4 12h16M4 18h16" /></Picto>
+          <span className="flex-1 min-w-0 text-[17px] truncate">Densité</span>
+          <Segmente valeur={p.densite} onChange={maj("densite")} className={reglage} label="Densité"
+            options={[["aere", "Aéré"], ["compact", "Compact"]]} />
+        </div>
+        <div className="ligne" style={inset}>
+          <Picto couleur="#34C759"><path d="M3 17l6-10 4 6 3-4 5 8H3z" /></Picto>
+          <span className="flex-1 min-w-0 text-[17px] truncate">Unités</span>
+          <Segmente valeur={p.unites} onChange={maj("unites")} className={reglage} label="Unités de distance"
+            options={[["km", "Kilomètres"], ["mi", "Miles"]]} />
+        </div>
+        <div className="ligne" style={inset}>
+          <Picto couleur="#FF9500"><path d="M5 5h14v15H5zM5 10h14M9 3v4M15 3v4" /></Picto>
+          <span className="flex-1 min-w-0 text-[17px] truncate">Semaine</span>
+          <Segmente valeur={p.premierJour} onChange={maj("premierJour")} className={reglage} label="Premier jour de la semaine"
+            options={[[1, "Lundi"], [0, "Dimanche"]]} />
+        </div>
+      </Groupe>
+
+      <Groupe titre="Lisibilité"
+        pied="La palette adaptée remplace le vert et le rouge par des teintes qui restent distinctes pour les daltoniens. Les repères ajoutent une marque aux interrupteurs et soulignent les liens, pour ne jamais dépendre de la seule couleur.">
+        <div className="ligne" style={inset}>
+          <Picto couleur="#0A84FF"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 9a3 3 0 100 6 3 3 0 000-6z" /></Picto>
+          <span className="flex-1 min-w-0 text-[17px]">Palette adaptée au daltonisme</span>
+          <Interrupteur actif={p.palette === "daltonien"} label="Palette adaptée au daltonisme"
+            onChange={(v) => modifierPreferences({ palette: v ? "daltonien" : "standard" })} />
+        </div>
+        <div className="ligne" style={inset}>
+          <Picto couleur="#5E5CE6"><path d="M5 19h14M8 5v6a4 4 0 008 0V5" /></Picto>
+          <span className="flex-1 min-w-0 text-[17px]">Repères sans couleur</span>
+          <Interrupteur actif={!!p.reperes} label="Repères sans couleur" onChange={(v) => modifierPreferences({ reperes: !!v })} />
+        </div>
+      </Groupe>
+    </>
   );
 }
 
@@ -729,14 +800,7 @@ export default function Profil({ theme, setTheme }) {
           </Link>
         </Groupe>
 
-        <Groupe titre="Apparence">
-          <div className="ligne" style={inset}>
-            <Picto couleur="#5856D6"><path d="M20 14.5A8 8 0 019.5 4a8 8 0 1010.5 10.5z" /></Picto>
-            <span className="flex-1 text-[17px]">Thème</span>
-            <Segmente valeur={theme} onChange={setTheme} className="w-[200px]"
-              options={[["auto", "Auto"], ["light", "Clair"], ["dark", "Sombre"]]} />
-          </div>
-        </Groupe>
+        <Apparence theme={theme} setTheme={setTheme} />
 
         <Notifications />
 

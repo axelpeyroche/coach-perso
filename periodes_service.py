@@ -282,10 +282,13 @@ def bilan_periode(db: Session, user: Utilisateur, type_: str, ref: Optional[str]
 # Calendrier d'un mois
 # ---------------------------------------------------------------------------
 
-def calendrier(db: Session, user: Utilisateur, mois: Optional[str]) -> dict:
+def calendrier(db: Session, user: Utilisateur, mois: Optional[str], premier_jour: int = 1) -> dict:
     auj = sv.aujourdhui(user)
     premier, dernier = _bornes("mois", mois, auj)
-    debut, fin = cs._lundi(premier), cs._lundi(dernier) + timedelta(days=6)
+    # premier_jour : 1 = semaines du lundi au dimanche, 0 = du dimanche au samedi (affichage seulement)
+    tete = 0 if premier_jour == 1 else 6
+    debut = premier - timedelta(days=(premier.weekday() - tete) % 7)
+    fin = dernier - timedelta(days=(dernier.weekday() - tete) % 7) + timedelta(days=6)
     acts = (db.query(Activite).filter(Activite.utilisateur_id == user.id,
                                       Activite.debut >= datetime.combine(debut - timedelta(days=365), datetime.min.time()),
                                       Activite.debut < datetime.combine(fin + timedelta(days=1), datetime.min.time()))
@@ -329,9 +332,9 @@ def calendrier(db: Session, user: Utilisateur, mois: Optional[str]) -> dict:
             "prevues": prevues_jour.get(d.isoformat(), []),
             "marqueurs": marqueurs.get(d, []),
         })
-        if d.weekday() == 6:
+        if i % 7 == 6:
             sem = [a for k in range(7) for a in par_jour.get(d - timedelta(days=k), [])]
-            semaines.append({"lundi": (d - timedelta(days=6)).isoformat(), **_totaux(sem)})
+            semaines.append({"lundi": (d - timedelta(days=6)).isoformat(), "bilan": tete == 0, **_totaux(sem)})
     pm = premier - timedelta(days=1)
     return {
         "mois": premier.isoformat()[:7], "libelle": f"{MOIS[premier.month - 1].capitalize()} {premier.year}",

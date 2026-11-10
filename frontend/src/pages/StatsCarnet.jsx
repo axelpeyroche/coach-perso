@@ -13,7 +13,7 @@ import Jalons from "../components/Jalons";
 import { Section, Segmente } from "../components/ui";
 import { axeX, axeY, grille, curseur, InfoBulle, Legende } from "../components/graphiques";
 import api, { getStatsCarnet } from "../api";
-import { SPORTS, sportInfo, fmtAllureSec, fmtDate, nombre } from "../carnet";
+import { SPORTS, sportInfo, fmtAllureSec, fmtDate, nombre, fmtDistance } from "../carnet";
 
 const BLEU = "#007AFF";
 const ORANGE = "#FF9500";
@@ -158,9 +158,9 @@ export default function StatsCarnet() {
       ) : (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <StatTile label="Cette semaine" color="orange" value={`${nombre(t.semaine.duree_h)} h`} sub={`${t.semaine.nb} séance(s) · ${nombre(t.semaine.distance_km)} km`} />
-            <StatTile label="Ce mois-ci" color="blue" value={`${nombre(t.mois.duree_h)} h`} sub={`${t.mois.nb} séance(s) · ${nombre(t.mois.distance_km)} km`} />
-            <StatTile label={`Année ${new Date().getFullYear()}`} color="green" value={`${nombre(t.annee.distance_km, 0)} km`} sub={`${t.annee.nb} séances · ${nombre(t.annee.duree_h, 0)} h · ${t.annee.dplus_m} m D+`} />
+            <StatTile label="Cette semaine" color="orange" value={`${nombre(t.semaine.duree_h)} h`} sub={`${t.semaine.nb} séance(s) · ${fmtDistance(t.semaine.distance_km)}`} />
+            <StatTile label="Ce mois-ci" color="blue" value={`${nombre(t.mois.duree_h)} h`} sub={`${t.mois.nb} séance(s) · ${fmtDistance(t.mois.distance_km)}`} />
+            <StatTile label={`Année ${new Date().getFullYear()}`} color="green" value={`${fmtDistance(t.annee.distance_km, 0)}`} sub={`${t.annee.nb} séances · ${nombre(t.annee.duree_h, 0)} h · ${t.annee.dplus_m} m D+`} />
             <StatTile label="Régularité" color="pink" value={`${s.regularite.serie_semaines} sem.`} sub={`d'affilée · ${s.regularite.jours_actifs_28j} j actifs / 28`} />
           </div>
 
@@ -305,7 +305,7 @@ export default function StatsCarnet() {
                       <div className="flex items-baseline justify-between gap-2">
                         <span className="text-[15px]">{info.emoji} {r.label}</span>
                         <span className="text-[13px] text-label-2 chiffres">
-                          {r.nb} · {nombre(r.duree_h)} h{r.distance_km ? ` · ${nombre(r.distance_km, 0)} km` : ""}
+                          {r.nb} · {nombre(r.duree_h)} h{r.distance_km ? ` · ${fmtDistance(r.distance_km, 0)}` : ""}
                         </span>
                       </div>
                       <div className="h-1.5 rounded-full bg-remplissage overflow-hidden">
@@ -328,7 +328,7 @@ export default function StatsCarnet() {
                       <span className="flex-1 text-[15px]">{l}</span>
                       <span className="text-right">
                         <span className="block text-[15px] font-semibold chiffres">{x.nb} séances · {nombre(x.duree_h)} h</span>
-                        <span className="block text-[12px] text-label-2 chiffres">{nombre(x.distance_km)} km · {x.dplus_m} m D+</span>
+                        <span className="block text-[12px] text-label-2 chiffres">{fmtDistance(x.distance_km)} · {x.dplus_m} m D+</span>
                       </span>
                     </div>
                   ))}

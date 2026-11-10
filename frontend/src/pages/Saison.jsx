@@ -8,7 +8,7 @@ import { Section, Chevron } from "../components/ui";
 import { Legende } from "../components/graphiques";
 import { PastilleTon } from "./Alertes";
 import { getSaison } from "../api";
-import { fmtDate, nombre } from "../carnet";
+import { fmtDate, nombre, fmtDistance } from "../carnet";
 
 // Vue de la saison : les semaines jusqu'à la course, découpées en phases,
 // avec la charge réalisée contre la charge prévue et les semaines allégées.
@@ -100,7 +100,7 @@ function DetailSemaine({ s }) {
   const faits = [
     ["Charge", s.charge != null ? nombre(s.charge, 0) : "—", s.charge_prevue != null ? `prévue ${nombre(s.charge_prevue, 0)}` : null],
     ["Durée", s.duree_h != null ? `${nombre(s.duree_h)} h` : "—", null],
-    ["Distance", s.distance_km != null ? `${nombre(s.distance_km, 0)} km` : "—", s.dplus_m ? `${nombre(s.dplus_m, 0)} m D+` : null],
+    ["Distance", s.distance_km != null ? `${fmtDistance(s.distance_km, 0)}` : "—", s.dplus_m ? `${nombre(s.dplus_m, 0)} m D+` : null],
     ["Séances", s.seances != null ? s.seances : "—", s.seances_prevues ? `${s.seances_faites}/${s.seances_prevues} du plan` : null],
     ["Forme (CTL)", s.ctl != null ? nombre(s.ctl, 0) : "—", null],
   ];
@@ -167,7 +167,7 @@ export default function Saison() {
                     <p className="text-[20px] font-bold leading-6 text-balance">{o.titre}</p>
                     <p className="mt-1 text-[14px] text-label-2">
                       {fmtDate(o.date, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
-                      {o.distance_km ? ` · ${nombre(o.distance_km)} km` : ""}{o.dplus_m ? ` · ${nombre(o.dplus_m, 0)} m D+` : ""}
+                      {o.distance_km ? ` · ${fmtDistance(o.distance_km)}` : ""}{o.dplus_m ? ` · ${nombre(o.dplus_m, 0)} m D+` : ""}
                     </p>
                     <Link to={`/objectifs/preparation?id=${o.id}`} className="mt-1.5 inline-flex items-center gap-1 text-[15px] font-medium text-brand">
                       Préparer la course <Chevron />

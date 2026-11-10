@@ -11,7 +11,8 @@ import BilanPeriode from "../components/BilanPeriode";
 import Exploration from "../components/Exploration";
 import { Actions, Faits, Ligne, ORANGE, Repartition, court, heures, hms, teinte } from "../components/BilanBlocs";
 import { getActivite, getBilan } from "../api";
-import { fmtDate, nombre, sportInfo } from "../carnet";
+import { fmtDate, nombre, sportInfo, fmtDistance } from "../carnet";
+import { lirePreferences } from "../preferences";
 
 const INITIALES = ["J", "F", "M", "A", "M", "J", "J", "A", "S", "O", "N", "D"];
 
@@ -102,7 +103,7 @@ function Regularite({ b }) {
   const minutes = Object.fromEntries(b.jours);
   const debut = new Date(b.annee, 0, 1), fin = new Date(`${b.jusqu_au}T12:00`);
   const cases = [];
-  for (let i = 0; i < (debut.getDay() + 6) % 7; i++) cases.push(<i key={`x${i}`} />);
+  for (let i = 0; i < (debut.getDay() - lirePreferences().premierJour + 7) % 7; i++) cases.push(<i key={`x${i}`} />);
   for (const d = new Date(debut); d <= fin; d.setDate(d.getDate() + 1)) {
     const k = iso(d), m = minutes[k] || 0;
     const n = m === 0 ? 0 : m <= 30 ? 1 : m <= 75 ? 2 : 3;
@@ -160,14 +161,14 @@ function Marquantes({ b, ouvrir }) {
   const { plus_longue: l, plus_gros_dplus: d, plus_longue_duree: t } = b.marquantes;
   const lignes = [
     l && <Ligne key="l" ico={sportInfo(l.sport).emoji} fond={teinte("rgb(var(--green))")} titre="Plus longue sortie"
-      sous={`${l.titre || sportInfo(l.sport).label} · ${court(l.date)}`} valeur={`${nombre(l.distance_km, 1)} km`}
+      sous={`${l.titre || sportInfo(l.sport).label} · ${court(l.date)}`} valeur={`${fmtDistance(l.distance_km, 1)}`}
       detail={l.dplus_m ? `${nombre(l.dplus_m, 0)} m D+` : hms(l.duree_sec)} onClick={() => ouvrir(l.id)} />,
     d && <Ligne key="d" ico="⛰️" fond={teinte("#AF52DE")} titre="Plus gros dénivelé"
       sous={`${d.titre || sportInfo(d.sport).label} · ${court(d.date)}`} valeur={`${nombre(d.dplus_m, 0)} m`}
-      detail={d.distance_km ? `${nombre(d.distance_km, 1)} km` : null} onClick={() => ouvrir(d.id)} />,
+      detail={d.distance_km ? `${fmtDistance(d.distance_km, 1)}` : null} onClick={() => ouvrir(d.id)} />,
     t && t.id !== l?.id && <Ligne key="t" ico="⏱️" fond={teinte("rgb(var(--blue))")} titre="Plus longue séance"
       sous={`${t.titre || sportInfo(t.sport).label} · ${court(t.date)}`} valeur={hms(t.duree_sec)}
-      detail={t.distance_km ? `${nombre(t.distance_km, 1)} km` : null} onClick={() => ouvrir(t.id)} />,
+      detail={t.distance_km ? `${fmtDistance(t.distance_km, 1)}` : null} onClick={() => ouvrir(t.id)} />,
   ].filter(Boolean);
   if (!lignes.length) return null;
   return (

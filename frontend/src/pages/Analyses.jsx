@@ -24,7 +24,7 @@ import {
   TendanceVfc, FenetreSommeil, EffetNuit, TempsRecuperation, Chaleur, TendancesLongues, CompositionCorporelle,
 } from "../components/CorpsAnalyses";
 import api, { getAnalyses } from "../api";
-import { fmtAllureSec, fmtDate, fmtDuree, nombre, sportInfo } from "../carnet";
+import { fmtAllureSec, fmtDate, fmtDuree, nombre, sportInfo, fmtDistance } from "../carnet";
 
 const BLEU = "#007AFF";
 const ORANGE = "#FF9500";
@@ -1183,7 +1183,7 @@ function Durabilite({ d }) {
                   <p className="text-label-2">{fmtDate(x.date)}</p>
                   {x.titre && <p className="font-semibold truncate">{x.titre}</p>}
                   <p className="chiffres mt-1">Durabilité : <b style={{ color: couleurDurab(x.durabilite_pct) }}>{signe(x.durabilite_pct, 1)} %</b></p>
-                  <p className="chiffres text-label-2">{fmtDuree(x.duree_min * 60)} · {nombre(x.distance_km, 1)} km{x.dplus_m ? ` · ${nombre(x.dplus_m, 0)} m D+` : ""}</p>
+                  <p className="chiffres text-label-2">{fmtDuree(x.duree_min * 60)} · {fmtDistance(x.distance_km, 1)}{x.dplus_m ? ` · ${nombre(x.dplus_m, 0)} m D+` : ""}</p>
                 </div>
               );
             }} />

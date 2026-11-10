@@ -445,6 +445,8 @@ export default function App() {
         <RequireAuth>
             <SynchroIntervals />
             <ServiceWorker />
+            <button type="button" className="lien-evitement btn-primaire"
+              onClick={() => document.getElementById("contenu")?.focus()}>Aller au contenu</button>
             <div className="min-h-screen flex" style={{ overflowX: "clip" }}>
 
               {/* ── Sidebar desktop ── */}
@@ -461,8 +463,8 @@ export default function App() {
               </aside>
 
               {/* ── Contenu principal ── */}
-              <main
-                className="flex-1 md:ml-60 pb-[calc(6.5rem+env(safe-area-inset-bottom))] md:pb-0 min-h-screen w-full min-w-0"
+              <main id="contenu" tabIndex={-1}
+                className="flex-1 md:ml-60 pb-[calc(6.5rem+env(safe-area-inset-bottom))] md:pb-0 min-h-screen w-full min-w-0 outline-none"
                 style={{ overflowX: "clip" }}
               >
                 <MemoireDefilement />

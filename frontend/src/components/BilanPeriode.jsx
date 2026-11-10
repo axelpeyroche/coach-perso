@@ -6,7 +6,7 @@ import { Section } from "./ui";
 import { Actions, Faits, Ligne, ORANGE, Repartition, court, duree, teinte } from "./BilanBlocs";
 import { ExplorationMois } from "./Exploration";
 import { getBilanPeriode } from "../api";
-import { fmtDate, nombre, sportInfo } from "../carnet";
+import { fmtDate, nombre, sportInfo, fmtDistance } from "../carnet";
 
 const JOURS = ["L", "M", "M", "J", "V", "S", "D"];
 const hm = (h) => `${Math.floor(h)} h ${String(Math.round((h - Math.floor(h)) * 60)).padStart(2, "0")}`;
@@ -240,7 +240,7 @@ export default function BilanPeriode({ type, refp, onRef, ouvrir, onSemaine }) {
                   <Ligne key={a.id} ico={sportInfo(a.sport).emoji} fond={teinte(sportInfo(a.sport).couleur)}
                     titre={a.titre || sportInfo(a.sport).label}
                     sous={[fmtDate(a.date, { weekday: "short", day: "numeric", month: "short" }), a.type].filter(Boolean).join(" · ")}
-                    valeur={a.distance_km >= 0.5 && sportInfo(a.sport).distance ? `${nombre(a.distance_km, 1)} km` : duree(a.duree_sec)}
+                    valeur={a.distance_km >= 0.5 && sportInfo(a.sport).distance ? `${fmtDistance(a.distance_km, 1)}` : duree(a.duree_sec)}
                     detail={a.distance_km >= 0.5 && sportInfo(a.sport).distance ? duree(a.duree_sec) : null}
                     onClick={() => ouvrir(a.id)} />
                 ))}

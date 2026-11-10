@@ -10,7 +10,7 @@ export default {
   theme: {
     extend: {
       colors: {
-        brand: { DEFAULT: v("blue"), dark: v("blue") },
+        brand: { DEFAULT: v("accent"), dark: v("accent") },
         ios: {
           blue: v("blue"),
           green: v("green"),
@@ -30,7 +30,7 @@ export default {
         fond: v("bg"),
         surface: { DEFAULT: v("surface"), 2: v("surface-2") },
         // Textes : principal, secondaire, tertiaire
-        label: { DEFAULT: v("label"), 2: "rgb(var(--label-2) / 0.6)", 3: "rgb(var(--label-3) / 0.3)" },
+        label: { DEFAULT: v("label"), 2: "rgb(var(--label-2) / var(--label-2-a))", 3: "rgb(var(--label-3) / var(--label-3-a))" },
         // Remplissages gris translucides (champs, segments, boutons gris)
         remplissage: "rgb(var(--fill) / var(--fill-a))",
         separateur: "rgb(var(--sep) / var(--sep-a))",

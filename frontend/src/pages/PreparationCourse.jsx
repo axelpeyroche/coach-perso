@@ -6,7 +6,7 @@ import Page from "../components/Page";
 import Card from "../components/Card";
 import { Section } from "../components/ui";
 import { getPreparation, putPreparation } from "../api";
-import { fmtDate, fmtAllureSec, nombre, inputCls } from "../carnet";
+import { fmtDate, fmtAllureSec, nombre, inputCls, fmtDistance } from "../carnet";
 
 // Préparation d'une course : compte à rebours, plan d'allure, météo du jour J,
 // ravitaillement, check-list à cocher et étapes des deux dernières semaines.
@@ -276,7 +276,7 @@ export default function PreparationCourse() {
                 <p className="text-[20px] font-bold leading-6 text-balance">{o.titre}</p>
                 <p className="mt-1 text-[14px] text-label-2">
                   {o.date ? fmtDate(o.date, { weekday: "long", day: "numeric", month: "long", year: "numeric" }) : "Date à préciser"}
-                  {o.distance_km ? ` · ${nombre(o.distance_km)} km` : ""}{o.dplus_m ? ` · ${nombre(o.dplus_m, 0)} m D+` : ""}
+                  {o.distance_km ? ` · ${fmtDistance(o.distance_km)}` : ""}{o.dplus_m ? ` · ${nombre(o.dplus_m, 0)} m D+` : ""}
                 </p>
                 <label className="mt-2 inline-flex items-center gap-2 text-[14px] text-label-2">
                   Départ à

@@ -31,6 +31,11 @@
     --brown: 162 132 94;
     --gray: 142 142 147;
 
+    /* Couleur d'accent (réglable dans le Profil) et opacité des textes secondaires */
+    --accent: var(--blue);
+    --label-2-a: 0.6;
+    --label-3-a: 0.3;
+
     --bg: 242 242 247;
     --surface: 255 255 255;
     --surface-2: 242 242 247;
@@ -76,6 +81,10 @@
     --brown: 172 142 104;
     --gray: 142 142 147;
 
+    /* Textes secondaires un peu plus denses en sombre : contraste suffisant sur les cartes */
+    --label-2-a: 0.72;
+    --label-3-a: 0.42;
+
     --bg: 0 0 0;
     --surface: 28 28 30;
     --surface-2: 44 44 46;
@@ -111,6 +120,19 @@
   /* Feuille ou alerte ouverte : la page derrière ne défile plus */
   html.verrou, html.verrou body { overflow: hidden; }
 
+  /* ── Préférences d'affichage (preferences.js pose ces attributs sur <html>) ── */
+  html[data-accent="orange"] { --accent: var(--orange); }
+  html[data-accent="vert"] { --accent: var(--green); }
+  html[data-accent="violet"] { --accent: var(--purple); }
+  html[data-accent="rose"] { --accent: var(--pink); }
+  html[data-accent="indigo"] { --accent: var(--indigo); }
+  html[data-accent="turquoise"] { --accent: var(--teal); }
+  /* Densité compacte : tout ce qui est en rem (marges, hauteurs de ligne) se resserre */
+  html.dense { font-size: 14px; }
+  /* Palette lisible sans distinguer le rouge du vert (teintes d'Okabe et Ito) */
+  html[data-palette="daltonien"] { --green: 0 158 115; --red: 213 94 0; --orange: 230 159 0; }
+  html.dark[data-palette="daltonien"] { --green: 60 200 160; --red: 245 130 50; --orange: 250 205 70; }
+
   a, button { -webkit-touch-callout: none; }
 
   body {
@@ -127,7 +149,7 @@
 
   *:focus:not(:focus-visible) { outline: none; }
   *:focus-visible {
-    outline: 2px solid rgb(var(--blue) / 0.6);
+    outline: 2px solid rgb(var(--accent) / 0.75);
     outline-offset: 2px;
   }
 
@@ -379,6 +401,7 @@
       transition active:scale-[0.97] active:opacity-80 disabled:opacity-40 disabled:pointer-events-none whitespace-nowrap;
   }
   .btn-sm { @apply h-8 px-3.5 text-[13px]; }
+  .squelette { @apply animate-pulse bg-remplissage; }
   .btn-primaire { @apply btn bg-brand text-white; }
   .btn-teinte { @apply btn bg-brand/[0.12] text-brand; }
   .btn-gris { @apply btn bg-remplissage text-label; }
@@ -489,6 +512,17 @@
       shadow-[0_3px_8px_rgba(0,0,0,0.15),0_3px_1px_rgba(0,0,0,0.06)];
   }
   .interrupteur[aria-checked="true"] > span { transform: translateX(20px); }
+  /* Repères sans couleur : I / O sur les interrupteurs, liens soulignés */
+  html.reperes .interrupteur::after {
+    content: "O"; position: absolute; top: 50%; right: 8px; transform: translateY(-50%);
+    font-size: 11px; font-weight: 700; line-height: 1; color: rgb(var(--label-2) / 0.7);
+  }
+  html.reperes .interrupteur[aria-checked="true"]::after { content: "I"; right: auto; left: 12px; color: #fff; }
+  html.reperes .btn-texte { text-decoration: underline; text-underline-offset: 3px; }
+
+  /* Lien d'évitement : n'apparaît qu'au clavier, envoie au contenu sans passer par le menu */
+  .lien-evitement { position: fixed; left: 12px; top: -80px; z-index: 100; }
+  .lien-evitement:focus { top: calc(env(safe-area-inset-top) + 12px); }
 
   /* Chiffres alignés (stats) */
   .chiffres { font-variant-numeric: tabular-nums; }
