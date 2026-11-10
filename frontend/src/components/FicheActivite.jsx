@@ -8,6 +8,7 @@ import CarteTrace from "./CarteTrace";
 import ModalActivite from "./ModalActivite";
 import EnteteFiche, { ancre } from "./EnteteFiche";
 import { allureAjustee, Decoupage, enMouvement, MemeParcours, Partager, SegmentsSeance } from "./FicheExtras";
+import { BilanSeance, Intervalles, PrevuRealise } from "./FicheSeance";
 import { Segmente } from "./ui";
 import { axeX, axeY, grille } from "./graphiques";
 
@@ -260,6 +261,8 @@ export default function FicheActivite({ activite: initiale, onClose }) {
 
         <EnteteFiche a={a} />
 
+        <BilanSeance a={a} onChange={setA} />
+
         {tuiles.length > 0 && (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
             {tuiles.map(([l, v, u, c]) => <Tuile key={l} label={l} valeur={v} unite={u} couleur={c} />)}
@@ -271,6 +274,10 @@ export default function FicheActivite({ activite: initiale, onClose }) {
             <CarteTrace activiteId={a.id} position={position} onPosition={onPositionProfil} />
           </div>
         )}
+
+        <PrevuRealise id={a.id} />
+
+        <Intervalles intervalles={["footing", "recuperation", "sortie_longue"].includes(a.type_seance?.cle) ? null : flux?.intervalles} total={flux?.decoupage?.splits?.at(-1)?.fin_km} onPosition={onPositionProfil} />
 
         <Decoupage decoupage={flux?.decoupage} sport={a.sport} onPosition={onPositionProfil} />
 

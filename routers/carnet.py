@@ -166,6 +166,9 @@ def lister_activites(
         req = req.filter((Activite.titre.ilike(motif)) | (Activite.notes.ilike(motif)))
     total = req.count()
     items = req.order_by(Activite.debut.desc()).offset(offset).limit(limit).all()
+    import seance_service as ss
+    if ss.maj_types_page(db, current_user.id, items):  # type de séance reconnu au premier affichage
+        db.commit()
     return {"total": total, "activites": [cs.serialiser_activite(a) for a in items]}
 
 
@@ -304,6 +307,45 @@ def flux_activite(
     a = _activite_utilisateur(db, current_user, activite_id)
     t = db.query(TraceGPS).filter(TraceGPS.activite_id == a.id).first()
     return iv.flux_seance(current_user, a, json.loads(t.points) if t else None)
+
+
+@router.get("/api/activites/{activite_id}/bilan", summary="Bilan automatique d'une séance")
+def bilan_activite(
+    activite_id: int,
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(obtenir_session),
+):
+    """Type reconnu, trois phrases, répétitions détectées et comparaison à la séance prévue.
+    N'écrit que le champ d'analyse `seance` de l'activité, calculé une fois par tracé."""
+    import seance_service as ss
+    a = _activite_utilisateur(db, current_user, activite_id)
+    res = ss.bilan(db, current_user, a)
+    db.commit()
+    return res
+
+
+class TypeSeanceSchema(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    cle: Optional[str] = Field(default=None, max_length=30)
+
+
+@router.put("/api/activites/{activite_id}/type", summary="Corrige le type de séance (null = type reconnu)")
+def corriger_type(
+    activite_id: int,
+    payload: TypeSeanceSchema,
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(obtenir_session),
+):
+    a = _activite_utilisateur(db, current_user, activite_id)
+    if payload.cle is not None and payload.cle not in cs.TYPES_SEANCE:
+        raise HTTPException(status_code=422, detail="Type de séance inconnu")
+    det = cs._details_dict(a)
+    det.pop("type_manuel", None)
+    if payload.cle:
+        det["type_manuel"] = payload.cle
+    a.details = json.dumps(det, ensure_ascii=False) if det else None
+    db.commit()
+    return cs.serialiser_activite(a)
 
 
 @router.get("/api/activites/{activite_id}/meteo", summary="Météo pendant la séance (Open-Meteo)")

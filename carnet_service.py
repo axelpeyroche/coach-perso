@@ -147,6 +147,30 @@ def charge(a: Activite) -> float:
     return (a.duree_sec / 60) * (a.rpe if a.rpe else 5)
 
 
+# Types de séance à pied reconnus par seance_service (ou choisis à la main)
+TYPES_SEANCE = {
+    "footing": "Footing",
+    "recuperation": "Récupération",
+    "sortie_longue": "Sortie longue",
+    "fractionne_court": "Fractionné court",
+    "fractionne_long": "Fractionné long",
+    "seuil": "Seuil / tempo",
+    "cotes": "Côtes",
+    "course": "Course",
+    "test": "Test",
+}
+
+
+def type_seance(details: Optional[dict]) -> Optional[dict]:
+    """{cle, label, auto} : le type choisi à la main s'il existe, sinon le type reconnu."""
+    det = details if isinstance(details, dict) else {}
+    manuel = det.get("type_manuel")
+    if manuel in TYPES_SEANCE:
+        return {"cle": manuel, "label": TYPES_SEANCE[manuel], "auto": False}
+    cle = (det.get("seance") or {}).get("type") if isinstance(det.get("seance"), dict) else None
+    return {"cle": cle, "label": TYPES_SEANCE[cle], "auto": True} if cle in TYPES_SEANCE else None
+
+
 def serialiser_activite(a: Activite) -> dict:
     try:
         details = json.loads(a.details) if a.details else None
@@ -183,6 +207,7 @@ def serialiser_activite(a: Activite) -> dict:
         "est_competition": bool(a.est_competition),
         "objectif_id": a.objectif_id,
         "details": details,
+        "type_seance": type_seance(details) if a.sport in SPORTS_PIED else None,
         # RPE pré-rempli à partir de l'effort estimé par l'Apple Watch (à confirmer)
         "rpe_estime": a.rpe is not None and isinstance(details, dict) and details.get("rpe_source") == "estime_apple",
     }

@@ -25,6 +25,9 @@ export default function ActiviteLigne({ a, onClick }) {
             {a.titre || a.sport_label || s.label}
           </span>
           {a.est_competition && <span className="shrink-0 text-[13px]">🏅</span>}
+          {a.type_seance && !["footing", "course"].includes(a.type_seance.cle) && (
+            <span className="badge shrink-0 bg-remplissage text-label-2">{a.type_seance.label}</span>
+          )}
         </span>
         <span className="block text-[13px] text-label-2 truncate chiffres">
           {metriques.join(" · ") || "—"}

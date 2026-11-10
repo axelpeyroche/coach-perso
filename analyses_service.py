@@ -1284,6 +1284,8 @@ def calculer_analyses(db: Session, user: Utilisateur, aujourd_hui: Optional[date
                                       < datetime.combine(auj + timedelta(days=1), datetime.min.time()))
             .order_by(Activite.debut).all())
     maj_efforts(db, user.id, acts)
+    import seance_service as ss
+    ss.maj_types(db, user.id, acts)
     objectifs = db.query(Objectif).filter(Objectif.utilisateur_id == user.id).all()
     mesures = _mesures_par_type(db, user.id, auj - timedelta(days=365 + REF_RECUP_JOURS))
     poids = db.query(PoidsUtilisateur).filter(PoidsUtilisateur.utilisateur_id == user.id).all()

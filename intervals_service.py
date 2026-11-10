@@ -602,6 +602,18 @@ def _vitesse_ajustee(seance, series: list) -> None:
                        "brut": [v * 3.6 if _num(v) else None for v in va]})
 
 
+def _repetitions(seance) -> Optional[dict]:
+    """Répétitions détectées dans une séance à pied (détail par répétition, FC comprise)."""
+    if seance.sport not in cs.SPORTS_PIED:
+        return None
+    import seance_service as ss
+    try:
+        return ss.detecter_intervalles(seance)
+    except Exception:  # ne jamais priver la fiche de ses courbes pour une détection ratée
+        logging.getLogger(__name__).exception("Détection des répétitions")
+        return None
+
+
 def _depuis_streams(streams: list, sport: str, intervalles: Optional[list] = None) -> Optional[dict]:
     par_type = {s.get("type"): s for s in streams or [] if s.get("type")}
     temps = (par_type.get("time") or {}).get("data") or []
@@ -623,7 +635,7 @@ def _depuis_streams(streams: list, sport: str, intervalles: Optional[list] = Non
     if not series:
         return None
     dist_km = [d / 1000 if isinstance(d, (int, float)) else None for d in dist] if len(dist) == n else None
-    decoupe = {}
+    decoupe, reps = {}, None
     if dist_km:
         par_cle = {s["cle"]: s["brut"] for s in series}
         alt = next((d for d in ((par_type.get(t) or {}).get("data") for t in ("fixed_altitude", "altitude"))
@@ -631,7 +643,8 @@ def _depuis_streams(streams: list, sport: str, intervalles: Optional[list] = Non
         seance = dc.Seance(temps, dist, alt, par_cle.get("fc"), par_cle.get("cadence"), sport)
         decoupe = dc.decouper(seance, intervalles)
         _vitesse_ajustee(seance, series)
-    return {**_sortie("intervals", temps, dist_km, series, sauts), "decoupage": decoupe}
+        reps = _repetitions(seance)
+    return {**_sortie("intervals", temps, dist_km, series, sauts), "decoupage": decoupe, "intervalles": reps}
 
 
 def _depuis_trace(points: list, sport: str = "") -> Optional[dict]:
@@ -667,7 +680,8 @@ def _depuis_trace(points: list, sport: str = "") -> Optional[dict]:
     seance = dc.Seance(temps, dist, alt, sport=sport)
     decoupe = dc.decouper(seance)
     _vitesse_ajustee(seance, series)
-    return {**_sortie("trace", temps, [d / 1000 for d in dist], series), "decoupage": decoupe}
+    return {**_sortie("trace", temps, [d / 1000 for d in dist], series), "decoupage": decoupe,
+            "intervalles": _repetitions(seance)}
 
 
 def flux_seance(user: Utilisateur, act: Activite, points_trace: Optional[list]) -> dict:

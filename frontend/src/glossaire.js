@@ -319,6 +319,24 @@ export const GLOSSAIRE = {
     calcul: "Demi-Cooper : distance en 6 min ÷ 100 = VMA. 30 min au seuil : allure des 30 meilleures minutes. Allure critique : (distance des 10 min − distance des 3 min) ÷ 7 min ; la réserve D′ est ce qu'il reste des 3 min au-dessus de cette allure. Dérive aérobie : hausse du cœur entre les deux moitiés d'une sortie à allure constante. Tractions : répétitions de la série du test.",
     lire: "L'écart est calculé avec le test précédent du même type : vert = progrès, rouge = recul. Un test n'a de valeur que refait dans les mêmes conditions (terrain, fraîcheur, météo). Un test passé d'âge est marqué « à refaire » : tes allures d'entraînement reposent alors sur une mesure ancienne.",
   },
+  bilan_seance: {
+    titre: "Bilan et type de séance",
+    quoi: "Trois phrases qui résument la séance : ce que tu as fait, comment elle se situe par rapport au plan ou à tes habitudes, et le fait le plus marquant. Le type (footing, sortie longue, fractionné, seuil, côtes, course, test) est reconnu tout seul.",
+    calcul: "Aucune IA : des règles. Le type vient des répétitions repérées dans l'allure, du temps passé en zones 4 et 5, de la durée comparée à tes sorties des 8 dernières semaines et des mots du titre. Le fait marquant est choisi parmi : record de l'année, régularité des répétitions, dérive du cœur, efficacité, chaleur, tenue en fin de sortie, zones.",
+    lire: "Si le type est faux, touche la pastille et choisis le bon : ton choix reste, et les bilans de semaine s'en servent. Une séance sans tracé ni cardio n'est reconnue que par sa durée et son titre.",
+  },
+  intervalles: {
+    titre: "Répétitions détectées",
+    quoi: "Les efforts d'une séance de fractionné ou de côtes, retrouvés dans le tracé même si la montre n'a pas enregistré de tours.",
+    calcul: "L'allure, ramenée au plat quand il y a du dénivelé, est séparée en deux groupes : rapide et lent. Une répétition est un passage rapide d'au moins 20 s, encadré par un ralentissement net. Il en faut au moins trois de durées voisines. L'écart entre répétitions est la dispersion de leurs allures ; « fin contre début » compare le dernier tiers au premier.",
+    lire: "Un écart sous 3 % : séance très régulière. Un dernier tiers plus lent de plus de 5 % : départ trop rapide ou récupération trop courte. La ligne bleue est ta meilleure répétition. Un footing vallonné ou progressif n'est pas compté comme du fractionné.",
+  },
+  note_execution: {
+    titre: "Prévu contre réalisé",
+    quoi: "La séance faite comparée à celle du plan à laquelle elle est liée, avec une note d'exécution sur 100.",
+    calcul: "Chaque critère présent dans le plan est noté : durée, distance, dénivelé, effort ressenti, type de séance, et l'allure, la FC ou la zone visée quand la consigne en donne une. La note est leur moyenne, la durée et l'allure visée comptant davantage. 85 et plus : conforme ; 65 à 84 : proche ; en dessous : différente.",
+    lire: "En endurance, aller plus vite que prévu fait baisser la note autant qu'aller plus lentement : la consigne compte plus que la performance. Une note basse n'est pas une mauvaise séance, seulement une séance différente du plan.",
+  },
   prediction_course: {
     titre: "Prédiction de course",
     quoi: "Le temps que tu peux viser sur ta prochaine course, avec une fourchette et l'allure à tenir sur chaque tronçon du parcours.",
