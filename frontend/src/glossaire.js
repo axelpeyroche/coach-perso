@@ -343,4 +343,22 @@ export const GLOSSAIRE = {
     calcul: "Le tracé est découpé tous les 50 m ; chaque pas est converti en distance équivalente à plat selon sa pente, avec tes propres allures en montée et en descente quand tu as assez de données. Le temps vient de ta VMA et de la part de VMA tenable sur cette durée. Une marge s'ajoute si tes sorties longues sont courtes ou si tu faiblis en fin de sortie. Optimiste = −3 %, prudente = +5 % ou plus quand les données manquent.",
     lire: "Prends la visée comme plan de course et la prudente comme allure de départ : on rattrape rarement un départ trop rapide. Le tableau donne le temps écoulé à la fin de chaque tronçon. L'estimation ignore les arrêts, la météo, la boue et la technicité : ajoute-les toi-même.",
   },
+  comparer_seances: {
+    titre: "Comparer deux séances",
+    quoi: "Deux sorties du même sport superposées : allure, fréquence cardiaque, profil et cadence, avec leurs chiffres côte à côte.",
+    calcul: "Les séances proposées d'abord sont du même type et d'une distance voisine (à 25 % près), les plus récentes en tête. Les deux courbes sont replacées sur la même échelle, au kilomètre ou à la minute, pour être lues au même endroit. L'écart est toujours celui de cette séance par rapport à l'autre.",
+    lire: "Même allure pour moins de battements, ou plus vite pour autant : c'est un progrès. Compare ce qui est comparable : même parcours ou même profil, météo voisine, même fraîcheur. Sur deux parcours différents, lis la comparaison au temps plutôt qu'à la distance.",
+  },
+  repartition_temps: {
+    titre: "Répartition du temps",
+    quoi: "Où est passé le temps de la séance : dans quelle zone d'allure, sur quelle pente, sur quel terrain.",
+    calcul: "Chaque point des courbes est rangé dans une classe et son temps y est ajouté ; les pauses longues ne comptent pas. Les zones d'allure viennent de ta vitesse critique (les mêmes que dans Analyses). La pente est lue sur l'altitude lissée. Le terrain vient de la carte OpenStreetMap le long du tracé.",
+    lire: "Un footing doit vivre en Z1–Z2 ; une séance de seuil montre un bloc net en Z3–Z4. En côte, l'allure tombe d'une zone ou deux sans que l'effort baisse : lis alors la pente en même temps. L'allure par classe de pente montre ce que te coûte la montée et ce que te rend la descente.",
+  },
+  portion: {
+    titre: "Analyser une portion",
+    quoi: "Les moyennes d'un morceau de la séance que tu choisis : une côte, un bloc au seuil, les derniers kilomètres.",
+    calcul: "Entre les deux bornes : distance et durée écoulées, allure (durée ÷ distance, arrêts compris), moyenne de la FC et de la cadence, et dénivelé positif sur l'altitude lissée.",
+    lire: "Règle les deux curseurs, ou glisse la souris sur une courbe à l'ordinateur : la portion est grisée sur toutes les courbes. « En faire un segment » la garde : chaque nouveau passage au même endroit y sera chronométré et comparé.",
+  },
 };

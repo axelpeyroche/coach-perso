@@ -83,6 +83,7 @@ def creer_tables() -> None:
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS notif_matin_heure VARCHAR(5)",
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS notif_matin_le DATE",
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS rappel_poids_jour INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS filtres_carnet TEXT",
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS taille_cm FLOAT",
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS besoin_sommeil_h FLOAT",
         # Adresse (domicile) pour centrer la carte des tracés

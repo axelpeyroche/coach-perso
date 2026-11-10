@@ -25,7 +25,7 @@ const chrono = (s) => {
 const rythme = (pied, secKm, kmh) => (pied ? mmss(secKm) : nombre(kmh, 1));
 
 // Distance cumulée (km) le long des points [lat, lon, …]
-function cumulKm(points) {
+export function cumulKm(points) {
   const RAD = Math.PI / 180, c = [0];
   for (let i = 1; i < points.length; i++) {
     const a = points[i - 1], b = points[i];

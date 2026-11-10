@@ -115,6 +115,8 @@ class Utilisateur(Base):
     notif_matin_le: Mapped[Optional[date]] = mapped_column(Date)
     # Rappel de pesée : jour de la semaine (0 = lundi … 6 = dimanche), -1 = désactivé
     rappel_poids_jour: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    # Filtres du carnet enregistrés : JSON [{nom, criteres}, …]
+    filtres_carnet: Mapped[Optional[str]] = mapped_column(Text)
 
 
 # ---------------------------------------------------------------------------

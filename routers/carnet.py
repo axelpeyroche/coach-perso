@@ -143,30 +143,77 @@ def sports_presents(
     return {s: n for s, n in lignes if s}
 
 
-@router.get("/api/activites", summary="Liste des activités (filtres sport/dates, pagination)")
+@router.get("/api/carnet/filtres", summary="Filtres enregistrés du carnet et critères proposés")
+def filtres_carnet(current_user: Utilisateur = Depends(get_current_user)):
+    import recherche_service as rs
+    return {"filtres": rs.filtres_enregistres(current_user), "types": cs.TYPES_SEANCE, "meteos": rs.METEOS,
+            "lieux": rs.LIEUX if current_user.adresse_lat is not None else {}}
+
+
+class FiltresSchema(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    filtres: list[dict] = Field(default_factory=list, max_length=30)
+
+
+@router.put("/api/carnet/filtres", summary="Remplace les filtres enregistrés du carnet")
+def enregistrer_filtres_carnet(payload: FiltresSchema, current_user: Utilisateur = Depends(get_current_user),
+                               db: Session = Depends(obtenir_session)):
+    import recherche_service as rs
+    filtres = rs.enregistrer_filtres(current_user, payload.filtres)
+    db.commit()
+    return {"filtres": filtres}
+
+
+@router.get("/api/activites", summary="Liste des activités (recherche, filtres avancés, pagination)")
 def lister_activites(
     sport: Optional[str] = None,
     depuis: Optional[date] = None,
     jusqu_a: Optional[date] = None,
-    q: Optional[str] = None,
+    q: Optional[str] = Query(None, max_length=120),
+    type: Optional[str] = Query(None, max_length=30),
+    dist_min: Optional[float] = Query(None, ge=0),
+    dist_max: Optional[float] = Query(None, ge=0),
+    dplus_min: Optional[int] = Query(None, ge=0),
+    fc_min: Optional[int] = Query(None, ge=0),
+    fc_max: Optional[int] = Query(None, ge=0),
+    meteo: Optional[str] = Query(None, max_length=20),
+    lieu: Optional[str] = Query(None, max_length=20),
     limit: int = Query(50, ge=1, le=1000),
     offset: int = Query(0, ge=0),
     current_user: Utilisateur = Depends(get_current_user),
     db: Session = Depends(obtenir_session),
 ):
+    import recherche_service as rs
+    import seance_service as ss
     req = db.query(Activite).filter(Activite.utilisateur_id == current_user.id)
+    if dist_min is not None:
+        req = req.filter(Activite.distance_km >= dist_min)
+    if dist_max is not None:
+        req = req.filter(Activite.distance_km <= dist_max)
+    if dplus_min is not None:
+        req = req.filter(Activite.dplus_m >= dplus_min)
+    if fc_min is not None:
+        req = req.filter(Activite.fc_moyenne_bpm >= fc_min)
+    if fc_max is not None:
+        req = req.filter(Activite.fc_moyenne_bpm <= fc_max)
     if sport:
         req = req.filter(Activite.sport == sport)
     if depuis:
         req = req.filter(Activite.debut >= datetime.combine(depuis, datetime.min.time()))
     if jusqu_a:
         req = req.filter(Activite.debut < datetime.combine(jusqu_a + timedelta(days=1), datetime.min.time()))
-    if q:
-        motif = f"%{q}%"
-        req = req.filter((Activite.titre.ilike(motif)) | (Activite.notes.ilike(motif)))
+    for mot in rs.mots(q):  # chaque mot dans le titre ou les notes
+        m = rs.motif(mot)
+        req = req.filter((Activite.titre.ilike(m, escape="\\")) | (Activite.notes.ilike(m, escape="\\")))
+    if type or meteo or lieu:
+        # Critères lus dans le détail des séances : filtrés ici, puis paginés
+        tous = req.order_by(Activite.debut.desc()).all()
+        if type and ss.maj_types(db, current_user.id, tous):  # types pas encore reconnus
+            db.commit()
+        tous = rs.filtrer(db, current_user, tous, type, meteo, lieu)
+        return {"total": len(tous), "activites": [cs.serialiser_activite(a) for a in tous[offset:offset + limit]]}
     total = req.count()
     items = req.order_by(Activite.debut.desc()).offset(offset).limit(limit).all()
-    import seance_service as ss
     if ss.maj_types_page(db, current_user.id, items):  # type de séance reconnu au premier affichage
         db.commit()
     return {"total": total, "activites": [cs.serialiser_activite(a) for a in items]}
@@ -307,6 +354,17 @@ def flux_activite(
     a = _activite_utilisateur(db, current_user, activite_id)
     t = db.query(TraceGPS).filter(TraceGPS.activite_id == a.id).first()
     return iv.flux_seance(current_user, a, json.loads(t.points) if t else None)
+
+
+@router.get("/api/activites/{activite_id}/comparables", summary="Séances à comparer à celle-ci")
+def comparables_activite(
+    activite_id: int,
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(obtenir_session),
+):
+    """Lecture seule : même sport, même type de séance d'abord, puis distance la plus proche."""
+    import recherche_service as rs
+    return rs.comparables(db, current_user, _activite_utilisateur(db, current_user, activite_id))
 
 
 @router.get("/api/activites/{activite_id}/bilan", summary="Bilan automatique d'une séance")

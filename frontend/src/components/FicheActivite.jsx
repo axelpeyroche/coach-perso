@@ -1,6 +1,6 @@
-import { memo, useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceArea, ReferenceLine } from "recharts";
 import { getFlux } from "../api";
 import { sportInfo, fmtDuree, nombre } from "../carnet";
 import Feuille from "./Feuille";
@@ -9,6 +9,8 @@ import ModalActivite from "./ModalActivite";
 import EnteteFiche, { ancre } from "./EnteteFiche";
 import { allureAjustee, Decoupage, enMouvement, MemeParcours, Partager, SegmentsSeance } from "./FicheExtras";
 import { BilanSeance, Intervalles, PrevuRealise } from "./FicheSeance";
+import { Portion, Repartition } from "./FicheAnalyse";
+import Comparer from "./Comparaison";
 import { Segmente } from "./ui";
 import { axeX, axeY, grille } from "./graphiques";
 
@@ -97,15 +99,24 @@ function preparer(flux, sport) {
 const fmtVal = (s, v) => (v == null ? "—" : s.allure ? mmss(v) : nombre(v, s.dec));
 
 // Une courbe : mémorisée pour ne pas tout redessiner pendant le survol
-const Graphe = memo(function Graphe({ s, lignes, axe, ticksX, onSurvol, repere }) {
+const Graphe = memo(function Graphe({ s, lignes, axe, ticksX, onSurvol, repere, zone, onGlisser }) {
   const id = `deg-${s.cle}`;
+  // Glisser à la souris : du point d'appui au point de relâche, la portion à analyser
+  const appui = useRef(null);
+  const idx = (e) => (e?.activeTooltipIndex != null ? Number(e.activeTooltipIndex) : null);
   return (
-    <div className="h-[132px] md:h-[150px] -mx-1" style={{ touchAction: "pan-y" }}
+    <div className="h-[132px] md:h-[150px] -mx-1 select-none" style={{ touchAction: "pan-y" }}
       onTouchEnd={() => onSurvol(null)} onTouchCancel={() => onSurvol(null)}>
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={lignes} syncId="seance" margin={{ top: 6, right: 0, bottom: 0, left: 0 }}
-          onMouseMove={(e) => onSurvol(e?.activeTooltipIndex ?? null)}
-          onMouseLeave={() => onSurvol(null)}>
+          onMouseMove={(e) => onSurvol(idx(e))}
+          onMouseDown={(e) => { appui.current = idx(e); }}
+          onMouseUp={(e) => {
+            const a = appui.current, b = idx(e);
+            appui.current = null;
+            if (a != null && b != null && Math.abs(b - a) >= 3) onGlisser?.(Math.min(a, b), Math.max(a, b));
+          }}
+          onMouseLeave={() => { appui.current = null; onSurvol(null); }}>
           <defs>
             <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor={s.couleur} stopOpacity={0.45} />
@@ -117,6 +128,7 @@ const Graphe = memo(function Graphe({ s, lignes, axe, ticksX, onSurvol, repere }
             tickFormatter={(v) => (axe === "d" ? `${nombre(v, Number.isInteger(v) ? 0 : 1)} km` : chrono(v))} />
           <YAxis {...axeY} width={40} domain={s.domaine} ticks={s.ticks} reversed={!!s.allure} allowDataOverflow
             tickFormatter={(v) => (s.allure ? mmss(v) : nombre(v, Math.min(2, s.decAxe)))} />
+          {zone && <ReferenceArea x1={zone[0]} x2={zone[1]} fill="currentColor" fillOpacity={0.1} stroke="currentColor" strokeOpacity={0.3} />}
           {/* Position montrée depuis le profil de dénivelé */}
           {repere != null && <ReferenceLine x={repere} stroke="currentColor" strokeOpacity={0.35} strokeWidth={1} />}
           <Tooltip content={() => null} cursor={{ stroke: "currentColor", strokeOpacity: 0.35, strokeWidth: 1 }} />
@@ -190,6 +202,9 @@ export default function FicheActivite({ activite: initiale, onClose }) {
   const [edition, setEdition] = useState(false);
   const [axe, setAxe] = useState("d");
   const [index, setIndex] = useState(null);
+  // Portion analysée : indices de début et de fin dans les courbes
+  const [portion, setPortion] = useState(null);
+  const onGlisser = useCallback((i0, i1) => setPortion([i0, i1]), []);
   const s = sportInfo(a.sport);
   const det = a.details || {};
 
@@ -230,6 +245,16 @@ export default function FicheActivite({ activite: initiale, onClose }) {
       .filter((v) => v > min);
   }, [prepa, axeEff]);
   const point = index != null ? prepa?.lignes[index] : null;
+  // Bornes de la portion sur l'axe affiché (distance ou temps), trous de distance comblés
+  const zone = useMemo(() => {
+    if (!portion || !prepa) return null;
+    const val = (i, sens) => {
+      for (let k = i; k >= 0 && k < prepa.lignes.length; k += sens) if (prepa.lignes[k][axeEff] != null) return prepa.lignes[k][axeEff];
+      return null;
+    };
+    const x1 = val(portion[0], 1), x2 = val(portion[1], -1);
+    return x1 != null && x2 != null && x2 > x1 ? [x1, x2] : null;
+  }, [portion, prepa, axeEff]);
 
   const pied = PIED.has(a.sport);
   // Données essentielles seulement ; foulée, pas, dérive… restent dans les analyses
@@ -286,6 +311,10 @@ export default function FicheActivite({ activite: initiale, onClose }) {
         {det.trace && <div id={ancre(a.id, "parcours")} className="empty:hidden scroll-mt-16"><MemeParcours activite={a} /></div>}
         <div id={ancre(a.id, "segments")} className="empty:hidden scroll-mt-16"><SegmentsSeance activite={a} avecTrace={!!det.trace} /></div>
 
+        {prepa && <Repartition activite={a} lignes={prepa.lignes} pied={pied} />}
+
+        {prepa && <Comparer activite={a} flux={flux} />}
+
         <section className="space-y-3">
           <div className="flex items-center justify-between gap-3 px-1">
             <h2 className="text-[20px] font-bold tracking-tight">Courbes</h2>
@@ -303,6 +332,15 @@ export default function FicheActivite({ activite: initiale, onClose }) {
                 : "Touche une courbe pour lire les valeurs"}
             </p>
           )}
+
+          {prepa && prepa.lignes.length > 12 && (portion
+            ? <Portion activite={a} lignes={prepa.lignes} portion={portion} onChange={setPortion} pied={pied} />
+            : (
+              <button type="button" className="btn-gris btn-sm"
+                onClick={() => { const n = prepa.lignes.length - 1; setPortion([Math.round(n / 3), Math.round((2 * n) / 3)]); }}>
+                Analyser une portion
+              </button>
+            ))}
 
           {isLoading ? <Squelette /> : prepa ? (
             <div className="grid gap-3">
@@ -325,7 +363,7 @@ export default function FicheActivite({ activite: initiale, onClose }) {
                       {fmtVal(serie, point ? v : moyenne(serie))}
                       <span className="text-[13px] font-medium text-label-2 ml-1">{serie.unite}</span>
                     </p>
-                    <Graphe s={serie} lignes={prepa.lignes} axe={axeEff} ticksX={ticksX} onSurvol={onSurvol}
+                    <Graphe s={serie} lignes={prepa.lignes} axe={axeEff} ticksX={ticksX} onSurvol={onSurvol} zone={zone} onGlisser={onGlisser}
                       repere={depuisProfil && point ? point[axeEff] : null} />
                   </div>
                 );

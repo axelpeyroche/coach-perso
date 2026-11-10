@@ -122,6 +122,9 @@ export const getTrace = (id) => api.get(`/activites/${id}/trace`).then((r) => r.
 export const getTerrains = (id) => api.get(`/activites/${id}/terrains`).then((r) => r.data);
 export const getBilanActivite = (id) => api.get(`/activites/${id}/bilan`).then((r) => r.data);
 export const setTypeSeance = (id, cle) => api.put(`/activites/${id}/type`, { cle }).then((r) => r.data);
+export const getFiltresCarnet = () => api.get("/carnet/filtres").then((r) => r.data);
+export const setFiltresCarnet = (filtres) => api.put("/carnet/filtres", { filtres }).then((r) => r.data);
+export const getComparables = (id) => api.get(`/activites/${id}/comparables`).then((r) => r.data);
 export const getFlux = (id) => api.get(`/activites/${id}/flux`).then((r) => r.data);
 export const getCarteTraces = () => api.get("/traces/carte", { timeout: 60000 }).then((r) => r.data);
 export const getMeteo = (id) => api.get(`/activites/${id}/meteo`).then((r) => r.data);
