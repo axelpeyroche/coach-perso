@@ -12,7 +12,7 @@ import corps_service as co
 import suivi_service as sv
 from database import obtenir_session
 from deps import get_current_user
-from models import Douleur, ReleveDouleur, Utilisateur
+from models import Activite, Douleur, MeteoActivite, ReleveDouleur, TraceGPS, Utilisateur
 
 router = APIRouter()
 
@@ -153,3 +153,65 @@ def supprimer_douleur(douleur_id: int, current_user: Utilisateur = Depends(get_c
     db.delete(d)
     db.commit()
     return co.journal(db, current_user.id, sv.aujourdhui(current_user))
+
+
+class MensurationsSchema(BaseModel):
+    jour: Optional[date] = None
+    valeurs: dict[str, Optional[float]]
+
+
+@router.get("/api/corps/mensurations", summary="Composition corporelle : masse grasse, tours, masse maigre")
+def mensurations(current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
+    return co.composition(db, current_user, sv.aujourdhui(current_user))
+
+
+@router.put("/api/corps/mensurations", summary="Enregistre les mesures d'un jour (null retire une valeur)")
+def enregistrer_mensurations(payload: MensurationsSchema, current_user: Utilisateur = Depends(get_current_user),
+                             db: Session = Depends(obtenir_session)):
+    auj = sv.aujourdhui(current_user)
+    j = min(_jour(current_user, payload.jour), auj)
+    if not payload.valeurs or any(t not in co.MENSURATIONS for t in payload.valeurs):
+        raise HTTPException(400, "Mesure inconnue")
+    try:
+        co.enregistrer_mensurations(db, current_user.id, j, payload.valeurs)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    db.commit()
+    return co.composition(db, current_user, auj)
+
+
+METEO_PAR_APPEL = 6
+
+
+@router.post("/api/corps/meteo/completer", summary="Lit la météo des sorties de course qui n'en ont pas (quelques-unes par appel)")
+def completer_meteo(current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
+    """La météo n'est lue qu'à l'ouverture d'une fiche : l'analyse de la chaleur a besoin de tout l'historique."""
+    import json
+
+    import carnet_service as cs
+    import corps_analyses as ca
+    import meteo_service
+    auj = sv.aujourdhui(current_user)
+    acts = (db.query(Activite).filter(Activite.utilisateur_id == current_user.id, Activite.sport.in_(cs.SPORTS_PIED))
+            .order_by(Activite.debut.desc()).all())
+    a_faire = ca.sorties_a_completer(db, acts, auj)
+    fuseau = current_user.fuseau_horaire or "Europe/Paris"
+    ajoutees = echecs = 0
+    for a in a_faire[:METEO_PAR_APPEL]:
+        try:
+            deja = db.get(MeteoActivite, a.id)
+            if deja:   # météo connue, altitude du tracé à ajouter
+                d = json.loads(deja.donnees)
+                t = db.query(TraceGPS).filter(TraceGPS.activite_id == a.id).first()
+                d["altitude_m"] = meteo_service.altitude_mediane(json.loads(t.points)) if t else None
+                deja.donnees = json.dumps(d)
+                db.commit()
+                ajoutees += 1
+            elif meteo_service.meteo_activite(db, a, fuseau):
+                ajoutees += 1
+            else:
+                echecs += 1
+        except Exception:
+            db.rollback()
+            echecs += 1
+    return {"ajoutees": ajoutees, "echecs": echecs, "restantes": max(0, len(a_faire) - ajoutees - echecs)}

@@ -1204,11 +1204,13 @@ def calculer_analyses(db: Session, user: Utilisateur, aujourd_hui: Optional[date
     reference = zs.fc_seuil_au(zs.candidats_seuil(acts), auj, user.fc_max)
     zones_jour = zs.zones_profil(user, (efforts.get("vc") or {}).get("vitesse_ms"),
                                  (vma.get("actuelle") or {}).get("vma"), reference)
+    import corps_service as co
+    marqueurs = co.marqueurs_par_jour(db, user.id, auj - timedelta(days=365 + REF_RECUP_JOURS))
     res = {
         "genere_le": datetime.utcnow().isoformat(timespec="seconds") + "Z",
         "forme": forme,
         "zones": _zones_hebdo(acts, user, auj),
-        "recuperation": _recuperation(mesures, auj, marqueurs=_marqueurs(db, user.id, auj)),
+        "recuperation": _recuperation(mesures, auj, marqueurs=marqueurs),
         "course": _course(acts, auj),
         "vma": vma,
         "plan": _respect_plan(db, user.id, auj),
@@ -1226,6 +1228,9 @@ def calculer_analyses(db: Session, user: Utilisateur, aujourd_hui: Optional[date
         "pas": _pas({m.jour: m.valeur for m in db.query(MesureSante.jour, MesureSante.valeur).filter(
             MesureSante.utilisateur_id == user.id, MesureSante.type == "pas")}, auj),
     }
+    import corps_analyses
+    res["corps"] = corps_analyses.calculer(db, user, acts, mesures, marqueurs, res["recuperation"], res["sommeil"], auj,
+                                           _recuperation(mesures, auj, jours=365, marqueurs=marqueurs))
     import essentiel_service
     res["essentiel"] = essentiel_service.essentiel(res)
     return res
@@ -1294,4 +1299,10 @@ def resume(analyses: dict) -> dict:
         "dette_sommeil": {k: analyses["sommeil"][k] for k in ("besoin_h", "dette_7j", "dette_14j", "regularite_min")},
         "signaux_nuit": analyses["signaux_nuit"]["actuel"],
         "pas": {k: analyses["pas"][k] for k in ("moy_7j", "moy_28j")},
+        "corps": _resume_corps(analyses.get("corps")),
     }
+
+
+def _resume_corps(c: Optional[dict]) -> Optional[dict]:
+    import corps_analyses
+    return corps_analyses.resume(c)

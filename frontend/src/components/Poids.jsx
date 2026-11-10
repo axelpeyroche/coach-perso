@@ -6,6 +6,7 @@ import {
 } from "recharts";
 import Card from "./Card";
 import ModalPoids from "./ModalPoids";
+import Aide from "./Aide";
 import { Segmente } from "./ui";
 import { axeX, axeY, grille, InfoBulle, Legende, GRIS } from "./graphiques";
 import { getHistoriquePoids } from "../api";
@@ -15,6 +16,7 @@ import { fmtDate, nombre } from "../carnet";
 const VIOLET = "#AF52DE";
 const VERT = "#34C759";
 const JOUR = 86400000;
+const TAU = 10; // jours de mémoire de la tendance
 
 // Classes de l'OMS
 export const ZONES_IMC = [
@@ -42,6 +44,16 @@ function variation(points, jours) {
   const avant = [...points].reverse().find((p) => p.t <= borne);
   if (!avant) return null;
   return dernier.poids - avant.poids;
+}
+
+// Rythme : variation de la tendance par semaine sur le dernier mois (au moins 2 semaines d'écart)
+function rythme(points) {
+  if (points.length < 3) return null;
+  const dernier = points.at(-1);
+  const avant = [...points].reverse().find((p) => p.t <= dernier.t - 28 * JOUR)
+    ?? points.find((p) => p.t <= dernier.t - 14 * JOUR);
+  if (!avant || dernier.t - avant.t > 70 * JOUR) return null;
+  return (dernier.moy - avant.moy) / ((dernier.t - avant.t) / (7 * JOUR));
 }
 
 // Repères réguliers de l'axe : 1er et 15 du mois sur une courte période, sinon début de mois (au plus ~7)
@@ -96,10 +108,12 @@ export default function PoidsAnalyse() {
 
   const points = useMemo(() => {
     const ps = (data?.points ?? []).map((p) => ({ ...p, t: t(p.date) })).sort((a, b) => a.t - b.t);
-    // Moyenne glissante sur 4 semaines : pesées des 28 derniers jours
+    // Tendance : moyenne exponentielle (mémoire d'environ 10 jours), insensible aux écarts d'eau d'un jour à l'autre
+    let moy = null, avant = null;
     return ps.map((p) => {
-      const fen = ps.filter((q) => q.t <= p.t && q.t > p.t - 28 * JOUR);
-      return { ...p, moy: fen.reduce((s, q) => s + q.poids, 0) / fen.length };
+      moy = moy == null ? p.poids : moy + (1 - Math.exp(-(p.t - avant) / (TAU * JOUR))) * (p.poids - moy);
+      avant = p.t;
+      return { ...p, moy };
     });
   }, [data]);
 
@@ -138,6 +152,10 @@ export default function PoidsAnalyse() {
   const x0 = tout ? premier - marge : premier, x1 = dernier.t + marge;
 
   const v4 = variation(points, 28), v13 = variation(points, 91);
+  const r = rythme(points);
+  const rPct = r != null ? (100 * r) / dernier.moy : null;
+  const rLecture = r == null ? "il faut 3 pesées sur 2 semaines" : Math.abs(r) < 0.1 ? "poids stable"
+    : rPct <= -1 ? "perte rapide : la récupération en pâtit" : rPct < 0 ? "perte progressive" : rPct >= 0.5 ? "prise rapide" : "prise progressive";
   const sur = points.filter((p) => p.t >= dernier.t - 365 * JOUR);
   const min = sur.reduce((a, p) => (p.poids < a.poids ? p : a));
   const max = sur.reduce((a, p) => (p.poids > a.poids ? p : a));
@@ -156,9 +174,19 @@ export default function PoidsAnalyse() {
         <p className="font-rounded text-[34px] leading-10 font-bold chiffres mt-1">
           {nombre(dernier.poids, 1)}<span className="text-[17px] font-semibold text-label-2 ml-1">kg</span>
         </p>
-        <p className="text-[13px] text-label-2">Tendance 4 sem. : <span className="chiffres">{kg(dernier.moy)}</span></p>
+        <p className="text-[13px] text-label-2">Tendance lissée : <span className="chiffres">{kg(dernier.moy)}</span></p>
 
         <div className="grid grid-cols-2 gap-2 mt-3">
+          <div className="tuile px-3 py-2.5 min-w-0 col-span-2 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[12px] text-label-2">Rythme</p>
+              <p className={`text-[12px] leading-4 ${rPct != null && rPct <= -1 ? "text-ios-orange" : "text-label-2"}`}>{rLecture}</p>
+            </div>
+            <p className="font-rounded text-[17px] font-bold chiffres shrink-0 text-right">
+              {r == null ? "—" : Math.abs(r) < 0.05 ? "stable" : `${r > 0 ? "+" : "−"}${nombre(Math.abs(r), 2)} kg`}
+              {r != null && Math.abs(r) >= 0.05 && <span className="text-[12px] font-semibold text-label-2"> /sem.</span>}
+            </p>
+          </div>
           <Tuile label="Sur 4 semaines" value={ecart(v4)} />
           <Tuile label="Sur 3 mois" value={ecart(v13)} />
           <Tuile label="Min. sur 12 mois" value={kg(min.poids)} sub={fmtDate(min.date, { day: "numeric", month: "short", year: "2-digit" })} />
@@ -190,8 +218,8 @@ export default function PoidsAnalyse() {
         <Card className="h-full">
           <div className="flex items-start justify-between gap-3 mb-3">
             <div className="min-w-0">
-              <p className="text-[13px] font-semibold" style={{ color: VIOLET }}>Évolution du poids</p>
-              <p className="text-[13px] text-label-2">{visibles.length} pesée{visibles.length > 1 ? "s" : ""} · trait plein = moyenne 4 sem.</p>
+              <p className="text-[13px] font-semibold flex items-center gap-1" style={{ color: VIOLET }}>Évolution du poids<Aide sujet="poids" /></p>
+              <p className="text-[13px] text-label-2">{visibles.length} pesée{visibles.length > 1 ? "s" : ""} · trait plein = tendance lissée</p>
             </div>
             <Segmente valeur={periode} onChange={setChoix} options={PERIODES} />
           </div>
@@ -216,12 +244,12 @@ export default function PoidsAnalyse() {
               <Area dataKey="poids" name="Pesée" type="monotone" stroke={VIOLET} strokeOpacity={0.35} strokeWidth={1}
                 fill="url(#degradePoids)" baseValue={bas}
                 dot={{ r: serie.length > 60 ? 1.5 : 3, fill: VIOLET, strokeWidth: 0 }} activeDot={{ r: 5, strokeWidth: 2, stroke: "#fff" }} />
-              <Line dataKey="moy" name="Moyenne 4 sem." type="monotone" stroke={VIOLET} strokeWidth={3} dot={false} activeDot={false} />
+              <Line dataKey="moy" name="Tendance" type="monotone" stroke={VIOLET} strokeWidth={3} dot={false} activeDot={false} />
             </ComposedChart>
           </ResponsiveContainer>
           <Legende items={[
             { label: "Pesées", couleur: `${VIOLET}88` },
-            { label: "Moyenne 4 semaines", couleur: VIOLET },
+            { label: "Tendance lissée", couleur: VIOLET },
             ...(normal ? [{ label: `IMC normal (${nombre(normal[0], 0)}–${nombre(normal[1], 0)} kg)`, couleur: `${VERT}66` }] : []),
           ]} />
         </Card>

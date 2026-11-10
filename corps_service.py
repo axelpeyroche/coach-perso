@@ -298,13 +298,17 @@ def export(db: Session, user_id: int, auj: Optional[date] = None) -> dict:
         "ressentis": ressentis(db, user_id, auj - timedelta(days=14)),
         "douleurs": [d for d in lister_douleurs(db, user_id, auj) if d["en_cours"] or d["fin"] >= limite],
         "signalements": signalements_seance(db, user_id, auj, 14),
+        "composition": export_composition(db, user_id, auj),
     }
 
 
 def markdown(c: Optional[dict]) -> list[str]:
-    if not c or not any(c.get(k) for k in ("marqueurs", "ressentis", "douleurs", "signalements")):
+    if not c or not any(c.get(k) for k in ("marqueurs", "ressentis", "douleurs", "signalements", "composition")):
         return []
     l = ["## Corps : contexte, ressenti, douleurs", ""]
+    if c.get("composition"):
+        l.append("**Composition corporelle** : " + " · ".join(c["composition"]))
+        l.append("")
     if c["marqueurs"]:
         l.append("**Jours marqués (28 j)** : " + " ; ".join(f"{m['jour']} {', '.join(m['types']).lower()}" for m in c["marqueurs"]))
         l.append("")
@@ -331,3 +335,114 @@ def markdown(c: Optional[dict]) -> list[str]:
             f"{s['jour']} {s['exercice']} : « {s['ressenti']} »" for s in c["signalements"]))
         l.append("")
     return l
+
+
+# ---------------------------------------------------------------------------
+# Composition corporelle : masse grasse et mensurations
+# ---------------------------------------------------------------------------
+
+MENSURATIONS = {   # type : (libellé, unité, minimum, maximum, où mesurer)
+    "masse_grasse": ("Masse grasse", "%", 3, 60, "Balance à impédance ou pince à plis, toujours dans les mêmes conditions."),
+    "tour_taille": ("Tour de taille", "cm", 40, 200, "À mi-chemin entre la dernière côte et le haut du bassin, en fin d'expiration."),
+    "tour_hanches": ("Tour de hanches", "cm", 50, 200, "Au plus large des fesses."),
+    "tour_poitrine": ("Tour de poitrine", "cm", 50, 200, "Sous les aisselles, au plus large."),
+    "tour_cuisse": ("Tour de cuisse", "cm", 25, 120, "À mi-cuisse, jambe relâchée, toujours la même."),
+    "tour_bras": ("Tour de bras", "cm", 15, 80, "À mi-bras, relâché, toujours le même."),
+}
+TYPES_MENSURATIONS = [{"type": t, "label": v[0], "unite": v[1], "min": v[2], "max": v[3], "aide": v[4]}
+                      for t, v in MENSURATIONS.items()]
+
+
+def enregistrer_mensurations(db: Session, user_id: int, jour: date, valeurs: dict, source: str = "manuel") -> int:
+    """Pose, remplace ou retire (valeur None) les mesures d'un jour. Une valeur venue d'une balance
+    ne remplace jamais une saisie manuelle du même jour."""
+    from models import Mensuration
+    n = 0
+    for t, v in valeurs.items():
+        if t not in MENSURATIONS:
+            continue
+        m = db.query(Mensuration).filter(Mensuration.utilisateur_id == user_id, Mensuration.type == t,
+                                         Mensuration.jour == jour).first()
+        if v is None:
+            if m and source == "manuel":
+                db.delete(m)
+                n += 1
+            continue
+        _, _, mini, maxi, _ = MENSURATIONS[t]
+        if not (mini <= v <= maxi):
+            raise ValueError(f"{MENSURATIONS[t][0]} : valeur attendue entre {mini} et {maxi} {MENSURATIONS[t][1]}")
+        if m:
+            if source != "manuel" and m.source == "manuel":
+                continue
+            if m.valeur != round(v, 1) or m.source != source:
+                m.valeur, m.source = round(v, 1), source
+                n += 1
+        else:
+            db.add(Mensuration(utilisateur_id=user_id, type=t, jour=jour, valeur=round(v, 1), source=source))
+            n += 1
+    db.flush()
+    return n
+
+
+def _poids_au(pesees: list[tuple[date, float]], jour: date, tolerance: int = 21) -> Optional[float]:
+    proches = [(abs((j - jour).days), p) for j, p in pesees if abs((j - jour).days) <= tolerance]
+    return min(proches)[1] if proches else None
+
+
+def composition(db: Session, user: Utilisateur, auj: date) -> dict:
+    from models import Mensuration, PoidsUtilisateur
+    series: dict[str, list[dict]] = {t: [] for t in MENSURATIONS}
+    for m in (db.query(Mensuration).filter(Mensuration.utilisateur_id == user.id)
+              .order_by(Mensuration.jour, Mensuration.id)):
+        if m.type in series:
+            series[m.type].append({"jour": m.jour.isoformat(), "valeur": m.valeur, "source": m.source})
+    pesees = [(p.enregistre_le.date(), p.poids_kg) for p in db.query(PoidsUtilisateur).filter(
+        PoidsUtilisateur.utilisateur_id == user.id).order_by(PoidsUtilisateur.enregistre_le) if p.enregistre_le]
+    # Masse grasse et masse maigre en kg, avec la pesée la plus proche (3 semaines au plus)
+    for p in series["masse_grasse"]:
+        poids = _poids_au(pesees, date.fromisoformat(p["jour"]))
+        if poids:
+            p["grasse_kg"] = round(poids * p["valeur"] / 100, 1)
+            p["maigre_kg"] = round(poids - p["grasse_kg"], 1)
+    derniers = {}
+    for t, pts in series.items():
+        if not pts:
+            continue
+        d = pts[-1]
+        # Comparaison : la mesure la plus proche d'il y a 3 mois, à défaut la première
+        cible = date.fromisoformat(d["jour"]) - timedelta(days=90)
+        avant = min(pts[:-1], key=lambda p: abs((date.fromisoformat(p["jour"]) - cible).days), default=None)
+        derniers[t] = {**d, "ecart": round(d["valeur"] - avant["valeur"], 1) if avant else None,
+                       "depuis": avant["jour"] if avant else None}
+    derives = {}
+    mg = derniers.get("masse_grasse")
+    if mg and mg.get("maigre_kg") is not None:
+        derives["masse_maigre_kg"], derives["masse_grasse_kg"] = mg["maigre_kg"], mg["grasse_kg"]
+        avant = next((p for p in series["masse_grasse"] if p["jour"] == mg["depuis"]), None) if mg["depuis"] else None
+        if avant and avant.get("maigre_kg") is not None:
+            derives["masse_maigre_ecart"] = round(mg["maigre_kg"] - avant["maigre_kg"], 1)
+            derives["masse_grasse_ecart"] = round(mg["grasse_kg"] - avant["grasse_kg"], 1)
+    tt = derniers.get("tour_taille")
+    if tt and user.taille_cm:
+        ratio = tt["valeur"] / user.taille_cm
+        derives["taille_stature"] = round(ratio, 2)
+        derives["taille_stature_ok"] = ratio < 0.5
+    th = derniers.get("tour_hanches")
+    if tt and th:
+        derives["taille_hanches"] = round(tt["valeur"] / th["valeur"], 2)
+    return {"types": TYPES_MENSURATIONS, "series": series, "derniers": derniers, "derives": derives,
+            "aujourdhui": auj.isoformat(), "taille_cm": user.taille_cm}
+
+
+def export_composition(db: Session, user_id: int, auj: date) -> list[str]:
+    from models import Mensuration
+    out, vus = [], set()
+    for m in (db.query(Mensuration).filter(Mensuration.utilisateur_id == user_id,
+                                           Mensuration.jour >= auj - timedelta(days=180))
+              .order_by(Mensuration.jour.desc(), Mensuration.id.desc())):
+        if m.type in vus or m.type not in MENSURATIONS:
+            continue
+        vus.add(m.type)
+        label, unite = MENSURATIONS[m.type][:2]
+        out.append(f"{label.lower()} {str(m.valeur).replace('.', ',')} {unite} ({m.jour.isoformat()})")
+    return out

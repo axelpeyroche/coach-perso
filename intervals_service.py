@@ -197,6 +197,7 @@ def synchroniser_wellness(db: Session, user: Utilisateur, depuis, jusqu_a, compl
     deja = {(m.type, m.jour) for m in db.query(MesureSante).filter(
         MesureSante.utilisateur_id == user.id, MesureSante.jour >= depuis, MesureSante.type.in_(("fc_repos", "vfc", "vo2max")))}
     items = []
+    masse_grasse: list[tuple] = []
     recus = {"fc_repos": 0, "vfc": 0, "vo2max": 0, "sommeil": 0, "fc_sommeil": 0, "score_sommeil": 0, "spo2": 0}
     vus_sommeil: dict[str, int] = {}
     for w in lignes if isinstance(lignes, list) else []:
@@ -204,6 +205,8 @@ def synchroniser_wellness(db: Session, user: Utilisateur, depuis, jusqu_a, compl
             jour = datetime.fromisoformat(str(w.get("id"))[:10]).date()
         except ValueError:
             continue
+        if isinstance(w.get("bodyFat"), (int, float)) and 3 <= w["bodyFat"] <= 60:
+            masse_grasse.append((jour, float(w["bodyFat"])))
         if w.get("sleepSecs"):
             recus["sommeil"] += 1
             items.append(("sommeil", jour, w["sleepSecs"] / 3600))
@@ -248,6 +251,10 @@ def synchroniser_wellness(db: Session, user: Utilisateur, depuis, jusqu_a, compl
                 if (t, jour) not in deja:
                     items.append((t, jour, float(w[cle])))
     recus["champs_sommeil"] = vus_sommeil
+    if masse_grasse:   # balance connectée à Intervals : une saisie manuelle du même jour garde la priorité
+        import corps_service
+        for jour, v in masse_grasse:
+            corps_service.enregistrer_mensurations(db, user.id, jour, {"masse_grasse": v}, source="intervals")
     if completer:
         presents = {(m.type, m.jour) for m in db.query(MesureSante.type, MesureSante.jour).filter(
             MesureSante.utilisateur_id == user.id, MesureSante.jour >= depuis, MesureSante.jour <= jusqu_a)}

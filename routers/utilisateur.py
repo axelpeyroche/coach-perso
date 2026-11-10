@@ -317,6 +317,11 @@ def supprimer_compte(payload: SuppressionCompteSchema, current_user: Utilisateur
         except Exception:
             pass
     db.query(PoidsUtilisateur).filter_by(utilisateur_id=current_user.id).delete()
+    from models import Douleur, MarqueurJour, Mensuration, ReleveDouleur, RessentiMatin
+    mes_douleurs = db.query(Douleur.id).filter_by(utilisateur_id=current_user.id)
+    db.query(ReleveDouleur).filter(ReleveDouleur.douleur_id.in_(mes_douleurs)).delete(synchronize_session=False)
+    for modele in (Douleur, MarqueurJour, RessentiMatin, Mensuration):
+        db.query(modele).filter_by(utilisateur_id=current_user.id).delete()
     db.query(MesureSante).filter_by(utilisateur_id=current_user.id).delete()
     db.query(NuitSommeil).filter_by(utilisateur_id=current_user.id).delete()
     db.query(SeancePrevue).filter_by(utilisateur_id=current_user.id).delete()

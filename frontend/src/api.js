@@ -220,4 +220,7 @@ export const creerDouleur = (payload) => api.post("/corps/douleurs", payload).th
 export const modifierDouleur = (id, payload) => api.patch(`/corps/douleurs/${id}`, payload).then((r) => r.data);
 export const releverDouleur = (id, payload) => api.put(`/corps/douleurs/${id}/releve`, payload).then((r) => r.data);
 export const supprimerDouleur = (id) => api.delete(`/corps/douleurs/${id}`).then((r) => r.data);
-export const adapterPrevue = (id, action) => api.post(`/plan/${id}/adapter`, { action }).then((r) => r.data);
+export const getMensurations = () => api.get("/corps/mensurations").then((r) => r.data);
+export const putMensurations = (payload) => api.put("/corps/mensurations", payload).then((r) => r.data);
+export const completerMeteo = () => api.post("/corps/meteo/completer", null, { timeout: 60000 }).then((r) => r.data);
+export const adapterPrevue =(id, action) => api.post(`/plan/${id}/adapter`, { action }).then((r) => r.data);

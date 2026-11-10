@@ -81,6 +81,12 @@ def lire(lat: float, lon: float, debut: datetime, fin: datetime, fuseau: str,
     return res
 
 
+def altitude_mediane(pts: list) -> Optional[int]:
+    """Altitude médiane du tracé (m), None s'il n'en porte pas."""
+    alt = sorted(p[2] for p in pts if len(p) > 2 and isinstance(p[2], (int, float)))
+    return round(alt[len(alt) // 2]) if alt else None
+
+
 def meteo_activite(db: Session, a: Activite, fuseau: str) -> Optional[dict]:
     """Météo gardée en base, sinon lue sur Open-Meteo (séance avec tracé GPS seulement)."""
     deja = db.get(MeteoActivite, a.id)
@@ -94,6 +100,8 @@ def meteo_activite(db: Session, a: Activite, fuseau: str) -> Optional[dict]:
         return None
     fin = a.debut + timedelta(seconds=a.duree_sec or 0)
     res = lire(pts[0][0], pts[0][1], a.debut, fin, fuseau)
+    if res:
+        res["altitude_m"] = altitude_mediane(pts)
     # Le jour même, l'archive n'est pas encore consolidée : on ne garde qu'à partir du lendemain
     if res and a.debut.date() < date.today():
         db.add(MeteoActivite(activite_id=a.id, donnees=json.dumps(res)))

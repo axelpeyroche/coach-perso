@@ -774,6 +774,8 @@ def _markdown_analyses(r: Optional[dict]) -> list[str]:
         l.append("- Dérive cardiaque des dernières sorties longues : "
                  + ", ".join(f"{d['date']} {d['derive_pct']:+.1f} %" for d in der) + " (> 5 % = endurance à consolider)")
     l.append("")
+    import corps_analyses
+    l += corps_analyses.markdown(r.get("corps"))
     return l
 
 

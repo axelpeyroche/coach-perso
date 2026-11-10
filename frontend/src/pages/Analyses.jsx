@@ -17,6 +17,9 @@ import { axeX, axeY, grille, curseur, InfoBulle, Legende, GRIS } from "../compon
 import PoidsAnalyse from "../components/Poids";
 import { JournalDouleurs, JoursMarques } from "../components/Corps";
 import { RegulariteSommeil, RecupFc, AsymetrieMarche } from "../components/MesuresCompanion";
+import {
+  TendanceVfc, FenetreSommeil, EffetNuit, TempsRecuperation, Chaleur, TendancesLongues, CompositionCorporelle,
+} from "../components/CorpsAnalyses";
 import api, { getAnalyses } from "../api";
 import { fmtAllureSec, fmtDate, fmtDuree, nombre, sportInfo } from "../carnet";
 
@@ -1552,7 +1555,8 @@ const ANCRES = {
   charge: "forme", monotonie: "forme", intensite: "forme",
   efforts: "capacites", efficacite: "capacites", vma: "capacites", zones: "capacites",
   recuperation: "corps", signaux: "corps", pas: "corps", poids: "corps", marqueurs: "corps", douleurs: "corps",
-  dette: "sommeil", regularite: "sommeil",
+  tendance_vfc: "corps", effet_nuit: "corps", temps_recuperation: "corps", chaleur: "corps", saisons: "corps", composition: "corps",
+  dette: "sommeil", regularite: "sommeil", fenetre: "sommeil",
   foulee: "technique", denivele: "technique",
   plan: "bilan", annuel: "bilan", correlations: "bilan",
 };
@@ -1650,6 +1654,7 @@ export default function Analyses() {
         <>
           <Section titre="Récupération">
             <Ancre id="recuperation" className="space-y-2.5"><Recuperation r={a.recuperation} /></Ancre>
+            {a.corps?.vfc_tendance && <Ancre id="tendance_vfc"><TendanceVfc t={a.corps.vfc_tendance} /></Ancre>}
             <div className="grid gap-3 lg:grid-cols-2">
               <Ancre id="signaux"><SignauxNuit s={a.signaux_nuit} /></Ancre>
               <Ancre id="pas"><Pas p={a.pas} /></Ancre>
@@ -1658,14 +1663,28 @@ export default function Analyses() {
             </div>
             <Ancre id="marqueurs"><JoursMarques /></Ancre>
           </Section>
+          <Section titre="Ce que ton corps a appris">
+            <div className="grid gap-3 lg:grid-cols-2">
+              <Ancre id="effet_nuit"><EffetNuit e={a.corps?.effet_nuit} /></Ancre>
+              <Ancre id="temps_recuperation"><TempsRecuperation r={a.corps?.temps_recuperation} /></Ancre>
+            </div>
+            <Ancre id="chaleur"><Chaleur c={a.corps?.chaleur} /></Ancre>
+            <Ancre id="saisons"><TendancesLongues t={a.corps?.tendances} /></Ancre>
+          </Section>
           <Ancre id="douleurs"><Section titre="Douleurs"><JournalDouleurs /></Section></Ancre>
-          <Ancre id="poids"><Section titre="Poids"><PoidsAnalyse /></Section></Ancre>
+          <Ancre id="poids">
+            <Section titre="Poids">
+              <PoidsAnalyse />
+              <Ancre id="composition"><CompositionCorporelle /></Ancre>
+            </Section>
+          </Ancre>
         </>
       )}
 
       {onglet === "sommeil" && (
         <Section titre="Sommeil">
           <Ancre id="dette" className="space-y-2.5"><DetteSommeil s={a.sommeil} /></Ancre>
+          <Ancre id="fenetre"><FenetreSommeil c={a.corps?.chronotype} /></Ancre>
           <Nuits r={a.recuperation} />
           <Ancre id="regularite"><RegulariteSommeil /></Ancre>
         </Section>

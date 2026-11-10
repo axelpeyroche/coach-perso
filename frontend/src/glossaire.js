@@ -190,7 +190,49 @@ export const GLOSSAIRE = {
   poids: {
     titre: "Poids",
     quoi: "Tes pesées et leur tendance.",
-    calcul: "Relevés saisis ou reçus, avec une moyenne glissante.",
-    lire: "Le poids varie de 1 à 2 kg d'un jour à l'autre (eau, repas). Pèse-toi dans les mêmes conditions et regarde la tendance.",
+    calcul: "Relevés saisis ou reçus. La tendance est une moyenne lissée : chaque pesée la déplace un peu, les anciennes comptent de moins en moins (environ 10 jours de mémoire). Le rythme est la variation de cette tendance, par semaine, sur le dernier mois.",
+    lire: "Le poids varie de 1 à 2 kg d'un jour à l'autre (eau, repas). Pèse-toi dans les mêmes conditions et regarde la tendance. Au-delà de 1 % du poids perdu par semaine, la récupération et la performance en pâtissent.",
+  },
+  composition: {
+    titre: "Composition corporelle",
+    quoi: "Ce dont ton poids est fait : graisse d'un côté, masse maigre (muscle, os, eau) de l'autre, plus tes mensurations.",
+    calcul: "Masse grasse en kg = poids × pourcentage de graisse ; masse maigre = le reste. Le poids utilisé est la pesée la plus proche de la mesure (3 semaines au plus). Taille ÷ stature = tour de taille divisé par ta taille.",
+    lire: "Une balance à impédance se trompe de plusieurs points dans l'absolu : seule l'évolution compte, mesurée dans les mêmes conditions. Perdre du poids en gardant la masse maigre est l'objectif. Un rapport taille ÷ stature sous 0,50 est le repère de santé le plus simple.",
+  },
+  vfc_tendance: {
+    titre: "Tendance de la VFC sur 7 jours",
+    quoi: "La moyenne de ta VFC sur une semaine, comparée à ta plage normale, et sa régularité d'un matin à l'autre.",
+    calcul: "Moyenne des 7 derniers jours ; plage normale = moyenne des 60 jours précédents ± un demi écart-type. Le CV (coefficient de variation) est l'écart-type de la semaine divisé par sa moyenne.",
+    lire: "Un seul mauvais matin ne veut rien dire : c'est la moyenne 7 jours qui sort de la plage qui signale une fatigue installée. Un CV qui grimpe alors que la moyenne tient est souvent le premier signe que ton corps encaisse mal.",
+  },
+  chronotype: {
+    titre: "Fenêtre de sommeil et chronotype",
+    quoi: "Tes heures habituelles de coucher et de réveil, ton rythme naturel (du matin, intermédiaire, du soir) et l'heure de coucher qui couvre ton besoin.",
+    calcul: "Moyennes sur 8 semaines, semaine et week-end séparés. Chronotype : milieu de tes nuits libres (week-end). Jet-lag social : décalage du milieu de nuit entre week-end et semaine. Coucher conseillé : réveil habituel − besoin de sommeil − 15 min d'endormissement, avancé si tu as une dette.",
+    lire: "Un décalage de plus d'une heure le week-end fatigue comme un petit voyage chaque lundi. Mieux vaut se coucher plus tôt que se lever plus tard pour rattraper une dette.",
+  },
+  effet_nuit: {
+    titre: "Effet des séances sur la nuit",
+    quoi: "Ce que chaque type de journée change à la nuit suivante et à la VFC du lendemain matin.",
+    calcul: "Pour chaque nuit, écart à ta moyenne des 28 jours précédents, puis moyenne par type de journée (au moins 4 nuits). Les jours marqués (malade, alcool, voyage…) sont écartés.",
+    lire: "Une séance intense tard le soir retarde souvent l'endormissement et fait monter la FC de la nuit. Si c'est ton cas, avance-la ou allonge le retour au calme. Les petits écarts ne sont pas colorés : ils ne sortent pas du bruit.",
+  },
+  temps_recuperation: {
+    titre: "Temps de récupération personnel",
+    quoi: "Le nombre de jours qu'il te faut, à toi, pour que VFC et FC au repos reviennent dans ta normale après une journée dure.",
+    calcul: "Après chaque séance intense, sortie longue ou course : premier matin où l'indice de récupération repasse au-dessus de −0,5. Une autre séance dure entre-temps annule la mesure.",
+    lire: "C'est le délai minimal à laisser entre deux séances dures. Il s'allonge avec l'âge, le manque de sommeil et la chaleur ; s'il grimpe sans raison, la charge globale est trop haute.",
+  },
+  chaleur: {
+    titre: "Chaleur et altitude",
+    quoi: "Ce que chaque degré de plus te coûte en fréquence cardiaque quand tu cours à la même allure, et l'effet de l'altitude.",
+    calcul: "Sur tes sorties de course des deux dernières années avec météo : FC moyenne expliquée par la vitesse et par les degrés au-dessus de 15 °C. Altitude : écart restant entre les sorties au-dessus de 1 000 m et les autres.",
+    lire: "Par temps chaud, cours à la FC habituelle et accepte l'allure plus lente : l'effort pour le corps est le même. L'acclimatation (10 à 14 jours de chaleur) réduit ce coût.",
+  },
+  tendances_longues: {
+    titre: "Saison après saison",
+    quoi: "La moyenne de tes mesures de fond (FC au repos, VFC, VO2max, poids) pour chaque saison.",
+    calcul: "Hiver = décembre à février, printemps = mars à mai, été = juin à août, automne = septembre à novembre. « Sur un an » compare la dernière saison à la même un an plus tôt ; la tendance est la pente sur toutes les saisons.",
+    lire: "Une FC au repos qui baisse et une VFC qui monte d'une année sur l'autre signent un vrai progrès de fond, au-delà des hauts et des bas de la semaine.",
   },
 };

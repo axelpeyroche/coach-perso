@@ -528,3 +528,18 @@ class ReleveDouleur(Base):
     jour: Mapped[date] = mapped_column(Date, nullable=False)
     intensite: Mapped[int] = mapped_column(Integer, nullable=False)
     note: Mapped[Optional[str]] = mapped_column(String(500))
+
+
+class Mensuration(Base):
+    """Composition corporelle : masse grasse (%) et tours (cm), une valeur par type et par jour.
+    `source` : manuel (saisie, prioritaire) ou intervals (balance connectée)."""
+    __tablename__ = "mensurations"
+    __table_args__ = (UniqueConstraint("utilisateur_id", "type", "jour", name="uq_mensuration_jour"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    utilisateur_id: Mapped[int] = mapped_column(ForeignKey("utilisateurs.id", ondelete="CASCADE"), nullable=False, index=True)
+    type: Mapped[str] = mapped_column(String(20), nullable=False)
+    jour: Mapped[date] = mapped_column(Date, nullable=False)
+    valeur: Mapped[float] = mapped_column(Float, nullable=False)
+    source: Mapped[str] = mapped_column(String(20), nullable=False, default="manuel")
+    cree_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
