@@ -3,6 +3,7 @@ import clsx from "clsx";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 import { axeX, axeY, grille, InfoBulle, Legende, GRIS } from "./graphiques";
 import Card from "./Card";
+import Aide from "./Aide";
 import { useMesures } from "./Forme";
 import { EVEIL, heure, hm } from "./SommeilNuit";
 import { fmtDate, nombre } from "../carnet";
@@ -18,11 +19,15 @@ const court = (iso) => fmtDate(iso, { day: "numeric", month: "short" });
 const moyenne = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
 const depuis = (n) => new Date(Date.now() - (n - 1) * 864e5).toLocaleDateString("sv");
 
+const AIDES = { "Régularité du sommeil": "regularite_sommeil", "Récupération FC 1 min": "recup_fc", "Asymétrie de marche": "asymetrie" };
+
 function Entete({ titre, couleur, sousTitre, action }) {
   return (
     <div className="flex items-start justify-between gap-3 mb-3">
       <div className="min-w-0">
-        <p className="text-[13px] font-semibold" style={{ color: couleur }}>{titre}</p>
+        <p className="text-[13px] font-semibold flex items-center gap-1" style={{ color: couleur }}>
+          {titre}<Aide sujet={AIDES[titre]} />
+        </p>
         {sousTitre && <p className="text-[13px] text-label-2">{sousTitre}</p>}
       </div>
       {action}

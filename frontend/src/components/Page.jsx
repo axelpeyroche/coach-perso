@@ -23,7 +23,7 @@ function BarreNav({ action }) {
             </svg>
           </button>
         ) : <span />}
-        <div className="barre-nav-actions flex items-center gap-2">{action}</div>
+        <div className="barre-nav-actions flex items-center gap-2 min-w-0">{action}</div>
       </div>
     </div>,
     document.body

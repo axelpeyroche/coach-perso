@@ -74,6 +74,14 @@ def notif_matin_due(user: Utilisateur) -> bool:
 # Forme du matin
 # ---------------------------------------------------------------------------
 
+MALADIE_Z = 1.5          # FC de repos au-delà de +1,5 écart-type…
+MALADIE_MATINS = 2       # …au moins deux matins de suite…
+MALADIE_CHARGE_MAX = 0.8  # …alors que la charge de la semaine est faible : la fatigue d'entraînement n'explique pas
+
+NIVEAU_MALADIE = ("Signes de maladie possible",
+                  "Ta FC de repos est nettement au-dessus de ta normale alors que tu t'es peu entraîné : "
+                  "repos ou marche, pas de séance dure tant que ça ne revient pas.")
+
 NIVEAUX = {
     "vert": ("En forme", "Feu vert : tu peux faire la séance la plus exigeante de la semaine."),
     "orange": ("Normal", "Récupération incomplète : garde l'intensité sous contrôle aujourd'hui."),
@@ -92,6 +100,54 @@ def _alerte_vfc(points: list[dict]) -> int:
         else:
             break
     return n
+
+
+def _ratio_charge(db: Session, user_id: int, auj: date) -> Optional[float]:
+    """Charge des 7 derniers jours rapportée à la moyenne hebdomadaire des 28 derniers (≈ ACWR)."""
+    acts = (db.query(Activite).filter(Activite.utilisateur_id == user_id,
+                                      Activite.debut >= datetime.combine(auj - timedelta(days=28), datetime.min.time()))
+            .all())
+    ch = an.charges_quotidiennes(acts)
+    c7 = sum(v for d, v in ch.items() if auj - timedelta(days=7) < d <= auj)
+    c28 = sum(v for d, v in ch.items() if auj - timedelta(days=28) < d <= auj)
+    return round(c7 / (c28 / 4), 2) if c28 > 0 else None
+
+
+def _maladie_possible(points: list[dict], ratio: Optional[float]) -> bool:
+    """FC de repos très au-dessus de la normale plusieurs matins de suite, sans charge pour l'expliquer."""
+    mesures = [p for p in points if p.get("fc_z") is not None][-MALADIE_MATINS:]
+    if len(mesures) < MALADIE_MATINS or any(p["fc_z"] < MALADIE_Z for p in mesures):
+        return False
+    return ratio is None or ratio < MALADIE_CHARGE_MAX
+
+
+def _explication(frais: dict, ratio: Optional[float], maladie: bool) -> list[dict]:
+    """Ce qui compose le score du matin, en clair (bouton « Pourquoi ? »)."""
+    def sens(z, inverse=False):
+        z = -z if inverse else z
+        return "bon" if z >= 0.5 else "neutre" if z >= -0.5 else "moyen" if z >= -1.5 else "mauvais"
+    lignes = []
+    if frais.get("vfc_z") is not None:
+        z = frais["vfc_z"]
+        lignes.append({"cle": "vfc", "label": "VFC", "valeur": f"{frais['vfc']:.0f} ms",
+                       "ref": f"habituelle {frais['vfc_ref']:.0f} ms (de {frais['vfc_bas']:.0f} à {frais['vfc_haut']:.0f})",
+                       "z": z, "sens": sens(z),
+                       "texte": "dans ta plage" if abs(z) < 0.5 else ("plus haute que d'habitude" if z > 0 else "plus basse que d'habitude")})
+    if frais.get("fc_z") is not None:
+        z = frais["fc_z"]
+        lignes.append({"cle": "fc_repos", "label": "FC de repos", "valeur": f"{frais['fc_repos']:.0f} bpm",
+                       "ref": f"habituelle {frais['fc_ref']:.0f} bpm", "z": z, "sens": sens(z, inverse=True),
+                       "texte": "dans ta plage" if abs(z) < 0.5 else ("plus haute que d'habitude" if z > 0 else "plus basse que d'habitude")})
+    if frais.get("sommeil") is not None:
+        h = frais["sommeil"]
+        lignes.append({"cle": "sommeil", "label": "Dernière nuit", "valeur": f"{int(h)} h {round((h % 1) * 60):02d}",
+                       "ref": "ne compte pas dans le score", "z": None, "sens": "neutre" if h >= 7 else "moyen",
+                       "texte": "nuit suffisante" if h >= 7 else "nuit courte"})
+    if ratio is not None:
+        lignes.append({"cle": "charge", "label": "Charge sur 7 jours", "valeur": f"× {ratio:.2f}".replace(".", ","),
+                       "ref": "par rapport à ta moyenne, ne compte pas dans le score", "z": None, "sens": "neutre",
+                       "texte": "semaine légère" if ratio < 0.8 else "semaine chargée" if ratio > 1.3 else "semaine habituelle"})
+    return lignes
 
 
 def _intensite(p: SeancePrevue) -> float:
@@ -127,10 +183,16 @@ def forme_du_jour(db: Session, user: Utilisateur, auj: Optional[date] = None) ->
         Activite.debut < datetime.combine(auj + timedelta(days=1), datetime.min.time())).first() is not None
 
     statut = frais["statut"] if frais else None
+    ratio = _ratio_charge(db, user.id, auj)
+    maladie = bool(frais) and _maladie_possible(pts, ratio)
+    if maladie:
+        statut = "rouge"
     conseil, suggestion = None, None
     if restantes:
         tri = sorted(restantes, key=_intensite)
-        if statut == "rouge":
+        if maladie:
+            conseil = "Laisse les séances de côté aujourd'hui : repos, hydratation, et reprise en douceur quand la FC de repos est revenue."
+        elif statut == "rouge":
             suggestion = tri[0] if _intensite(tri[0]) <= 4 else None
             conseil = (f"Si tu t'entraînes, choisis « {suggestion.titre} »." if suggestion
                        else "Les séances restantes sont intenses : remplace-les aujourd'hui par de l'endurance facile ou du repos.")
@@ -148,8 +210,11 @@ def forme_du_jour(db: Session, user: Utilisateur, auj: Optional[date] = None) ->
     return {
         "jour": auj.isoformat(),
         "statut": statut,
-        "label": NIVEAUX[statut][0] if statut else None,
-        "message": NIVEAUX[statut][1] if statut else None,
+        "label": NIVEAU_MALADIE[0] if maladie else NIVEAUX[statut][0] if statut else None,
+        "message": NIVEAU_MALADIE[1] if maladie else NIVEAUX[statut][1] if statut else None,
+        "maladie_possible": maladie,
+        "charge_ratio": ratio,
+        "explication": _explication(frais, ratio, maladie) if frais else [],
         "mesure_du": frais["jour"] if frais else None,
         "score": frais["score"] if frais else None,
         "vfc": frais["vfc"] if frais else None,

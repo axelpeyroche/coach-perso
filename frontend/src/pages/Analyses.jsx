@@ -1,4 +1,6 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   BarChart, Bar, LineChart, Line, ComposedChart, Area, ScatterChart, Scatter, ZAxis,
@@ -7,7 +9,10 @@ import {
 import clsx from "clsx";
 import Card from "../components/Card";
 import Page from "../components/Page";
-import { Section, Segmente } from "../components/ui";
+import { Section, Segmente, Onglets, Chevron } from "../components/ui";
+import Aide, { FicheAide } from "../components/Aide";
+import Feuille from "../components/Feuille";
+import { GLOSSAIRE } from "../glossaire";
 import { axeX, axeY, grille, curseur, InfoBulle, Legende, GRIS } from "../components/graphiques";
 import PoidsAnalyse from "../components/Poids";
 import { RegulariteSommeil, RecupFc, AsymetrieMarche } from "../components/MesuresCompanion";
@@ -47,12 +52,25 @@ const RECUP = {
   rouge: { cls: "bg-ios-red/15 text-ios-red", label: "Fatigué", couleur: ROUGE },
 };
 
-function Graphe({ titre, couleur, sousTitre, action, children, note, className }) {
+// Fiche du glossaire ouverte par le « i » de chaque encart (d'après son titre)
+const AIDES = {
+  "Forme, fatigue, fraîcheur": "forme", "Temps par zone": "intensite", "Évolution des zones": "zones",
+  "Variabilité cardiaque": "vfc", "FC au repos": "fc_repos", "SpO2 nocturne": "signaux_nuit",
+  "Évolution de la VMA": "vma", "Prédictions de course": "predictions", "Dérive cardiaque": "derive",
+  "Contrainte et monotonie": "monotonie", "Signaux de la nuit": "signaux_nuit", "Pas quotidiens": "pas",
+  "Durée des nuits et dette": "dette_sommeil", "Courbe des meilleurs efforts": "meilleurs_efforts",
+  "Efficacité aérobie": "efficacite", "Durabilité": "durabilite", "Foulée": "foulee", "Foulée dans le temps": "foulee",
+  "Volume et dénivelé": "denivele", "Séances par semaine": "plan", "Cumul depuis le 1er janvier": "annuel",
+};
+
+function Graphe({ titre, couleur, sousTitre, action, children, note, className, aide }) {
   return (
     <Card className={className}>
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="min-w-0">
-          <p className="text-[13px] font-semibold" style={{ color: couleur }}>{titre}</p>
+          <p className="text-[13px] font-semibold flex items-center gap-1" style={{ color: couleur }}>
+            <span className="truncate">{titre}</span><Aide sujet={aide ?? AIDES[titre]} />
+          </p>
           {sousTitre && <p className="text-[13px] text-label-2">{sousTitre}</p>}
         </div>
         {action}
@@ -1413,7 +1431,7 @@ function Correlation({ c }) {
   const ok = c.r != null;
   const couleur = !ok || c.conforme == null ? GRIS : c.conforme ? VERT : ORANGE;
   return (
-    <Graphe titre={c.titre} couleur={BLEU}
+    <Graphe titre={c.titre} couleur={BLEU} aide="correlations"
       sousTitre={ok ? `r = ${nombre(c.r, 2)} · ${c.force} · ${c.n} points` : `${c.n} point(s) · il en faut au moins 8`}
       action={ok && c.conforme != null ? (
         <span className={clsx("badge text-[11px] shrink-0", c.conforme ? "bg-ios-green/15 text-ios-green" : "bg-ios-orange/15 text-ios-orange")}>
@@ -1448,12 +1466,115 @@ function Correlation({ c }) {
   );
 }
 
+// ── L'essentiel : les analyses résumées en quelques constats ──────────────
+const TONS = {
+  alerte: { label: "À traiter", texte: "text-ios-red", fond: "bg-ios-red/[0.14]", trace: "M12 8v5M12 16.5v.01" },
+  attention: { label: "À surveiller", texte: "text-ios-orange", fond: "bg-ios-orange/[0.16]", trace: "M12 8v5M12 16.5v.01" },
+  bon: { label: "Bon signe", texte: "text-ios-green", fond: "bg-ios-green/[0.16]", trace: "M7.5 12.5l3 3 6-7" },
+  info: { label: "Repère", texte: "text-ios-blue", fond: "bg-ios-blue/[0.14]", trace: "M12 11v5.5M12 7.5v.01" },
+};
+
+function Constat({ c, onOuvrir }) {
+  const t = TONS[c.ton] ?? TONS.info;
+  return (
+    <button type="button" onClick={() => onOuvrir(c)}
+      className="card p-4 w-full text-left flex items-start gap-3 transition active:scale-[0.99] active:opacity-80 hover:shadow-md">
+      <span aria-hidden className={clsx("w-9 h-9 rounded-full flex items-center justify-center shrink-0", t.fond, t.texte)}>
+        <svg viewBox="0 0 24 24" className="w-[22px] h-[22px]" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round">
+          <path d={t.trace} />
+        </svg>
+      </span>
+      <span className="flex-1 min-w-0">
+        <span className={clsx("block text-[12px] font-semibold uppercase tracking-[0.02em]", t.texte)}>{t.label}</span>
+        <span className="block text-[17px] leading-[22px] font-semibold mt-0.5">{c.titre}</span>
+        <span className="block text-[15px] leading-5 text-label-2 mt-1">{c.texte}</span>
+      </span>
+      <span className="self-center"><Chevron /></span>
+    </button>
+  );
+}
+
+function Essentiel({ constats, onOuvrir }) {
+  const [fiche, setFiche] = useState(null);
+  const compte = (ton) => constats.filter((c) => c.ton === ton).length;
+  const resume = [["alerte", "à traiter"], ["attention", "à surveiller"], ["bon", compte("bon") > 1 ? "bons signes" : "bon signe"]]
+    .filter(([ton]) => compte(ton)).map(([ton, l]) => `${compte(ton)} ${l}`).join(" · ");
+  return (
+    <>
+      <Section titre="L'essentiel">
+        {constats.length ? (
+          <>
+            {resume && <p className="text-[15px] text-label-2 px-1 -mt-1">{resume}</p>}
+            <div className="grid gap-3 md:grid-cols-2">
+              {constats.map((c) => <Constat key={c.id} c={c} onOuvrir={onOuvrir} />)}
+            </div>
+          </>
+        ) : (
+          <Card><Vide>Pas encore assez de données pour dégager des constats. Ils apparaîtront avec tes séances et tes mesures du matin.</Vide></Card>
+        )}
+        <p className="text-[12px] text-label-3 px-1">
+          Constats calculés par règles à partir de tes données, du plus urgent au plus anecdotique. Touche un constat pour voir le détail.
+        </p>
+      </Section>
+      <Section titre="Glossaire">
+        <div className="card overflow-hidden md:columns-2 md:gap-0">
+          {Object.entries(GLOSSAIRE).map(([cle, g]) => (
+            <button type="button" key={cle} onClick={() => setFiche(cle)}
+              className="ligne w-full text-left break-inside-avoid active:bg-remplissage hover:bg-remplissage/60 transition">
+              <span className="flex-1 min-w-0 truncate text-[16px]">{g.titre}</span>
+              <Chevron />
+            </button>
+          ))}
+        </div>
+      </Section>
+      {fiche && (
+        <Feuille titre={GLOSSAIRE[fiche].titre} onClose={() => setFiche(null)}>
+          <FicheAide sujet={fiche} />
+        </Feuille>
+      )}
+    </>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────
+const ONGLETS = [
+  ["essentiel", "Essentiel"], ["forme", "Forme"], ["capacites", "Capacités"], ["corps", "Corps"],
+  ["sommeil", "Sommeil"], ["technique", "Technique"], ["bilan", "Bilan"],
+];
+// Encart → onglet qui le contient (liens /analyses#zones, constats de « L'essentiel »)
+const ANCRES = {
+  charge: "forme", monotonie: "forme", intensite: "forme",
+  efforts: "capacites", efficacite: "capacites", vma: "capacites", zones: "capacites",
+  recuperation: "corps", signaux: "corps", pas: "corps", poids: "corps",
+  dette: "sommeil", regularite: "sommeil",
+  foulee: "technique", denivele: "technique",
+  plan: "bilan", annuel: "bilan", correlations: "bilan",
+};
+
+const Ancre = ({ id, children, className }) => <div id={id} className={clsx("scroll-mt-24 min-w-0", className)}>{children}</div>;
+
 export default function Analyses() {
   const { data: a, isLoading, isError } = useQuery({ queryKey: ["analyses"], queryFn: getAnalyses, staleTime: 5 * 60_000 });
+  const { hash } = useLocation();
+  const navigate = useNavigate();
+  const cle = hash.slice(1);
+  const ancre = ANCRES[cle] ? cle : null;
+  const onglet = ancre ? ANCRES[cle] : ONGLETS.some(([v]) => v === cle) ? cle : "essentiel";
+
+  // Onglets flottants dès que ceux de l'en-tête sortent de l'écran (ordinateur)
+  const repere = useRef(null);
+  const [flottant, setFlottant] = useState(false);
   useEffect(() => {
-    if (!a || !window.location.hash) return;
-    const el = document.getElementById(window.location.hash.slice(1));
+    const el = repere.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(([e]) => setFlottant(!e.isIntersecting && e.boundingClientRect.top < 0));
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [a]);
+
+  useEffect(() => {
+    if (!a || !ancre) return;
+    const el = document.getElementById(ancre);
     if (!el) return;
     // Les graphiques au-dessus grandissent en se dessinant : on recale jusqu'à stabilité
     let essais = 0;
@@ -1467,47 +1588,102 @@ export default function Analyses() {
     window.addEventListener("wheel", stop, { once: true });
     window.addEventListener("touchstart", stop, { once: true });
     return () => { stop(); clearTimeout(fin); window.removeEventListener("wheel", stop); window.removeEventListener("touchstart", stop); };
-  }, [a]);
+  }, [a, ancre]);
 
   if (isLoading) return <Page titre="Analyses"><p className="text-[15px] text-label-2">Calcul en cours…</p></Page>;
   if (isError || !a) return <Page titre="Analyses"><Card><Vide>Impossible de charger les analyses.</Vide></Card></Page>;
 
+  const choisir = (v) => { navigate({ hash: v === "essentiel" ? "" : v }, { replace: true }); window.scrollTo(0, 0); };
+  // Un constat ouvre son onglet à la hauteur de l'encart ; « retour » ramène à l'essentiel
+  const ouvrir = (c) => { window.scrollTo(0, 0); navigate({ hash: c.ancre ?? c.onglet }); };
+
   return (
-    <Page titre="Analyses" large sousTitre="Forme, récupération, performance">
-      <Section titre="Forme et fatigue"><FormeFatigue f={a.forme} /><Monotonie m={a.monotonie} /></Section>
-      <Section titre="Récupération">
-        <Recuperation r={a.recuperation} />
-        <div className="grid gap-3 lg:grid-cols-2">
-          <SignauxNuit s={a.signaux_nuit} />
-          <Pas p={a.pas} />
-          <RecupFc />
-          <AsymetrieMarche />
-        </div>
-      </Section>
-      <Section titre="Sommeil"><DetteSommeil s={a.sommeil} /><Nuits r={a.recuperation} /><RegulariteSommeil /></Section>
-      <Section titre="Poids"><PoidsAnalyse /></Section>
-      <div id="zones" className="scroll-mt-24">
-        <Section titre="Évolution des zones"><ZonesEvolution e={a.zones_evolution} actuelles={a.zones_entrainement} /></Section>
+    <Page titre="Analyses" large sousTitre="Comprendre ton corps et tes progrès"
+      action={<Onglets className="md:hidden" options={ONGLETS} valeur={onglet} onChange={choisir} />}>
+      <div ref={repere} className="hidden md:block -my-1">
+        <Onglets className="w-fit" options={ONGLETS} valeur={onglet} onChange={choisir} />
       </div>
-      <Section titre="Intensité"><Zones z={a.zones} /></Section>
-      <Section titre="Course à pied">
-        <Vma v={a.vma} />
-        <EffortsDuree e={a.efforts_duree} />
-        <Course c={a.course} />
-        <div className="grid gap-3 lg:grid-cols-2">
-          <Efficacite ef={a.efficacite} />
-          <Foulee f={a.foulee} />
-        </div>
-      </Section>
-      <Section titre="Dénivelé"><Denivele d={a.denivele} /></Section>
-      <Section titre="Respect du plan"><RespectPlan p={a.plan} /></Section>
-      <Section titre="Année par année"><Annuel y={a.annuel} /></Section>
-      <Section titre="Corrélations">
-        <div className="grid gap-3 md:grid-cols-2">
-          {a.correlations.map((c) => <Correlation key={c.id} c={c} />)}
-        </div>
-        <p className="text-[12px] text-label-3 px-1">Corrélation n'est pas causalité : ces liens aident à repérer tes tendances personnelles, à confirmer sur la durée.</p>
-      </Section>
+      {/* Ordinateur : les onglets restent sous la main une fois la page défilée */}
+      {createPortal(
+        <div className={clsx("hidden md:block fixed top-0 left-60 right-0 z-20 pointer-events-none transition duration-200",
+          flottant ? "opacity-100" : "opacity-0 -translate-y-2")} aria-hidden={!flottant}>
+          <div className="mx-auto max-w-6xl px-8 pt-3">
+            <Onglets className={clsx("w-fit", flottant && "pointer-events-auto")} options={ONGLETS} valeur={onglet} onChange={choisir} />
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {onglet === "essentiel" && <Essentiel constats={a.essentiel ?? []} onOuvrir={ouvrir} />}
+
+      {onglet === "forme" && (
+        <>
+          <Section titre="Forme et fatigue">
+            <Ancre id="charge"><FormeFatigue f={a.forme} /></Ancre>
+            <Ancre id="monotonie"><Monotonie m={a.monotonie} /></Ancre>
+          </Section>
+          <Ancre id="intensite"><Section titre="Intensité"><Zones z={a.zones} /></Section></Ancre>
+        </>
+      )}
+
+      {onglet === "capacites" && (
+        <>
+          <Section titre="Course à pied">
+            <Ancre id="vma"><Vma v={a.vma} /></Ancre>
+            <Ancre id="efforts" className="space-y-2.5"><EffortsDuree e={a.efforts_duree} /></Ancre>
+            <Course c={a.course} />
+            <Ancre id="efficacite"><Efficacite ef={a.efficacite} /></Ancre>
+          </Section>
+          <Ancre id="zones">
+            <Section titre="Évolution des zones"><ZonesEvolution e={a.zones_evolution} actuelles={a.zones_entrainement} /></Section>
+          </Ancre>
+        </>
+      )}
+
+      {onglet === "corps" && (
+        <>
+          <Section titre="Récupération">
+            <Ancre id="recuperation" className="space-y-2.5"><Recuperation r={a.recuperation} /></Ancre>
+            <div className="grid gap-3 lg:grid-cols-2">
+              <Ancre id="signaux"><SignauxNuit s={a.signaux_nuit} /></Ancre>
+              <Ancre id="pas"><Pas p={a.pas} /></Ancre>
+              <RecupFc />
+              <AsymetrieMarche />
+            </div>
+          </Section>
+          <Ancre id="poids"><Section titre="Poids"><PoidsAnalyse /></Section></Ancre>
+        </>
+      )}
+
+      {onglet === "sommeil" && (
+        <Section titre="Sommeil">
+          <Ancre id="dette" className="space-y-2.5"><DetteSommeil s={a.sommeil} /></Ancre>
+          <Nuits r={a.recuperation} />
+          <Ancre id="regularite"><RegulariteSommeil /></Ancre>
+        </Section>
+      )}
+
+      {onglet === "technique" && (
+        <>
+          <Ancre id="foulee"><Section titre="Foulée"><Foulee f={a.foulee} /></Section></Ancre>
+          <Ancre id="denivele"><Section titre="Dénivelé"><Denivele d={a.denivele} /></Section></Ancre>
+        </>
+      )}
+
+      {onglet === "bilan" && (
+        <>
+          <Ancre id="plan"><Section titre="Respect du plan"><RespectPlan p={a.plan} /></Section></Ancre>
+          <Ancre id="annuel"><Section titre="Année par année"><Annuel y={a.annuel} /></Section></Ancre>
+          <Ancre id="correlations">
+            <Section titre="Corrélations">
+              <div className="grid gap-3 md:grid-cols-2">
+                {a.correlations.map((c) => <Correlation key={c.id} c={c} />)}
+              </div>
+              <p className="text-[12px] text-label-3 px-1">Corrélation n'est pas causalité : ces liens aident à repérer tes tendances personnelles, à confirmer sur la durée.</p>
+            </Section>
+          </Ancre>
+        </>
+      )}
     </Page>
   );
 }

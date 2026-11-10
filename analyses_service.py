@@ -198,11 +198,13 @@ def _recuperation(mesures: dict[str, dict[date, float]], auj: date, jours: int =
             p["vfc_ref"], p["vfc_bas"], p["vfc_haut"] = _r(m), _r(m - (sd or 0)), _r(m + (sd or 0))
             if p["vfc"] is not None and sd:
                 zs.append((p["vfc"] - m) / sd)
+                p["vfc_z"] = _r(zs[-1], 2)
         m, sd = reference(fcr, j)
         if m is not None:
             p["fc_ref"] = _r(m)
             if p["fc_repos"] is not None and sd:
                 zs.append(-(p["fc_repos"] - m) / sd)
+                p["fc_z"] = _r(-zs[-1], 2)   # positif = FC de repos plus haute que d'habitude
         p["score"] = _r(_moy(zs), 2) if zs else None
         p["statut"] = _statut(p["score"])
         pts.append(p)
@@ -1189,7 +1191,7 @@ def calculer_analyses(db: Session, user: Utilisateur, aujourd_hui: Optional[date
     reference = zs.fc_seuil_au(zs.candidats_seuil(acts), auj, user.fc_max)
     zones_jour = zs.zones_profil(user, (efforts.get("vc") or {}).get("vitesse_ms"),
                                  (vma.get("actuelle") or {}).get("vma"), reference)
-    return {
+    res = {
         "genere_le": datetime.utcnow().isoformat(timespec="seconds") + "Z",
         "forme": forme,
         "zones": _zones_hebdo(acts, user, auj),
@@ -1211,6 +1213,9 @@ def calculer_analyses(db: Session, user: Utilisateur, aujourd_hui: Optional[date
         "pas": _pas({m.jour: m.valeur for m in db.query(MesureSante.jour, MesureSante.valeur).filter(
             MesureSante.utilisateur_id == user.id, MesureSante.type == "pas")}, auj),
     }
+    import essentiel_service
+    res["essentiel"] = essentiel_service.essentiel(res)
+    return res
 
 
 def _mmss(sec: Optional[int]) -> Optional[str]:

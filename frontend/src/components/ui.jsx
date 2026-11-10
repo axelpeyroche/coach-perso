@@ -54,6 +54,30 @@ export function Segmente({ options, valeur, onChange, className }) {
   );
 }
 
+// Onglets d'une page : capsule de verre qui défile à l'horizontale quand la place manque
+// (barre de navigation sur téléphone, collée en haut sur ordinateur). options : [[valeur, libellé], …]
+export function Onglets({ options, valeur, onChange, className, label = "Rubriques" }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const el = ref.current, actif = el?.querySelector('[aria-selected="true"]');
+    if (!actif || !el.clientWidth) return;
+    el.scrollTo({ left: actif.offsetLeft - (el.clientWidth - actif.offsetWidth) / 2, behavior: "smooth" });
+  }, [valeur]);
+  return (
+    <div className={clsx("glass glass-epais rounded-full min-w-0 max-w-full", className)}>
+      <div ref={ref} role="tablist" aria-label={label} className="relative flex gap-0.5 p-1 overflow-x-auto scrollbar-hide rounded-full">
+        {options.map(([v, l]) => (
+          <button type="button" role="tab" key={v} aria-selected={valeur === v} onClick={() => onChange(v)}
+            className={clsx("h-9 px-3.5 rounded-full text-[14px] whitespace-nowrap shrink-0 transition active:scale-95",
+              valeur === v ? "bg-label text-surface font-semibold" : "text-label font-medium hover:bg-remplissage")}>
+            {l}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // Interrupteur iOS
 export function Interrupteur({ actif, onChange, label }) {
   return (

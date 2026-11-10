@@ -1,8 +1,10 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import clsx from "clsx";
 import { getFormeJour } from "../api";
 import { fmtDate, nombre, sportInfo } from "../carnet";
+import Aide from "./Aide";
 
 const NIVEAUX = {
   vert:   { texte: "text-ios-green",  fond: "bg-ios-green",  teinte: "bg-ios-green/[0.12]" },
@@ -28,9 +30,59 @@ function Ecart({ label, valeur, unite, ecart, bon }) {
   );
 }
 
+const SENS = {
+  bon: { texte: "text-ios-green", fond: "bg-ios-green", signe: "✓" },
+  neutre: { texte: "text-label-2", fond: "bg-label-3", signe: "•" },
+  moyen: { texte: "text-ios-orange", fond: "bg-ios-orange", signe: "!" },
+  mauvais: { texte: "text-ios-red", fond: "bg-ios-red", signe: "!" },
+};
+
+// Position d'une mesure par rapport à la normale : curseur sur une échelle de −3 à +3 écarts-types
+function Echelle({ z, sens }) {
+  if (z == null) return null;
+  const pos = Math.max(0, Math.min(100, ((z + 3) / 6) * 100));
+  return (
+    <div className="relative h-1.5 rounded-full bg-remplissage mt-2" role="img"
+      aria-label={`${nombre(Math.abs(z), 1)} écart-type ${z < 0 ? "sous" : "au-dessus de"} ta normale`}>
+      <span className="absolute inset-y-0 left-[33.3%] right-[33.3%] bg-label-3/40 rounded-full" />
+      <span className={clsx("absolute top-1/2 w-3 h-3 -mt-1.5 -ml-1.5 rounded-full ring-2 ring-surface", SENS[sens].fond)} style={{ left: `${pos}%` }} />
+    </div>
+  );
+}
+
+// « Pourquoi ? » : chaque mesure du matin, sa valeur, ta normale et ce qu'elle pèse dans le score
+function Pourquoi({ lignes }) {
+  return (
+    <div className="ml-6 rounded-xl bg-fond/70 divide-y divide-separateur">
+      {lignes.map((l) => {
+        const s = SENS[l.sens] ?? SENS.neutre;
+        return (
+          <div key={l.cle} className="px-3 py-2.5">
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-[15px] font-semibold min-w-0 truncate">
+                <span aria-hidden className={clsx("inline-block w-4 font-bold", s.texte)}>{s.signe}</span>{l.label}
+              </span>
+              <span className="font-rounded text-[15px] font-bold chiffres shrink-0">{l.valeur}</span>
+            </div>
+            <p className="text-[13px] leading-[18px] text-label-2 pl-4">
+              <span className={s.texte}>{l.texte}</span>{l.ref ? ` · ${l.ref}` : ""}
+            </p>
+            <div className="pl-4"><Echelle z={l.z} sens={l.sens ?? "neutre"} /></div>
+          </div>
+        );
+      })}
+      <p className="px-3 py-2 text-[12px] leading-4 text-label-2 flex items-start gap-1">
+        <span className="flex-1">La zone grise est ta plage habituelle (60 jours). Le score vient de la VFC et de la FC de repos ; la nuit et la charge aident à l'interpréter.</span>
+        <Aide sujet="recuperation" />
+      </p>
+    </div>
+  );
+}
+
 // Pastille du matin : VFC et FC repos du jour comparées à la référence personnelle (~2 mois)
 export default function FormeJour() {
   const { data: f } = useQuery({ queryKey: ["forme-jour"], queryFn: getFormeJour, staleTime: 5 * 60_000 });
+  const [pourquoi, setPourquoi] = useState(false);
   if (!f || (!f.statut && !f.derniere_mesure)) return null;
   const n = f.statut ? NIVEAUX[f.statut] : null;
   const suggestion = f.seances_restantes.find((s) => s.id === f.suggestion_id);
@@ -73,6 +125,16 @@ export default function FormeJour() {
             ecart={f.fc_ecart} bon={f.fc_ecart <= 0} />
         </div>
       )}
+      {n && f.explication?.length > 0 && (
+        <>
+          <button type="button" onClick={() => setPourquoi((v) => !v)} aria-expanded={pourquoi}
+            className="ml-6 btn-texte text-[14px] inline-flex items-center gap-1">
+            {pourquoi ? "Masquer le détail" : "Pourquoi ?"}
+            <svg viewBox="0 0 24 24" className={clsx("w-3.5 h-3.5 transition-transform", pourquoi && "rotate-180")} fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+          </button>
+          {pourquoi && <Pourquoi lignes={f.explication} />}
+        </>
+      )}
       {mesureHier && <p className="pl-6 text-[12px] text-label-2">Mesure d'hier : celle de ce matin n'est pas encore arrivée.</p>}
 
       {f.vfc_basse_jours >= 3 && (
@@ -82,7 +144,7 @@ export default function FormeJour() {
       )}
 
       {f.alertes_nuit?.alerte && (
-        <Link to="/analyses" className="ml-6 block rounded-xl bg-ios-red/[0.12] px-3 py-2 text-[13px] leading-[18px] text-ios-red active:opacity-60">
+        <Link to="/analyses#signaux" className="ml-6 block rounded-xl bg-ios-red/[0.12] px-3 py-2 text-[13px] leading-[18px] text-ios-red active:opacity-60">
           <span className="font-semibold">Nuit inhabituelle</span> · {f.alertes_nuit.signaux.filter((x) => x.alerte)
             .map((x) => `${x.label.toLowerCase()} ${nombre(x.valeur, 1)} ${x.unite} (normale ${nombre(x.ref, 1)})`).join(", ")}
           <span className="block mt-0.5">{f.alertes_nuit.message}</span>

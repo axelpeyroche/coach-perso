@@ -154,7 +154,7 @@ export default function SommeilNuit() {
               il peut différer de quelques points de l'app Santé, et le détail « Interruptions » n'est pas disponible.
               Le temps « Éveillé » (champ « Awake Time » de Companion, en rouge) n'est pas compté dans la durée de la nuit ;
               ses pourcentages se calculent sur la nuit entière, éveil compris. C = heure du coucher, R = heure du réveil.</p>
-            <Link to="/analyses" onClick={() => setInfos(false)} className="inline-block text-brand">Voir l'évolution dans Analyses →</Link>
+            <Link to="/analyses#sommeil" onClick={() => setInfos(false)} className="inline-block text-brand">Voir l'évolution dans Analyses →</Link>
           </div>
         </Feuille>
       )}
