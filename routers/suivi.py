@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 import bilan_service as bs
+import periodes_service as pe
 import suivi_service as sv
 from database import obtenir_session
 from deps import get_current_user, limiter
@@ -37,6 +38,41 @@ def bilan(annee: Optional[int] = Query(None, ge=2000, le=2100),
     res = bs.bilan(db, current_user, annee or sv.aujourdhui(current_user).year)
     db.commit()  # meilleurs efforts mémorisés
     return res
+
+
+@router.get("/api/bilan/periode", summary="Bilan d'une semaine ou d'un mois, comparé aux périodes précédentes")
+def bilan_periode(type: str = Query("semaine", pattern="^(semaine|mois)$"),
+                  ref: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}(-\d{2})?$"),
+                  current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
+    limiter(f"periode:{current_user.id}", 60, 60)
+    try:
+        res = pe.bilan_periode(db, current_user, type, ref)
+    except ValueError:
+        raise HTTPException(400, "Période invalide")
+    db.commit()  # meilleurs efforts mémorisés
+    return res
+
+
+@router.get("/api/calendrier", summary="Calendrier d'un mois : séances faites et prévues, charge du jour, marqueurs")
+def calendrier(mois: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}$"),
+               current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
+    try:
+        res = pe.calendrier(db, current_user, mois)
+    except ValueError:
+        raise HTTPException(400, "Mois invalide")
+    db.commit()  # rapprochements du plan
+    return res
+
+
+@router.get("/api/jalons", summary="Séries de semaines actives, cumul de l'année et paliers franchis")
+def jalons(current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
+    return pe.jalons(db, current_user)
+
+
+@router.get("/api/exploration", summary="Kilomètres de chemins parcourus pour la première fois, mois par mois")
+def exploration(current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
+    limiter(f"exploration:{current_user.id}", 12, 60)
+    return pe.exploration(db, current_user)
 
 
 # ---------------------------------------------------------------------------

@@ -522,3 +522,27 @@
 .maplibregl-pseudo-fullscreen .maplibregl-ctrl-top-right,
 .maplibregl-pseudo-fullscreen .champs-carte { top: calc(var(--haut-lisible) + 8px); }
 .maplibregl-pseudo-fullscreen .maplibregl-ctrl-bottom-right { bottom: env(safe-area-inset-bottom); }
+
+/* ── Impression : export PDF d'un bilan ou d'une fiche ─────────────────── */
+@media print {
+  @page { margin: 12mm; }
+  :root, .dark {
+    --blue: 0 122 255; --green: 52 199 89; --red: 255 59 48; --orange: 255 149 0;
+    --bg: 255 255 255; --surface: 255 255 255; --surface-2: 242 242 247;
+    --label: 0 0 0; --label-2: 60 60 67; --label-3: 60 60 67;
+    --fill: 118 118 128; --fill-a: 0.12; --sep: 60 60 67; --sep-a: 0.18;
+    color-scheme: light;
+  }
+  html, body { background: #fff !important; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; animation: none !important; transition: none !important; }
+  aside, .barre-nav, .barre-onglets, .feuille-barre, .no-print { display: none !important; }
+  main { margin: 0 !important; padding: 0 !important; min-height: 0 !important; }
+  .card { break-inside: avoid; box-shadow: none !important; border: 0.5px solid rgb(60 60 67 / 0.25); }
+  /* Une fiche ouverte s'imprime seule, dépliée */
+  body:has(.voile) #root { display: none !important; }
+  .voile { position: static !important; display: block !important; background: none !important; }
+  .feuille, .feuille.feuille-large {
+    max-width: none !important; width: 100% !important; height: auto !important; max-height: none !important;
+    overflow: visible !important; box-shadow: none !important; border-radius: 0 !important; background: #fff !important;
+  }
+}

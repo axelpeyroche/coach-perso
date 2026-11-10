@@ -11,6 +11,7 @@ import { allureAjustee, Decoupage, enMouvement, MemeParcours, Partager, Segments
 import { BilanSeance, Intervalles, PrevuRealise } from "./FicheSeance";
 import { Portion, Repartition } from "./FicheAnalyse";
 import Comparer from "./Comparaison";
+import { BoutonPDF } from "./BilanBlocs";
 import { Segmente } from "./ui";
 import { axeX, axeY, grille } from "./graphiques";
 
@@ -386,7 +387,10 @@ export default function FicheActivite({ activite: initiale, onClose }) {
           {flux?.avertissement && <p className="text-[12px] text-ios-orange px-1">{flux.avertissement}</p>}
         </section>
 
-        <Partager activite={a} avecTrace={!!det.trace} flux={flux} />
+        <div className="no-print grid gap-2.5 sm:grid-cols-2">
+          <Partager activite={a} avecTrace={!!det.trace} flux={flux} />
+          <BoutonPDF />
+        </div>
 
         {a.notes && (
           <div className="card p-4">

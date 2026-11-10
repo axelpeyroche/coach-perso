@@ -1,13 +1,14 @@
 import { useState, useMemo, useEffect } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import Card from "../components/Card";
 import Page from "../components/Page";
-import { BoutonAjout } from "../components/ui";
+import { BoutonAjout, Segmente } from "../components/ui";
+import CalendrierCarnet from "../components/CalendrierCarnet";
 import ActiviteLigne from "../components/ActiviteLigne";
 import ModalActivite from "../components/ModalActivite";
 import FicheActivite from "../components/FicheActivite";
-import api, { getActivites } from "../api";
+import api, { getActivite, getActivites } from "../api";
 import { CRITERES_VIDES, PanneauFiltres, RETRAIT, detailFiltre, nbActifs, resume, useFiltresCarnet, versParams } from "../components/FiltresCarnet";
 import { SPORTS, nombre, fmtDuree } from "../carnet";
 
@@ -33,6 +34,11 @@ export default function Carnet() {
   const [limite, setLimite] = useState(PAGE);
   const [modal, setModal] = useState(undefined); // undefined = fermé, null = création, objet = édition
   const [fiche, setFiche] = useState(null);
+  const [params, setParams] = useSearchParams();
+  const calendrier = params.get("vue") === "calendrier";
+  const ouvrir = async (id) => {
+    try { setFiche(await getActivite(id)); } catch { /* séance supprimée entre-temps */ }
+  };
 
   const [criteres, setCriteres] = useState(CRITERES_VIDES);
   const [panneau, setPanneau] = useState(false);
@@ -92,6 +98,10 @@ export default function Carnet() {
       sousTitre={data ? `${data.total} activité${data.total > 1 ? "s" : ""}` : "Toutes tes séances"}
       action={<BoutonAjout onClick={() => setModal(null)} label="Ajouter une activité" />}>
 
+      <Segmente className="w-full md:w-auto" options={[["liste", "Liste"], ["calendrier", "Calendrier"]]} valeur={calendrier ? "calendrier" : "liste"}
+        onChange={(v) => setParams(v === "calendrier" ? { vue: v } : {}, { replace: true })} />
+
+      {calendrier ? <CalendrierCarnet onFiche={ouvrir} /> : (<>
       <div className="space-y-3">
         <div className="flex items-center gap-2">
           <label className="relative block flex-1 min-w-0 md:max-w-sm">
@@ -203,6 +213,7 @@ export default function Carnet() {
           )}
         </div>
       )}
+      </>)}
 
       {modal !== undefined && <ModalActivite activite={modal} onClose={() => setModal(undefined)} />}
       {fiche && <FicheActivite key={fiche.id} activite={fiche} onClose={() => setFiche(null)} />}

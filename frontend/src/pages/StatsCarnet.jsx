@@ -9,6 +9,7 @@ import Card from "../components/Card";
 import Page from "../components/Page";
 import StatTile from "../components/StatTile";
 import { FormeGraphiques } from "../components/Forme";
+import Jalons from "../components/Jalons";
 import { Section, Segmente } from "../components/ui";
 import { axeX, axeY, grille, curseur, InfoBulle, Legende } from "../components/graphiques";
 import api, { getStatsCarnet } from "../api";
@@ -149,7 +150,7 @@ export default function StatsCarnet() {
   return (
     <Page titre="Statistiques" large
       sousTitre={s.premiere_activite ? `Depuis le ${fmtDate(s.premiere_activite)}` : null}
-      action={<span className="flex gap-4"><Link to="/records" className="btn-texte">Records</Link><Link to="/analyses" className="btn-texte md:hidden">Analyses</Link></span>}>
+      action={<span className="flex gap-4"><Link to="/bilan?vue=semaine" className="btn-texte">Bilans</Link><Link to="/records" className="btn-texte">Records</Link><Link to="/analyses" className="btn-texte md:hidden">Analyses</Link></span>}>
       {filtres}
 
       {aucune ? (
@@ -290,6 +291,8 @@ export default function StatsCarnet() {
           </Section>
 
           {!sport && <FormeGraphiques />}
+
+          {!sport && <Jalons />}
 
           <Section titre="Habitudes">
             <div className="grid gap-3 lg:grid-cols-2">

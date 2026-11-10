@@ -361,4 +361,46 @@ export const GLOSSAIRE = {
     calcul: "Entre les deux bornes : distance et durée écoulées, allure (durée ÷ distance, arrêts compris), moyenne de la FC et de la cadence, et dénivelé positif sur l'altitude lissée.",
     lire: "Règle les deux curseurs, ou glisse la souris sur une courbe à l'ordinateur : la portion est grisée sur toutes les courbes. « En faire un segment » la garde : chaque nouveau passage au même endroit y sera chronométré et comparé.",
   },
+  bilan_periode: {
+    titre: "Bilan de la semaine ou du mois",
+    quoi: "Ce que tu as fait sur la période : volume, charge, intensité, sommeil, faits marquants et liste des séances.",
+    calcul: "Tout est recalculé à partir du carnet. La comparaison se fait avec la période précédente et avec la moyenne des quatre précédentes ; si la période est en cours, on compare à la même avancée (du lundi au même jour, ou du 1er au même quantième).",
+    lire: "Une semaine à plus de 130 % de la moyenne des quatre précédentes est une hausse nette : surveille la suivante. À moins de 70 %, c'est une semaine allégée, utile après un bloc chargé. « Exporter en PDF » ouvre l'impression du navigateur : choisis « Enregistrer au format PDF ».",
+  },
+  bilan_intensite: {
+    titre: "Répartition de l'intensité",
+    quoi: "La part du temps passée en facile, en modéré et en dur sur la période.",
+    calcul: "Pour chaque séance avec la fréquence cardiaque, le temps est réparti selon tes zones (facile = Z1–Z2, modéré = Z3, dur = Z4 et plus). Sans fréquence cardiaque, la séance est classée d'un bloc d'après l'effort ressenti. Les séances sans l'un ni l'autre ne sont pas comptées.",
+    lire: "En endurance, un repère courant est d'environ 80 % de facile. Beaucoup de modéré et peu de facile : tes footings sont sans doute trop rapides.",
+  },
+  calendrier: {
+    titre: "Calendrier",
+    quoi: "Le mois d'un coup d'œil : séances faites, séances prévues, marqueurs du jour (maladie, voyage…) et charge de chaque journée.",
+    calcul: "Le fond bleu d'une case suit la charge du jour, rapportée à tes grosses journées des douze derniers mois : plus il est soutenu, plus la journée a pesé. Une séance prévue déjà réalisée n'apparaît qu'une fois, comme séance faite.",
+    lire: "Touche un jour pour voir le détail. Une séance prévue se déplace : à l'ordinateur, glisse-la sur un autre jour ; au téléphone, « Déplacer » puis touche le jour voulu. Le total de chaque semaine (à droite sur grand écran) ouvre son bilan.",
+  },
+  jalons: {
+    titre: "Caps franchis",
+    quoi: "Tes cumuls depuis ta première séance et le prochain chiffre rond à atteindre.",
+    calcul: "Kilomètres, dénivelé, heures et séances sont additionnés sur tout le carnet. La date estimée du prochain cap prolonge ton rythme des dernières semaines ; elle n'apparaît pas si ce rythme est trop faible pour être parlant.",
+    lire: "C'est un repère de constance, pas un objectif : ne rallonge pas une sortie pour franchir un cap.",
+  },
+  serie_semaines: {
+    titre: "Semaines actives d'affilée",
+    quoi: "Le nombre de semaines consécutives avec au moins une séance.",
+    calcul: "Les semaines vont du lundi au dimanche. La semaine en cours ne casse pas la série tant qu'elle n'est pas finie.",
+    lire: "La régularité compte plus que les grosses semaines isolées. Une semaine très légère suffit à garder le fil : inutile de forcer quand tu es malade ou en voyage.",
+  },
+  cumul_annuel: {
+    titre: "Cumul de l'année",
+    quoi: "Les kilomètres de l'année, jour après jour, comparés à l'an dernier et à ton objectif annuel s'il existe.",
+    calcul: "La courbe bleue additionne les distances depuis le 1er janvier. La grise fait de même pour l'année précédente. La ligne orange relie zéro à la cible de l'objectif au 31 décembre. La projection prolonge ton rythme récent jusqu'à la fin de l'année.",
+    lire: "Au-dessus de la ligne orange, tu es en avance sur l'objectif. L'écart avec l'an dernier se lit à la verticale d'une même date.",
+  },
+  exploration: {
+    titre: "Exploration",
+    quoi: "La longueur de chemins parcourus pour la première fois.",
+    calcul: "Le terrain est découpé en mailles d'une centaine de mètres. Chaque tracé GPS est lu dans l'ordre des dates : les mailles jamais traversées auparavant comptent comme nouvelles, et la distance parcourue dedans est additionnée. Seules les séances avec un tracé comptent.",
+    lire: "Un mois à 0 km nouveau n'a rien d'un problème : c'est juste un mois sur tes parcours habituels. À une centaine de mètres près, deux sentiers parallèles très proches peuvent être confondus.",
+  },
 };

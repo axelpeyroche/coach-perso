@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 import animations as an
 import carnet_service as cs
+import periodes_service as pe
 import pictogrammes as pg
 from database import obtenir_session
 from deps import get_current_user
@@ -76,6 +77,8 @@ class MajPrevueSchema(BaseModel):
     delier: bool = False
     # Séance guidée terminée (mode « séance en cours ») ; null l'efface
     deroule: Optional[dict] = None
+    # Déplacement dans le calendrier
+    jour: Optional[date] = None
 
 
 def _items(db: Session, user: Utilisateur, seances: list[SeancePrevueSchema]) -> list[dict]:
@@ -230,6 +233,11 @@ def modifier_prevue(
         p.statut = payload.statut
     if "commentaire" in champs:
         p.commentaire = (payload.commentaire or "").strip() or None
+    if payload.jour:
+        try:
+            pe.deplacer_prevue(db, current_user, p, payload.jour)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
     if "deroule" in champs:
         brut = json.dumps(payload.deroule, ensure_ascii=False) if payload.deroule else None
         if brut and len(brut) > 50_000:
