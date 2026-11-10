@@ -17,6 +17,7 @@ import { axeX, axeY, grille, curseur, InfoBulle, Legende, GRIS } from "../compon
 import PoidsAnalyse from "../components/Poids";
 import { JournalDouleurs, JoursMarques } from "../components/Corps";
 import { ProfilAthlete, RadarProfil, Musculation } from "../components/Capacites";
+import { Tests, Prediction } from "../components/CapacitesTests";
 import { CourbeAllure, ProfilVitesse, EquilibreCharges, Pentes, SeuilAerobie, Reperes, Simulateur } from "../components/CapacitesAvancees";
 import { RegulariteSommeil, RecupFc, AsymetrieMarche } from "../components/MesuresCompanion";
 import {
@@ -1558,6 +1559,7 @@ const ANCRES = {
   efforts: "capacites", efficacite: "capacites", vma: "capacites", zones: "capacites",
   profil_athlete: "capacites", muscu: "capacites", courbe_allure: "capacites", profil_vitesse: "capacites",
   charges_equilibre: "capacites", pentes: "capacites", seuil_aerobie: "capacites", reperes: "capacites", simulateur: "capacites",
+  tests: "capacites", prediction_course: "capacites",
   recuperation: "corps", signaux: "corps", pas: "corps", poids: "corps", marqueurs: "corps", douleurs: "corps",
   tendance_vfc: "corps", effet_nuit: "corps", temps_recuperation: "corps", chaleur: "corps", saisons: "corps", composition: "corps",
   dette: "sommeil", regularite: "sommeil", fenetre: "sommeil",
@@ -1649,6 +1651,10 @@ export default function Analyses() {
               <Ancre id="reperes"><Reperes r={a.capacites?.reperes} /></Ancre>
             </Section>
           </Ancre>
+          <Section titre="Tests et prédiction">
+            <Ancre id="tests"><Tests t={a.capacites?.tests} /></Ancre>
+            <Ancre id="prediction_course"><Prediction p={a.capacites?.prediction} /></Ancre>
+          </Section>
           <Section titre="Course à pied">
             <Ancre id="vma"><Vma v={a.vma} /></Ancre>
             <Ancre id="efforts" className="space-y-2.5"><EffortsDuree e={a.efforts_duree} courbe={a.capacites?.courbe} /></Ancre>

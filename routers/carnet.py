@@ -855,6 +855,27 @@ def modifier_objectif(
     return cs.progression_objectif(o, _activites(db, current_user.id))
 
 
+class ParcoursObjectif(BaseModel):
+    itineraire_id: Optional[int] = None
+
+
+@router.put("/api/objectifs/{objectif_id}/parcours", summary="Lie (ou délie) un parcours enregistré à un objectif de course")
+def lier_parcours_objectif(
+    objectif_id: int,
+    payload: ParcoursObjectif,
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(obtenir_session),
+):
+    from models import ItineraireFavori
+    o = _objectif_utilisateur(db, current_user, objectif_id)
+    if payload.itineraire_id is not None and not db.query(ItineraireFavori.id).filter(
+            ItineraireFavori.id == payload.itineraire_id, ItineraireFavori.utilisateur_id == current_user.id).first():
+        raise HTTPException(404, "Parcours introuvable")
+    o.itineraire_id = payload.itineraire_id
+    db.commit()
+    return {"id": o.id, "itineraire_id": o.itineraire_id}
+
+
 @router.delete("/api/objectifs/{objectif_id}", summary="Supprime un objectif")
 def supprimer_objectif(
     objectif_id: int,

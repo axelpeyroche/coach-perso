@@ -143,6 +143,31 @@ def creer_prevue(
     return _une(db, p)
 
 
+class TestPlanifie(BaseModel):
+    cle: str = Field(..., max_length=30)
+    jour: date
+
+
+@router.post("/api/plan/tests", summary="Planifie un test guidé (demi-Cooper, seuil, allure critique, dérive, tractions)")
+def planifier_test(
+    payload: TestPlanifie,
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(obtenir_session),
+):
+    import tests_service
+    auj = date.today()
+    if not auj <= payload.jour <= auj + timedelta(days=366):
+        raise HTTPException(422, "Choisis une date entre aujourd'hui et dans un an.")
+    item = tests_service.seance(payload.cle, payload.jour)
+    if not item:
+        raise HTTPException(404, "Test inconnu")
+    cs.enregistrer_plan(db, current_user.id, [item])
+    db.commit()
+    p = db.query(SeancePrevue).filter(SeancePrevue.utilisateur_id == current_user.id,
+                                      SeancePrevue.id_externe == item["id_externe"]).first()
+    return _une(db, p)
+
+
 @router.post("/api/plan/import", summary="Importe un plan collé depuis n'importe quelle IA (ChatGPT, Gemini, Claude…)")
 def importer_plan(
     payload: ImportPlanSchema,

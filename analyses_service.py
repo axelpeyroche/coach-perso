@@ -1329,6 +1329,11 @@ def calculer_analyses(db: Session, user: Utilisateur, aujourd_hui: Optional[date
     import capacites_avancees
     res["capacites"].update(capacites_avancees.calculer(db, user, acts, mesures, vma, efforts, zones_jour, serie_complete,
                                                         objectifs, auj))
+    import prediction_service
+    import tests_service
+    res["capacites"]["tests"] = tests_service.calculer(db, user, acts, vma, res["capacites"].get("musculation"), auj)
+    res["capacites"]["prediction"] = prediction_service.calculer(db, user, acts, vma, res["course"], res["capacites"].get("pentes"),
+                                                                 objectifs, auj)
     import essentiel_service
     res["essentiel"] = essentiel_service.essentiel(res)
     return res

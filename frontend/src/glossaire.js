@@ -313,4 +313,16 @@ export const GLOSSAIRE = {
     calcul: "Même calcul que la courbe de forme : la forme suit la charge sur 42 jours, la fatigue sur 7 jours, la fraîcheur est leur différence. Les séances du plan sont reprises, puis ta charge habituelle. Affûtage 1 semaine : −40 % les 7 derniers jours. Affûtage 2 semaines : −25 % puis −50 %.",
     lire: "Le jour d'une course, vise « frais » : une fraîcheur positive sans perdre plus de 5 à 10 % de forme. « Très frais » avec une forme qui chute signifie un affûtage trop long. C'est un modèle simple : il ignore le sommeil, le stress et la qualité des séances.",
   },
+  tests_guides: {
+    titre: "Tests guidés",
+    quoi: "Cinq protocoles simples pour mesurer tes capacités au lieu de les estimer : VMA, seuil, allure critique, endurance fondamentale, force du haut du corps.",
+    calcul: "Demi-Cooper : distance en 6 min ÷ 100 = VMA. 30 min au seuil : allure des 30 meilleures minutes. Allure critique : (distance des 10 min − distance des 3 min) ÷ 7 min ; la réserve D′ est ce qu'il reste des 3 min au-dessus de cette allure. Dérive aérobie : hausse du cœur entre les deux moitiés d'une sortie à allure constante. Tractions : répétitions de la série du test.",
+    lire: "L'écart est calculé avec le test précédent du même type : vert = progrès, rouge = recul. Un test n'a de valeur que refait dans les mêmes conditions (terrain, fraîcheur, météo). Un test passé d'âge est marqué « à refaire » : tes allures d'entraînement reposent alors sur une mesure ancienne.",
+  },
+  prediction_course: {
+    titre: "Prédiction de course",
+    quoi: "Le temps que tu peux viser sur ta prochaine course, avec une fourchette et l'allure à tenir sur chaque tronçon du parcours.",
+    calcul: "Le tracé est découpé tous les 50 m ; chaque pas est converti en distance équivalente à plat selon sa pente, avec tes propres allures en montée et en descente quand tu as assez de données. Le temps vient de ta VMA et de la part de VMA tenable sur cette durée. Une marge s'ajoute si tes sorties longues sont courtes ou si tu faiblis en fin de sortie. Optimiste = −3 %, prudente = +5 % ou plus quand les données manquent.",
+    lire: "Prends la visée comme plan de course et la prudente comme allure de départ : on rattrape rarement un départ trop rapide. Le tableau donne le temps écoulé à la fin de chaque tronçon. L'estimation ignore les arrêts, la météo, la boue et la technicité : ajoute-les toi-même.",
+  },
 };

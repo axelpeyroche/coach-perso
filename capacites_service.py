@@ -18,6 +18,8 @@ from typing import Optional
 from sqlalchemy.orm import Session
 
 import capacites_avancees
+import prediction_service
+import tests_service
 import carnet_service as cs
 from models import Activite, PoidsUtilisateur, SeancePrevue, Utilisateur
 
@@ -661,6 +663,8 @@ def resume(c: Optional[dict]) -> Optional[dict]:
         "muscu_exercices": [{"nom": e["nom"], "mesure": e["mesure"], "actuel": e["actuel"], "meilleur": e["meilleur"]["valeur"],
                              "seances": e["nb"]} for e in m["exercices"][:10]],
         "avancees": capacites_avancees.resume(c),
+        "tests": tests_service.resume(c.get("tests")),
+        "prediction": prediction_service.resume(c.get("prediction")),
     }
 
 
@@ -688,5 +692,7 @@ def markdown(r: Optional[dict]) -> list[str]:
     for e in r["muscu_exercices"]:
         l.append(f"  - {e['nom']} : {_fr(e['actuel'])} {_MESURES[e['mesure']]}, record {_fr(e['meilleur'])} ({e['seances']} séances)")
     l += capacites_avancees.markdown(r.get("avancees"))
+    l += tests_service.markdown(r.get("tests"))
+    l += prediction_service.markdown(r.get("prediction"))
     l.append("")
     return l

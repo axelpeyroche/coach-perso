@@ -343,6 +343,8 @@ class Objectif(Base):
     metrique: Mapped[Optional[str]] = mapped_column(String(30))  # distance_km | duree_h | dplus_m | nb_seances | valeur_libre
     valeur_cible: Mapped[Optional[float]] = mapped_column(Float)
     valeur_actuelle: Mapped[Optional[float]] = mapped_column(Float, comment="Pour métrique valeur_libre, saisie à la main")
+    # Parcours enregistré (itineraires_favoris.id) lié à la course, pour la prédiction par tronçon
+    itineraire_id: Mapped[Optional[int]] = mapped_column(Integer)
     unite: Mapped[Optional[str]] = mapped_column(String(30))
     statut: Mapped[str] = mapped_column(String(20), default="actif")  # actif | atteint | abandonne
     resultat_temps_sec: Mapped[Optional[int]] = mapped_column(Integer)

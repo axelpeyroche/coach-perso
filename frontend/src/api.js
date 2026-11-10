@@ -182,6 +182,8 @@ export const modifierPrevue = (id, payload) => api.patch(`/plan/${id}`, payload)
 export const getPictogrammes = () => api.get("/pictogrammes").then((r) => r.data);
 export const getAnimations = () => api.get("/animations").then((r) => r.data);
 export const supprimerPrevue = (id) => api.delete(`/plan/${id}`).then((r) => r.data);
+export const planifierTest = (payload) => api.post("/plan/tests", payload).then((r) => r.data);
+export const lierParcoursObjectif = (id, itineraire_id) => api.put(`/objectifs/${id}/parcours`, { itineraire_id }).then((r) => r.data);
 export const getActivitesProches = (id) => api.get(`/plan/${id}/activites`).then((r) => r.data);
 export const getClaudeToken = () => api.get("/claude/token").then((r) => r.data);
 export const regenererClaudeToken = () => api.post("/claude/token/regenerer").then((r) => r.data);
