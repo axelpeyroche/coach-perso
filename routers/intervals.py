@@ -99,6 +99,15 @@ def synchro_nuit(notifier: bool = Query(False, description="Envoie la notificati
         raise HTTPException(409, "Intervals.icu n'est pas connecté sur ce compte")
     deja = user.notif_matin_le == sv.aujourdhui(user)
     res = _synchroniser(db, user, not deja)  # après la notification du jour : synchro limitée (1 / 15 min)
+    # Sauvegarde hebdomadaire du compte : faite ici, au premier passage une fois les 7 jours écoulés
+    try:
+        import sauvegarde_service
+        if sauvegarde_service.due(db, user.id):
+            res["sauvegarde"] = sauvegarde_service.creer(db, user)["cree_le"]
+            db.commit()
+    except Exception:
+        db.rollback()
+        _log.exception("Sauvegarde hebdomadaire en échec")
     # Synchro du matin (tâche toutes les 30 min) : forme du jour, alerte VFC et records battus,
     # envoyés une seule fois par jour, à partir de l'heure choisie dans le profil
     if not notifier and not sv.notif_matin_due(user):

@@ -279,7 +279,7 @@ def _alerte_sortie_longue(db: Session, user: Utilisateur, auj: date) -> Optional
 
 
 def alertes(db: Session, user: Utilisateur, auj: Optional[date] = None) -> dict:
-    a = an.calculer_analyses(db, user, auj)
+    a = an.calculer_analyses(db, user, auj) if auj else an.analyses_du_jour(db, user)
     auj = auj or date.today()
     constats = a.get("essentiel") or []
     out = []

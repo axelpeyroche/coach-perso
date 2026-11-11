@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   BarChart, Bar, LineChart, Line, ComposedChart, Area, ScatterChart, Scatter, ZAxis,
@@ -1410,6 +1410,23 @@ const METRIQUES = [
   ["dplus", "D+", "m"], ["charge", "Charge", ""], ["seances", "Séances", ""],
 ];
 
+// Ce qui limite la lecture des analyses : années sans le détail des séances, données tenues à l'écart
+function NoteQualite({ q }) {
+  if (!q) return null;
+  const partielles = q.annees_partielles ?? [];
+  const ecartes = [q.seances_ecartees && `${q.seances_ecartees} séance${q.seances_ecartees > 1 ? "s" : ""}`,
+    q.jours_ecartes && `${q.jours_ecartes} jour${q.jours_ecartes > 1 ? "s" : ""} de mesures`].filter(Boolean);
+  if (!partielles.length && !ecartes.length) return null;
+  return (
+    <p className="px-1 text-[13px] leading-[18px] text-label-2">
+      {partielles.length > 0 && <>Données partielles en {partielles.join(", ")} : peu de séances ont le détail seconde par seconde, les
+        allures et la dérive de ces années sont à lire avec prudence. </>}
+      {ecartes.length > 0 && <>Tenu à l’écart de ces calculs : {ecartes.join(" et ")}. </>}
+      <Link to="/sante-carnet" className="text-brand font-medium">Santé du carnet</Link>
+    </p>
+  );
+}
+
 function Annuel({ y }) {
   const [m, setM] = useState("heures");
   if (!y?.annees?.length) return <Card><Vide>Il manque au moins une année de séances : importe ton historique depuis Profil › Sources pour comparer les années.</Vide></Card>;
@@ -1748,7 +1765,7 @@ export default function Analyses() {
       {onglet === "bilan" && (
         <>
           <Ancre id="plan"><Section titre="Respect du plan"><RespectPlan p={a.plan} /></Section></Ancre>
-          <Ancre id="annuel"><Section titre="Année par année"><Annuel y={a.annuel} /></Section></Ancre>
+          <Ancre id="annuel"><Section titre="Année par année"><Annuel y={a.annuel} /><NoteQualite q={a.qualite} /></Section></Ancre>
           <Ancre id="correlations">
             <Section titre="Corrélations">
               <div className="grid gap-3 md:grid-cols-2">

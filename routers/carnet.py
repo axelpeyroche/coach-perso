@@ -1016,9 +1016,7 @@ def analyses(
     current_user: Utilisateur = Depends(get_current_user),
     db: Session = Depends(obtenir_session),
 ):
-    res = an.calculer_analyses(db, current_user)
-    db.commit()  # meilleurs efforts mémorisés, rapprochements du plan
-    return res
+    return an.analyses_du_jour(db, current_user)   # commit compris : meilleurs efforts mémorisés, rapprochements du plan
 
 
 # ---------------------------------------------------------------------------

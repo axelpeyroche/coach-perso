@@ -21,7 +21,7 @@ from fastapi.responses import JSONResponse
 
 logger = logging.getLogger(__name__)
 
-from routers import auth, carnet, coaching, corps, intervals, itineraires, materiel, plan, suivi, utilisateur
+from routers import auth, carnet, coaching, corps, intervals, itineraires, materiel, plan, qualite, suivi, utilisateur
 
 app = FastAPI(
     title="Carnet — API",
@@ -111,6 +111,7 @@ app.include_router(itineraires.router)
 app.include_router(materiel.router)
 app.include_router(corps.router)
 app.include_router(coaching.router)
+app.include_router(qualite.router)
 
 
 # ---------------------------------------------------------------------------

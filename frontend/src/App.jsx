@@ -25,6 +25,7 @@ const CreerParcours = lazy(() => import("./pages/CreerParcours"));
 const RetourSpotify = lazy(() => import("./pages/RetourSpotify"));
 const Saison = lazy(() => import("./pages/Saison"));
 const Alertes = lazy(() => import("./pages/Alertes"));
+const SanteCarnet = lazy(() => import("./pages/SanteCarnet"));
 const PreparationCourse = lazy(() => import("./pages/PreparationCourse"));
 
 // ── SVG Icons ──────────────────────────────────────────────────────────────
@@ -605,6 +606,7 @@ export default function App() {
                   <Route path="/profil"     element={<Profil theme={theme} setTheme={setTheme} />} />
                   <Route path="/saison"     element={<Saison />} />
                   <Route path="/alertes"    element={<Alertes />} />
+                  <Route path="/sante-carnet" element={<SanteCarnet />} />
                   <Route path="/objectifs/preparation" element={<PreparationCourse />} />
                   <Route path="/spotify"    element={<RetourSpotify />} />
                   <Route path="*"           element={<Navigate to="/" replace />} />

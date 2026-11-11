@@ -1,0 +1,3 @@
+# Outils de développement : tests automatiques des calculs (python -m pytest)
+-r requirements.txt
+pytest==9.2.0

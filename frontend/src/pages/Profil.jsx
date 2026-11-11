@@ -798,6 +798,11 @@ export default function Profil({ theme, setTheme }) {
             <span className="flex-1 text-[17px]">Analyse avec ton IA</span>
             <Chevron />
           </Link>
+          <Link to="/sante-carnet" className="ligne" style={inset}>
+            <Picto couleur="#FF2D55"><path d="M3 12h4l2.5-6 4 12 2.5-6h5" /></Picto>
+            <span className="flex-1 text-[17px]">Santé du carnet</span>
+            <Chevron />
+          </Link>
         </Groupe>
 
         <Apparence theme={theme} setTheme={setTheme} />

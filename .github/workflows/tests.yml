@@ -1,0 +1,24 @@
+name: Tests des calculs
+
+on:
+  push:
+    branches: [master]
+    paths: ["**.py", "requirements*.txt", ".github/workflows/tests.yml"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      # Les tests créent leur propre base SQLite jetable (tests/conftest.py) : aucun secret, aucune vraie base
+      - run: python -m pytest -q

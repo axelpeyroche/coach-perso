@@ -317,3 +317,11 @@ export const getSeancesTypes = () => api.get("/seances-types").then((r) => r.dat
 export const getPreparation = (id) => api.get(`/objectifs/${id}/preparation`).then((r) => r.data);
 export const putPreparation = (id, payload) => api.put(`/objectifs/${id}/preparation`, payload).then((r) => r.data);
 export const putReglageNotif = (cle, actif) => api.put("/push/reglages", { cle, actif }).then((r) => r.data);
+
+// --- Santé du carnet : qualité des données, journal des recalculs, sauvegardes ---
+export const getSanteCarnet = () => api.get("/carnet/sante", { timeout: 60000 }).then((r) => r.data);
+export const getExclusions = () => api.get("/carnet/exclusions").then((r) => r.data);
+export const ecarterDesCalculs = (payload) => api.post("/carnet/exclusions", payload).then((r) => r.data);
+export const reintegrerDansCalculs = (id) => api.delete(`/carnet/exclusions/${id}`).then((r) => r.data);
+export const creerSauvegarde = () => api.post("/carnet/sauvegardes", null, { timeout: 60000 }).then((r) => r.data);
+export const telechargerSauvegarde = (id) => api.get(`/carnet/sauvegardes/${id}`, { responseType: "blob", timeout: 60000 }).then((r) => r.data);

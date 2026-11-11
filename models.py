@@ -17,6 +17,7 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Integer,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
@@ -551,3 +552,49 @@ class Mensuration(Base):
     valeur: Mapped[float] = mapped_column(Float, nullable=False)
     source: Mapped[str] = mapped_column(String(20), nullable=False, default="manuel")
     cree_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+# ---------------------------------------------------------------------------
+# Socle : qualité des données, journal des recalculs, sauvegardes
+# ---------------------------------------------------------------------------
+
+class Exclusion(Base):
+    """Séance ou mesure d'un jour écartée des calculs sans être supprimée ni modifiée.
+    `genre` : activite (activite_id renseigné) ou mesure (type_mesure + jour)."""
+    __tablename__ = "exclusions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    utilisateur_id: Mapped[int] = mapped_column(ForeignKey("utilisateurs.id", ondelete="CASCADE"), nullable=False, index=True)
+    genre: Mapped[str] = mapped_column(String(10), nullable=False)
+    activite_id: Mapped[Optional[int]] = mapped_column(ForeignKey("activites.id", ondelete="CASCADE"), index=True)
+    type_mesure: Mapped[Optional[str]] = mapped_column(String(20))
+    jour: Mapped[Optional[date]] = mapped_column(Date)
+    raison: Mapped[Optional[str]] = mapped_column(String(200))
+    cree_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class JournalCalcul(Base):
+    """Une ligne à chaque fois qu'un repère calculé change (VMA, allure critique, FC au seuil) : avant, après, pourquoi."""
+    __tablename__ = "journal_calculs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    utilisateur_id: Mapped[int] = mapped_column(ForeignKey("utilisateurs.id", ondelete="CASCADE"), nullable=False, index=True)
+    jour: Mapped[date] = mapped_column(Date, nullable=False)
+    cle: Mapped[str] = mapped_column(String(20), nullable=False)   # vma | allure_critique | fc_seuil
+    ancienne: Mapped[Optional[float]] = mapped_column(Float)
+    nouvelle: Mapped[Optional[float]] = mapped_column(Float)
+    cause: Mapped[Optional[str]] = mapped_column(String(300))
+    cree_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+
+class Sauvegarde(Base):
+    """Copie hebdomadaire du compte (JSON compressé, sans les tracés GPS). Les 4 dernières sont gardées."""
+    __tablename__ = "sauvegardes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    utilisateur_id: Mapped[int] = mapped_column(ForeignKey("utilisateurs.id", ondelete="CASCADE"), nullable=False, index=True)
+    cree_le: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    origine: Mapped[str] = mapped_column(String(10), nullable=False, default="auto")   # auto | manuel
+    taille: Mapped[int] = mapped_column(Integer, nullable=False)       # octets compressés
+    resume: Mapped[Optional[str]] = mapped_column(Text)                # JSON : nombre de lignes par table
+    contenu: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)

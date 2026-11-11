@@ -12,6 +12,7 @@ import { BilanSeance, Intervalles, PrevuRealise } from "./FicheSeance";
 import { Portion, Repartition } from "./FicheAnalyse";
 import Comparer from "./Comparaison";
 import { BoutonPDF } from "./BilanBlocs";
+import EcartCalculs from "./EcartCalculs";
 import { Segmente } from "./ui";
 import { axeX, axeY, grille } from "./graphiques";
 
@@ -424,6 +425,7 @@ export default function FicheActivite({ activite: initiale, onClose, voisines, o
         <div className="no-print grid gap-2.5 sm:grid-cols-2">
           <Partager activite={a} avecTrace={!!det.trace} flux={flux} />
           <BoutonPDF />
+          {a.id != null && <EcartCalculs activiteId={a.id} />}
         </div>
 
         {a.notes && (

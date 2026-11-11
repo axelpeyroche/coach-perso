@@ -230,53 +230,8 @@ def patch_fuseau_horaire(
 
 @router.get("/api/utilisateur/export", summary="Exporte toutes les données du compte (portabilité RGPD)")
 def exporter_donnees(current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
-    """Dump générique (colonne par colonne) des données personnelles de l'utilisateur."""
-
-    def _dump(obj):
-        d = {}
-        for col in obj.__table__.columns:
-            v = getattr(obj, col.name)
-            if isinstance(v, (datetime, date)):
-                v = v.isoformat()
-            d[col.name] = v
-        return d
-
-    poids = (
-        db.query(PoidsUtilisateur)
-        .filter_by(utilisateur_id=current_user.id)
-        .order_by(PoidsUtilisateur.enregistre_le)
-        .all()
-    )
-    objectifs = db.query(ObjectifCourse).filter_by(utilisateur_id=current_user.id).all()
-    activites = db.query(Activite).filter_by(utilisateur_id=current_user.id).order_by(Activite.debut).all()
-    objectifs_carnet = db.query(Objectif).filter_by(utilisateur_id=current_user.id).all()
-
-    mesures = (db.query(MesureSante).filter_by(utilisateur_id=current_user.id)
-               .order_by(MesureSante.jour, MesureSante.type).all())
-    nuits = db.query(NuitSommeil).filter_by(utilisateur_id=current_user.id).order_by(NuitSommeil.jour).all()
-    prevues = db.query(SeancePrevue).filter_by(utilisateur_id=current_user.id).order_by(SeancePrevue.jour).all()
-    traces = db.query(TraceGPS).filter_by(utilisateur_id=current_user.id).order_by(TraceGPS.activite_id).all()
-    segments = db.query(Segment).filter_by(utilisateur_id=current_user.id).order_by(Segment.id).all()
-
-    profil = _dump(current_user)
-    for secret in ("password_hash", "strava_access_token", "strava_refresh_token", "intervals_cle",
-                   "import_token", "analyse_token", "claude_token"):
-        profil.pop(secret, None)
-
-    return {
-        "profil": profil,
-        "historique_poids": [_dump(p) for p in poids],
-        "objectifs_course": [_dump(o) for o in objectifs],
-        "activites": [_dump(a) for a in activites],
-        "objectifs": [_dump(o) for o in objectifs_carnet],
-        "mesures_sante": [_dump(m) for m in mesures],
-        "nuits_sommeil": [_dump(n) for n in nuits],
-        "seances_prevues": [_dump(p) for p in prevues],
-        "traces_gps": [_dump(t) for t in traces],  # points : JSON [[lat, lon, alt, s], …] tel que stocké
-        "segments": [_dump(s) for s in segments],
-        "exporte_le": datetime.utcnow().isoformat(timespec="seconds") + "Z",
-        "version": 2,
-    }
+    import sauvegarde_service
+    return sauvegarde_service.exporter(db, current_user)
 
 
 # Tables de l'ancien programme EPC, plus mappées mais toujours en base avec une
@@ -336,6 +291,9 @@ def supprimer_compte(payload: SuppressionCompteSchema, current_user: Utilisateur
     db.query(ItineraireFavori).filter_by(utilisateur_id=current_user.id).delete()
     db.query(Pictogramme).filter_by(utilisateur_id=current_user.id).delete()
     db.query(Animation).filter_by(utilisateur_id=current_user.id).delete()
+    from models import Exclusion, JournalCalcul, Sauvegarde
+    for modele in (Exclusion, JournalCalcul, Sauvegarde):
+        db.query(modele).filter_by(utilisateur_id=current_user.id).delete()
     db.delete(current_user)
     db.commit()
     return {"ok": True}
