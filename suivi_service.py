@@ -506,7 +506,7 @@ def rappel_poids_du(db: Session, user: Utilisateur) -> bool:
 # Notifications réglables une par une (toutes actives par défaut)
 NOTIFS = {
     "forme": ("Forme du matin", "Ton état du jour et le conseil pour la séance."),
-    "seance": ("Séance du jour", "Ce qui est prévu aujourd'hui, avec les zones à viser."),
+    "seance": ("Séances de la semaine", "Ce qu'il reste à faire cette semaine, avec les zones à viser."),
     "bilan": ("Bilan de la semaine", "Le lundi matin : la semaine écoulée en quelques chiffres."),
     "fc_repos": ("FC de repos qui décroche", "Deux matins de suite à 5 battements ou plus au-dessus de ta normale."),
     "vfc": ("VFC en baisse", "Trois mesures d'affilée sous ta normale."),
@@ -548,13 +548,16 @@ def _zone_texte(zones: dict, bas: int, haut: int) -> str:
     return nom
 
 
-def seance_du_jour_texte(db: Session, user: Utilisateur, auj: Optional[date] = None) -> Optional[tuple[str, str]]:
-    """(titre, corps) de la notification « séance du jour », ou None si rien n'est prévu."""
+def seances_semaine_texte(db: Session, user: Utilisateur, auj: Optional[date] = None) -> Optional[tuple[str, str]]:
+    """(titre, corps) de la notification des séances qu'il reste à faire cette semaine, ou None.
+    Pas de « séance du jour » : le jour écrit dans le plan ne compte pas, l'athlète choisit quand les faire."""
     auj = auj or aujourdhui(user)
-    prevues = (db.query(SeancePrevue)
-               .filter(SeancePrevue.utilisateur_id == user.id, SeancePrevue.jour == auj,
-                       SeancePrevue.statut != "sautee", SeancePrevue.activite_id.is_(None))
-               .order_by(SeancePrevue.ordre, SeancePrevue.id).all())
+    lundi = auj - timedelta(days=auj.weekday())
+    prevues = [p for p in (db.query(SeancePrevue)
+               .filter(SeancePrevue.utilisateur_id == user.id, SeancePrevue.jour >= lundi,
+                       SeancePrevue.jour <= lundi + timedelta(days=6), SeancePrevue.activite_id.is_(None))
+               .order_by(SeancePrevue.jour, SeancePrevue.ordre, SeancePrevue.id).all())
+               if cs.statut_prevue(p, auj) == "a_venir"]
     if not prevues:
         return None
     endurance = [p for p in prevues if p.sport in cs.SPORTS_PIED or p.sport == "velo"]
@@ -574,7 +577,7 @@ def seance_du_jour_texte(db: Session, user: Utilisateur, auj: Optional[date] = N
             cible = (_zone_texte(zones, 1, 2) if i <= 3 else _zone_texte(zones, 2, 3) if i < 7
                      else _zone_texte(zones, 4, 5) + " sur les efforts")
         lignes.append(" · ".join(x for x in [p.titre, duree, cible] if x))
-    titre = "Séance du jour" if len(prevues) == 1 else f"{len(prevues)} séances aujourd'hui"
+    titre = f"{len(prevues)} séance{'s' if len(prevues) > 1 else ''} à faire cette semaine"
     return titre, "\n".join(lignes)
 
 
@@ -626,7 +629,7 @@ def notifications_matin(db: Session, user: Utilisateur, depuis: Optional[datetim
         envoyees += envoyer(db, user.id, titre, corps, "/", "forme",
                             actions=[("/plan", "Voir le plan"), ("/analyses", "Mes analyses")])
     if actif["seance"]:
-        seance = seance_du_jour_texte(db, user)
+        seance = seances_semaine_texte(db, user)
         if seance:
             envoyees += envoyer(db, user.id, seance[0], seance[1], "/plan?guidee=1", "seance",
                                 actions=[("/plan?guidee=1", "Ouvrir la séance"), ("/carnet?nouvelle=1", "Noter une séance")])

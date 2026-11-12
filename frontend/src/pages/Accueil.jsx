@@ -17,20 +17,15 @@ import SommeilNuit from "../components/SommeilNuit";
 import { AlerteMarche } from "../components/MesuresCompanion";
 import ZonesCardiaques from "../components/ZonesCardiaques";
 import { axeX, axeY, grille, curseur, InfoBulle, Graphique } from "../components/graphiques";
-import { ProchainesSeances, Pastilles } from "./Plan";
+import { ProchainesSeances } from "./Plan";
 import { useAuth } from "../AuthContext";
-import { getActivites, getStatsCarnet, getAlertes, getPlan } from "../api";
+import { getActivites, getStatsCarnet, getAlertes } from "../api";
 import { PastilleTon } from "./Alertes";
-import { nombre, fmtDistance, sportInfo } from "../carnet";
+import { nombre, fmtDistance } from "../carnet";
 import { Section, BoutonAjout, Chevron, Interrupteur } from "../components/ui";
-import { usePreferences, modifierPreferences, debutSemaine, aujourdhuiIso } from "../preferences";
+import { usePreferences, modifierPreferences, debutSemaine } from "../preferences";
 
 const ZONE_COULEUR = { "sous-charge": "blue", optimale: "green", vigilance: "orange", risque: "red" };
-const jourPlus = (isoJour, n) => {
-  const d = new Date(`${isoJour}T12:00`);
-  d.setDate(d.getDate() + n);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-};
 
 // Encart du centre d'alertes : la plus importante, et combien d'autres attendent
 function EncartAlertes() {
@@ -48,55 +43,6 @@ function EncartAlertes() {
       </span>
       <Chevron />
     </Link>
-  );
-}
-
-// Séance(s) prévue(s) aujourd'hui, tirées du plan de la semaine
-const ETAT_SEANCE = {
-  realisee: ["✓ Faite", "text-ios-green"], sautee: ["Sautée", "text-label-2"], manquee: ["! Non faite", "text-ios-orange"],
-};
-function SeanceDuJour({ depuis }) {
-  const jusqu = jourPlus(depuis, 6);
-  const { data } = useQuery({ queryKey: ["plan", depuis, jusqu], queryFn: () => getPlan(depuis, jusqu) });
-  if (!data) return <div className="card h-[72px] squelette" aria-hidden />;
-  const auj = aujourdhuiIso();
-  const duJour = data.seances.filter((s) => s.jour === auj);
-  if (!duJour.length) {
-    const suivante = data.seances.find((s) => s.jour > auj && s.statut !== "sautee" && s.statut !== "realisee");
-    return (
-      <Link to="/plan" className="card p-4 flex items-center gap-3">
-        <span className="w-10 h-10 shrink-0 rounded-full flex items-center justify-center text-[19px] bg-remplissage">🌿</span>
-        <span className="flex-1 min-w-0">
-          <span className="block text-[16px] font-semibold leading-5">Rien de prévu aujourd'hui</span>
-          <span className="block text-[14px] leading-[19px] text-label-2 mt-0.5 truncate">
-            {suivante
-              ? `Prochaine séance : ${suivante.titre}, ${new Date(`${suivante.jour}T12:00`).toLocaleDateString("fr-FR", { weekday: "long" })}`
-              : data.seances.length ? "Plus de séance prévue cette semaine." : "Aucun plan pour cette semaine : ajoute une séance ou importe ton plan."}
-          </span>
-        </span>
-        <Chevron />
-      </Link>
-    );
-  }
-  return (
-    <Card pad={false} className="py-1">
-      {duJour.map((s) => {
-        const info = sportInfo(s.sport);
-        const etat = ETAT_SEANCE[s.statut];
-        return (
-          <Link key={s.id} to="/plan" className="ligne" style={{ "--inset": "4.25rem" }}>
-            <span className="w-10 h-10 shrink-0 rounded-full flex items-center justify-center text-[19px]"
-              style={{ backgroundColor: `${info.couleur}26` }}>{s.emoji ?? info.emoji}</span>
-            <span className="flex-1 min-w-0">
-              <span className="block text-[12px] font-semibold text-label-2 uppercase tracking-wide">Séance du jour</span>
-              <span className="block text-[16px] font-semibold leading-5 truncate">{s.titre}</span>
-              <Pastilles s={s} />
-            </span>
-            {etat ? <span className={clsx("text-[13px] font-semibold shrink-0", etat[1])}>{etat[0]}</span> : <Chevron />}
-          </Link>
-        );
-      })}
-    </Card>
   );
 }
 
@@ -339,7 +285,6 @@ export default function Accueil() {
               <FormeJour />
               <SommeilNuit />
             </div>
-            <SeanceDuJour depuis={debut} />
             <EncartAlertes />
             <AlerteMarche />
           </div>

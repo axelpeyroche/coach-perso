@@ -684,14 +684,17 @@ export function ProchainesSeances() {
   const { data } = useQuery({ queryKey: ["plan", depuis, jusqu], queryFn: () => getPlan(depuis, jusqu) });
   // Même liste que « À faire » sur la page Plan, sans plafond
   const prochaines = (data?.seances ?? []).filter((s) => s.statut !== "realisee" && s.statut !== "sautee");
+  const comptees = (data?.seances ?? []).filter((s) => s.statut !== "sautee").length;
+  const faites = comptees - prochaines.length;
 
   return (
-    <Section titre="À faire cette semaine" lien="/plan" libelleLien="Plan" className="h-full flex flex-col">
+    <Section titre={comptees ? `À faire cette semaine · ${faites}/${comptees} faite${faites > 1 ? "s" : ""}` : "À faire cette semaine"}
+      lien="/plan" libelleLien="Plan" className="h-full flex flex-col">
       <Card pad={false} className="py-1 flex-1">
         {!data ? (
           <Squelettes forme="lignes" n={3} label="Chargement du plan" />
         ) : prochaines.length === 0 ? (
-          <p className="ligne text-[15px] text-label-2">Plus rien à faire cette semaine.</p>
+          <p className="ligne text-[15px] text-label-2">{comptees ? "Semaine bouclée : tout est fait." : "Rien de prévu cette semaine."}</p>
         ) : (
           prochaines.map((s) => {
             const info = sportInfo(s.sport);

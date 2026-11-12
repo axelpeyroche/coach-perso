@@ -1708,31 +1708,146 @@ CHAMPS_PREVUE = ("jour", "ordre", "sport", "titre", "description", "duree_min", 
                  "dplus_m", "rpe_cible", "objectif_id")
 
 
-def _score(prevue: SeancePrevue, a: Activite) -> Optional[tuple]:
-    """Compatibilité séance prévue ↔ activité réalisée (None si incompatible).
-    Le jour indiqué n'est qu'un rattachement à la semaine : l'athlète place ses
-    séances où il veut. Critères : même semaine (lundi → dimanche), même famille
-    de sport, durée d'au moins 40 % de la durée prévue (ex. un vélotaf ne valide
-    pas une sortie longue). Plus le score est petit, meilleure est la correspondance."""
-    if _lundi(a.debut.date()) != _lundi(prevue.jour):
+# Rattachement automatique : jamais au hasard. Le jour écrit dans le plan ne compte pas
+# (l'athlète place ses séances où il veut dans la semaine) ; seules comptent la semaine
+# (lundi → dimanche), la famille de sport et ce que la séance a réellement été.
+# Dans le doute, rien n'est relié : l'athlète relie à la main.
+NOTE_MIN_PIED = 70     # conformité minimale (sur 100) d'une sortie à pied avec la séance prévue
+MARGE_PIED = 10        # avance exigée sur une autre séance prévue (différente) qui irait aussi
+FAMILLES_TYPE = {"footing": "facile", "recuperation": "facile", "sortie_longue": "long",
+                 "fractionne_court": "intense", "fractionne_long": "intense", "seuil": "intense",
+                 "cotes": "intense", "course": "course", "test": "test"}
+
+
+def _groupe(sport: str) -> str:
+    """Famille servant au rattachement : muscu et HIIT/cross se confondent (un AMRAP peut arriver en « hiit »)."""
+    return "force" if sport in ("muscu", "hiit") else famille_sport(sport)
+
+
+def _paris(iso) -> Optional[datetime]:
+    """Horodatage ISO (UTC du navigateur) → heure de Paris sans fuseau, comme Activite.debut."""
+    if not iso:
         return None
-    if famille_sport(a.sport) != famille_sport(prevue.sport):
+    try:
+        from zoneinfo import ZoneInfo
+        d = datetime.fromisoformat(str(iso).replace("Z", "+00:00"))
+        return d.astimezone(ZoneInfo("Europe/Paris")).replace(tzinfo=None) if d.tzinfo else d
+    except (ValueError, KeyError):
         return None
-    cible = (prevue.duree_min or 0) * 60
-    duree = a.duree_sec or 0
-    if cible and duree and duree < cible * 0.4:
+
+
+def note_pied(p: SeancePrevue, a: Activite) -> Optional[int]:
+    """Conformité (0-100) d'une sortie à pied avec une séance prévue, d'après la durée, la distance,
+    le D+, l'effort, le type reconnu (footing, seuil, fractionné, côtes…), l'allure et la FC visées.
+    None = incompatible ou rien pour en juger."""
+    import seance_service as ss
+    duree = duree_mouvement(a) or 0
+    if p.duree_min and duree and duree < p.duree_min * 60 * 0.5:
+        return None                           # un bout de séance ne valide pas la séance
+    if p.distance_km and a.distance_km and a.distance_km < p.distance_km * 0.5:
         return None
-    return (
-        0 if a.sport == prevue.sport else 1,                   # même sport exact d'abord
-        abs(duree - cible) / cible if cible else -duree / 3600,  # durée la plus proche (ou la plus longue)
-        abs((a.debut.date() - prevue.jour).days),              # départage : date la plus proche
-    )
+    prevu_type = ss.type_du_texte(p.titre, p.description)
+    fait = ss.type_seance(a)
+    if prevu_type and fait:
+        familles = {FAMILLES_TYPE[prevu_type], FAMILLES_TYPE[fait["cle"]]}
+        # Un footing ne valide pas un seuil, des côtes ne valident pas une sortie longue…
+        # (une sortie longue courue tranquille reste une sortie facile, et inversement)
+        if len(familles) > 1 and familles != {"facile", "long"}:
+            return None
+    pr = ss.prevu_realise(a, p)
+    if pr["note"] is None or not any(l["cle"] in ("duree", "distance") for l in pr["lignes"]):
+        return None                           # sans durée ni distance comparables, on ne devine pas
+    return pr["note"]
+
+
+def _relier(p: SeancePrevue, a: Activite) -> None:
+    p.activite_id = a.id
+    if (p.titre or "").strip() and not (a.titre or "").strip():
+        # nommée une seule fois, au rattachement : un nom déjà donné par l'athlète n'est jamais écrasé
+        a.titre = p.titre.strip()
+
+
+def _signature(p: SeancePrevue) -> tuple:
+    """Deux séances prévues identiques (même texte) sont interchangeables : pas d'ambiguïté entre elles."""
+    return (p.sport, (p.titre or "").strip().lower(), (p.description or "").strip(), p.duree_min, p.distance_km)
+
+
+def _rapprocher_pied(prevues: list, acts: list) -> list:
+    """Sorties à pied d'une même semaine : une sortie va à la séance prévue qui lui ressemble nettement
+    le plus. Si deux séances différentes lui vont presque aussi bien, l'athlète choisit."""
+    notes = {(p.id, a.id): n for p in prevues for a in acts if (n := note_pied(p, a)) is not None}
+    liens, restantes, libres = [], list(prevues), list(acts)
+    while True:
+        meilleur = None
+        for a in libres:
+            cand = sorted(((notes[(p.id, a.id)], p) for p in restantes if (p.id, a.id) in notes),
+                          key=lambda x: -x[0])
+            if not cand or cand[0][0] < NOTE_MIN_PIED:
+                continue
+            note, p = cand[0]
+            autres = [n for n, q in cand[1:] if _signature(q) != _signature(p)]
+            if autres and note - autres[0] < MARGE_PIED:
+                continue                      # ambigu : à relier à la main
+            if meilleur is None or note > meilleur[0]:
+                meilleur = (note, p, a)       # la paire la plus nette passe d'abord
+        if meilleur is None:
+            return liens
+        _, p, a = meilleur
+        liens.append((p, a))
+        restantes.remove(p)
+        libres.remove(a)
+
+
+def _rapprocher_force(prevues: list, acts: list) -> list:
+    """Muscu : le contenu ne se lit pas dans l'activité de la montre. On ne relie que sur une preuve :
+    l'activité a commencé pendant la séance guidée de cette séance (à une heure près avant le début),
+    ou elle porte exactement le nom de la séance prévue."""
+    liens, libres = [], list(acts)
+    for p in prevues:
+        d = lire_deroule(p) or {}
+        debut, fin = _paris(d.get("debut")), _paris(d.get("fin"))
+        choix = None
+        if debut and fin:
+            pendant = [a for a in libres if debut - timedelta(hours=1) <= a.debut <= fin + timedelta(minutes=15)]
+            if len(pendant) == 1:
+                choix = pendant[0]
+        if choix is None and (p.titre or "").strip():
+            memes = [a for a in libres if (a.titre or "").strip().lower() == p.titre.strip().lower()]
+            if len(memes) == 1:
+                choix = memes[0]
+        if choix is not None:
+            liens.append((p, choix))
+            libres.remove(choix)
+    return liens
+
+
+def _rapprocher_autre(prevues: list, acts: list) -> list:
+    """Vélo, natation, marche… : même sport, durée à ±35 % du prévu, et aucune autre séance prévue
+    (différente) qui irait presque aussi bien."""
+    paires = []
+    for p in prevues:
+        cible = (p.duree_min or 0) * 60
+        for a in acts:
+            if a.sport == p.sport and cible and a.duree_sec and abs(a.duree_sec - cible) / cible <= 0.35:
+                paires.append((abs(a.duree_sec - cible) / cible, p, a))
+    liens, restantes, libres = [], list(prevues), list(acts)
+    for ecart, p, a in sorted(paires, key=lambda x: x[0]):
+        if p not in restantes or a not in libres:
+            continue
+        rivales = [e for e, q, b in paires
+                   if b is a and q is not p and q in restantes and _signature(q) != _signature(p)]
+        if rivales and min(rivales) - ecart < 0.15:
+            continue
+        liens.append((p, a))
+        restantes.remove(p)
+        libres.remove(a)
+    return liens
 
 
 def rapprocher_plan(db: Session, user_id: int, aujourd_hui: Optional[date] = None, jours: int = 60) -> int:
-    """Relie automatiquement les séances prévues aux activités réalisées de la même
-    semaine (affectation gloutonne des meilleures correspondances, une activité
-    par séance). Retourne le nombre de nouveaux rapprochements."""
+    """Relie automatiquement les séances prévues aux activités réalisées de la même semaine,
+    seulement quand la correspondance est nette (voir _rapprocher_pied / _force / _autre) ;
+    sinon l'athlète relie à la main. Retourne le nombre de nouveaux rapprochements."""
     auj = aujourd_hui or date.today()
     debut = _lundi(auj - timedelta(days=jours))
     fin_semaine = _lundi(auj) + timedelta(days=6)
@@ -1760,27 +1875,38 @@ def rapprocher_plan(db: Session, user_id: int, aujourd_hui: Optional[date] = Non
     # une activité déjà reliée (même hors période chargée) n'est pas réutilisée
     prises = {i for (i,) in db.query(SeancePrevue.activite_id)
               .filter(SeancePrevue.utilisateur_id == user_id, SeancePrevue.activite_id.isnot(None)).all()}
-    paires = []
-    for rang, p in enumerate(a_relier):
-        for a in acts:
-            if a.id in prises:
-                continue
-            sc = _score(p, a)
-            if sc is not None:
-                paires.append((sc, rang, a.id, p, a))
-    paires.sort(key=lambda x: x[:3])
-    faites: set[int] = set()
+    semaines = {_lundi(p.jour) for p in a_relier}
+    libres = [a for a in acts if a.id not in prises and _lundi(a.debut.date()) in semaines]
+    # Le type des sorties à pied (footing, seuil, fractionné…) doit être reconnu avant de comparer
+    pied = {a.id for a in libres if a.sport in SPORTS_PIED}
+    if pied:
+        import seance_service as ss
+        contexte = (db.query(Activite)
+                    .filter(Activite.utilisateur_id == user_id, Activite.sport.in_(list(SPORTS_PIED)),
+                            Activite.debut >= datetime.combine(min(semaines) - timedelta(days=57), datetime.min.time()),
+                            Activite.debut < datetime.combine(fin_semaine + timedelta(days=1), datetime.min.time()))
+                    .all())
+        ss.maj_types(db, user_id, contexte, limite=len(pied), cibles=pied)
+    groupes: dict = defaultdict(lambda: ([], []))
+    for p in a_relier:
+        groupes[(_lundi(p.jour), _groupe(p.sport))][0].append(p)
+    for a in libres:
+        cle = (_lundi(a.debut.date()), _groupe(a.sport))
+        if cle in groupes:
+            groupes[cle][1].append(a)
     n = 0
-    for _, _, _, p, a in paires:
-        if p.id in faites or a.id in prises:
+    for (_, famille), (ps, candidates) in groupes.items():
+        if not candidates:
             continue
-        p.activite_id = a.id
-        if (p.titre or "").strip() and not (a.titre or "").strip():
-            # nommée une seule fois, au rattachement : un nom déjà donné par l'athlète n'est jamais écrasé
-            a.titre = p.titre.strip()
-        prises.add(a.id)
-        faites.add(p.id)
-        n += 1
+        if famille == "pied":
+            liens = _rapprocher_pied(ps, candidates)
+        elif famille == "force":
+            liens = _rapprocher_force(ps, candidates)
+        else:
+            liens = _rapprocher_autre(ps, candidates)
+        for p, a in liens:
+            _relier(p, a)
+            n += 1
     db.flush()
     return n
 
