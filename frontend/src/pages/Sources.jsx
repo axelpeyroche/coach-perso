@@ -10,7 +10,9 @@ import {
   getClaudeToken, regenererClaudeToken, importerTraces,
   getNuitsImportees, effacerNuitsImportees,
   getIntervals, connecterIntervals, deconnecterIntervals, synchroIntervals, historiqueIntervals,
+  choisirMontre, diagnostiquerIntervals,
 } from "../api";
+import { useAuth } from "../AuthContext";
 import { IAS, promptAnalyse } from "../ia";
 
 function useCopie() {
@@ -89,41 +91,158 @@ function Etape({ n, titre, children }) {
 
 const lienExt = "text-brand font-medium";
 
-function GuideIntervals() {
+const MONTRES = [
+  { id: "apple", nom: "Apple Watch", icone: "" },
+  { id: "garmin", nom: "Garmin", icone: "🔺" },
+  { id: "coros", nom: "Coros", icone: "🔷" },
+  { id: "polar", nom: "Polar", icone: "🔴" },
+  { id: "suunto", nom: "Suunto", icone: "⬛" },
+  { id: "android", nom: "Montre Android", icone: "🤖", detail: "Samsung, Huawei, Pixel…" },
+  { id: "autre", nom: "Autre", icone: "⌚" },
+];
+const MARQUES_CONNECTEES = ["garmin", "coros", "polar", "suunto"];
+const nomMontre = (id) => MONTRES.find((m) => m.id === id)?.nom ?? "ta montre";
+
+function ChoixMontre({ valeur, onChoix, enCours }) {
+  return (
+    <div className="space-y-2">
+      <p className="text-[15px] font-semibold">Quelle montre as-tu ?</p>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+        {MONTRES.map((m) => (
+          <button key={m.id} type="button" disabled={enCours} onClick={() => onChoix(m.id)}
+            className={`tuile p-3 text-left transition active:opacity-60 ${valeur === m.id ? "ring-2 ring-brand" : ""}`}>
+            <span className="block text-[20px] leading-6">{m.icone}</span>
+            <span className="block text-[15px] font-semibold">{m.nom}</span>
+            {m.detail && <span className="block text-[12px] text-label-2">{m.detail}</span>}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function GuideIntervals({ montre }) {
+  const marque = nomMontre(montre);
+  let n = 1;
   return (
     <div className="space-y-4">
       <p className="text-[13px] text-label-2">
         Intervals.icu est un service gratuit qui récupère les séances de ta montre (avec tracé GPS, FC, allure, dénivelé)
         et les données de forme. Le carnet va ensuite les chercher automatiquement.
       </p>
-      <Etape n={1} titre="Crée ton compte Intervals.icu (gratuit)">
+      <Etape n={n++} titre="Crée ton compte Intervals.icu (gratuit)">
         <p>Va sur <a className={lienExt} href="https://intervals.icu" target="_blank" rel="noreferrer">intervals.icu ↗</a>,
           touche <em>Sign up</em> et inscris-toi par e-mail ou avec Google. Indique ton sport principal, ta FC max et ton poids
           quand il te les demande (modifiables ensuite dans <em>Settings</em>).</p>
       </Etape>
-      <Etape n={2} titre="iPhone + Apple Watch : installe Intervals.icu Companion">
-        <p>Télécharge l'app gratuite <a className={lienExt} href="https://apps.apple.com/app/id6739638454" target="_blank" rel="noreferrer">Intervals.icu Companion ↗</a> sur
-          l'App Store, ouvre-la et connecte-toi avec ton compte Intervals.icu.</p>
-      </Etape>
-      <Etape n={3} titre="Active la synchronisation Apple Santé">
-        <p>Dans l'app Companion, ouvre l'onglet <em>Apple Health</em> et autorise l'accès à Santé quand iOS le demande
-          (laisse tout coché : entraînements, fréquence cardiaque, VFC, sommeil, poids).</p>
-        <p>Active la synchro des entraînements <em>Apple → Intervals.icu</em> (et les tours/laps si tu veux le détail
-          des fractions).</p>
-        <p>Dans Réglages iPhone → Companion, laisse l'<em>Actualisation en arrière-plan</em> et les notifications activées.
-          iOS limite la lecture de Santé quand le téléphone est verrouillé : si une séance tarde, ouvre l'app Companion
-          quelques secondes.</p>
-      </Etape>
-      <Etape n={4} titre="Autres montres (Garmin, Coros, Polar, Suunto…)">
-        <p>Pas besoin de l'app : sur intervals.icu, va dans <em>Settings</em> → <em>Connections</em> et connecte directement ton
-          compte Garmin Connect, Coros, Polar ou Suunto. Sur Android (Samsung, Huawei, Google Fit…), l'app Health Sync
-          fait le pont (essai gratuit puis payante).</p>
-      </Etape>
-      <Etape n={5} titre="Relie Intervals.icu au carnet">
+      {montre === "apple" && (
+        <>
+          <Etape n={n++} titre="Installe Intervals.icu Companion sur l'iPhone">
+            <p>Télécharge l'app gratuite <a className={lienExt} href="https://apps.apple.com/app/id6739638454" target="_blank" rel="noreferrer">Intervals.icu Companion ↗</a> sur
+              l'App Store, ouvre-la et connecte-toi avec ton compte Intervals.icu.</p>
+          </Etape>
+          <Etape n={n++} titre="Active la synchronisation Apple Santé">
+            <p>Dans l'app Companion, ouvre l'onglet <em>Apple Health</em> et autorise l'accès à Santé quand iOS le demande
+              (laisse tout coché : entraînements, fréquence cardiaque, VFC, sommeil, poids).</p>
+            <p>Active la synchro des entraînements <em>Apple → Intervals.icu</em> (et les tours/laps si tu veux le détail
+              des fractions).</p>
+            <p>Dans Réglages iPhone → Companion, laisse l'<em>Actualisation en arrière-plan</em> et les notifications activées.
+              iOS limite la lecture de Santé quand le téléphone est verrouillé : si une séance tarde, ouvre l'app Companion
+              quelques secondes.</p>
+          </Etape>
+        </>
+      )}
+      {MARQUES_CONNECTEES.includes(montre) && (
+        <Etape n={n++} titre={`Connecte ton compte ${marque}`}>
+          <p>Sur intervals.icu (version web) : <em>Settings</em> → <em>Connections</em> → <em>{marque}</em>, puis connecte-toi
+            avec ton compte {marque}. Coche l'import des séances et, s'il est proposé, celui des données de bien-être
+            (sommeil, FC au repos, VFC).</p>
+          <p>Ensuite, rien à faire : chaque séance synchronisée avec l'app {marque} arrive sur Intervals.icu quelques minutes plus tard.</p>
+        </Etape>
+      )}
+      {montre === "android" && (
+        <Etape n={n++} titre="Relie ta montre à Intervals.icu">
+          <p>Si ta marque apparaît dans intervals.icu → <em>Settings</em> → <em>Connections</em>, connecte-la directement.
+            Sinon, l'app Health Sync (Android) fait le pont entre Samsung Health, Huawei Santé, Google Fit… et Intervals.icu
+            (essai gratuit puis payante).</p>
+        </Etape>
+      )}
+      {(!montre || montre === "autre") && (
+        <Etape n={n++} titre="Relie ta montre à Intervals.icu">
+          <p>Sur intervals.icu : <em>Settings</em> → <em>Connections</em>, connecte le service de ta montre (Garmin Connect, Coros,
+            Polar, Suunto, Wahoo, Zwift…). Avec un iPhone, l'app Intervals.icu Companion envoie tout ce qui est dans Apple Santé.</p>
+        </Etape>
+      )}
+      <Etape n={n++} titre="Relie Intervals.icu au carnet">
         <p>Sur intervals.icu (version web) : <em>Settings</em> → <em>Developer Settings</em> → <em>API Key</em> → génère la clé.
           L'identifiant d'athlète (« i » suivi de chiffres) est affiché juste au-dessus. Colle-les ci-dessous : la première
           synchro récupère les 60 derniers jours.</p>
       </Etape>
+    </div>
+  );
+}
+
+// ── Diagnostic : ce que la montre envoie vraiment au carnet ────────────────
+const PASTILLE = {
+  ok: { signe: "✓", classe: "bg-ios-green" },
+  partiel: { signe: "!", classe: "bg-ios-orange" },
+  absent: { signe: "✕", classe: "bg-ios-red" },
+  erreur: { signe: "✕", classe: "bg-ios-red" },
+};
+const BANDEAU = { ok: "text-ios-green", partiel: "text-ios-orange", probleme: "text-ios-red" };
+
+function Diagnostic({ auto = false, onSynchro, synchroEnCours }) {
+  const diag = useMutation({ mutationFn: diagnostiquerIntervals });
+  const lance = useRef(false);
+  useEffect(() => {
+    if (auto && !lance.current) { lance.current = true; diag.mutate(); }
+  }, [auto]); // eslint-disable-line react-hooks/exhaustive-deps
+  const d = diag.data;
+
+  return (
+    <div className="tuile p-3.5 space-y-3">
+      <div>
+        <p className="text-[15px] font-semibold">Ce que reçoit le carnet</p>
+        <p className="text-[13px] text-label-2">Séances, tracés, FC, sommeil, forme : vérifie point par point ce qui arrive.</p>
+      </div>
+      <button className="btn-teinte w-full" disabled={diag.isPending} onClick={() => diag.mutate()}>
+        {diag.isPending ? "Diagnostic en cours…" : d ? "Relancer le diagnostic" : "Diagnostiquer ma connexion"}
+      </button>
+      {diag.isError && (
+        <p className="text-[13px] text-ios-red">{diag.error?.response?.data?.detail?.toString?.() ?? "Diagnostic impossible, réessaie."}</p>
+      )}
+      {d && (
+        <div className="space-y-2">
+          <p className={`text-[15px] font-semibold ${BANDEAU[d.resume.etat]}`}>{d.resume.texte}</p>
+          <ul className="space-y-2.5">
+            {d.points.map((p) => (
+              <li key={p.id} className="flex gap-2.5">
+                <span className={`w-5 h-5 mt-0.5 shrink-0 rounded-full text-white text-[12px] font-bold flex items-center justify-center ${
+                  p.facultatif && p.statut === "absent" ? "bg-label-3" : PASTILLE[p.statut].classe}`}>
+                  {PASTILLE[p.statut].signe}
+                </span>
+                <div className="flex-1 min-w-0 text-[13px]">
+                  <p className="text-[15px] font-medium text-label">
+                    {p.titre}{p.facultatif && <span className="text-[12px] font-normal text-label-2"> · facultatif</span>}
+                  </p>
+                  <p className="text-label-2 chiffres">{p.detail}</p>
+                  {p.conseil && <p className="text-label mt-0.5">{p.conseil}</p>}
+                  {p.action === "synchro" && onSynchro && (
+                    <button className="btn-gris btn-sm mt-1.5" disabled={synchroEnCours}
+                      onClick={async () => { try { await onSynchro(); } finally { diag.mutate(); } }}>
+                      {synchroEnCours ? "Synchro en cours…" : "Synchroniser maintenant"}
+                    </button>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+          <p className="text-[12px] text-label-2">
+            Le diagnostic lit seulement : il ne modifie rien, ni dans le carnet ni sur Intervals.icu.
+            {d.montre ? ` Conseils adaptés à : ${nomMontre(d.montre)}.` : ""}
+          </p>
+        </div>
+      )}
     </div>
   );
 }
@@ -314,12 +433,22 @@ function BlocIntervals() {
   });
   const connexion = useMutation({
     mutationFn: () => connecterIntervals(cle.trim(), athlete.trim() || null),
-    onSuccess: (r) => { qc.setQueryData(["intervals"], r); setCle(""); setAthlete(""); setRes(null); synchro.mutate(); },
+    onSuccess: (r) => {
+      qc.setQueryData(["intervals"], r); setCle(""); setAthlete(""); setRes(null);
+      synchro.mutate(undefined, { onSettled: () => setVenantDeConnecter(true) });
+    },
     onError: erreur,
   });
   const deco = useMutation({
     mutationFn: deconnecterIntervals,
     onSuccess: (r) => { qc.setQueryData(["intervals"], r); setRes(null); },
+  });
+  const { user } = useAuth();
+  const [changerMontre, setChangerMontre] = useState(false);
+  const [venantDeConnecter, setVenantDeConnecter] = useState(false);
+  const montre = useMutation({
+    mutationFn: choisirMontre,
+    onSuccess: (r) => { qc.setQueryData(["intervals"], r); setChangerMontre(false); },
   });
 
   return (
@@ -365,15 +494,39 @@ function BlocIntervals() {
               <p className="text-[13px] text-ios-red">{historique.error?.response?.data?.detail?.toString?.() ?? "Intervals.icu ne répond pas, réessaie plus tard."}</p>
             )}
           </div>
-          <SynchroNocturne />
-          <details className="tuile p-3.5">
-            <summary className="text-[15px] font-semibold cursor-pointer">Guide d'installation (compte, téléphone, Apple Santé)</summary>
-            <div className="pt-3"><GuideIntervals /></div>
+          <Diagnostic auto={venantDeConnecter} synchroEnCours={synchro.isPending}
+            onSynchro={() => synchro.mutateAsync()} />
+          {user?.est_admin ? <SynchroNocturne /> : (
+            <p className="text-[13px] text-label-2">Synchro du matin : automatique, rien à configurer.</p>
+          )}
+          <details className="tuile p-3.5" open={changerMontre || undefined}>
+            <summary className="text-[15px] font-semibold cursor-pointer">
+              Guide d'installation{statut.montre ? ` · ${nomMontre(statut.montre)}` : ""}
+            </summary>
+            <div className="pt-3 space-y-4">
+              {(changerMontre || !statut.montre) ? (
+                <ChoixMontre valeur={statut.montre} enCours={montre.isPending} onChoix={(m) => montre.mutate(m)} />
+              ) : (
+                <button className="text-[13px] text-brand active:opacity-50" onClick={() => setChangerMontre(true)}>Changer de montre</button>
+              )}
+              <GuideIntervals montre={statut.montre} />
+            </div>
           </details>
         </div>
       ) : (
         <div className="space-y-3">
-          <GuideIntervals />
+          {(!statut.montre || changerMontre) ? (
+            <ChoixMontre valeur={statut.montre} enCours={montre.isPending} onChoix={(m) => montre.mutate(m)} />
+          ) : (
+            <>
+              <div className="flex items-center gap-2">
+                <p className="flex-1 text-[15px]">Montre : <strong>{nomMontre(statut.montre)}</strong></p>
+                <button className="text-[13px] text-brand active:opacity-50" onClick={() => setChangerMontre(true)}>Changer</button>
+              </div>
+              <GuideIntervals montre={statut.montre} />
+            </>
+          )}
+          {statut.montre && !changerMontre && (
           <Option titre="Clé API et identifiant">
             <p className="text-[13px] text-label-2">La clé reste sur le serveur du carnet et ne sert qu'à lire tes séances.</p>
             <input className="champ" type="password" autoComplete="off" placeholder="Clé API" value={cle} onChange={(e) => setCle(e.target.value)} />
@@ -382,6 +535,7 @@ function BlocIntervals() {
               {connexion.isPending ? "Vérification…" : "Connecter"}
             </button>
           </Option>
+          )}
         </div>
       )}
       {res && !res.erreur && !res.ignore && (

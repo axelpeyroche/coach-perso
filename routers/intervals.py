@@ -8,6 +8,8 @@ chaque matin via GitHub Actions (suivie des notifications du jour) (route /api/i
 from __future__ import annotations
 
 import logging
+from datetime import datetime
+import urllib.parse
 import threading
 from typing import Optional
 
@@ -17,6 +19,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+import diagnostic_service as diag
 import intervals_service as iv
 import suivi_service as sv
 from database import SessionLocal, obtenir_session
@@ -35,7 +38,8 @@ class ConnexionIntervalsSchema(BaseModel):
 def _statut(user: Utilisateur) -> dict:
     return {"connecte": bool(user.intervals_cle), "athlete_id": user.intervals_athlete_id,
             "derniere_synchro": user.intervals_derniere_synchro.isoformat() + "Z"
-            if user.intervals_derniere_synchro else None}
+            if user.intervals_derniere_synchro else None,
+            "montre": user.montre}
 
 
 @router.get("/api/intervals", summary="Statut de la connexion Intervals.icu")
@@ -66,6 +70,72 @@ def deconnecter(db: Session = Depends(obtenir_session), current_user: Utilisateu
     current_user.intervals_derniere_synchro = None
     db.commit()
     return _statut(current_user)
+
+
+class MontreSchema(BaseModel):
+    montre: Optional[str] = Field(None, max_length=20)
+
+
+@router.put("/api/intervals/montre", summary="Marque de la montre (conseils de l'assistant de connexion)")
+def choisir_montre(payload: MontreSchema, db: Session = Depends(obtenir_session),
+                   current_user: Utilisateur = Depends(get_current_user)):
+    if payload.montre is not None and payload.montre not in diag.MONTRES:
+        raise HTTPException(422, "Montre inconnue")
+    current_user.montre = payload.montre
+    db.commit()
+    return _statut(current_user)
+
+
+@router.get("/api/intervals/diagnostic", summary="Vérifie, point par point, ce que la montre envoie au carnet")
+def diagnostic(db: Session = Depends(obtenir_session), current_user: Utilisateur = Depends(get_current_user)):
+    """Lecture seule : rien n'est modifié dans le carnet ni sur Intervals.icu."""
+    from datetime import date, timedelta
+    import carnet_service as cs
+    from models import Activite
+    if not current_user.intervals_cle:
+        points = [diag._point("connexion", "Liaison avec Intervals.icu", "absent", "Intervals.icu n'est pas relié au carnet.",
+                              "Suis l'assistant de connexion ci-dessus.")]
+        return {"points": points, "resume": diag.resume(points), "montre": current_user.montre}
+    athlete = urllib.parse.quote(current_user.intervals_athlete_id or "0")
+    aujourd_hui = date.today()
+    try:
+        iv.verifier(current_user.intervals_cle, current_user.intervals_athlete_id)
+        activites = iv._appel(current_user.intervals_cle, f"/athlete/{athlete}/activities",
+                              {"oldest": (aujourd_hui - timedelta(days=diag.JOURS_SEANCES)).isoformat(),
+                               "newest": aujourd_hui.isoformat()}) or []
+        wellness = iv._appel(current_user.intervals_cle, f"/athlete/{athlete}/wellness",
+                             {"oldest": (aujourd_hui - timedelta(days=diag.JOURS_FORME - 1)).isoformat(),
+                              "newest": aujourd_hui.isoformat()}) or []
+    except iv.IntervalsErreur as e:
+        points = [diag._point("connexion", "Liaison avec Intervals.icu", "erreur", str(e),
+                              "Génère une nouvelle clé dans intervals.icu › Settings › Developer Settings, "
+                              "puis déconnecte et reconnecte Intervals.icu ici.")]
+        return {"points": points, "resume": diag.resume(points), "montre": current_user.montre}
+    depuis = datetime.combine(aujourd_hui - timedelta(days=diag.JOURS_SEANCES + 2), datetime.min.time())
+    ids = {str(cs._details_dict(a).get("intervals_id")) for a in db.query(Activite).filter(
+        Activite.utilisateur_id == current_user.id, Activite.debut >= depuis)}
+    ids |= _ignorees_ids(current_user, activites)
+    points = [diag._point("connexion", "Liaison avec Intervals.icu", "ok",
+                          f"Clé acceptée (athlète {current_user.intervals_athlete_id or '—'}).")]
+    points += diag.controles(current_user.montre, activites if isinstance(activites, list) else [],
+                             wellness if isinstance(wellness, list) else [], ids, current_user.intervals_derniere_synchro)
+    return {"points": points, "resume": diag.resume(points), "montre": current_user.montre}
+
+
+def _ignorees_ids(user: Utilisateur, activites) -> set[str]:
+    """Séances supprimées volontairement du carnet : pas « manquantes »."""
+    import carnet_service as cs
+    from zoneinfo import ZoneInfo
+    ignorees = [datetime.fromisoformat(x) for x in cs._ignorees(user)]
+    if not ignorees or not isinstance(activites, list):
+        return set()
+    tz = ZoneInfo(user.fuseau_horaire or "Europe/Paris")
+    res = set()
+    for a in activites:
+        debut = iv._heure_locale(a.get("start_date"), tz) if isinstance(a, dict) else None
+        if debut and any(abs((debut - d).total_seconds()) <= 120 for d in ignorees):
+            res.add(str(a.get("id")))
+    return res
 
 
 @router.post("/api/intervals/synchro", summary="Récupérer les séances et tracés d'Intervals.icu")

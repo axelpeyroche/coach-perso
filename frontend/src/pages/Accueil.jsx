@@ -268,10 +268,10 @@ export default function Accueil() {
             <p className="text-4xl">🏃</p>
             <p className="text-[17px] font-semibold">Bienvenue dans ton carnet</p>
             <p className="text-[15px] text-label-2 max-w-sm mx-auto">
-              Commence par importer ton historique ou saisir ta dernière séance.
+              Relie ta montre pour que tes séances, ton sommeil et ta forme arrivent tout seuls, ou saisis ta dernière séance.
             </p>
             <div className="flex flex-wrap justify-center gap-2 pt-2">
-              <Link to="/sources" className="btn-primaire">Importer mes séances</Link>
+              <Link to="/sources#intervals" className="btn-primaire">Relier ma montre</Link>
               <button className="btn-teinte" onClick={() => setModal(null)}>Saisir une séance</button>
             </div>
           </div>

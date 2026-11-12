@@ -235,6 +235,8 @@ export const connecterIntervals = (cle, athlete_id) => api.put("/intervals", { c
 export const getNuitsImportees = () => api.get("/sommeil/nuits-importees").then((r) => r.data);
 export const effacerNuitsImportees = () => api.delete("/sommeil/nuits-importees", { timeout: 120000 }).then((r) => r.data);
 export const deconnecterIntervals = () => api.delete("/intervals").then((r) => r.data);
+export const choisirMontre = (montre) => api.put("/intervals/montre", { montre }).then((r) => r.data);
+export const diagnostiquerIntervals = () => api.get("/intervals/diagnostic", { timeout: 60000 }).then((r) => r.data);
 export const historiqueIntervals = () =>
   api.post("/intervals/historique", null, { timeout: 300000 }).then((r) => r.data);
 export const synchroIntervals = (force = false) =>

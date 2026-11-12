@@ -90,6 +90,7 @@ class Utilisateur(Base):
     intervals_athlete_id: Mapped[Optional[str]] = mapped_column(String(30))
     intervals_cle: Mapped[Optional[str]] = mapped_column(String(100))
     intervals_derniere_synchro: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    montre: Mapped[Optional[str]] = mapped_column(String(20))  # apple, garmin, coros… (conseils de l'assistant de connexion)
 
     # Physiologie
     fc_max: Mapped[Optional[int]] = mapped_column(Integer, comment="FC max mesurée (bpm)")
