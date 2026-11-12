@@ -218,13 +218,13 @@ export default function Auth() {
         style={{ animation: "vueFondu 0.35s var(--doux)" }}
       >
         <header className="text-center mb-9">
-          {/* Icône d'app : squircle, dégradé et reflet comme sur l'écran d'accueil */}
-          <div className={`relative mx-auto mb-5 flex items-center justify-center overflow-hidden
-              bg-gradient-to-b from-[#4FA8FF] to-[#0066E0] shadow-[0_8px_24px_rgba(0,102,224,0.32),0_1px_2px_rgba(0,0,0,0.12)]
+          {/* Icône d'app : même dessin que l'écran d'accueil (pouls blanc sur indigo) */}
+          <div className={`relative mx-auto mb-5 overflow-hidden bg-[#5E5CE6]
+              shadow-[0_8px_24px_rgba(94,92,230,0.32),0_1px_2px_rgba(0,0,0,0.12)]
               transition-all duration-500 ${inscription ? "w-16 h-16 rounded-[15px]" : "w-[88px] h-[88px] rounded-[20px]"}`}>
-            <div className="absolute inset-x-0 top-0 h-1/2 bg-gradient-to-b from-white/25 to-transparent" />
-            <svg className={`relative text-white drop-shadow-sm ${inscription ? "w-11 h-11" : "w-[60px] h-[60px]"}`} fill="currentColor" viewBox="0 0 24 24">
-              <path d="M13 2L4.5 13.5H11L10 22l8.5-11.5H12L13 2z" />
+            <svg className="absolute inset-0 w-full h-full" viewBox="0 0 32 32" aria-hidden="true">
+              <polyline points="5,20 10,14 13,17 17,7 21,23 24,16 27,19" fill="none" stroke="#fff"
+                strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </div>
           <h1 className="large-title">{inscription ? "Créer un compte" : "Mon carnet"}</h1>
