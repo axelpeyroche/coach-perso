@@ -358,7 +358,7 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
   if (etape.type === "echauffement") principale = suivant;
   else if (etape.type === "serie") principale = ex.duree && !etat.minuteurFin ? (etat.decompteFin ? null : lancerDecompte) : () => validerSerie(etape.i);
   else if (etape.type === "emom") principale = etat.emomDebut || etat.decompteFin ? null : lancerDecompte;
-  else if (etape.type === "amrap") principale = etat.decompteFin ? null : etat.amrapDebut ? () => majTours(1) : lancerDecompte;
+  else if (etape.type === "amrap") principale = etat.decompteFin || etat.amrapDebut ? null : lancerDecompte;
   else if (etape.type === "repos") principale = suivant;
   else if (etape.type === "ressenti") principale = finExercice;
   else if (etape.type === "fin") principale = enregistrer.isPending ? null : () => enregistrer.mutate();
@@ -426,6 +426,11 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
       <>
         <Surtitre>Échauffement</Surtitre>
         <Nom>{etape.texte}</Nom>
+        <div className="flex-1" />
+        <p className="text-center" aria-label="Durée de l'échauffement">
+          <span className="block font-rounded text-[56px] lg:text-[72px] font-bold leading-none tracking-[-0.03em] chiffres">{fmtChrono((now - etat.debut) / 1000)}</span>
+          <span className="text-[13px] text-white/60">Touche « Échauffement terminé » quand tu es prêt</span>
+        </p>
         <div className="flex-1" />
         {premier && (premier.amrap
           ? <Ensuite titre={`AMRAP ${premier.amrap} min`} detail={`${etapes.find((et) => et.type === "amrap")?.ks.length ?? 1} exercices`} />
@@ -497,7 +502,6 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
     const enCours = !!etat.amrapDebut;
     const total = etape.minutes * 60;
     const resteA = enCours ? Math.max(0, total - (now - etat.amrapDebut) / 1000) : total;
-    const tours = suivi.tours ?? 0;
     // Le circuit, rappelé tout du long (pictogramme, reps, 3D avant de lancer)
     const circuit = (
       <ol className={clsx("rounded-[16px] bg-[#1c1c1e] divide-y divide-white/[0.08]", enCours ? "mt-4" : "mt-5")}>
@@ -521,36 +525,25 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
         })}
       </ol>
     );
+    // Pendant le circuit : rien à toucher, juste le chrono et les exercices ; les tours se notent à la fin
     corps = enCours ? (
       <>
         <Surtitre couleur={ORANGE}>AMRAP · {etape.minutes} min</Surtitre>
         <div className="h-4" />
-        <Anneau part={resteA / total} couleur={ORANGE} className="w-[190px] lg:w-[260px]">
-          <span className="font-rounded text-[52px] lg:text-[72px] font-bold leading-none tracking-[-0.03em] chiffres">{fmtChrono(Math.ceil(resteA))}</span>
+        <Anneau part={resteA / total} couleur={ORANGE} className="w-[210px] lg:w-[280px]">
+          <span className="font-rounded text-[56px] lg:text-[76px] font-bold leading-none tracking-[-0.03em] chiffres">{fmtChrono(Math.ceil(resteA))}</span>
           <span className="mt-1.5 text-[13px] lg:text-[15px] text-white/60">restantes</span>
         </Anneau>
-        <div className="mt-5 flex items-center justify-center gap-5">
-          <button type="button" onClick={() => majTours(-1)} disabled={!tours} aria-label="Retirer un tour"
-            className="w-11 h-11 rounded-full bg-[#2c2c2e] text-[22px] font-semibold disabled:opacity-30">−</button>
-          <p className="text-center min-w-[120px]" aria-live="polite">
-            <span className="block font-rounded text-[56px] lg:text-[72px] font-bold leading-none chiffres">{tours}</span>
-            <span className="text-[13px] text-white/60">{tours > 1 ? "tours complets" : "tour complet"}</span>
-          </p>
-          <span className="w-11 h-11" aria-hidden />
-        </div>
         {circuit}
         <div className="flex-1 min-h-4" />
+        <p className="text-center text-[13px] text-white/60 mb-3">Le plus de tours possible · bips à 3, 2, 1 avant la fin</p>
         {musique}
-        <div className="flex gap-2.5">
-          <Bouton sombre className="!w-[38%]" onClick={finAmrap}>Arrêter</Bouton>
-          <Bouton couleur={ORANGE} onClick={() => majTours(1)}>+1 tour</Bouton>
-        </div>
       </>
     ) : (
       <>
         <Surtitre couleur={ORANGE}>AMRAP · {etape.minutes} min</Surtitre>
         <Nom>Le plus de tours possible</Nom>
-        <p className="mt-2 text-[14px] leading-5 text-white/60">Enchaîne le circuit sans t'arrêter et touche « +1 tour » à chaque tour bouclé. Bips à 3, 2, 1 avant la fin.</p>
+        <p className="mt-2 text-[14px] leading-5 text-white/60">Enchaîne les exercices dans l'ordre, puis recommence, sans t'arrêter. Au « GO », le chrono de {etape.minutes} min démarre ; tu noteras tes tours à la fin.</p>
         {circuit}
         <div className="flex-1 min-h-4" />
         {ex.historique && <div className="flex justify-center mb-3.5"><Puce>Dernière fois <b>{ex.historique}</b></Puce></div>}
@@ -594,28 +587,34 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
     const dernier = exercices.length - 1 === Math.max(...blocDe(etape));
     const champ = "w-full rounded-[14px] bg-[#1c1c1e] px-3.5 py-3 text-[16px] text-white placeholder:text-white/30 outline-none focus:ring-2 focus:ring-[#BF5AF2]";
     const libelle = "block mt-6 mb-2 ml-0.5 text-[12px] font-semibold uppercase tracking-[0.06em] text-white/30";
-    corps = (
+    const tours = suivi.tours ?? 0;
+    corps = etape.amrap ? (
+      // Fin de l'AMRAP : on note seulement les tours (et, si on veut, les reps du tour entamé)
       <>
-        <Surtitre couleur={VERT}>{etape.amrap ? "AMRAP terminé" : "Exercice terminé"}</Surtitre>
-        <Nom>{etape.amrap ? `${suivi.tours ?? 0} tour${(suivi.tours ?? 0) > 1 ? "s" : ""}${Number(suivi.reps_plus) > 0 ? ` + ${suivi.reps_plus} reps` : ""}` : ex.nom}</Nom>
-        {etape.amrap && (
-          <div className="mt-2 grid grid-cols-2 gap-2.5">
-            <div>
-              <p className={libelle}>Tours complets</p>
-              <div className="flex items-center justify-between rounded-[14px] bg-[#1c1c1e] p-1.5">
-                <button type="button" onClick={() => majTours(-1)} aria-label="Retirer un tour" className="w-10 h-10 rounded-[10px] bg-[#2c2c2e] text-[20px] font-semibold">−</button>
-                <span className="font-rounded text-[24px] font-bold chiffres">{suivi.tours ?? 0}</span>
-                <button type="button" onClick={() => majTours(1)} aria-label="Ajouter un tour" className="w-10 h-10 rounded-[10px] bg-[#2c2c2e] text-[20px] font-semibold">+</button>
-              </div>
-            </div>
-            <div>
-              <label htmlFor="reps-plus" className={libelle}>Reps du tour entamé</label>
-              <input id="reps-plus" type="number" inputMode="numeric" min="0" value={suivi.reps_plus ?? ""} placeholder="0"
-                onChange={(ev) => majEx(k, { reps_plus: ev.target.value })} className={clsx(champ, "h-[52px] font-rounded text-[20px] font-bold text-center")} />
-            </div>
-          </div>
-        )}
-        {ex.max && !etape.amrap && (
+        <Surtitre couleur={VERT}>Temps écoulé</Surtitre>
+        <Nom>Combien de tours as-tu faits ?</Nom>
+        <div className="flex-1" />
+        <div className="flex items-center justify-center gap-6">
+          <button type="button" onClick={() => majTours(-1)} disabled={!tours} aria-label="Retirer un tour"
+            className="w-14 h-14 rounded-full bg-[#2c2c2e] text-[28px] font-semibold disabled:opacity-30 active:scale-95 transition-transform">−</button>
+          <p className="text-center min-w-[130px]" aria-live="polite">
+            <span className="block font-rounded text-[80px] lg:text-[96px] font-bold leading-none chiffres">{tours}</span>
+            <span className="text-[14px] text-white/60">{tours > 1 ? "tours complets" : "tour complet"}</span>
+          </p>
+          <button type="button" onClick={() => majTours(1)} aria-label="Ajouter un tour"
+            className="w-14 h-14 rounded-full text-[28px] font-semibold active:scale-95 transition-transform" style={{ background: ORANGE }}>+</button>
+        </div>
+        <label htmlFor="reps-plus" className={clsx(libelle, "text-center !ml-0 !mt-8")}>Reps du tour entamé (facultatif)</label>
+        <input id="reps-plus" type="number" inputMode="numeric" min="0" value={suivi.reps_plus ?? ""} placeholder="0"
+          onChange={(ev) => majEx(k, { reps_plus: ev.target.value })} className={clsx(champ, "mx-auto !w-32 font-rounded text-[22px] font-bold text-center")} />
+        <div className="flex-1 min-h-4" />
+        <Bouton onClick={finExercice}><Coche />{dernier ? "Terminer la séance" : "Exercice suivant"}</Bouton>
+      </>
+    ) : (
+      <>
+        <Surtitre couleur={VERT}>Exercice terminé</Surtitre>
+        <Nom>{ex.nom}</Nom>
+        {ex.max && (
           <>
             <label htmlFor="reps-faites" className={libelle}>Répétitions faites</label>
             <input id="reps-faites" type="number" inputMode="numeric" min="0" value={suivi.reps_faites ?? ""} placeholder={ex.historique ? `Dernière fois : ${ex.historique}` : "Ton résultat"}
