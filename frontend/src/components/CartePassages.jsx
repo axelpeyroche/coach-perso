@@ -268,6 +268,21 @@ export default function CartePassages({ annee: fixe } = {}) {
       const pseudo = !cadre.current.requestFullscreen && !cadre.current.webkitRequestFullscreen;
       const ecran = new maplibregl.FullscreenControl({ container: cadre.current, pseudo });
       m.addControl(ecran, "top-right");
+      // En sortant du plein écran, le navigateur peut ramener la page ailleurs :
+      // on revient à la position d'avant, la carte réduite sous les yeux
+      let defilement = null;
+      ecran.on("fullscreenstart", () => { defilement = window.scrollY; });
+      ecran.on("fullscreenend", () => {
+        const y = defilement;
+        defilement = null;
+        const revenir = () => {
+          if (y != null) window.scrollTo({ top: y, behavior: "instant" });
+          else cadre.current?.scrollIntoView({ block: "center", behavior: "instant" });
+        };
+        requestAnimationFrame(revenir);
+        setTimeout(revenir, 150);
+        setTimeout(revenir, 400);
+      });
       if (TACTILE) {
         // Plein écran : plus de page à faire défiler, un doigt déplace la carte
         ecran.on("fullscreenstart", () => m.cooperativeGestures.disable());
