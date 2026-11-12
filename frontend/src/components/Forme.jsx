@@ -11,9 +11,9 @@ import { fmtDate, nombre } from "../carnet";
 // sens = 1 si une hausse est bon signe, -1 si une baisse l'est (FC au repos) ;
 // seuil = écart 7 j / 28 j au-delà duquel on alerte
 const META = {
-  fc_repos: { court: "FC repos", couleur: "rgb(var(--pink))", tuile: "pink", sens: -1, seuil: 2 },
-  vfc: { court: "VFC", couleur: "rgb(var(--indigo))", tuile: "indigo", sens: 1, seuil: 5 },
-  vo2max: { court: "VO2max", couleur: "rgb(var(--green))", tuile: "green", sens: 1, seuil: 1 },
+  fc_repos: { court: "FC repos", couleur: "rgb(var(--pink))", tuile: "pink", sens: -1, seuil: 2, analyse: "/analyses#recuperation" },
+  vfc: { court: "VFC", couleur: "rgb(var(--indigo))", tuile: "indigo", sens: 1, seuil: 5, analyse: "/analyses#tendance_vfc" },
+  vo2max: { court: "VO2max", couleur: "rgb(var(--green))", tuile: "green", sens: 1, seuil: 1, analyse: "/analyses#reperes" },
 };
 
 export function useMesures() {
@@ -39,7 +39,7 @@ export function FormeTuiles() {
       {mesures.map((m) => {
         const e = ecart(m);
         return (
-          <StatTile key={m.cle} label={META[m.cle].court} color={META[m.cle].tuile}
+          <StatTile key={m.cle} label={META[m.cle].court} color={META[m.cle].tuile} lien={META[m.cle].analyse}
             serie={m.points.slice(-30).map((p) => p.valeur)}
             value={<>
               {nombre(m.derniere.valeur, m.cle === "vo2max" ? 1 : 0)}
