@@ -36,4 +36,6 @@ node_modules/
 # Exports de données personnelles (santé, historique)
 import_*.csv
 historique_*.csv
+# Séances muscu reçues de Celio (programme perso, lues par la routine du dimanche)
+programme_muscu/
 *.fit
