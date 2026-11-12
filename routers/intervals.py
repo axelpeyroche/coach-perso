@@ -8,9 +8,10 @@ chaque matin via GitHub Actions (suivie des notifications du jour) (route /api/i
 from __future__ import annotations
 
 import logging
+import threading
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Security
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Security
 from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
@@ -19,7 +20,7 @@ from sqlalchemy.orm import Session
 import intervals_service as iv
 import suivi_service as sv
 from database import SessionLocal, obtenir_session
-from deps import get_current_user, http_bearer
+from deps import est_admin, get_current_user, http_bearer
 from models import MesureSante, NuitSommeil, Utilisateur
 
 router = APIRouter()
@@ -87,7 +88,8 @@ def historique(db: Session = Depends(obtenir_session), current_user: Utilisateur
 
 
 @router.post("/api/intervals/synchro-nuit", summary="Synchro planifiée (GitHub Actions) — auth par token d'import")
-def synchro_nuit(notifier: bool = Query(False, description="Envoie la notification du matin sans attendre l'heure choisie"),
+def synchro_nuit(taches: BackgroundTasks,
+                 notifier: bool = Query(False, description="Envoie la notification du matin sans attendre l'heure choisie"),
                  credentials: HTTPAuthorizationCredentials = Security(http_bearer),
                  db: Session = Depends(obtenir_session)):
     # Token dans l'en-tête Authorization (jamais dans l'URL, qui finit dans les journaux)
@@ -97,6 +99,15 @@ def synchro_nuit(notifier: bool = Query(False, description="Envoie la notificati
         raise HTTPException(401, "Token d'import invalide : recopie-le depuis la page Sources du carnet")
     if not user.intervals_cle:
         raise HTTPException(409, "Intervals.icu n'est pas connecté sur ce compte")
+    # La tâche GitHub de l'administrateur sert aussi d'horloge aux autres comptes : une fois la réponse
+    # envoyée, chacun est synchronisé à son tour (sans notification forcée), sans rien changer à ce passage-ci
+    if est_admin(db, user):
+        taches.add_task(synchro_matin_autres_comptes, user.id)
+    return passage_matin(db, user, notifier)
+
+
+def passage_matin(db: Session, user: Utilisateur, notifier: bool = False) -> dict:
+    """Synchro du matin d'un compte : séances, sauvegarde hebdomadaire, notifications du jour."""
     deja = user.notif_matin_le == sv.aujourdhui(user)
     res = _synchroniser(db, user, not deja)  # après la notification du jour : synchro limitée (1 / 15 min)
     # Sauvegarde hebdomadaire du compte : faite ici, au premier passage une fois les 7 jours écoulés
@@ -137,6 +148,40 @@ def _synchroniser(db: Session, user: Utilisateur, force: bool) -> dict:
         db.rollback()  # une autre synchro tournait en même temps : elle a déjà tout enregistré
         bilan = {"ignore": True}
     return {**_statut(user), **bilan}
+
+
+_verrou_autres = threading.Lock()
+
+
+def synchro_matin_autres_comptes(sauf_id: int) -> dict:
+    """Synchro du matin de tous les comptes reliés à Intervals.icu, sauf celui qui a déclenché le passage.
+    Un compte en erreur (clé révoquée, Intervals indisponible) n'empêche pas les suivants."""
+    if not _verrou_autres.acquire(blocking=False):
+        return {"ignore": "passage déjà en cours"}
+    bilan = {"comptes": 0, "erreurs": 0}
+    try:
+        db = SessionLocal()
+        try:
+            ids = [i for (i,) in db.query(Utilisateur.id).filter(Utilisateur.intervals_cle.isnot(None),
+                                                                  Utilisateur.id != sauf_id).order_by(Utilisateur.id)]
+        finally:
+            db.close()
+        for uid in ids:
+            db = SessionLocal()
+            try:
+                user = db.get(Utilisateur, uid)
+                if user and user.intervals_cle:
+                    passage_matin(db, user)
+                    bilan["comptes"] += 1
+            except Exception:
+                db.rollback()
+                bilan["erreurs"] += 1
+                _log.warning("Synchro du matin en échec pour un compte invité", exc_info=True)
+            finally:
+                db.close()
+    finally:
+        _verrou_autres.release()
+    return bilan
 
 
 def synchro_en_arriere_plan(user_id: int) -> None:

@@ -27,6 +27,7 @@ const Saison = lazy(() => import("./pages/Saison"));
 const Alertes = lazy(() => import("./pages/Alertes"));
 const SanteCarnet = lazy(() => import("./pages/SanteCarnet"));
 const PreparationCourse = lazy(() => import("./pages/PreparationCourse"));
+const Confidentialite = lazy(() => import("./pages/Confidentialite"));
 
 // ── SVG Icons ──────────────────────────────────────────────────────────────
 const Icon = {
@@ -557,6 +558,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={<Auth />} />
+      <Route path="/confidentialite" element={<Suspense fallback={null}><Confidentialite /></Suspense>} />
 
       <Route path="/*" element={
         <RequireAuth>

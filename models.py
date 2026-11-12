@@ -120,6 +120,9 @@ class Utilisateur(Base):
     filtres_carnet: Mapped[Optional[str]] = mapped_column(Text)
     # Notifications activées une par une : JSON {forme, vfc, nuit, records, seance, bilan, fc_repos}
     notifs_reglages: Mapped[Optional[str]] = mapped_column(Text)
+    # Consentement explicite au traitement des données de santé (RGPD art. 9), donné à l'inscription.
+    # Vide pour les comptes créés avant l'ouverture aux invités.
+    consentement_sante_le: Mapped[Optional[datetime]] = mapped_column(DateTime)
 
 
 # ---------------------------------------------------------------------------
@@ -598,3 +601,18 @@ class Sauvegarde(Base):
     taille: Mapped[int] = mapped_column(Integer, nullable=False)       # octets compressés
     resume: Mapped[Optional[str]] = mapped_column(Text)                # JSON : nombre de lignes par table
     contenu: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+
+
+class Invitation(Base):
+    """Code d'invitation à usage unique : sans lui, pas de création de compte (bêta fermée)."""
+    __tablename__ = "invitations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    code: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
+    note: Mapped[Optional[str]] = mapped_column(String(80))            # pour qui (prénom…)
+    cree_par_id: Mapped[Optional[int]] = mapped_column(ForeignKey("utilisateurs.id", ondelete="SET NULL"))
+    cree_le: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    expire_le: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    utilisee_par_id: Mapped[Optional[int]] = mapped_column(ForeignKey("utilisateurs.id", ondelete="SET NULL"))
+    utilisee_le: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    revoquee: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

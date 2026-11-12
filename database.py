@@ -97,6 +97,8 @@ def creer_tables() -> None:
         # Notifications réglables une par une, check-list de préparation de course
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS notifs_reglages TEXT",
         "ALTER TABLE objectifs ADD COLUMN IF NOT EXISTS preparation TEXT",
+        # Ouverture à d'autres comptes : consentement santé à l'inscription (colonne vide pour les comptes existants)
+        "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS consentement_sante_le TIMESTAMP",
         # Séance « Autre » rattachée à la main à une séance prévue : elle prend le sport du plan
         "UPDATE activites SET sport = p.sport FROM seances_prevues p "
         "WHERE p.activite_id = activites.id AND p.lien_manuel AND activites.sport = 'autre' AND p.sport <> 'autre'",

@@ -460,6 +460,9 @@ def envoyer(db: Session, user_id: int, titre: str, corps: str, url: str = "/", t
             actions: Optional[list[tuple[str, str]]] = None) -> int:
     """Envoie une notification à tous les appareils abonnés. Retourne le nombre d'envois réussis.
     `actions` : boutons (chemin à ouvrir, libellé), affichés là où le système le permet (Android, ordinateur)."""
+    import formulation
+    if not formulation.compte_admin(user_id):
+        titre, corps = formulation.neutre(titre), formulation.neutre(corps)
     charge = {"title": titre, "body": corps, "url": url, "tag": tag}
     if actions:
         charge["actions"] = [{"action": chemin, "title": libelle} for chemin, libelle in actions[:2]]

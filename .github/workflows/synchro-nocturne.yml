@@ -1,5 +1,7 @@
 # Synchro Intervals.icu chaque matin, même si le carnet n'est pas ouvert, puis notifications
 # du jour (forme du matin + séance conseillée, alerte VFC, records battus).
+# Le jeton est celui de l'administrateur : le serveur enchaîne ensuite, en arrière-plan, la même
+# synchro pour chaque compte invité relié à Intervals.icu (aucun réglage à faire de leur côté).
 # Secret à créer dans GitHub (Settings → Secrets and variables → Actions) :
 #   CARNET_IMPORT_TOKEN = token de synchro (Sources → Intervals.icu → Synchro nocturne → « Configurer »)
 name: Synchro du matin Intervals.icu

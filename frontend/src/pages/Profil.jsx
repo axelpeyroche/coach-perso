@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "../api";
-import { exporterDonnees, exporterCarnet, supprimerCompte, getPush, abonnerPush, desabonnerPush, testerPush, garderSeulPush, changerHeurePush, changerRappelPoids, putReglageNotif } from "../api";
+import { exporterDonnees, exporterCarnet, supprimerCompte, getPush, abonnerPush, desabonnerPush, testerPush, garderSeulPush, changerHeurePush, changerRappelPoids, putReglageNotif, getInvitations, creerInvitation, revoquerInvitation } from "../api";
 import { getErrorMessage } from "../utils/errors";
 import ConfirmDialog from "../components/ConfirmDialog";
 import Page from "../components/Page";
@@ -648,6 +648,80 @@ function Musique() {
   );
 }
 
+// Bêta fermée : codes d'invitation à usage unique (administrateur seulement)
+const STATUTS_INVITATION = {
+  active: ["En attente", "text-brand"], utilisee: ["Utilisée", "text-ios-green"],
+  revoquee: ["Révoquée", "text-label-2"], expiree: ["Expirée", "text-label-2"],
+};
+const lienInvitation = (code) => `${window.location.origin}/login?invitation=${code}`;
+
+function Invitations() {
+  const qc = useQueryClient();
+  const [note, setNote] = useState("");
+  const [copie, setCopie] = useState(null);
+  const { data } = useQuery({ queryKey: ["admin-invitations"], queryFn: getInvitations });
+  const creer = useMutation({
+    mutationFn: () => creerInvitation({ note: note.trim() || null, jours: 14 }),
+    onSuccess: (inv) => { setNote(""); qc.invalidateQueries({ queryKey: ["admin-invitations"] }); copier(inv.code); },
+  });
+  const revoquer = useMutation({
+    mutationFn: revoquerInvitation,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["admin-invitations"] }),
+  });
+  async function copier(code) {
+    const lien = lienInvitation(code);
+    try {
+      if (navigator.share && window.matchMedia("(pointer: coarse)").matches) {
+        await navigator.share({ title: "Mon Carnet", text: "Ton invitation pour Mon Carnet", url: lien });
+      } else {
+        await navigator.clipboard.writeText(lien);
+      }
+      setCopie(code);
+      setTimeout(() => setCopie(null), 2500);
+    } catch { /* partage annulé */ }
+  }
+  const invitations = data?.invitations ?? [];
+  const erreur = creer.isError ? getErrorMessage(creer.error, "Création impossible") : revoquer.isError ? getErrorMessage(revoquer.error, "Révocation impossible") : "";
+  return (
+    <Groupe titre="Invitations"
+      pied={erreur || `Chaque lien sert une seule fois et expire au bout de 14 jours. ${data ? `${data.comptes} compte${data.comptes > 1 ? "s" : ""} au total.` : ""} Tu ne vois que le prénom des personnes inscrites, jamais leurs données.`}>
+      <form className="ligne gap-2" onSubmit={e => { e.preventDefault(); creer.mutate(); }}>
+        <input value={note} onChange={e => setNote(e.target.value)} maxLength={80} placeholder="Pour qui ? (facultatif)"
+          aria-label="Note de l'invitation"
+          className="flex-1 min-w-0 h-11 bg-transparent border-0 outline-none text-[17px] placeholder:text-label-3/30" />
+        <button type="submit" disabled={creer.isPending} className="text-[17px] text-brand disabled:opacity-50 shrink-0">
+          {creer.isPending ? "…" : "Créer un lien"}
+        </button>
+      </form>
+      {invitations.map(inv => {
+        const [libelle, couleur] = STATUTS_INVITATION[inv.statut] ?? [inv.statut, "text-label-2"];
+        return (
+          <div key={inv.id} className="ligne gap-3">
+            <div className="flex-1 min-w-0">
+              <p className="text-[17px] truncate">{inv.note || inv.code}</p>
+              <p className="text-[13px] text-label-2 truncate">
+                <span className={couleur}>{libelle}</span>
+                {inv.utilisee_par ? ` · ${inv.utilisee_par}` : ""}
+                {inv.note ? ` · ${inv.code}` : ""}
+                {inv.statut === "active" ? ` · jusqu'au ${new Date(inv.expire_le).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}` : ""}
+              </p>
+            </div>
+            {inv.statut === "active" && (
+              <>
+                <button type="button" onClick={() => copier(inv.code)} className="text-[15px] text-brand shrink-0">
+                  {copie === inv.code ? "Copié ✓" : "Copier"}
+                </button>
+                <button type="button" onClick={() => revoquer.mutate(inv.id)} disabled={revoquer.isPending}
+                  className="text-[15px] text-ios-red shrink-0 disabled:opacity-50">Révoquer</button>
+              </>
+            )}
+          </div>
+        );
+      })}
+    </Groupe>
+  );
+}
+
 function DonneesCompte({ onDeleted }) {
   const [confirmSuppr, setConfirmSuppr] = useState(false);
   const [mdpSuppr, setMdpSuppr] = useState("");
@@ -675,7 +749,7 @@ function DonneesCompte({ onDeleted }) {
   return (
     <>
       <Groupe titre="Données du compte"
-        pied={errMsg || "Sauvegarde complète : profil, séances, mesures de santé, plans et traces GPS. Le CSV contient une ligne par séance (tableur)."}>
+        pied={errMsg || <>Sauvegarde complète : profil, séances, mesures de santé, plans et traces GPS. Le CSV contient une ligne par séance (tableur). Supprimer le compte efface tout, définitivement. <Link to="/confidentialite" className="text-brand">Confidentialité</Link></>}>
         <button onClick={() => exportMutation.mutate()} disabled={exportMutation.isPending} className="ligne disabled:opacity-50">
           <span className="flex-1 text-[17px] text-brand">Sauvegarde complète</span>
           <span className="text-[15px] text-label-2">{exportMutation.isPending ? "…" : "JSON"}</span>
@@ -809,7 +883,9 @@ export default function Profil({ theme, setTheme }) {
 
         <Notifications />
 
-        <Musique />
+        {user?.est_admin && <Musique />}
+
+        {user?.est_admin && <Invitations />}
 
         <DonneesCompte onDeleted={logout} />
 

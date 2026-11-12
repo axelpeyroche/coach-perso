@@ -325,3 +325,10 @@ export const ecarterDesCalculs = (payload) => api.post("/carnet/exclusions", pay
 export const reintegrerDansCalculs = (id) => api.delete(`/carnet/exclusions/${id}`).then((r) => r.data);
 export const creerSauvegarde = () => api.post("/carnet/sauvegardes", null, { timeout: 60000 }).then((r) => r.data);
 export const telechargerSauvegarde = (id) => api.get(`/carnet/sauvegardes/${id}`, { responseType: "blob", timeout: 60000 }).then((r) => r.data);
+
+// --- Inscription sur invitation / administration ---
+export const getModeInscription = () => api.get("/auth/inscriptions").then((r) => r.data);
+export const verifierInvitation = (code) => api.post("/auth/invitation", { code }).then((r) => r.data);
+export const getInvitations = () => api.get("/admin/invitations").then((r) => r.data);
+export const creerInvitation = (payload) => api.post("/admin/invitations", payload).then((r) => r.data);
+export const revoquerInvitation = (id) => api.post(`/admin/invitations/${id}/revoquer`).then((r) => r.data);

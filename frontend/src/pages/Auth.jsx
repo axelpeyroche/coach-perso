@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../AuthContext";
-import api, { avecReveil, reveillerServeur } from "../api";
+import api, { avecReveil, reveillerServeur, getModeInscription } from "../api";
 import { getErrorMessage } from "../utils/errors";
 import { Segmente } from "../components/ui";
 
@@ -125,7 +125,10 @@ function FormLogin({ onSwitch }) {
 
 // ─── Formulaire d'inscription ────────────────────────────────────────────────
 
-function FormRegister({ onSwitch, onSuccess }) {
+function FormRegister({ onSwitch, onSuccess, codeInitial }) {
+  const [code, setCode]           = useState(codeInitial || "");
+  const [accord, setAccord]       = useState(false);
+  const [mode, setMode]           = useState(null);  // libre | invitation | fermee
   const [prenom, setPrenom]       = useState("");
   const [nom, setNom]             = useState("");
   const [email, setEmail]         = useState("");
@@ -135,8 +138,15 @@ function FormRegister({ onSwitch, onSuccess }) {
   const [err, setErr]             = useState("");
   const [loading, setLoading]     = useState(false);
 
+  useEffect(() => {
+    getModeInscription().then(r => setMode(r.mode)).catch(() => setMode("invitation"));
+  }, []);
+  const surInvitation = mode !== "libre";
+
   async function submit(e) {
     e.preventDefault();
+    if (surInvitation && !code.trim()) { setErr("Saisis le code d'invitation reçu"); return; }
+    if (!accord) { setErr("Coche la case d'accord pour créer ton compte"); return; }
     if (password.length < 8) { setErr("Mot de passe trop court : 8 caractères minimum"); return; }
     setErr(""); setLoading(true);
     try {
@@ -144,6 +154,8 @@ function FormRegister({ onSwitch, onSuccess }) {
         prenom, nom, email, password,
         date_naissance: dateNaissance || null,
         sexe: sexe || null,
+        code_invitation: surInvitation ? code.trim() : null,
+        consentement_sante: accord,
       };
       await reveillerServeur();  // pas de nouvel essai automatique : il pourrait créer le compte deux fois
       const r = await api.post("/auth/register", payload, { timeout: 30_000 });
@@ -157,8 +169,17 @@ function FormRegister({ onSwitch, onSuccess }) {
 
   return (
     <form onSubmit={submit} className="space-y-6">
+      {mode === "fermee" && (
+        <p className="card p-4 text-[15px] text-label-2">Les inscriptions sont fermées pour le moment.</p>
+      )}
+      {surInvitation && (
+        <Groupe titre="Invitation" pied="Mon Carnet est en bêta fermée : il faut un code pour créer un compte.">
+          <Champ label="Code d'invitation (ex. ABCD-EFGH)" value={code} onChange={v => setCode(v.toUpperCase())}
+            autoComplete="off" required autoFocus={!codeInitial} />
+        </Groupe>
+      )}
       <Groupe titre="Nom">
-        <Champ label="Prénom" value={prenom} onChange={setPrenom} autoComplete="given-name" required autoFocus />
+        <Champ label="Prénom" value={prenom} onChange={setPrenom} autoComplete="given-name" required autoFocus={!surInvitation || !!codeInitial} />
         <Champ label="Nom" value={nom} onChange={setNom} autoComplete="family-name" required />
       </Groupe>
       <Groupe titre="Compte">
@@ -182,6 +203,20 @@ function FormRegister({ onSwitch, onSuccess }) {
           />
         </div>
       </Groupe>
+      <section>
+        <label className="card flex items-start gap-3 p-4 cursor-pointer">
+          <input type="checkbox" checked={accord} onChange={e => setAccord(e.target.checked)}
+            className="mt-0.5 w-5 h-5 shrink-0 accent-brand" />
+          <span className="text-[15px] leading-5">
+            J'accepte que Mon Carnet enregistre mes séances et mes mesures de santé (FC, sommeil, VFC, poids)
+            pour me les afficher et les analyser.{" "}
+            <Link to="/confidentialite" className="text-brand">Confidentialité</Link>
+          </span>
+        </label>
+        <p className="px-4 pt-1.5 text-[13px] leading-[18px] text-label-2">
+          Tes données ne sont ni vendues ni partagées. Tu peux les exporter ou supprimer ton compte à tout moment depuis Profil.
+        </p>
+      </section>
       <div className="space-y-6">
         <Erreur texte={err} />
         <BoutonPrincipal loading={loading}>Créer mon compte</BoutonPrincipal>
@@ -199,7 +234,10 @@ function FormRegister({ onSwitch, onSuccess }) {
 // ─── Page Auth ───────────────────────────────────────────────────────────────
 
 export default function Auth() {
-  const [mode, setMode] = useState("login"); // "login" | "register"
+  // Lien d'invitation : /login?invitation=ABCD-EFGH ouvre directement l'inscription, code prérempli
+  const [params] = useSearchParams();
+  const codeInvitation = params.get("invitation") || "";
+  const [mode, setMode] = useState(codeInvitation ? "register" : "login"); // "login" | "register"
   const { login } = useAuth();
   const navigate = useNavigate();
   const inscription = mode === "register";
@@ -227,7 +265,7 @@ export default function Auth() {
                 strokeWidth="3.4" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </div>
-          <h1 className="large-title">{inscription ? "Créer un compte" : "Mon carnet"}</h1>
+          <h1 className="large-title">{inscription ? "Créer un compte" : "Mon Carnet"}</h1>
           <p className="text-[17px] leading-[22px] text-label-2 mt-2 px-6">
             {inscription
               ? "Quelques informations pour démarrer ton carnet."
@@ -236,7 +274,7 @@ export default function Auth() {
         </header>
 
         {inscription
-          ? <FormRegister onSwitch={() => setMode("login")} onSuccess={handleRegisterSuccess} />
+          ? <FormRegister onSwitch={() => setMode("login")} onSuccess={handleRegisterSuccess} codeInitial={codeInvitation} />
           : <FormLogin onSwitch={() => setMode("register")} />
         }
       </main>
@@ -245,7 +283,8 @@ export default function Auth() {
         <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
           <path fillRule="evenodd" d="M10 1.5a4 4 0 00-4 4V8H5a2 2 0 00-2 2v6.5a2 2 0 002 2h10a2 2 0 002-2V10a2 2 0 00-2-2h-1V5.5a4 4 0 00-4-4zm2.5 6.5V5.5a2.5 2.5 0 00-5 0V8h5z" clipRule="evenodd" />
         </svg>
-        Connexion chiffrée · Carnet gratuit et personnel
+        Connexion chiffrée · Mon Carnet ·{" "}
+        <Link to="/confidentialite" className="underline underline-offset-2">Confidentialité</Link>
       </footer>
     </div>
   );

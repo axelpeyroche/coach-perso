@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 import secrets as _secrets
-from datetime import date
+from datetime import date, datetime
 from typing import Optional
 import logging
 
@@ -15,13 +15,14 @@ from sqlalchemy.orm import Session
 
 from database import obtenir_session
 from carnet_service import synchroniser_physiologie
-from models import Utilisateur
+from models import Invitation, Utilisateur
 from deps import (
     get_current_user,
     _hash_password,
     _verify_password,
     _create_token,
     compter_echec,
+    est_admin,
     ip_client,
     limiter,
     normaliser_email,
@@ -39,6 +40,8 @@ class RegisterSchema(BaseModel):
     sexe: Optional[str] = Field(None, max_length=10)
     date_naissance: Optional[str] = Field(None, max_length=10)  # "YYYY-MM-DD"
     poids_kg: Optional[float] = Field(None, gt=0, lt=400)
+    code_invitation: Optional[str] = Field(None, max_length=32)
+    consentement_sante: bool = False
 
 class LoginSchema(BaseModel):
     email: str = Field(..., max_length=254)
@@ -47,6 +50,40 @@ class LoginSchema(BaseModel):
 
 # Mettre INSCRIPTIONS_FERMEES=1 sur Render pour empêcher la création de nouveaux comptes
 INSCRIPTIONS_FERMEES = os.getenv("INSCRIPTIONS_FERMEES", "").strip().lower() in ("1", "true", "oui", "yes")
+# Bêta fermée : un code d'invitation est demandé, sauf INSCRIPTIONS_LIBRES=1 (ou base vide : premier compte)
+INSCRIPTIONS_LIBRES = os.getenv("INSCRIPTIONS_LIBRES", "").strip().lower() in ("1", "true", "oui", "yes")
+
+
+def normaliser_code(code: Optional[str]) -> str:
+    return "".join(c for c in (code or "").upper() if c.isalnum())
+
+
+def invitation_valide(db: Session, code: Optional[str]) -> Optional[Invitation]:
+    code = normaliser_code(code)
+    if not code:
+        return None
+    inv = db.query(Invitation).filter(Invitation.code == code).first()
+    if not inv or inv.revoquee or inv.utilisee_par_id or inv.utilisee_le or inv.expire_le < datetime.utcnow():
+        return None
+    return inv
+
+
+class VerifInvitationSchema(BaseModel):
+    code: str = Field(..., max_length=32)
+
+
+@router.get("/api/auth/inscriptions", summary="Mode d'inscription : ouverte, sur invitation ou fermée")
+def mode_inscription(db: Session = Depends(obtenir_session)):
+    if INSCRIPTIONS_FERMEES:
+        return {"mode": "fermee"}
+    libre = INSCRIPTIONS_LIBRES or db.query(Utilisateur.id).first() is None
+    return {"mode": "libre" if libre else "invitation"}
+
+
+@router.post("/api/auth/invitation", summary="Vérifie un code d'invitation (sans le consommer)")
+def verifier_invitation(payload: VerifInvitationSchema, request: Request, db: Session = Depends(obtenir_session)):
+    limiter(f"invitation:{ip_client(request)}", 20, 3600)
+    return {"valide": invitation_valide(db, payload.code) is not None}
 
 
 @router.post("/api/auth/register", summary="Crée un nouveau compte")
@@ -54,6 +91,13 @@ def register(payload: RegisterSchema, request: Request, db: Session = Depends(ob
     if INSCRIPTIONS_FERMEES:
         raise HTTPException(403, "Les inscriptions sont fermées")
     limiter(f"inscription:{ip_client(request)}", 5, 3600)
+    invitation = None
+    if not (INSCRIPTIONS_LIBRES or db.query(Utilisateur.id).first() is None):
+        invitation = invitation_valide(db, payload.code_invitation)
+        if not invitation:
+            raise HTTPException(403, "Code d'invitation invalide, déjà utilisé ou expiré")
+    if not payload.consentement_sante:
+        raise HTTPException(400, "Ton accord sur le traitement de tes données de santé est nécessaire pour créer le compte")
     email = normaliser_email(payload.email)
     verifier_mot_de_passe_robuste(payload.password)
     if not payload.prenom.strip() or not payload.nom.strip():
@@ -81,8 +125,13 @@ def register(payload: RegisterSchema, request: Request, db: Session = Depends(ob
             date_naissance=dn,
             poids_kg=payload.poids_kg,
             onboarding_complet=True,
+            consentement_sante_le=datetime.utcnow(),
         )
         db.add(user)
+        db.flush()
+        if invitation:
+            invitation.utilisee_par_id = user.id
+            invitation.utilisee_le = datetime.utcnow()
         db.commit()
         db.refresh(user)
     except Exception:
@@ -144,6 +193,7 @@ def me(current_user: Utilisateur = Depends(get_current_user), db: Session = Depe
         "fc_max_auto": auto["fc_max"] is not None,
         "fc_repos_auto": auto["fc_repos"] is not None,
         "fc_repos_nb_jours": auto["nb_jours_fc_repos"],
+        "est_admin": est_admin(db, current_user),
     }
 
 

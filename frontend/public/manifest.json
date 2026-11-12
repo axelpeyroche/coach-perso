@@ -1,6 +1,6 @@
 {
-  "name": "Carnet de suivi",
-  "short_name": "Carnet",
+  "name": "Mon Carnet",
+  "short_name": "Mon Carnet",
   "description": "Carnet de suivi multi-sport",
   "start_url": "/",
   "display": "standalone",

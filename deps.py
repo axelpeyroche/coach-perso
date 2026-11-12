@@ -145,3 +145,38 @@ def limiter(cle: str, maximum: int, fenetre_s: int, compter: bool = True) -> Non
 def compter_echec(cle: str) -> None:
     with _verrou:
         _tentatives[cle].append(time.monotonic())
+
+
+# ---------------------------------------------------------------------------
+# Administrateur (propriétaire du carnet)
+# ---------------------------------------------------------------------------
+# ADMIN_EMAIL (une ou plusieurs adresses séparées par des virgules) désigne l'administrateur ;
+# sans réglage, c'est le compte qui a le plus de séances (le propriétaire du carnet — pas forcément
+# le premier créé). Il génère les invitations et garde ses réglages d'origine (textes, Spotify…) ;
+# les autres comptes ont la version « grand public ».
+_ADMIN_EMAILS = {e.strip().lower() for e in os.getenv("ADMIN_EMAIL", "").split(",") if e.strip()}
+_compte_principal: Optional[int] = None
+
+
+def est_admin(db: Session, user: Optional[Utilisateur]) -> bool:
+    global _compte_principal
+    if user is None:
+        return False
+    if _ADMIN_EMAILS:
+        return (user.email or "").lower() in _ADMIN_EMAILS
+    if _compte_principal is None:
+        from sqlalchemy import func
+        from models import Activite
+        ligne = (db.query(Utilisateur.id)
+                 .outerjoin(Activite, Activite.utilisateur_id == Utilisateur.id)
+                 .group_by(Utilisateur.id)
+                 .order_by(func.count(Activite.id).desc(), Utilisateur.id)
+                 .first())
+        _compte_principal = ligne[0] if ligne else None
+    return user.id == _compte_principal
+
+
+def get_admin(user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)) -> Utilisateur:
+    if not est_admin(db, user):
+        raise HTTPException(403, "Réservé à l'administrateur")
+    return user

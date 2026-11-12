@@ -17,11 +17,16 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
+
+import jwt
+
+import formulation
+from deps import ALGORITHM, SECRET_KEY
 
 logger = logging.getLogger(__name__)
 
-from routers import auth, carnet, coaching, corps, intervals, itineraires, materiel, plan, qualite, suivi, utilisateur
+from routers import admin, auth, carnet, coaching, corps, intervals, itineraires, materiel, plan, qualite, suivi, utilisateur
 
 app = FastAPI(
     title="Carnet — API",
@@ -34,6 +39,36 @@ _ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://localhost:4173",
 ]
+
+# Comptes invités : formulations grand public des messages de forme (voir formulation.py).
+# Ajouté avant GZip pour lire la réponse non compressée.
+@app.middleware("http")
+async def _formulations_grand_public(request: Request, call_next):
+    reponse = await call_next(request)
+    if not request.url.path.startswith("/api/") or "json" not in reponse.headers.get("content-type", ""):
+        return reponse
+    uid = _utilisateur_du_jeton(request)
+    if uid is None or formulation.compte_admin(uid):
+        return reponse
+    corps = b"".join([c async for c in reponse.body_iterator])
+    if formulation.a_reformuler(corps):
+        try:
+            corps = formulation.reformuler_json(corps)
+        except ValueError:
+            pass
+    entetes = {k: v for k, v in reponse.headers.items() if k.lower() != "content-length"}
+    return Response(content=corps, status_code=reponse.status_code, headers=entetes, media_type=reponse.media_type)
+
+
+def _utilisateur_du_jeton(request: Request):
+    auth = request.headers.get("authorization", "")
+    if not auth.lower().startswith("bearer "):
+        return None
+    try:
+        return int(jwt.decode(auth[7:], SECRET_KEY, algorithms=[ALGORITHM])["sub"])
+    except Exception:
+        return None  # jeton d'import / Claude ou invalide : la route décide
+
 
 app.add_middleware(GZipMiddleware, minimum_size=2000)  # la carte des tracés pèse ~1 Mo en JSON
 app.add_middleware(
@@ -102,6 +137,7 @@ async def _handler_exception_global(request: Request, exc: Exception):
 
 
 app.include_router(auth.router)
+app.include_router(admin.router)
 app.include_router(utilisateur.router)
 app.include_router(carnet.router)
 app.include_router(plan.router)
