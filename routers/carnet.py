@@ -459,9 +459,10 @@ def carte_traces(
     current_user: Utilisateur = Depends(get_current_user),
     db: Session = Depends(obtenir_session),
 ):
-    """`meta[i]` = [sport, km, année] du tracé `traces[i]` ; seuls les tracés liés à une séance du carnet sont servis.
+    """`meta[i]` = [sport, km, année, id de la séance, jour ISO, titre, durée en s] du tracé `traces[i]` ; seuls les tracés liés à une séance du carnet sont servis.
     Les tracés encodés sont gardés en base et regénérés seulement quand les tracés changent."""
-    lignes = (db.query(TraceGPS.id, TraceGPS.distance_km, Activite.sport, Activite.debut)
+    lignes = (db.query(TraceGPS.id, TraceGPS.distance_km, Activite.sport, Activite.debut,
+                       Activite.id.label("activite_id"), Activite.titre, Activite.duree_sec)
               .join(Activite, Activite.id == TraceGPS.activite_id)
               .filter(TraceGPS.utilisateur_id == current_user.id).order_by(TraceGPS.id).all())
     signature = f"seances:{len(lignes)}:{sum(l.id for l in lignes)}:{round(sum(l.distance_km or 0 for l in lignes), 3)}"
@@ -476,7 +477,8 @@ def carte_traces(
             db.add(cache)
         cache.signature, cache.donnees = signature, "[" + ",".join(encodes) + "]"
         db.commit()
-    meta = [[l.sport, round(l.distance_km or 0, 2), l.debut.year] for l in lignes]
+    meta = [[l.sport, round(l.distance_km or 0, 2), l.debut.year, l.activite_id, l.debut.date().isoformat(),
+             l.titre, l.duree_sec] for l in lignes]
     return Response('{"meta":' + json.dumps(meta, separators=(",", ":")) + ',"traces":' + cache.donnees + "}",
                     media_type="application/json")
 

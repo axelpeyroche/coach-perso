@@ -3,7 +3,10 @@ import { useQuery } from "@tanstack/react-query";
 import { getCarteTraces } from "../api";
 import { useAuth } from "../AuthContext";
 import { STYLE, Bascule, chargerMaplibre, controleRotation, tournerALaSouris } from "./CarteTrace";
-import { calculerPassages, decoderTraces } from "../passages";
+import { cadresTraces, calculerPassages, decoderTraces, tracesPassantPar, traitTroncon, tronconClique } from "../passages";
+import { getActivite } from "../api";
+import { sportInfo } from "../carnet";
+import FicheActivite from "./FicheActivite";
 
 const TACTILE = typeof window !== "undefined" && !!window.matchMedia?.("(pointer: coarse)").matches;
 
@@ -18,6 +21,67 @@ const COULEUR = ["match", ["get", "n"], ...PALIERS.flatMap(([n, , c]) => [n, c])
 const LARGEUR = ["interpolate", ["linear"], ["zoom"], 9, 1.2, 13, 2.2, 16, 4];
 const LARGEUR_BORD = ["interpolate", ["linear"], ["zoom"], 9, 2.4, 13, 3.6, 16, 5.5];
 const ZOOM_DOMICILE = 11.5;
+const VIDE = { type: "FeatureCollection", features: [] };
+const OPACITE_ESTOMPEE = 0.06;   // tracés qui ne passent pas par le tronçon cliqué
+
+const dureeTexte = (s) => {
+  if (!s) return null;
+  const m = Math.round(s / 60);
+  return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}`;
+};
+const jourTexte = (iso) => new Date(`${iso}T12:00:00`).toLocaleDateString("fr-FR",
+  { weekday: "short", day: "numeric", month: "short", year: iso.slice(0, 4) === String(new Date().getFullYear()) ? undefined : "numeric" });
+
+// Liste des séances passées par le tronçon cliqué
+function PanneauPassage({ seances, lieu, sportListe, setSportListe, onFermer, onOuvrir }) {
+  const parSport = Object.entries(seances.reduce((o, s) => ({ ...o, [s.sport]: (o[s.sport] ?? 0) + 1 }), {}))
+    .sort((a, b) => b[1] - a[1]);
+  const liste = sportListe ? seances.filter((s) => s.sport === sportListe) : seances;
+  const km = Math.round(liste.reduce((t, s) => t + s.km, 0));
+  const puce = (actif) => `shrink-0 px-2.5 py-0.5 rounded-full text-[12px] font-semibold ${actif ? "bg-white text-black" : "bg-white/15 text-white/85"}`;
+  return (
+    <div className="panneau-passage absolute z-20 inset-x-0 bottom-0 max-h-[58%] sm:inset-x-auto sm:top-0 sm:right-0 sm:max-h-none sm:w-72
+      flex flex-col bg-black/80 backdrop-blur text-white sm:border-l border-t sm:border-t-0 border-white/10">
+      <div className="px-3 pt-2.5 pb-2 border-b border-white/10">
+        <div className="flex items-center gap-2">
+          <p className="flex-1 text-[15px] font-semibold chiffres">
+            {liste.length} séance{liste.length > 1 ? "s" : ""} ici{km > 0 && <span className="font-normal text-white/60"> · {km.toLocaleString("fr-FR")} km</span>}
+          </p>
+          <button type="button" onClick={onFermer} aria-label="Fermer la liste" className="h-7 w-7 grid place-items-center rounded-full bg-white/15 text-[13px]">✕</button>
+        </div>
+        {lieu && <p className="text-[12px] text-white/60 truncate">{lieu}</p>}
+        {parSport.length > 1 && (
+          <div className="flex gap-1.5 mt-2 overflow-x-auto">
+            <button type="button" className={puce(!sportListe)} onClick={() => setSportListe(null)}>Tout</button>
+            {parSport.map(([sp, n]) => (
+              <button type="button" key={sp} className={puce(sportListe === sp)} onClick={() => setSportListe(sportListe === sp ? null : sp)}>
+                {sportInfo(sp).label} {n}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      <ul className="flex-1 overflow-y-auto overscroll-contain pb-[env(safe-area-inset-bottom)]">
+        {liste.length === 0 && <li className="px-3 py-3 text-[13px] text-white/60">Aucune séance ici avec ces filtres.</li>}
+        {liste.map((s) => (
+          <li key={s.id}>
+            <button type="button" onClick={() => onOuvrir(s.id)}
+              className="w-full flex items-center gap-2.5 px-3 py-2 text-left border-b border-white/[0.07] hover:bg-white/10 active:bg-white/15">
+              <span className="text-[17px] leading-none" aria-hidden="true">{sportInfo(s.sport).emoji}</span>
+              <span className="flex-1 min-w-0">
+                <span className="block text-[13px] font-semibold truncate">{s.titre || sportInfo(s.sport).label}</span>
+                <span className="block text-[11.5px] text-white/60 chiffres">
+                  {[jourTexte(s.jour), s.km > 0 && `${s.km.toLocaleString("fr-FR", { maximumFractionDigits: 1 })} km`, dureeTexte(s.duree)].filter(Boolean).join(" · ")}
+                </span>
+              </span>
+              <span className="text-white/40 text-[13px]" aria-hidden="true">›</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 // Recherche d'une ville ou d'un lieu (Photon / OpenStreetMap : gratuit, sans clé).
 function RechercheLieu({ onChoix, centre }) {
@@ -116,12 +180,64 @@ export default function CartePassages({ annee: fixe } = {}) {
     queryKey: ["carte-traces"], queryFn: getCarteTraces, enabled: visible, staleTime: 10 * 60 * 1000,
   });
   const traces = useMemo(() => (brut ? decoderTraces(brut.traces) : null), [brut]);
+  const cadres = useMemo(() => (traces ? cadresTraces(traces) : null), [traces]);
+  const idx = useMemo(() => (brut
+    ? brut.meta.flatMap(([sport, , an], i) => (sports.includes(sport) && (annee == null || an === annee) ? [i] : []))
+    : null), [brut, sports, annee]);
   const data = useMemo(() => {
-    if (!traces) return null;
-    const idx = brut.meta.flatMap(([sport, , an], i) => (sports.includes(sport) && (annee == null || an === annee) ? [i] : []));
+    if (!traces || !idx) return null;
     return { ...calculerPassages(idx.map((i) => traces[i])), nb_traces: idx.length,
       km: Math.round(idx.reduce((t, i) => t + brut.meta[i][1], 0)) };
-  }, [traces, brut, sports, annee]);
+  }, [traces, brut, idx]);
+
+  // Tronçon cliqué : seuls les tracés qui y passent restent en couleur, les séances sont listées
+  const [troncon, setTroncon] = useState(null);
+  const [lieu, setLieu] = useState(null);
+  const [sportListe, setSportListe] = useState(null);
+  const [fiche, setFiche] = useState(null);
+  const passants = useMemo(() => (troncon && idx ? tracesPassantPar(traces, cadres, idx, troncon) : null),
+    [troncon, idx, traces, cadres]);
+  const seances = useMemo(() => (passants
+    ? passants.map((i) => {
+      const [sport, km, , id, jour, titre, duree] = brut.meta[i];
+      return { i, sport, km, id, jour, titre, duree };
+    }).sort((a, b) => (a.jour < b.jour ? 1 : a.jour > b.jour ? -1 : b.id - a.id))
+    : null), [passants, brut]);
+  const visibles = useMemo(() => (seances && sportListe ? seances.filter((s) => s.sport === sportListe) : seances), [seances, sportListe]);
+  const selection = useMemo(() => (visibles ? calculerPassages(visibles.map((s) => traces[s.i])) : null), [visibles, traces]);
+  const fermer = () => { setTroncon(null); setSportListe(null); setLieu(null); };
+  // Un clic choisit le tronçon le plus proche (lu par la référence : le gestionnaire de la carte reste à jour)
+  const surClic = useRef(null);
+  surClic.current = (e) => {
+    const m = carte.current;
+    if (!m || !traces || !idx?.length) return;
+    // Tolérance de 12 px à l'écran, convertie en mètres au zoom courant
+    const mpp = (40_075_016 * Math.cos(e.lngLat.lat * Math.PI / 180)) / (512 * 2 ** m.getZoom());
+    const t = tronconClique(traces, cadres, idx, [e.lngLat.lng, e.lngLat.lat], Math.max(12 * mpp, 8));
+    if (!t) return;
+    setTroncon(t); setSportListe(null); setLieu(null);
+  };
+  // Nom de la rue ou du lieu (Photon, au mieux)
+  useEffect(() => {
+    if (!troncon) return;
+    const ctrl = new AbortController();
+    fetch(`https://photon.komoot.io/reverse?lat=${troncon.q[1].toFixed(5)}&lon=${troncon.q[0].toFixed(5)}&lang=fr&limit=1`, { signal: ctrl.signal })
+      .then((r) => r.json())
+      .then((j) => {
+        const p = j.features?.[0]?.properties;
+        if (p) setLieu([p.street ?? p.name, p.city ?? p.district].filter(Boolean).filter((v, k, a) => a.indexOf(v) === k).join(", ") || null);
+      })
+      .catch(() => {});
+    return () => ctrl.abort();
+  }, [troncon]);
+  // Classe posée à la main : React ne doit pas écraser celle du plein écran de MapLibre
+  useEffect(() => { cadre.current?.classList.toggle("carte-liste", !!troncon); }, [troncon]);
+  // Fiche de la séance : on sort du plein écran pour qu'elle s'affiche par-dessus la page
+  const ouvrir = async (id) => {
+    const bouton = cadre.current?.querySelector(".maplibregl-ctrl-shrink");
+    if (bouton) bouton.click();
+    try { setFiche(await getActivite(id)); } catch { /* séance supprimée entre-temps */ }
+  };
   const annees = useMemo(() => (brut ? [...new Set(brut.meta.map((m) => m[2]).filter(Boolean))].sort((a, b) => b - a) : []), [brut]);
 
   // Ne charge les tracés (≈ 400 Ko) que lorsqu'elle arrive à l'écran
@@ -170,6 +286,25 @@ export default function CartePassages({ annee: fixe } = {}) {
         m.addLayer({ id: "passages", type: "line", source: "passages",
           layout: { "line-join": "round", "line-cap": "round", "line-sort-key": ["get", "n"] },
           paint: { "line-color": COULEUR, "line-width": LARGEUR } });
+        // Tracés passés par le tronçon cliqué, par-dessus les autres (estompés)
+        m.addSource("selection", { type: "geojson", data: VIDE });
+        m.addLayer({ id: "selection-bord", type: "line", source: "selection",
+          layout: { "line-join": "round", "line-cap": "round" },
+          paint: { "line-color": "#000", "line-opacity": 0.45, "line-width": LARGEUR_BORD } });
+        m.addLayer({ id: "selection", type: "line", source: "selection",
+          layout: { "line-join": "round", "line-cap": "round", "line-sort-key": ["get", "n"] },
+          paint: { "line-color": COULEUR, "line-width": LARGEUR } });
+        m.addSource("troncon", { type: "geojson", data: VIDE });
+        m.addLayer({ id: "troncon", type: "line", source: "troncon",
+          layout: { "line-cap": "round" },
+          paint: { "line-color": "#fff", "line-opacity": 0.95,
+            "line-width": ["interpolate", ["linear"], ["zoom"], 9, 5, 13, 7, 16, 10] } });
+        m.on("click", (e) => surClic.current?.(e));
+        // Main au survol d'un tracé (à la souris)
+        m.on("mousemove", (e) => {
+          const b = [[e.point.x - 6, e.point.y - 6], [e.point.x + 6, e.point.y + 6]];
+          m.getCanvas().style.cursor = m.queryRenderedFeatures(b, { layers: ["passages", "selection"] }).length ? "pointer" : "";
+        });
         setPrete(true);
       });
     })();
@@ -209,6 +344,19 @@ export default function CartePassages({ annee: fixe } = {}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, prete, fixe]);
 
+  // Sélection : les autres tracés s'estompent, ceux du tronçon passent devant
+  useEffect(() => {
+    const m = carte.current;
+    if (!prete || !m) return;
+    const actif = !!troncon;
+    m.setPaintProperty("passages", "line-opacity", actif ? OPACITE_ESTOMPEE : 1);
+    m.setPaintProperty("passages-bord", "line-opacity", actif ? 0.02 : 0.35);
+    m.getSource("selection").setData(actif && selection ? { type: "FeatureCollection", features: selection.features } : VIDE);
+    m.getSource("troncon").setData(actif
+      ? { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: traitTroncon(troncon) } }
+      : VIDE);
+  }, [troncon, selection, prete]);
+
   // Adresse enregistrée ou modifiée dans le Profil : la carte s'y recentre
   const centree = useRef(null);
   useEffect(() => {
@@ -245,6 +393,16 @@ export default function CartePassages({ annee: fixe } = {}) {
       </div>
       <div ref={cadre} className="relative h-80 lg:h-[26rem] rounded-[14px] overflow-hidden bg-remplissage">
         <div ref={conteneur} className="w-full h-full" />
+        {seances && (
+          <PanneauPassage seances={seances} lieu={lieu} sportListe={sportListe} setSportListe={setSportListe}
+            onFermer={fermer} onOuvrir={ouvrir} />
+        )}
+        {seances && (
+          <button type="button" onClick={fermer}
+            className="absolute z-10 left-2 bottom-[calc(58%+0.5rem)] sm:bottom-8 flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-[13px] font-semibold text-black shadow">
+            ✕ Tout afficher
+          </button>
+        )}
         {(isLoading || !visible) && (
           <div className="absolute inset-0 grid place-items-center pointer-events-none">
             <span className="rounded-[8px] bg-black/60 backdrop-blur px-2.5 py-1 text-[13px] font-semibold text-white">Chargement des tracés…</span>
@@ -280,9 +438,11 @@ export default function CartePassages({ annee: fixe } = {}) {
           </span>
         ))}
       </div>
+      {fiche && <FicheActivite key={fiche.id} activite={fiche} onClose={() => setFiche(null)} />}
       {data && (
         <p className="px-1 text-[12px] text-label-2 chiffres">
           {data.nb_traces} sortie{data.nb_traces > 1 ? "s" : ""} · {data.km.toLocaleString("fr-FR")} km · jusqu'à {data.max} passages au même endroit
+          {!seances && " · touche un tracé pour voir les séances passées par là"}
         </p>
       )}
     </div>

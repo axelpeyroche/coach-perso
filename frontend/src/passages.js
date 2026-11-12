@@ -103,3 +103,70 @@ export function calculerPassages(traces, cellule = 15) {
   for (const c of somme.keys()) max = Math.max(max, compte.get(c));
   return { features, vue: [[o, s], [e, n]], max };
 }
+
+// ——— Clic sur un tracé : quelles sorties passent par ce tronçon ? ———
+
+// Cadre de chaque tracé, pour écarter d'un coup ceux qui sont loin du clic
+export function cadresTraces(traces) {
+  return traces.map((t) => {
+    let o = 180, s = 90, e = -180, n = -90;
+    for (let i = 0; i < t.lat.length; i++) {
+      o = Math.min(o, t.lon[i]); e = Math.max(e, t.lon[i]); s = Math.min(s, t.lat[i]); n = Math.max(n, t.lat[i]);
+    }
+    return [o, s, e, n];
+  });
+}
+
+// Parcourt les portions de `t` proches de `p` (en mètres, repère local centré sur p) :
+// rappel(distance, projeté [x, y], direction [dx, dy] normée, à côté (p se projette dans la portion, pas au-delà))
+function portionsProches(t, cadre, p, rayon, rappel) {
+  const kx = 111_320 * Math.cos(p[1] * Math.PI / 180), ky = 110_574;
+  const mx = rayon / kx, my = rayon / ky;
+  if (p[0] < cadre[0] - mx || p[0] > cadre[2] + mx || p[1] < cadre[1] - my || p[1] > cadre[3] + my) return;
+  for (let i = 1; i < t.lat.length; i++) {
+    const ax = (t.lon[i - 1] - p[0]) * kx, ay = (t.lat[i - 1] - p[1]) * ky;
+    const bx = (t.lon[i] - p[0]) * kx, by = (t.lat[i] - p[1]) * ky;
+    if ((ax > rayon && bx > rayon) || (ax < -rayon && bx < -rayon) || (ay > rayon && by > rayon) || (ay < -rayon && by < -rayon)) continue;
+    const vx = bx - ax, vy = by - ay, l2 = vx * vx + vy * vy;
+    if (!l2 || l2 > 2000 * 2000) continue;   // point répété, ou tracé coupé (voir calculerPassages)
+    const brut = -(ax * vx + ay * vy) / l2, f = Math.max(0, Math.min(1, brut));
+    const x = ax + vx * f, y = ay + vy * f, d = Math.hypot(x, y);
+    if (d <= rayon) { const l = Math.sqrt(l2); rappel(d, [x, y], [vx / l, vy / l], brut >= -0.05 && brut <= 1.05); }
+  }
+}
+
+/**
+ * Tronçon le plus proche du clic `p` = [lon, lat], parmi les tracés `idx`, à moins de `tolerance` mètres.
+ * Retourne { q: [lon, lat] (point sur le tracé), d: [dx, dy] (sens du tronçon) } ou null.
+ */
+export function tronconClique(traces, cadres, idx, p, tolerance) {
+  let mieux = null;
+  for (const i of idx) {
+    portionsProches(traces[i], cadres[i], p, tolerance, (d, xy, dir) => {
+      if (!mieux || d < mieux.dist) mieux = { dist: d, xy, dir };
+    });
+  }
+  if (!mieux) return null;
+  const kx = 111_320 * Math.cos(p[1] * Math.PI / 180), ky = 110_574;
+  return { q: [p[0] + mieux.xy[0] / kx, p[1] + mieux.xy[1] / ky], d: mieux.dir };
+}
+
+// Tracés passés par ce tronçon : à moins de `rayon` mètres de q, dans le même axe
+// (à un carrefour, seule la branche cliquée compte : |cos| ≥ 0,7, soit ±45°)
+export function tracesPassantPar(traces, cadres, idx, troncon, rayon = 25) {
+  const { q, d } = troncon;
+  return idx.filter((i) => {
+    let ok = false;
+    // « À côté » : un tracé qui s'arrête ou tourne juste avant le point ne compte pas
+    portionsProches(traces[i], cadres[i], q, rayon, (_, __, dir, aCote) => {
+      if (aCote && Math.abs(dir[0] * d[0] + dir[1] * d[1]) >= 0.7) ok = true;
+    });
+    return ok;
+  });
+}
+
+// Petit trait centré sur le tronçon cliqué (±`demi` mètres), pour le montrer sur la carte
+export function traitTroncon({ q, d }, demi = 30) {
+  const kx = 111_320 * Math.cos(q[1] * Math.PI / 180), ky = 110_574;
+  return [[q[0] - d[0] * demi / kx, q[1] - d[1] * demi / ky], [q[0] + d[0] * demi / kx, q[1] + d[1] * demi / ky]];
+}

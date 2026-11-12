@@ -569,6 +569,12 @@
 .maplibregl-pseudo-fullscreen .maplibregl-ctrl-top-right,
 .maplibregl-pseudo-fullscreen .champs-carte { top: calc(var(--haut-lisible) + 8px); }
 .maplibregl-pseudo-fullscreen .maplibregl-ctrl-bottom-right { bottom: env(safe-area-inset-bottom); }
+/* Liste des séances d'un tronçon ouverte à droite : les boutons de la carte se décalent */
+@media (min-width: 640px) {
+  .carte-liste .maplibregl-ctrl-top-right, .carte-liste .maplibregl-ctrl-bottom-right { right: 18rem; }
+  .carte-liste .champs-carte { right: 21rem; }
+  .maplibregl-pseudo-fullscreen .panneau-passage { top: var(--haut-lisible); }
+}
 
 /* ── Impression : export PDF d'un bilan ou d'une fiche ─────────────────── */
 @media print {
