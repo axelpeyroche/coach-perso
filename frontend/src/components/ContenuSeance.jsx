@@ -101,7 +101,7 @@ function Muscu({ r, couleur }) {
           <div className="flex items-baseline justify-between gap-2">
             <h4 className={titreSection}>{s.titre ?? "Exercices"}</h4>
             <span className="px-1 text-[13px] text-label-2 chiffres">
-              {s.exercices.length} exercice{s.exercices.length > 1 ? "s" : ""}{s.duree ? ` · ${s.duree}` : ""}
+              {s.exercices.length} exercice{s.exercices.length > 1 ? "s" : ""}{s.amrap ? " en boucle" : s.duree ? ` · ${s.duree}` : ""}
             </span>
           </div>
           <div className="card divide-y-[0.5px] divide-separateur overflow-hidden">

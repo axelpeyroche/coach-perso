@@ -172,13 +172,18 @@ def series_realisees(db: Session, user_id: int, acts: list[Activite], auj: date)
                 continue
             nom, groupes = identifier(str(e.get("nom") or ""))
             reps, tenue = _reps_exercice(e, p.description or "")
+            # Test max : le résultat saisi en fin d'exercice remplace la consigne
+            faites = e.get("reps_faites")
+            test_max = isinstance(faites, (int, float)) and not isinstance(faites, bool) and faites > 0
+            if test_max:
+                reps, tenue = float(faites), None
             charge = str(e.get("charge") or "")
             kg = _RE_KG.search(charge)
             out.append({"jour": jour, "nom": nom, "groupes": groupes, "series": int(e["series_faites"]), "reps": reps,
                         "tenue_s": tenue, "kg": float(kg[1].replace(",", ".")) if kg else None,
                         "par_main": "par main" in charge.lower() or "par bras" in charge.lower(),
                         "difficulte": e.get("difficulte") if e.get("difficulte") in cs.DIFFICULTES else None,
-                        "max": False, "source": "guidee"})
+                        "max": test_max, "source": "guidee"})
     import suivi_service as sv
     for a in acts:
         if a.sport not in ("muscu", "hiit") or a.debut.date() in jours_guides or not a.notes:

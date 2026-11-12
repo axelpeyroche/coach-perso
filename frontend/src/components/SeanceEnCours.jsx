@@ -229,7 +229,7 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
       ...st, idx: Math.min(idx, etapes.length - 1), ex: exS,
       minuteurFin: et.type === "repos" ? t + et.duree * 1000 : null,
       minuteurTotal: et.type === "repos" ? et.duree : null,
-      decompteFin: null, emomDebut: null,
+      decompteFin: null, emomDebut: null, amrapDebut: null,
     };
   }
   const suivant = () => setEtat((st) => aller(st, st.idx + 1));
@@ -241,15 +241,29 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
   function finEmom(faites) {
     setEtat((st) => aller(st, st.idx + 1, { ...st.ex, [k]: { ...st.ex[k], series_faites: faites } }));
   }
+  // Un circuit AMRAP couvre plusieurs exercices : ils se terminent ensemble
+  const blocDe = (et) => et.ks ?? [et.k];
   function finExercice() {
-    setEtat((st) => aller(st, st.idx + 1, { ...st.ex, [k]: { ...st.ex[k], fin: Date.now() } }));
+    setEtat((st) => {
+      const t = Date.now();
+      const exS = { ...st.ex };
+      const tours = st.ex[k]?.tours ?? 0;
+      blocDe(etape).forEach((i) => { exS[i] = { ...exS[i], fin: t, ...(etape.amrap ? { series_faites: tours } : {}) }; });
+      return aller(st, st.idx + 1, exS);
+    });
   }
+  function finAmrap() {
+    setEtat((st) => aller(st, st.idx + 1, { ...st.ex, [k]: { ...st.ex[k], amrap_fin: Date.now() } }));
+  }
+  const majTours = (d) => setEtat((st) => ({ ...st, ex: { ...st.ex, [k]: { ...st.ex[k], tours: Math.max(0, (st.ex[k]?.tours ?? 0) + d) } } }));
   function passerExercice() {
     setMenu(false);
     setEtat((st) => {
-      const prochaine = etapes.findIndex((et, i) => i > st.idx && (et.k == null || et.k > k));
-      return aller(st, prochaine < 0 ? etapes.length - 1 : prochaine,
-        { ...st.ex, [k]: { ...st.ex[k], passe: true, fin: Date.now() } });
+      const dernierDuBloc = Math.max(...blocDe(etape));
+      const prochaine = etapes.findIndex((et, i) => i > st.idx && (et.k == null || et.k > dernierDuBloc));
+      const exS = { ...st.ex };
+      blocDe(etape).forEach((i) => { exS[i] = { ...exS[i], passe: true, fin: Date.now() }; });
+      return aller(st, prochaine < 0 ? etapes.length - 1 : prochaine, exS);
     });
   }
   // Le décompte sonore part dans le geste lui-même, d'un bloc (sinon « trois » pouvait tomber en bip, puis les mots un à un)
@@ -266,7 +280,9 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
         setGoJusqua(Date.now() + 700);
         setEtat((st) => (etape.type === "emom"
           ? { ...st, decompteFin: null, emomDebut: st.decompteFin }
-          : { ...st, decompteFin: null, minuteurFin: st.decompteFin + ex.duree * 1000, minuteurTotal: ex.duree }));
+          : etape.type === "amrap"
+            ? { ...st, decompteFin: null, amrapDebut: st.decompteFin }
+            : { ...st, decompteFin: null, minuteurFin: st.decompteFin + ex.duree * 1000, minuteurTotal: ex.duree }));
       } else if (r <= 3 && bipUneFois(`d${etat.decompteFin}-${r}`)) bipCourt(r, "go", etat.decompteFin - now);
     } else if (etat.minuteurFin) {
       const r = Math.ceil((etat.minuteurFin - now) / 1000);
@@ -291,6 +307,15 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
         else if (r <= 3 && bipUneFois(`e${etat.emomDebut}-${m}-${r}`))
           bipCourt(r, m === ex.series - 1 ? "repos" : "go", 60000 - (ecoule % 60000));
       }
+    } else if (etape.type === "amrap" && etat.amrapDebut) {
+      const total = etape.minutes * 60000;
+      const ecoule = now - etat.amrapDebut;
+      if (ecoule >= total) {
+        if (bipUneFois(`a-fin${etat.amrapDebut}`)) { bipLong("repos"); finAmrap(); }
+      } else {
+        const r = Math.ceil((total - ecoule) / 1000);
+        if (r <= 3 && bipUneFois(`a${etat.amrapDebut}-${r}`)) bipCourt(r, "repos", total - ecoule);
+      }
     }
   }, [now]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -308,9 +333,21 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
             series_prevues: e.series, series_faites: x.series_faites ?? 0, passe: !!x.passe,
             difficulte: x.difficulte ?? null, ressenti: (x.ressenti || "").trim() || null,
             duree_s: x.debut && x.fin ? Math.round((x.fin - x.debut) / 1000) : null,
+            ...(e.amrap ? { amrap_min: e.amrap } : {}),
+            ...(e.max && x.reps_faites != null && x.reps_faites !== "" ? { reps_faites: Number(x.reps_faites) } : {}),
           };
         }),
       };
+      // Résultat de chaque circuit AMRAP : tours complets + reps du tour entamé
+      const circuits = etapes.filter((et) => et.type === "amrap").map((et) => {
+        const x = etat.ex[et.k] || {};
+        return {
+          minutes: et.minutes, tours: x.tours ?? 0, reps_plus: Number(x.reps_plus) || 0, passe: !!x.passe,
+          difficulte: x.difficulte ?? null, ressenti: (x.ressenti || "").trim() || null,
+          exercices: et.ks.map((i) => ({ nom: exercices[i].nom, reps: exercices[i].reps ?? null })),
+        };
+      });
+      if (circuits.length) deroule.amrap = circuits;
       return modifierPrevue(s.id, { deroule });
     },
     onSuccess: () => { effacer(s.id); onEnregistree(); },
@@ -321,6 +358,7 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
   if (etape.type === "echauffement") principale = suivant;
   else if (etape.type === "serie") principale = ex.duree && !etat.minuteurFin ? (etat.decompteFin ? null : lancerDecompte) : () => validerSerie(etape.i);
   else if (etape.type === "emom") principale = etat.emomDebut || etat.decompteFin ? null : lancerDecompte;
+  else if (etape.type === "amrap") principale = etat.decompteFin ? null : etat.amrapDebut ? () => majTours(1) : lancerDecompte;
   else if (etape.type === "repos") principale = suivant;
   else if (etape.type === "ressenti") principale = finExercice;
   else if (etape.type === "fin") principale = enregistrer.isPending ? null : () => enregistrer.mutate();
@@ -343,6 +381,10 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
   const avancement = exercices.map((_, i) => {
     if (etape.type === "fin") return 1;
     if (k == null) return 0;
+    if (etape.ks?.includes(i)) {
+      if (etape.type === "ressenti") return 1;
+      return etat.amrapDebut ? Math.min(1, (now - etat.amrapDebut) / (etape.minutes * 60000)) : 0;
+    }
     if (i < k) return 1;
     if (i > k) return 0;
     // Seules les étapes d'effort comptent (séries, EMOM) : pas les repos ni le ressenti
@@ -371,6 +413,7 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
       return [titre, e.charge];
     }
     if (et.type === "emom") return [`${e.nom} · EMOM ${e.series} min`, e.reps ? `${e.reps} reps` : null];
+    if (et.type === "amrap") return [`AMRAP ${et.minutes} min`, `${et.ks.length} exercices`];
     if (et.type === "repos") return ["Repos", fmtChrono(et.duree)];
     return [null];
   }
@@ -384,7 +427,9 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
         <Surtitre>Échauffement</Surtitre>
         <Nom>{etape.texte}</Nom>
         <div className="flex-1" />
-        {premier && <Ensuite titre={`${premier.nom} · ${prescription(premier)}`} detail={premier.emom ? `${premier.reps} reps` : premier.charge} />}
+        {premier && (premier.amrap
+          ? <Ensuite titre={`AMRAP ${premier.amrap} min`} detail={`${etapes.find((et) => et.type === "amrap")?.ks.length ?? 1} exercices`} />
+          : <Ensuite titre={`${premier.nom} · ${prescription(premier)}`} detail={premier.emom ? `${premier.reps} reps` : premier.charge} />)}
         <div className="h-3" />
         {musique}
         <Bouton onClick={suivant}>Échauffement terminé</Bouton>
@@ -448,6 +493,71 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
         <Bouton couleur={ORANGE} onClick={lancerDecompte}><Lecture />Lancer l'EMOM</Bouton>
       </>
     );
+  } else if (etape.type === "amrap") {
+    const enCours = !!etat.amrapDebut;
+    const total = etape.minutes * 60;
+    const resteA = enCours ? Math.max(0, total - (now - etat.amrapDebut) / 1000) : total;
+    const tours = suivi.tours ?? 0;
+    // Le circuit, rappelé tout du long (pictogramme, reps, 3D avant de lancer)
+    const circuit = (
+      <ol className={clsx("rounded-[16px] bg-[#1c1c1e] divide-y divide-white/[0.08]", enCours ? "mt-4" : "mt-5")}>
+        {etape.ks.map((i) => {
+          const e = exercices[i];
+          return (
+            <li key={i} className={clsx("flex items-center gap-3 px-3.5", enCours ? "py-2" : "py-3")}>
+              <Pictogramme traces={pictos[i]} className="w-6 h-6 shrink-0 text-white/60" />
+              <span className="flex-1 min-w-0">
+                <span className="block text-[15px] lg:text-[17px] font-semibold truncate">{e.nom}</span>
+                {!enCours && (e.charge || e.consigne) && <span className="block text-[13px] text-white/60 truncate">{[e.charge, e.consigne].filter(Boolean).join(" · ")}</span>}
+              </span>
+              <span className="font-rounded text-[17px] lg:text-[19px] font-bold chiffres shrink-0">{e.reps ?? "?"}{e.unite ? <span className="ml-1 text-[13px] font-semibold text-white/60">{e.unite}</span> : null}</span>
+              {!enCours && anims[i] && (
+                <button type="button" onClick={() => setMouvement(i)} aria-label={`Voir le mouvement : ${e.nom}`}
+                  className="w-8 h-8 shrink-0 rounded-full flex items-center justify-center active:scale-95 transition-transform"
+                  style={{ background: "rgba(175,82,222,.18)", color: "#D9A6F0" }}><Lecture className="w-2.5 h-3" /></button>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    );
+    corps = enCours ? (
+      <>
+        <Surtitre couleur={ORANGE}>AMRAP · {etape.minutes} min</Surtitre>
+        <div className="h-4" />
+        <Anneau part={resteA / total} couleur={ORANGE} className="w-[190px] lg:w-[260px]">
+          <span className="font-rounded text-[52px] lg:text-[72px] font-bold leading-none tracking-[-0.03em] chiffres">{fmtChrono(Math.ceil(resteA))}</span>
+          <span className="mt-1.5 text-[13px] lg:text-[15px] text-white/60">restantes</span>
+        </Anneau>
+        <div className="mt-5 flex items-center justify-center gap-5">
+          <button type="button" onClick={() => majTours(-1)} disabled={!tours} aria-label="Retirer un tour"
+            className="w-11 h-11 rounded-full bg-[#2c2c2e] text-[22px] font-semibold disabled:opacity-30">−</button>
+          <p className="text-center min-w-[120px]" aria-live="polite">
+            <span className="block font-rounded text-[56px] lg:text-[72px] font-bold leading-none chiffres">{tours}</span>
+            <span className="text-[13px] text-white/60">{tours > 1 ? "tours complets" : "tour complet"}</span>
+          </p>
+          <span className="w-11 h-11" aria-hidden />
+        </div>
+        {circuit}
+        <div className="flex-1 min-h-4" />
+        {musique}
+        <div className="flex gap-2.5">
+          <Bouton sombre className="!w-[38%]" onClick={finAmrap}>Arrêter</Bouton>
+          <Bouton couleur={ORANGE} onClick={() => majTours(1)}>+1 tour</Bouton>
+        </div>
+      </>
+    ) : (
+      <>
+        <Surtitre couleur={ORANGE}>AMRAP · {etape.minutes} min</Surtitre>
+        <Nom>Le plus de tours possible</Nom>
+        <p className="mt-2 text-[14px] leading-5 text-white/60">Enchaîne le circuit sans t'arrêter et touche « +1 tour » à chaque tour bouclé. Bips à 3, 2, 1 avant la fin.</p>
+        {circuit}
+        <div className="flex-1 min-h-4" />
+        {ex.historique && <div className="flex justify-center mb-3.5"><Puce>Dernière fois <b>{ex.historique}</b></Puce></div>}
+        {musique}
+        <Bouton couleur={ORANGE} onClick={lancerDecompte}><Lecture />Lancer l'AMRAP</Bouton>
+      </>
+    );
   } else if (etape.type === "serie") {
     const chrono = ex.duree && etat.minuteurFin;
     corps = (
@@ -481,11 +591,37 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
       </>
     );
   } else if (etape.type === "ressenti") {
-    const dernier = exercices.length - 1 === k;
+    const dernier = exercices.length - 1 === Math.max(...blocDe(etape));
+    const champ = "w-full rounded-[14px] bg-[#1c1c1e] px-3.5 py-3 text-[16px] text-white placeholder:text-white/30 outline-none focus:ring-2 focus:ring-[#BF5AF2]";
+    const libelle = "block mt-6 mb-2 ml-0.5 text-[12px] font-semibold uppercase tracking-[0.06em] text-white/30";
     corps = (
       <>
-        <Surtitre couleur={VERT}>Exercice terminé</Surtitre>
-        <Nom>{ex.nom}</Nom>
+        <Surtitre couleur={VERT}>{etape.amrap ? "AMRAP terminé" : "Exercice terminé"}</Surtitre>
+        <Nom>{etape.amrap ? `${suivi.tours ?? 0} tour${(suivi.tours ?? 0) > 1 ? "s" : ""}${Number(suivi.reps_plus) > 0 ? ` + ${suivi.reps_plus} reps` : ""}` : ex.nom}</Nom>
+        {etape.amrap && (
+          <div className="mt-2 grid grid-cols-2 gap-2.5">
+            <div>
+              <p className={libelle}>Tours complets</p>
+              <div className="flex items-center justify-between rounded-[14px] bg-[#1c1c1e] p-1.5">
+                <button type="button" onClick={() => majTours(-1)} aria-label="Retirer un tour" className="w-10 h-10 rounded-[10px] bg-[#2c2c2e] text-[20px] font-semibold">−</button>
+                <span className="font-rounded text-[24px] font-bold chiffres">{suivi.tours ?? 0}</span>
+                <button type="button" onClick={() => majTours(1)} aria-label="Ajouter un tour" className="w-10 h-10 rounded-[10px] bg-[#2c2c2e] text-[20px] font-semibold">+</button>
+              </div>
+            </div>
+            <div>
+              <label htmlFor="reps-plus" className={libelle}>Reps du tour entamé</label>
+              <input id="reps-plus" type="number" inputMode="numeric" min="0" value={suivi.reps_plus ?? ""} placeholder="0"
+                onChange={(ev) => majEx(k, { reps_plus: ev.target.value })} className={clsx(champ, "h-[52px] font-rounded text-[20px] font-bold text-center")} />
+            </div>
+          </div>
+        )}
+        {ex.max && !etape.amrap && (
+          <>
+            <label htmlFor="reps-faites" className={libelle}>Répétitions faites</label>
+            <input id="reps-faites" type="number" inputMode="numeric" min="0" value={suivi.reps_faites ?? ""} placeholder={ex.historique ? `Dernière fois : ${ex.historique}` : "Ton résultat"}
+              onChange={(ev) => majEx(k, { reps_faites: ev.target.value })} className={clsx(champ, "font-rounded text-[22px] font-bold")} />
+          </>
+        )}
         <p className="mt-6 mb-2 ml-0.5 text-[12px] font-semibold uppercase tracking-[0.06em] text-white/30">Difficulté</p>
         <div className="grid grid-cols-4 gap-1.5">
           {DIFFICULTES.map(([v, l]) => (
@@ -510,7 +646,7 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
     );
   } else {
     const faits = exercices.filter((_, i) => !etat.ex[i]?.passe && (etat.ex[i]?.series_faites ?? 0) > 0).length;
-    const series = exercices.reduce((n, e, i) => n + (e.emom ? 0 : etat.ex[i]?.series_faites ?? 0), 0);
+    const series = exercices.reduce((n, e, i) => n + (e.emom || e.amrap ? 0 : etat.ex[i]?.series_faites ?? 0), 0);
     const notes = exercices.filter((_, i) => (etat.ex[i]?.ressenti || "").trim() || etat.ex[i]?.difficulte).length;
     const stats = [["Durée", fmtChrono((now - etat.debut) / 1000)], ["Exercices", `${faits}/${exercices.length}`], ["Séries", series], ["Ressentis", notes]];
     corps = (
@@ -538,7 +674,7 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
   const debloquer = (ev) => { if (!ev.target.closest?.("[data-spotify]")) debloquerSon(); };
 
   const ecran = (
-    <div className="fixed inset-0 z-[60] flex bg-black text-white font-sans antialiased select-none [&_textarea]:select-text"
+    <div className="fixed inset-0 z-[60] flex bg-black text-white font-sans antialiased select-none [&_textarea]:select-text [&_input]:select-text"
       role="dialog" aria-modal="true" aria-label={`Séance en cours : ${s.titre}`}
       onClickCapture={debloquer} onTouchEndCapture={debloquer}>
       <div className="relative flex-1 min-w-0 flex flex-col"
@@ -598,7 +734,7 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
         {exercices.map((e, i) => {
           const x = etat.ex[i] || {};
           const fait = etape.type === "fin" || (k != null && i < k);
-          const enCours = i === k && etape.type !== "fin";
+          const enCours = (i === k || !!etape.ks?.includes(i)) && etape.type !== "fin";
           const sectionNouvelle = i > 0 && e.section !== exercices[i - 1].section && e.section;
           return (
             <div key={i}>
@@ -611,7 +747,7 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
                 </b>
                 <span className="flex-1 min-w-0 truncate">{e.nom}</span>
                 <em className="not-italic text-[12px] text-white/30 chiffres shrink-0">
-                  {x.passe ? "passé" : enCours && !e.emom ? `${x.series_faites ?? 0}/${e.series}` : e.emom ? `${e.series}′` : `${e.series} × ${e.reps}`}
+                  {x.passe ? "passé" : e.amrap ? prescription(e) : enCours && !e.emom ? `${x.series_faites ?? 0}/${e.series}` : e.emom ? `${e.series}′` : prescription(e)}
                 </em>
               </div>
             </div>

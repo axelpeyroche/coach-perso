@@ -38,7 +38,10 @@ const RE_HISTO = /^dernière fois\s*:?\s*/i;
 
 // Exercice prêt à afficher
 function preparer(e, section) {
-  const duree = secondes(e.reps);
+  const max = /\bmax/i.test(`${e.reps ?? ""} ${e.nom} ${e.notes.join(" ")}`);
+  // Test « max en 1 min » : chronométré comme un exercice en durée
+  const dureeMax = max ? /(\d+)\s*(min|['′]|s\b|sec)/i.exec(e.reps ?? "") : null;
+  const duree = secondes(e.reps) ?? (dureeMax ? secondes(`${dureeMax[1]}${/s/i.test(dureeMax[2]) ? " s" : " min"}`) : null);
   const notes = e.notes.filter((n) => !RE_HISTO.test(n) && !/^après\s+\d/i.test(n));
   const histoNote = e.notes.find((n) => RE_HISTO.test(n));
   return {
@@ -55,17 +58,26 @@ function preparer(e, section) {
     pause: e.emom ? pauseAvant(e.notes) : null,
     historique: e.historique || (histoNote ? histoNote.replace(RE_HISTO, "") : null),
     consigne: notes[0] ?? null,
+    amrap: section?.amrap ?? null, // minutes du circuit AMRAP auquel l'exercice appartient
+    max, // test : on note les reps faites
   };
 }
 
 export function construireSeance(r) {
   const sections = r.sections.slice();
   const sectionEchauffement = sections[0] && /échauff/i.test(sections[0].titre ?? "") ? sections.shift() : null;
-  const exercices = sections.flatMap((s) => s.exercices.map((e) => preparer(e, s)));
+  const exercices = sections.flatMap((s, j) => s.exercices.map((e) => ({ ...preparer(e, s), bloc: j })));
 
   const etapes = [{ type: "echauffement", texte: echauffement(r.intro, sectionEchauffement) }];
   exercices.forEach((e, k) => {
-    if (e.emom) {
+    if (e.amrap) {
+      // Tout le circuit en une étape : seul le premier exercice du bloc la crée
+      if (k > 0 && exercices[k - 1].amrap && exercices[k - 1].bloc === e.bloc) return;
+      const ks = exercices.map((x, i) => (x.amrap && x.bloc === e.bloc ? i : -1)).filter((i) => i >= 0);
+      etapes.push({ type: "amrap", k, ks, minutes: e.amrap });
+      etapes.push({ type: "ressenti", k, ks, amrap: true });
+      return;
+    } else if (e.emom) {
       if (e.pause) etapes.push({ type: "repos", k, duree: e.pause, avantEmom: true });
       etapes.push({ type: "emom", k });
     } else {
@@ -83,6 +95,8 @@ export function construireSeance(r) {
 // Prescription courte d'un exercice : « 3 × 12 », « EMOM 10 min », « 3 × 45 s »
 export function prescription(e) {
   if (e.emom) return `EMOM ${e.series} min`;
+  if (e.amrap) return `${e.reps ?? "?"}${e.unite ? ` ${e.unite}` : ""} / tour`;
+  if (e.max && e.series <= 1) return e.reps ?? "Max";
   return `${e.series} × ${e.reps ?? "?"}`;
 }
 

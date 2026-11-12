@@ -147,3 +147,29 @@ def test_alerte_fc_repos():
     pts = [{"fc_repos": 50, "fc_ref": 48}, {"fc_repos": 54, "fc_ref": 48}, {"fc_repos": 53, "fc_ref": 48}]
     assert sv._alerte_fc(pts) == 2                        # +5 bpm ou plus, deux matins de suite
     assert sv._alerte_fc(pts + [{"fc_repos": 52, "fc_ref": 48}]) == 0
+
+
+# ── Lecture des notes de musculation ─────────────────────────────────────────
+
+def test_notes_de_test_nom_puis_nombre():
+    notes = ("Tractions pronation : 10 Dips : 22 Pompes : 35 Squats sautés : 37 "
+             "Tractions supination : 9 Relevés de jambes : 27")
+    lus = {e["nom"]: e["reps"] for e in sv.exercices_muscu(notes)}
+    assert lus == {"Tractions": 10, "Dips": 22, "Pompes": 35, "Squats sautés": 37,
+                   "Tractions supination": 9, "Relevés de jambes": 27}
+    assert all(e["max"] for e in sv.exercices_muscu(notes))
+
+
+def test_notes_series_et_durees_ne_sont_pas_des_max():
+    lus = sv.exercices_muscu("Dips : 4x8 puis 12 tractions. Gainage : 1:30, Repos : 90 s")
+    assert [(e["nom"], e["series"], e["reps"]) for e in lus] == [("Dips", 4, 8), ("Tractions", 1, 12)]
+
+
+def test_deroule_amrap_et_test_max_dans_l_export():
+    d = {"duree_s": 1500, "exercices": [
+        {"nom": "Tractions", "series_faites": 1, "series_prevues": 1, "reps_faites": 11},
+        {"nom": "Pompes", "series_faites": 4, "series_prevues": 1, "amrap_min": 10},
+    ], "amrap": [{"minutes": 10, "tours": 4, "reps_plus": 7, "difficulte": "dur",
+                  "exercices": [{"nom": "Pompes", "reps": "10"}, {"nom": "Squats", "reps": "15"}]}]}
+    assert cs.texte_deroule(d) == ("Séance guidée 25 min · Tractions max 11 reps ; "
+                                   "AMRAP 10 min (10 Pompes, 15 Squats) : 4 tours + 7 reps (dur)")

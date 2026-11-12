@@ -283,10 +283,16 @@ _RE_SERIES = re.compile(
     r"(?:\s*(?:@|à|a|avec)?\s*(?P<kg>\d{1,3}(?:[.,]\d{1,2})?)\s*kg)?", re.I)
 # « 12 tractions », « Retest 5,5 tractions », « max 30 pompes »
 _RE_MAX = re.compile(r"(?:^|[\s,;.(])(?P<n>\d{1,3}(?:[.,]5)?)\s+(?P<nom>[A-Za-zÀ-ÿ'’\-]{4,30})", re.I)
+# Résultats de test notés « Tractions pronation : 10 Dips : 22 » (le nombre suit le nom)
+_RE_DEUX_POINTS = re.compile(
+    r"(?P<nom>[A-Za-zÀ-ÿ'’][A-Za-zÀ-ÿ'’ \-]{1,40}?)\s*:\s*(?P<n>\d{1,3})"
+    r"(?!\s*(?:[x×*\d.,:'′]|kg|s\b|sec|min|h\b|tours|rounds|séries|series|reps))", re.I)
 _PAS_EXERCICE = {"emom", "amrap", "force", "min", "minutes", "secondes", "sec", "séries", "series", "tours",
                  "blocs", "km", "kg", "fois", "rounds", "reps", "répétitions", "repetitions", "jours", "semaines"}
 _ALIAS = {"traction": "Tractions", "pompe": "Pompes", "dip": "Dips", "australienne": "Australiennes",
           "squat": "Squats", "fente": "Fentes", "bulgare": "Fentes bulgares", "curl": "Curl"}
+_VARIANTES = {"supination", "sautés", "sautes", "sauté", "lestées", "lestés", "lestees", "diamant", "archer",
+              "déclinées", "inclinées", "explosives", "pistol"}
 
 
 def _nom_exercice(brut: str) -> Optional[str]:
@@ -297,7 +303,9 @@ def _nom_exercice(brut: str) -> Optional[str]:
         return None
     for cle, joli in _ALIAS.items():
         if mots[0].startswith(cle):
-            return joli
+            # Une variante (supination, sautés, lestées…) reste un exercice à part
+            variante = [m for m in mots[1:] if m in _VARIANTES]
+            return f"{joli} {' '.join(variante)}" if variante else joli
     return nom[:1].upper() + nom[1:]
 
 
@@ -312,6 +320,13 @@ def exercices_muscu(texte: str) -> list[dict]:
             kg = float(m["kg"].replace(",", ".")) if m["kg"] else None
             out.append({"nom": nom, "series": int(m["s"]), "reps": int(m["r"]), "kg": kg})
         pris.append(m.span())
+    for m in _RE_DEUX_POINTS.finditer(texte):
+        if any(a < m.end() and m.start() < b for a, b in pris):
+            continue
+        nom = _nom_exercice(re.split(r"[,.;]", m["nom"])[-1])
+        if nom:
+            out.append({"nom": nom, "series": 1, "reps": int(m["n"]), "kg": None, "max": True})
+            pris.append(m.span())
     for m in _RE_MAX.finditer(texte):
         if any(a <= m.start("n") < b for a, b in pris):
             continue

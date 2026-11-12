@@ -1813,14 +1813,33 @@ def texte_deroule(d: Optional[dict]) -> str:
         if e.get("passe"):
             parties.append(f"{nom} : passé")
             continue
+        if e.get("amrap_min"):
+            continue  # résumé avec son circuit ci-dessous
         faites, prevues = e.get("series_faites"), e.get("series_prevues")
         t = nom
-        if faites is not None and prevues:
+        if isinstance(e.get("reps_faites"), (int, float)):
+            t += f" max {e['reps_faites']:g} reps"
+        elif faites is not None and prevues:
             t += f" {faites}/{prevues}" + (" min" if e.get("emom") else "")
         if e.get("difficulte") in DIFFICULTES:
             t += f" ({DIFFICULTES[e['difficulte']]})"
         if (e.get("ressenti") or "").strip():
             t += f" : « {str(e['ressenti']).strip()} »"
+        parties.append(t)
+    for c in d.get("amrap") or []:
+        if not isinstance(c, dict):
+            continue
+        circuit = ", ".join(f"{x.get('reps') or '?'} {x.get('nom')}" for x in c.get("exercices") or [] if isinstance(x, dict))
+        if c.get("passe"):
+            parties.append(f"AMRAP {c.get('minutes')} min ({circuit}) : passé")
+            continue
+        t = f"AMRAP {c.get('minutes')} min ({circuit}) : {c.get('tours') or 0} tours"
+        if c.get("reps_plus"):
+            t += f" + {c['reps_plus']} reps"
+        if c.get("difficulte") in DIFFICULTES:
+            t += f" ({DIFFICULTES[c['difficulte']]})"
+        if (c.get("ressenti") or "").strip():
+            t += f" : « {str(c['ressenti']).strip()} »"
         parties.append(t)
     duree = d.get("duree_s")
     tete = "Séance guidée" + (f" {round(duree / 60)} min" if isinstance(duree, (int, float)) and duree > 0 else "")

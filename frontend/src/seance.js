@@ -29,7 +29,14 @@ function lireEntete(ligne) {
   let duree = null;
   const m = /\(\s*(\d+)\s*(?:'|′|min)\s*\)\s*$/i.exec(titre);
   if (m) { duree = `${m[1]} min`; titre = titre.slice(0, m.index).trim(); }
-  return { titre: majuscule(titre.toLowerCase()), duree };
+  // « AMRAP 10 MIN » ou « AMRAP (10') » : circuit à enchaîner le plus de tours possible
+  let amrap = null;
+  if (/\bAMRAP\b/i.test(titre)) {
+    const a = /AMRAP\D{0,3}(\d+)\s*(?:'|′|min)/i.exec(titre);
+    amrap = a ? Number(a[1]) : m ? Number(m[1]) : 10;
+    if (!duree) duree = `${amrap} min`;
+  }
+  return { titre: majuscule(titre.toLowerCase()).replace(/amrap/i, "AMRAP"), duree, amrap };
 }
 
 // Partage « a. b » à la première fin de phrase (point suivi d'une espace)
@@ -104,7 +111,7 @@ function lireMuscu(lignes) {
     if (!ligne) continue;
     const ex = RE_EXERCICE.exec(ligne);
     if (ex) {
-      if (!sections.length) sections.push({ titre: null, duree: null, exercices: [] });
+      if (!sections.length) sections.push({ titre: null, duree: null, amrap: null, exercices: [] });
       sections[sections.length - 1].exercices.push(lireExercice(ex[1], ex[2], ex[3]));
     } else if (estEntete(ligne)) {
       sections.push({ ...lireEntete(ligne), exercices: [] });
