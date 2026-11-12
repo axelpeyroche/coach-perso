@@ -270,18 +270,29 @@ export default function CartePassages({ annee: fixe } = {}) {
       m.addControl(ecran, "top-right");
       // En sortant du plein écran, le navigateur peut ramener la page ailleurs :
       // on revient à la position d'avant, la carte réduite sous les yeux
+      // Position lue au clic, avant que le navigateur ne passe en plein écran (après, elle est déjà faussée)
       let defilement = null;
-      ecran.on("fullscreenstart", () => { defilement = window.scrollY; });
+      cadre.current.addEventListener("pointerdown", (e) => {
+        if (e.target.closest?.(".maplibregl-ctrl-fullscreen")) defilement = window.scrollY;
+      }, true);
       ecran.on("fullscreenend", () => {
         const y = defilement;
         defilement = null;
         const revenir = () => {
+          const el = cadre.current;
+          if (!el || el.classList.contains("maplibregl-pseudo-fullscreen") || document.fullscreenElement) return;
           if (y != null) window.scrollTo({ top: y, behavior: "instant" });
-          else cadre.current?.scrollIntoView({ block: "center", behavior: "instant" });
+          // Toujours la carte sous les yeux, même si la page a bougé entre-temps
+          const r = el.getBoundingClientRect();
+          if (r.top < 0 || r.bottom > window.innerHeight) el.scrollIntoView({ block: "center", behavior: "instant" });
         };
-        requestAnimationFrame(revenir);
-        setTimeout(revenir, 150);
-        setTimeout(revenir, 400);
+        // Chrome rétablit son propre défilement un peu après la sortie : on repasse derrière lui
+        let fini = false;
+        const stop = () => { fini = true; };
+        window.addEventListener("wheel", stop, { once: true, passive: true });
+        window.addEventListener("touchstart", stop, { once: true, passive: true });
+        for (const t of [0, 100, 250, 500, 800, 1200]) setTimeout(() => { if (!fini) revenir(); }, t);
+        setTimeout(() => { window.removeEventListener("wheel", stop); window.removeEventListener("touchstart", stop); }, 1300);
       });
       if (TACTILE) {
         // Plein écran : plus de page à faire défiler, un doigt déplace la carte
