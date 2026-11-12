@@ -1775,8 +1775,9 @@ def rapprocher_plan(db: Session, user_id: int, aujourd_hui: Optional[date] = Non
         if p.id in faites or a.id in prises:
             continue
         p.activite_id = a.id
-        if (p.titre or "").strip():
-            a.titre = p.titre.strip()  # nommée une seule fois, au rattachement : renommable ensuite
+        if (p.titre or "").strip() and not (a.titre or "").strip():
+            # nommée une seule fois, au rattachement : un nom déjà donné par l'athlète n'est jamais écrasé
+            a.titre = p.titre.strip()
         prises.add(a.id)
         faites.add(p.id)
         n += 1
