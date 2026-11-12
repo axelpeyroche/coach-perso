@@ -291,8 +291,8 @@ def supprimer_compte(payload: SuppressionCompteSchema, current_user: Utilisateur
     db.query(ItineraireFavori).filter_by(utilisateur_id=current_user.id).delete()
     db.query(Pictogramme).filter_by(utilisateur_id=current_user.id).delete()
     db.query(Animation).filter_by(utilisateur_id=current_user.id).delete()
-    from models import Exclusion, JournalCalcul, Sauvegarde
-    for modele in (Exclusion, JournalCalcul, Sauvegarde):
+    from models import Exclusion, JournalCalcul, ModeleSeance, Sauvegarde
+    for modele in (Exclusion, JournalCalcul, Sauvegarde, ModeleSeance):
         db.query(modele).filter_by(utilisateur_id=current_user.id).delete()
     db.delete(current_user)
     db.commit()

@@ -264,7 +264,14 @@ export const importerPlan = (payload) => api.post("/plan/import", payload).then(
 export const modifierPrevue = (id, payload) => api.patch(`/plan/${id}`, payload).then((r) => r.data);
 export const getPictogrammes = () => api.get("/pictogrammes").then((r) => r.data);
 export const getAnimations = () => api.get("/animations").then((r) => r.data);
-export const supprimerPrevue = (id) => api.delete(`/plan/${id}`).then((r) => r.data);
+export const supprimerPrevue = (id, suite = false) =>
+  api.delete(`/plan/${id}`, { params: suite ? { suite: true } : undefined }).then((r) => r.data);
+// Envoi sur la montre (calendrier Intervals.icu) et modèles de séance
+export const envoyerMontre = (id, jour) => api.post(`/plan/${id}/montre`, { jour }, { timeout: 45000 }).then((r) => r.data);
+export const retirerMontre = (id) => api.delete(`/plan/${id}/montre`, { timeout: 45000 }).then((r) => r.data);
+export const getModeles = () => api.get("/modeles").then((r) => r.data);
+export const creerModele = (payload) => api.post("/modeles", payload).then((r) => r.data);
+export const supprimerModele = (id) => api.delete(`/modeles/${id}`).then((r) => r.data);
 export const planifierTest = (payload) => api.post("/plan/tests", payload).then((r) => r.data);
 export const lierParcoursObjectif = (id, itineraire_id) => api.put(`/objectifs/${id}/parcours`, { itineraire_id }).then((r) => r.data);
 export const getActivitesProches = (id) => api.get(`/plan/${id}/activites`).then((r) => r.data);

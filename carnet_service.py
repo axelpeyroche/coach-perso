@@ -6,6 +6,7 @@ progression des objectifs et export (Markdown / JSON / CSV) pour analyse.
 
 from __future__ import annotations
 
+import blocs_service as bl
 import csv
 import io
 import json
@@ -1705,7 +1706,7 @@ def series_mesures(db: Session, user_id: int, jours: int = 365, aujourd_hui: Opt
 # ---------------------------------------------------------------------------
 
 CHAMPS_PREVUE = ("jour", "ordre", "sport", "titre", "description", "duree_min", "distance_km",
-                 "dplus_m", "rpe_cible", "objectif_id")
+                 "dplus_m", "rpe_cible", "objectif_id", "structure")
 
 
 # Rattachement automatique : jamais au hasard. Le jour écrit dans le plan ne compte pas
@@ -1983,6 +1984,17 @@ def statut_prevue(p: SeancePrevue, aujourd_hui: Optional[date] = None) -> str:
     return "a_venir" if _lundi(p.jour) >= _lundi(auj) else "manquee"
 
 
+def envoi_montre(p: SeancePrevue) -> Optional[dict]:
+    """Séance envoyée sur la montre : jour choisi, date d'envoi, contenu encore identique ou non."""
+    e = bl.lire_structure(p.envoi_montre)
+    if not isinstance(e, dict) or not e.get("event_id"):
+        return None
+    # à jour : même contenu, et séance pas déplacée depuis l'envoi (l'envoi la place au jour choisi)
+    jour = e.get("jour")
+    return {"jour": jour, "le": e.get("le"),
+            "a_jour": e.get("empreinte") == bl.empreinte(p) and jour == p.jour.isoformat()}
+
+
 def serialiser_prevue(p: SeancePrevue, activite: Optional[Activite] = None,
                       aujourd_hui: Optional[date] = None) -> dict:
     info = SPORTS.get(p.sport, SPORTS["autre"])
@@ -1995,6 +2007,8 @@ def serialiser_prevue(p: SeancePrevue, activite: Optional[Activite] = None,
         "objectif_id": p.objectif_id, "commentaire": p.commentaire, "lien_manuel": bool(p.lien_manuel),
         "statut": statut_prevue(p, aujourd_hui), "activite": None,
         "deroule": lire_deroule(p),
+        "structure": bl.lire_structure(p.structure),
+        "montre": envoi_montre(p),
     }
     if activite:
         d["activite"] = serialiser_activite(activite)
@@ -2012,6 +2026,12 @@ def lister_plan(db: Session, user_id: int, depuis: date, jusqu_a: date,
     ids = [p.activite_id for p in prevues if p.activite_id]
     acts = {a.id: a for a in db.query(Activite).filter(Activite.id.in_(ids)).all()} if ids else {}
     return [serialiser_prevue(p, acts.get(p.activite_id), aujourd_hui) for p in prevues]
+
+
+def est_saisie_athlete(p: SeancePrevue) -> bool:
+    """Séance que l'athlète a construite (blocs, série répétée) ou envoyée sur sa montre :
+    un plan envoyé ou importé ne la remplace jamais."""
+    return bool(p.structure or p.envoi_montre or (p.id_externe or "").startswith("rec-"))
 
 
 def enregistrer_plan(db: Session, user_id: int, items: list[dict],
@@ -2034,6 +2054,9 @@ def enregistrer_plan(db: Session, user_id: int, items: list[dict],
         envoyes.add(id_ext)
         p = (db.query(SeancePrevue)
              .filter(SeancePrevue.utilisateur_id == user_id, SeancePrevue.id_externe == id_ext).first())
+        if p and statut_prevue(p, auj) == "realisee":
+            bilan["conserve"] = bilan.get("conserve", 0) + 1  # séance faite : jamais réécrite
+            continue
         if p:
             if _lundi(p.jour) != _lundi(x["jour"]) and not p.lien_manuel:
                 p.activite_id = None  # séance changée de semaine : le rapprochement sera recalculé
@@ -2042,6 +2065,8 @@ def enregistrer_plan(db: Session, user_id: int, items: list[dict],
             p = SeancePrevue(utilisateur_id=user_id, id_externe=id_ext, statut="prevue")
             db.add(p)
             bilan["cree"] += 1
+        if p.structure and "description" in x and x["description"] != p.description:
+            p.structure = None  # description réécrite (plan hebdo, import) : les blocs ne la décrivent plus
         for k in CHAMPS_PREVUE:
             if k in x:
                 setattr(p, k, x[k])
@@ -2053,7 +2078,7 @@ def enregistrer_plan(db: Session, user_id: int, items: list[dict],
                   .filter(SeancePrevue.utilisateur_id == user_id,
                           SeancePrevue.jour >= max(depuis, _lundi(auj)), SeancePrevue.jour <= jusqu_a).all()):
             if (p.id_externe not in envoyes and p.activite_id is None and p.statut != "sautee"
-                    and not p.commentaire and not p.deroule):
+                    and not p.commentaire and not p.deroule and not est_saisie_athlete(p)):
                 db.delete(p)
                 bilan["supprime"] += 1
     db.flush()

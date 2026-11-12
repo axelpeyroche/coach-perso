@@ -154,11 +154,12 @@ function lireEndurance(lignes) {
   return { type: "endurance", intro, phases, consignes };
 }
 
-export function analyserDescription(texte) {
+// `muscu` : texte écrit par l'éditeur de blocs muscu, lu même avec un seul exercice
+export function analyserDescription(texte, { muscu = false } = {}) {
   if (!texte?.trim()) return null;
   const lignes = texte.split(/\r?\n/);
   const exercices = lignes.filter((l) => RE_EXERCICE.test(l.trim())).length;
-  if (exercices >= 2) {
+  if (exercices >= (muscu ? 1 : 2)) {
     const r = lireMuscu(lignes);
     if (r.sections.length) return r;
   }
@@ -179,9 +180,9 @@ const FORMATS = [
 ];
 
 // Résumé d'une séance pour sa carte : formats (EMOM, AMRAP…) et exercices à faire
-export function resumeSeance(texte) {
+export function resumeSeance(texte, options) {
   const formats = FORMATS.filter(([, re]) => re.test(texte ?? "")).map(([f]) => f);
-  const r = analyserDescription(texte);
+  const r = analyserDescription(texte, options);
   const exercices = r?.type === "muscu"
     ? r.sections.flatMap((s) => s.exercices.map((e) => e.nom.replace(/\s*\([^)]*\)/g, "").trim()))
     : [];

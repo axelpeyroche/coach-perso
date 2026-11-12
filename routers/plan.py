@@ -1,8 +1,9 @@
 """
 Plan d'entraînement : séances prévues.
 
-- Routes authentifiées (JWT) pour le dashboard : consulter le plan, marquer une
-  séance sautée, la relier à une activité, commenter, supprimer.
+- Routes authentifiées (JWT) pour le dashboard : consulter le plan, créer ou modifier
+  une séance (texte ou blocs, répétée chaque semaine), la sauter, la relier à une activité,
+  commenter, supprimer, l'envoyer sur la montre (calendrier Intervals.icu), « Mes modèles ».
 - Routes « Claude » (en-tête `X-Carnet-Token`) pour le script `outils/carnet.py` :
   lire l'export complet, lire et envoyer le plan.
 """
@@ -19,12 +20,15 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 import animations as an
+import blocs_service as bl
 import carnet_service as cs
+import deps
+import intervals_service as iv
 import periodes_service as pe
 import pictogrammes as pg
 from database import obtenir_session
 from deps import get_current_user
-from models import Activite, Objectif, SeancePrevue, Utilisateur
+from models import Activite, ModeleSeance, Objectif, SeancePrevue, Utilisateur
 from routers.carnet import _reponse_export
 
 router = APIRouter()
@@ -48,6 +52,17 @@ class SeancePrevueSchema(BaseModel):
     ordre: int = 0
     id_externe: Optional[str] = Field(None, max_length=100)
     objectif_id: Optional[int] = None
+    # Séance construite par blocs dans l'éditeur (voir blocs_service) ; la description reste la référence lisible
+    structure: Optional[dict] = None
+
+
+class RepetitionSchema(BaseModel):
+    toutes: int = Field(1, ge=1, le=2)   # toutes les semaines ou une semaine sur deux
+    fois: int = Field(..., ge=2, le=26)  # nombre total de séances, la première comprise
+
+
+class CreationPrevueSchema(SeancePrevueSchema):
+    repetition: Optional[RepetitionSchema] = None
 
 
 class PeriodeSchema(BaseModel):
@@ -79,6 +94,37 @@ class MajPrevueSchema(BaseModel):
     deroule: Optional[dict] = None
     # Déplacement dans le calendrier
     jour: Optional[date] = None
+    # Modification du contenu (séance pas encore faite)
+    sport: Optional[str] = Field(None, max_length=30)
+    titre: Optional[str] = Field(None, max_length=200)
+    description: Optional[str] = Field(None, max_length=20_000)
+    duree_min: Optional[int] = Field(None, ge=0, le=1440)
+    distance_km: Optional[float] = Field(None, ge=0, le=1000)
+    dplus_m: Optional[int] = Field(None, ge=0, le=20_000)
+    rpe_cible: Optional[float] = Field(None, ge=1, le=10)
+    structure: Optional[dict] = None
+
+
+CHAMPS_CONTENU = ("sport", "titre", "description", "duree_min", "distance_km", "dplus_m", "rpe_cible", "structure")
+
+
+class EnvoiMontreSchema(BaseModel):
+    jour: date
+
+
+class ModeleSchema(BaseModel):
+    nom: str = Field(..., min_length=1, max_length=100)
+    sport: str = Field(..., max_length=30)
+    titre: str = Field(..., min_length=1, max_length=200)
+    description: Optional[str] = Field(None, max_length=20_000)
+    duree_min: Optional[int] = Field(None, ge=0, le=1440)
+    distance_km: Optional[float] = Field(None, ge=0, le=1000)
+    dplus_m: Optional[int] = Field(None, ge=0, le=20_000)
+    rpe_cible: Optional[float] = Field(None, ge=1, le=10)
+    structure: Optional[dict] = None
+
+
+MAX_MODELES = 100
 
 
 def _items(db: Session, user: Utilisateur, seances: list[SeancePrevueSchema]) -> list[dict]:
@@ -87,8 +133,14 @@ def _items(db: Session, user: Utilisateur, seances: list[SeancePrevueSchema]) ->
     for s in seances:
         if s.objectif_id is not None and s.objectif_id not in objectifs:
             raise HTTPException(400, f"Objectif inconnu : {s.objectif_id}")
-        d = s.model_dump()
+        d = s.model_dump(exclude={"repetition"})
         d["sport"] = cs.normaliser_sport(s.sport)
+        try:
+            d["structure"] = bl.valider_structure(s.structure)
+        except ValueError as e:
+            raise HTTPException(400, str(e))
+        if d["structure"] is None:
+            d.pop("structure")  # un plan envoyé sans blocs n'efface pas ceux d'une séance existante
         items.append(d)
     return items
 
@@ -104,6 +156,21 @@ def _prevue(db: Session, user: Utilisateur, prevue_id: int) -> SeancePrevue:
     if not p:
         raise HTTPException(404, "Séance prévue introuvable")
     return p
+
+
+def _realisee(p: SeancePrevue) -> bool:
+    return bool(p.activite_id or (cs.lire_deroule(p) or {}).get("fin"))
+
+
+def _retirer_de_la_montre(user: Utilisateur, p: SeancePrevue) -> None:
+    """Retire la séance du calendrier Intervals.icu, au mieux (injoignable : elle y reste)."""
+    e = bl.lire_structure(p.envoi_montre) or {}
+    if e.get("event_id") and user.intervals_cle:
+        try:
+            iv.retirer_seance(user, e["event_id"])
+        except iv.IntervalsErreur:
+            pass
+    p.envoi_montre = None
 
 
 def _une(db: Session, p: SeancePrevue) -> dict:
@@ -128,22 +195,30 @@ def lister_plan(
     return {"depuis": d.isoformat(), "jusqu_a": f.isoformat(), "seances": res}
 
 
-@router.post("/api/plan", summary="Ajoute une séance prévue à la main")
+@router.post("/api/plan", summary="Ajoute une séance prévue à la main (éventuellement répétée chaque semaine)")
 def creer_prevue(
-    payload: SeancePrevueSchema,
+    payload: CreationPrevueSchema,
     current_user: Utilisateur = Depends(get_current_user),
     db: Session = Depends(obtenir_session),
 ):
     item = _items(db, current_user, [payload])[0]
-    item["id_externe"] = item["id_externe"] or f"manuel-{_secrets.token_hex(6)}"
     if not item["jour"]:
         auj = date.today()
         item["jour"] = auj - timedelta(days=auj.weekday())
-    cs.enregistrer_plan(db, current_user.id, [item])
+    rep = payload.repetition
+    if rep:
+        # Série rec-<série>-<k> : une séance toutes les 1 ou 2 semaines, jamais remplacée par un plan envoyé
+        serie = _secrets.token_hex(5)
+        items = [{**item, "id_externe": f"rec-{serie}-{k}", "jour": item["jour"] + timedelta(weeks=k * rep.toutes)}
+                 for k in range(rep.fois)]
+    else:
+        item["id_externe"] = item["id_externe"] or f"manuel-{_secrets.token_hex(6)}"
+        items = [item]
+    cs.enregistrer_plan(db, current_user.id, items)
     db.commit()
     p = db.query(SeancePrevue).filter(SeancePrevue.utilisateur_id == current_user.id,
-                                      SeancePrevue.id_externe == item["id_externe"]).first()
-    return _une(db, p)
+                                      SeancePrevue.id_externe == items[0]["id_externe"]).first()
+    return {**_une(db, p), "crees": len(items)}
 
 
 class TestPlanifie(BaseModel):
@@ -229,6 +304,35 @@ def modifier_prevue(
 ):
     p = _prevue(db, current_user, prevue_id)
     champs = payload.model_fields_set
+    contenu = champs & set(CHAMPS_CONTENU)
+    if contenu:
+        if _realisee(p):
+            raise HTTPException(400, "Une séance déjà réalisée ne se modifie plus")
+        if "titre" in contenu and not (payload.titre or "").strip():
+            raise HTTPException(400, "Le titre est obligatoire")
+        structure = None
+        if "structure" in contenu:
+            try:
+                structure = bl.valider_structure(payload.structure)
+            except ValueError as e:
+                raise HTTPException(400, str(e))
+        if "sport" in contenu and payload.sport:
+            sport = cs.normaliser_sport(payload.sport)
+            if cs.famille_sport(sport) != cs.famille_sport(p.sport) and p.activite_id and not p.lien_manuel:
+                p.activite_id = None  # rapprochement automatique fait pour l'ancien sport
+            p.sport = sport
+        for k in ("titre", "description", "duree_min", "distance_km", "dplus_m", "rpe_cible"):
+            if k in contenu:
+                v = getattr(payload, k)
+                if isinstance(v, str):
+                    v = v.strip() or None
+                if k == "titre":
+                    v = v[:200]
+                if k == "description" and v != p.description and "structure" not in contenu:
+                    p.structure = None  # texte réécrit à la main : les blocs ne le décrivent plus
+                setattr(p, k, v)
+        if "structure" in contenu:
+            p.structure = structure
     if "statut" in champs and payload.statut:
         p.statut = payload.statut
     if "commentaire" in champs:
@@ -294,10 +398,134 @@ def lister_animations(current_user: Utilisateur = Depends(get_current_user), db:
 @router.delete("/api/plan/{prevue_id}", summary="Supprime une séance prévue")
 def supprimer_prevue(
     prevue_id: int,
+    suite: bool = Query(False, description="Séance répétée : supprime aussi les suivantes de la série (pas encore faites)"),
     current_user: Utilisateur = Depends(get_current_user),
     db: Session = Depends(obtenir_session),
 ):
-    db.delete(_prevue(db, current_user, prevue_id))
+    p = _prevue(db, current_user, prevue_id)
+    cibles = [p]
+    ide = p.id_externe or ""
+    if suite and ide.startswith("rec-") and ide.count("-") == 2:
+        prefixe = ide.rsplit("-", 1)[0] + "-"
+        cibles += [q for q in db.query(SeancePrevue).filter(
+            SeancePrevue.utilisateur_id == current_user.id, SeancePrevue.id != p.id,
+            SeancePrevue.id_externe.like(prefixe + "%"), SeancePrevue.jour > p.jour).all()
+            if not _realisee(q) and not q.commentaire]
+    for q in cibles:
+        if q.envoi_montre:
+            _retirer_de_la_montre(current_user, q)
+        db.delete(q)
+    db.commit()
+    return {"ok": True, "supprimees": len(cibles)}
+
+
+# ---------------------------------------------------------------------------
+# Envoi sur la montre (calendrier Intervals.icu → Garmin, Coros, Suunto, Apple Watch…)
+# ---------------------------------------------------------------------------
+
+@router.post("/api/plan/{prevue_id}/montre", summary="Place la séance un jour donné et l'envoie sur la montre via Intervals.icu")
+def envoyer_montre(
+    prevue_id: int,
+    payload: EnvoiMontreSchema,
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(obtenir_session),
+):
+    import suivi_service as sv
+    p = _prevue(db, current_user, prevue_id)
+    if not current_user.intervals_cle:
+        raise HTTPException(409, "Connecte d'abord Intervals.icu (Sources) pour envoyer des séances sur ta montre")
+    if _realisee(p):
+        raise HTTPException(400, "Séance déjà réalisée")
+    auj = sv.aujourdhui(current_user)
+    lundi = p.jour - timedelta(days=p.jour.weekday())
+    if not (lundi <= payload.jour < lundi + timedelta(days=7)):
+        raise HTTPException(400, "Choisis un jour de la semaine de la séance")
+    if payload.jour < auj:
+        raise HTTPException(400, "Choisis aujourd'hui ou un jour à venir")
+    deps.limiter(f"montre:{current_user.id}", 30, 3600)
+    ancien = bl.lire_structure(p.envoi_montre) or {}
+    try:
+        pe.deplacer_prevue(db, current_user, p, payload.jour)
+        event_id = iv.envoyer_seance(current_user, bl.evenement(p, payload.jour, bl.lire_structure(p.structure)),
+                                     ancien.get("event_id"))
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(400, str(e))
+    except iv.IntervalsErreur as e:
+        db.rollback()
+        raise HTTPException(502, str(e))
+    p.envoi_montre = json.dumps({"event_id": event_id, "jour": payload.jour.isoformat(),
+                                 "le": datetime.now().isoformat(timespec="seconds"), "empreinte": bl.empreinte(p)})
+    db.commit()
+    db.refresh(p)
+    return _une(db, p)
+
+
+@router.delete("/api/plan/{prevue_id}/montre", summary="Retire la séance de la montre (calendrier Intervals.icu)")
+def retirer_montre(
+    prevue_id: int,
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(obtenir_session),
+):
+    p = _prevue(db, current_user, prevue_id)
+    e = bl.lire_structure(p.envoi_montre) or {}
+    if e.get("event_id") and current_user.intervals_cle:
+        try:
+            iv.retirer_seance(current_user, e["event_id"])
+        except iv.IntervalsErreur as err:
+            raise HTTPException(502, str(err))
+    p.envoi_montre = None
+    db.commit()
+    db.refresh(p)
+    return _une(db, p)
+
+
+# ---------------------------------------------------------------------------
+# Mes modèles de séance
+# ---------------------------------------------------------------------------
+
+def _modele(m: ModeleSeance) -> dict:
+    return {"id": m.id, "nom": m.nom, "sport": m.sport, "titre": m.titre, "description": m.description,
+            "duree_min": m.duree_min, "distance_km": m.distance_km, "dplus_m": m.dplus_m,
+            "rpe_cible": m.rpe_cible, "structure": bl.lire_structure(m.structure)}
+
+
+@router.get("/api/modeles", summary="Mes modèles de séance")
+def lister_modeles(current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
+    ms = (db.query(ModeleSeance).filter(ModeleSeance.utilisateur_id == current_user.id)
+          .order_by(ModeleSeance.nom, ModeleSeance.id).all())
+    return [_modele(m) for m in ms]
+
+
+@router.post("/api/modeles", summary="Enregistre une séance comme modèle")
+def creer_modele(payload: ModeleSchema, current_user: Utilisateur = Depends(get_current_user),
+                 db: Session = Depends(obtenir_session)):
+    if db.query(ModeleSeance).filter(ModeleSeance.utilisateur_id == current_user.id).count() >= MAX_MODELES:
+        raise HTTPException(400, f"{MAX_MODELES} modèles au maximum : supprimes-en un d'abord")
+    try:
+        structure = bl.valider_structure(payload.structure)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    d = payload.model_dump(exclude={"structure"})
+    d["sport"] = cs.normaliser_sport(d["sport"])
+    d["nom"], d["titre"] = d["nom"].strip(), d["titre"].strip()
+    if not d["nom"] or not d["titre"]:
+        raise HTTPException(400, "Nom et titre obligatoires")
+    m = ModeleSeance(utilisateur_id=current_user.id, structure=structure, **d)
+    db.add(m)
+    db.commit()
+    db.refresh(m)
+    return _modele(m)
+
+
+@router.delete("/api/modeles/{modele_id}", summary="Supprime un modèle de séance")
+def supprimer_modele(modele_id: int, current_user: Utilisateur = Depends(get_current_user),
+                     db: Session = Depends(obtenir_session)):
+    m = db.query(ModeleSeance).filter(ModeleSeance.id == modele_id,
+                                      ModeleSeance.utilisateur_id == current_user.id).first()
+    if not m:
+        raise HTTPException(404, "Modèle introuvable")
+    db.delete(m)
     db.commit()
     return {"ok": True}
 

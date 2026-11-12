@@ -275,6 +275,7 @@ def adapter_seance(db: Session, p: SeancePrevue, action: str, auj: date) -> str:
     if p.dplus_m:
         p.dplus_m = round(p.dplus_m * 0.6)
     p.rpe_cible = min(p.rpe_cible or 3, 3)
+    p.structure = None  # la description réécrite ne correspond plus aux blocs
     origine = (p.description or "").strip()
     if not origine.startswith("Version allégée"):
         p.description = ("Version allégée : effort facile du début à la fin, aucune intensité, on s'arrête au moindre doute."

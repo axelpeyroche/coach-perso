@@ -17,7 +17,7 @@ import logging
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Optional
 from zoneinfo import ZoneInfo
 
@@ -43,22 +43,91 @@ class IntervalsErreur(Exception):
     """Erreur affichable telle quelle à l'utilisateur."""
 
 
-def _appel(cle: str, chemin: str, params: Optional[dict] = None):
+class IntervalsIntrouvable(IntervalsErreur):
+    """404 : athlète (lecture) ou séance prévue (écriture) absente d'Intervals.icu."""
+
+
+def _appel(cle: str, chemin: str, params: Optional[dict] = None, methode: str = "GET",
+           corps=None, introuvable: Optional[str] = None):
     url = API + chemin + ("?" + urllib.parse.urlencode(params) if params else "")
     auth = base64.b64encode(f"API_KEY:{cle}".encode()).decode()
-    req = urllib.request.Request(url, headers={"Authorization": f"Basic {auth}", "Accept": "application/json",
-                                               "User-Agent": "coach-perso"})
+    entetes = {"Authorization": f"Basic {auth}", "Accept": "application/json", "User-Agent": "coach-perso"}
+    data = None
+    if corps is not None:
+        data = json.dumps(corps, ensure_ascii=False).encode("utf-8")
+        entetes["Content-Type"] = "application/json"
+    req = urllib.request.Request(url, data=data, method=methode, headers=entetes)
     try:
         with urllib.request.urlopen(req, timeout=30) as r:
-            return json.loads(r.read().decode("utf-8"))
+            brut = r.read()
+            return json.loads(brut.decode("utf-8")) if brut.strip() else None
     except urllib.error.HTTPError as e:
         if e.code in (401, 403):
             raise IntervalsErreur("Clé API Intervals.icu refusée : vérifie-la dans Intervals.icu → Settings → Developer Settings") from e
         if e.code == 404:
-            raise IntervalsErreur("Athlète introuvable sur Intervals.icu : vérifie l'identifiant (ex. i123456)") from e
+            raise IntervalsIntrouvable(introuvable or "Athlète introuvable sur Intervals.icu : vérifie l'identifiant (ex. i123456)") from e
+        if e.code in (400, 422):
+            raise IntervalsErreur("Intervals.icu a refusé la séance : vérifie son contenu (durées, allures)") from e
+        if e.code == 429:
+            raise IntervalsErreur("Intervals.icu reçoit trop de demandes : réessaie dans une minute") from e
         raise IntervalsErreur(f"Intervals.icu a répondu {e.code}") from e
     except (urllib.error.URLError, TimeoutError) as e:
         raise IntervalsErreur("Intervals.icu ne répond pas, réessaie plus tard") from e
+
+
+# ── Séances prévues envoyées sur la montre (calendrier Intervals.icu → Garmin, Coros, Suunto, Apple…) ──
+
+def envoyer_seance(user: Utilisateur, corps: dict, event_id: Optional[str] = None) -> str:
+    """Crée la séance dans le calendrier Intervals.icu (ou la met à jour) ; renvoie son identifiant."""
+    athlete = urllib.parse.quote(user.intervals_athlete_id or "0")
+    if event_id:
+        try:
+            r = _appel(user.intervals_cle, f"/athlete/{athlete}/events/{urllib.parse.quote(str(event_id))}",
+                       methode="PUT", corps=corps, introuvable="Séance introuvable sur Intervals.icu")
+            return str((r or {}).get("id") or event_id)
+        except IntervalsIntrouvable:
+            pass  # supprimée côté Intervals.icu : on la recrée
+    else:
+        # Envoi précédent peut-être créé sans réponse reçue (délai dépassé) : on le retrouve
+        # par son external_id plutôt que d'en créer un second sur la montre.
+        deja = _retrouver(user, athlete, corps)
+        if deja:
+            return envoyer_seance(user, corps, deja)
+    r = _appel(user.intervals_cle, f"/athlete/{athlete}/events", methode="POST", corps=corps)
+    if not isinstance(r, dict) or not r.get("id"):
+        raise IntervalsErreur("Intervals.icu n'a pas confirmé la séance, réessaie")
+    return str(r["id"])
+
+
+def _retrouver(user: Utilisateur, athlete: str, corps: dict) -> Optional[str]:
+    """Identifiant d'un événement déjà présent avec le même external_id (± 3 semaines), au mieux."""
+    ext = corps.get("external_id")
+    try:
+        jour = date.fromisoformat(str(corps.get("start_date_local", ""))[:10])
+    except ValueError:
+        return None
+    if not ext:
+        return None
+    try:
+        evts = _appel(user.intervals_cle, f"/athlete/{athlete}/events",
+                      params={"oldest": (jour - timedelta(days=21)).isoformat(),
+                              "newest": (jour + timedelta(days=21)).isoformat()})
+    except IntervalsErreur:
+        return None
+    for e in evts if isinstance(evts, list) else []:
+        if isinstance(e, dict) and e.get("external_id") == ext and e.get("id"):
+            return str(e["id"])
+    return None
+
+
+def retirer_seance(user: Utilisateur, event_id: str) -> None:
+    """Supprime la séance du calendrier Intervals.icu (déjà absente : rien à faire)."""
+    athlete = urllib.parse.quote(user.intervals_athlete_id or "0")
+    try:
+        _appel(user.intervals_cle, f"/athlete/{athlete}/events/{urllib.parse.quote(str(event_id))}",
+               methode="DELETE", introuvable="Séance introuvable sur Intervals.icu")
+    except IntervalsIntrouvable:
+        pass
 
 
 def verifier(cle: str, athlete_id: Optional[str]) -> dict:

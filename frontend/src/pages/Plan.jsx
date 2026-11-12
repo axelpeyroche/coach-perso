@@ -16,9 +16,14 @@ import { courseGuidable } from "../seanceCourse";
 import { resumeSeance, analyserDescription } from "../seance";
 import { DIFFICULTES, fmtChrono } from "../seanceGuidee";
 import { debloquerSon } from "../son";
-import { Section, BoutonAjout, Squelettes } from "../components/ui";
+import { Section, BoutonAjout, Squelettes, Segmente, Interrupteur } from "../components/ui";
+import EditeurBlocs, { erreurStructure, SPORTS_ALLURE } from "../components/EditeurBlocs";
+import {
+  typePourSport, structureVide, descriptionDepuis, dureeEstimee, structureDepuisDescription,
+} from "../blocs";
 import {
   getPlan, getActivites, creerPrevue, modifierPrevue, supprimerPrevue, getActivitesProches, getSeancesTypes,
+  getModeles, creerModele, supprimerModele, envoyerMontre, retirerMontre, getIntervals,
 } from "../api";
 import { SPORTS, sportInfo, fmtDuree, fmtDate, nombre, inputCls, fmtDistance } from "../carnet";
 
@@ -74,16 +79,105 @@ function ChoixActivite({ prevue, onChoix, onClose }) {
 // Sports pour lesquels la page Itinéraires sait proposer un parcours
 const ITINERAIRE = { course: 1, trail: 1, randonnee: 1, marche: 1, velo: 1 };
 
+// ── Envoi sur la montre (calendrier Intervals.icu) ─────────────────────────
+const CONSEILS_MONTRE = {
+  garmin: "Elle arrive dans le calendrier Garmin Connect, puis sur la montre à la synchronisation suivante (si l’envoi des séances prévues est activé dans les réglages Garmin d’Intervals.icu).",
+  coros: "Elle arrive dans le calendrier de l’app COROS. Si tu la retires ici, vérifie aussi sur la montre : COROS y garde parfois les séances supprimées.",
+  suunto: "Elle arrive dans l’app Suunto, puis sur la montre à la synchronisation suivante.",
+  apple: "Sur Apple Watch, ouvre l’app Intervals.icu Companion sur l’iPhone pour l’ajouter à l’app Exercice.",
+  polar: "Polar ne reçoit pas les séances d’Intervals.icu : elle restera visible dans ton calendrier Intervals.icu.",
+};
+const CONSEIL_DEFAUT = "Elle est ajoutée à ton calendrier Intervals.icu ; selon ta montre, elle peut s’y synchroniser.";
+
+function BlocMontre({ s }) {
+  const qc = useQueryClient();
+  const { data: iv, isLoading } = useQuery({ queryKey: ["intervals"], queryFn: getIntervals, staleTime: 60_000 });
+  const aujourdhui = iso(new Date());
+  const lundi = lundiDe(new Date(`${s.jour}T00:00`));
+  const jours = Array.from({ length: 7 }, (_, i) => ajouter(lundi, i)).filter((d) => iso(d) >= aujourdhui);
+  const envoi = s.montre;
+  const [jour, setJour] = useState(() => envoi?.jour ?? (jours[0] ? iso(jours[0]) : null));
+  const [erreur, setErreur] = useState(null);
+  const message = (e) => (typeof e?.response?.data?.detail === "string" ? e.response.data.detail : "Envoi impossible pour le moment, réessaie plus tard.");
+
+  const envoyer = useMutation({
+    mutationFn: () => envoyerMontre(s.id, jour),
+    onSuccess: () => { setErreur(null); invaliderPlan(qc); },
+    onError: (e) => setErreur(message(e)),
+  });
+  const retirer = useMutation({
+    mutationFn: () => retirerMontre(s.id),
+    onSuccess: () => { setErreur(null); invaliderPlan(qc); },
+    onError: (e) => setErreur(message(e)),
+  });
+
+  if (!envoi && !jours.length) return null; // semaine passée
+  const occupe = envoyer.isPending || retirer.isPending;
+  const perime = envoi && (!envoi.a_jour || (jour && jour !== envoi.jour));
+  const fmtJour = (j) => fmtDate(new Date(`${j}T00:00`), { weekday: "long", day: "numeric", month: "long" });
+
+  return (
+    <section className="space-y-1.5">
+      <h4 className="px-1 text-[13px] uppercase tracking-[0.02em] font-medium text-label-2">Sur ma montre</h4>
+      <div className="card p-3.5 space-y-3">
+        {isLoading ? <Squelettes n={1} /> : !iv?.connecte ? (
+          <p className="text-[14px] text-label-2">
+            Pour envoyer tes séances sur ta montre, connecte d’abord Intervals.icu.{" "}
+            <Link to="/sources" className="text-brand font-medium">Sources</Link>
+          </p>
+        ) : (
+          <>
+            {envoi && (
+              <p className="text-[14px]">
+                <span className="font-semibold text-ios-green">✓ Envoyée</span> pour le {fmtJour(envoi.jour)}
+                {!envoi.a_jour && <span className="block text-[13px] text-ios-orange">Séance modifiée depuis l’envoi : renvoie-la pour mettre la montre à jour.</span>}
+              </p>
+            )}
+            {jours.length > 0 && (
+              <label className="flex items-center justify-between gap-3">
+                <span className="text-[15px]">Jour</span>
+                <select className={`${inputCls} !w-auto`} value={jour ?? ""} onChange={(e) => setJour(e.target.value)}>
+                  {jours.map((d) => <option key={iso(d)} value={iso(d)}>{fmtJour(iso(d))}</option>)}
+                  {envoi && !jours.some((d) => iso(d) === envoi.jour) && <option value={envoi.jour} disabled>{fmtJour(envoi.jour)}</option>}
+                </select>
+              </label>
+            )}
+            <div className="flex gap-2">
+              {jours.length > 0 && (!envoi || perime) && (
+                <button type="button" className="btn-primaire flex-1" disabled={occupe || !jour || !jours.some((d) => iso(d) === jour)}
+                  onClick={() => envoyer.mutate()}>
+                  {envoyer.isPending ? "Envoi…" : envoi ? "Renvoyer" : "Envoyer sur ma montre"}
+                </button>
+              )}
+              {envoi && (
+                <button type="button" className="btn-gris flex-1" disabled={occupe} onClick={() => retirer.mutate()}>
+                  {retirer.isPending ? "…" : "Retirer de la montre"}
+                </button>
+              )}
+            </div>
+            <p className="text-[12px] leading-4 text-label-2">{CONSEILS_MONTRE[iv.montre] ?? CONSEIL_DEFAUT}</p>
+          </>
+        )}
+        {erreur && <p className="text-[13px] text-ios-red" role="alert">{erreur}</p>}
+      </div>
+    </section>
+  );
+}
+
 function DetailSeance({ s, onClose, onOuvrirActivite }) {
   const qc = useQueryClient();
   const info = sportInfo(s.sport);
   const statut = STATUTS[s.statut] ?? STATUTS.a_venir;
   const [enCours, setEnCours] = useState(false);
-  const contenu = useMemo(() => (s.description ? analyserDescription(s.description) : null), [s.description]);
+  const [edition, setEdition] = useState(false);
+  const blocsMuscu = s.structure?.type === "muscu";
+  const contenu = useMemo(() => (s.description ? analyserDescription(s.description, { muscu: blocsMuscu }) : null), [s.description, blocsMuscu]);
   const muscu = contenu?.type === "muscu" && contenu.sections.some((x) => x.exercices.length);
   const course = !muscu && courseGuidable(contenu);
   const guidable = (muscu || course) && s.statut !== "realisee";
   const reprise = guidable && seanceSauvegardee(s.id);
+  const aFaire = s.statut !== "realisee" && !s.activite && !s.deroule?.fin;
+  const modifiable = aFaire && !seanceSauvegardee(s.id);
   const mesures = [
     ["Durée", s.duree_min != null ? fmtDuree(s.duree_min * 60) : null],
     ["Distance", s.distance_km != null ? `${fmtDistance(s.distance_km)}` : null],
@@ -129,7 +223,7 @@ function DetailSeance({ s, onClose, onOuvrirActivite }) {
 
       {s.deroule?.fin && <RecapDeroule d={s.deroule} />}
 
-      {s.description && <ContenuSeance description={s.description} couleur={info.couleur} />}
+      {s.description && <ContenuSeance description={s.description} couleur={info.couleur} muscu={blocsMuscu} />}
 
       {s.activite && (
         <section className="space-y-1.5">
@@ -153,8 +247,15 @@ function DetailSeance({ s, onClose, onOuvrirActivite }) {
         </Link>
       )}
 
+      {aFaire && <BlocMontre key={s.id} s={s} />}
+
+      {modifiable && (
+        <button type="button" className="btn-gris w-full" onClick={() => setEdition(true)}>Modifier la séance</button>
+      )}
+
       <CommentaireSeance s={s} />
 
+      {edition && <ModalPrevue seance={s} onClose={() => setEdition(false)} />}
       {enCours && course && <CourseEnCours s={s} contenu={contenu} onClose={() => setEnCours(false)} />}
       {enCours && muscu && (
         <SeanceEnCours s={s} contenu={contenu} onClose={() => setEnCours(false)}
@@ -259,16 +360,17 @@ function CarteSeance({ s, onOuvrirActivite, ouverte = false }) {
   const [detail, setDetail] = useState(ouverte);
   const [choix, setChoix] = useState(false);
   const [confirmSuppr, setConfirmSuppr] = useState(false);
+  const serie = (s.id_externe ?? "").startsWith("rec-");
   const info = sportInfo(s.sport);
   const sautee = s.statut === "sautee";
-  const { formats, exercices } = resumeSeance(s.description);
+  const { formats, exercices } = resumeSeance(s.description, { muscu: s.structure?.type === "muscu" });
 
   const maj = useMutation({
     mutationFn: (payload) => modifierPrevue(s.id, payload),
     onSuccess: () => { invaliderPlan(qc); setChoix(false); },
   });
   const suppr = useMutation({
-    mutationFn: () => supprimerPrevue(s.id),
+    mutationFn: (suite) => supprimerPrevue(s.id, suite),
     onSuccess: () => { invaliderPlan(qc); setConfirmSuppr(false); },
   });
 
@@ -330,8 +432,15 @@ function CarteSeance({ s, onOuvrirActivite, ouverte = false }) {
       {detail && <DetailSeance s={s} onClose={() => setDetail(false)} onOuvrirActivite={onOuvrirActivite} />}
 
       <ConfirmDialog open={confirmSuppr} title="Supprimer cette séance prévue ?" danger pending={suppr.isPending}
-        message={`« ${s.titre} » sera retirée du plan de la semaine.`}
-        confirmLabel="Supprimer" onConfirm={() => suppr.mutate()} onCancel={() => setConfirmSuppr(false)} />
+        message={serie ? `« ${s.titre} » fait partie d’une série répétée. Supprimer cette séance seulement, ou aussi les suivantes ?`
+          : `« ${s.titre} » sera retirée du plan de la semaine.`}
+        confirmLabel={serie ? "Cette séance seulement" : "Supprimer"} onConfirm={() => suppr.mutate(false)} onCancel={() => setConfirmSuppr(false)}>
+        {serie && (
+          <button type="button" className="btn-danger w-full !mt-3" disabled={suppr.isPending} onClick={() => suppr.mutate(true)}>
+            Celle-ci et les suivantes de la série
+          </button>
+        )}
+      </ConfirmDialog>
     </div>
   );
 }
@@ -418,53 +527,207 @@ function SeancesTypes({ onClose, onChoisir }) {
   );
 }
 
-function ModalPrevue({ semaine, onClose }) {
+// ── Mes modèles de séance ──────────────────────────────────────────────────
+function MesModeles({ onChoisir, onClose }) {
   const qc = useQueryClient();
-  const [f, setF] = useState({ sport: "course", titre: "", duree_min: "", distance_km: "", rpe_cible: "", description: "" });
+  const { data, isLoading } = useQuery({ queryKey: ["modeles"], queryFn: getModeles });
+  const [aSupprimer, setASupprimer] = useState(null);
+  const suppr = useMutation({
+    mutationFn: (id) => supprimerModele(id),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["modeles"] }); setASupprimer(null); },
+  });
+  return (
+    <Feuille titre="Mes modèles" onClose={onClose}>
+      {isLoading ? <Squelettes n={3} /> : !data?.length ? (
+        <p className="text-[15px] text-label-2 text-center py-6">
+          Aucun modèle pour l’instant. Prépare une séance puis touche « Enregistrer comme modèle ».
+        </p>
+      ) : (
+        <div className="card py-0.5">
+          {data.map((m) => {
+            const info = sportInfo(m.sport);
+            return (
+              <div key={m.id} className="ligne">
+                <button type="button" className="flex-1 min-w-0 flex items-center gap-3 text-left" onClick={() => onChoisir(m)}>
+                  <span className="w-9 h-9 shrink-0 rounded-full flex items-center justify-center text-[17px]"
+                    style={{ backgroundColor: `${info.couleur}26` }} aria-hidden>{info.emoji}</span>
+                  <span className="min-w-0">
+                    <span className="block text-[15px] font-semibold truncate">{m.nom}</span>
+                    <span className="block text-[13px] text-label-2 truncate">
+                      {m.titre}{m.duree_min ? ` · ${fmtDuree(m.duree_min * 60)}` : ""}{m.structure ? " · blocs" : ""}
+                    </span>
+                  </span>
+                </button>
+                <button type="button" className="btn-texte !text-ios-red text-[14px] shrink-0" onClick={() => setASupprimer(m)}>
+                  Supprimer
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <ConfirmDialog open={!!aSupprimer} title="Supprimer ce modèle ?" danger pending={suppr.isPending}
+        message={aSupprimer ? `Le modèle « ${aSupprimer.nom} » sera supprimé. Les séances déjà prévues ne changent pas.` : ""}
+        confirmLabel="Supprimer" onConfirm={() => suppr.mutate(aSupprimer.id)} onCancel={() => setASupprimer(null)} />
+    </Feuille>
+  );
+}
+
+// ── Ajouter ou modifier une séance prévue (texte libre ou blocs) ───────────
+const versChamp = (v) => (v == null ? "" : String(v));
+
+function ModalPrevue({ semaine, seance = null, onClose }) {
+  const qc = useQueryClient();
+  const edition = !!seance;
+  const [f, setF] = useState(() => ({
+    sport: seance?.sport ?? "course", titre: seance?.titre ?? "",
+    // durée calculée depuis les blocs : champ laissé vide pour qu'elle suive les modifications
+    duree_min: seance?.structure && seance.duree_min === Math.round(dureeEstimee(seance.structure) ?? -1) ? "" : versChamp(seance?.duree_min),
+    distance_km: versChamp(seance?.distance_km), dplus_m: versChamp(seance?.dplus_m),
+    rpe_cible: versChamp(seance?.rpe_cible), description: seance?.description ?? "",
+  }));
+  // null : contenu en texte libre ; sinon séance construite par blocs
+  const [structure, setStructure] = useState(seance?.structure ?? null);
+  // Texte d'avant le passage aux blocs : rendu tel quel si l'on revient au texte sans rien changer
+  const origine = useRef(null);
+  const [avisBlocs, setAvisBlocs] = useState(null);
+  const [rep, setRep] = useState({ actif: false, toutes: 1, fois: 4 });
   const [erreur, setErreur] = useState(null);
   const [biblio, setBiblio] = useState(false);
+  const [modeles, setModeles] = useState(false);
+  const [nomModele, setNomModele] = useState(null); // null : champ fermé
+  const [modeleOk, setModeleOk] = useState(null);
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
-  const num = (v) => (v === "" ? null : Number(String(v).replace(",", ".")));
+  const num = (v) => (v === "" || v == null ? null : Number(String(v).replace(",", ".")));
+  const message = (e) => {
+    const d = e?.response?.data?.detail;
+    return typeof d === "string" ? d : Array.isArray(d) ? "Vérifie les champs saisis." : "Erreur lors de l'enregistrement";
+  };
 
-  const creer = useMutation({
-    mutationFn: creerPrevue,
+  const estimee = structure ? dureeEstimee(structure) : null;
+
+  // Contenu prêt à envoyer (création, modification, modèle)
+  function contenu() {
+    const desc = structure ? descriptionDepuis(structure) : f.description.trim();
+    return {
+      sport: f.sport, titre: f.titre.trim(), description: desc || null,
+      duree_min: num(f.duree_min) ?? (estimee ? Math.round(estimee) : null),
+      distance_km: num(f.distance_km), dplus_m: num(f.dplus_m), rpe_cible: num(f.rpe_cible),
+      structure: structure ?? null,
+    };
+  }
+
+  const enregistrer = useMutation({
+    mutationFn: (payload) => (edition
+      ? modifierPrevue(seance.id, payload)
+      : creerPrevue({ jour: semaine, ...payload, ...(rep.actif ? { repetition: { toutes: rep.toutes, fois: rep.fois } } : {}) })),
     onSuccess: () => { invaliderPlan(qc); onClose(); },
-    onError: (e) => setErreur(e?.response?.data?.detail?.toString?.() ?? "Erreur lors de l'enregistrement"),
+    onError: (e) => setErreur(message(e)),
   });
+  const modele = useMutation({
+    mutationFn: (payload) => creerModele(payload),
+    onSuccess: (m) => { qc.invalidateQueries({ queryKey: ["modeles"] }); setNomModele(null); setModeleOk(`Modèle « ${m.nom} » enregistré.`); },
+    onError: (e) => setErreur(message(e)),
+  });
+
+  function verifier() {
+    if (!f.titre.trim()) return "Le titre est obligatoire.";
+    for (const k of ["duree_min", "distance_km", "dplus_m"]) {
+      const v = num(f[k]);
+      if (v != null && (Number.isNaN(v) || v < 0)) return "Durée, distance et dénivelé : des nombres positifs.";
+    }
+    return erreurStructure(structure);
+  }
 
   function soumettre(e) {
     e.preventDefault();
-    creer.mutate({
-      jour: semaine, sport: f.sport, titre: f.titre, description: f.description || null,
-      duree_min: num(f.duree_min), distance_km: num(f.distance_km), rpe_cible: num(f.rpe_cible),
-    });
+    const err = verifier();
+    setErreur(err);
+    if (!err) enregistrer.mutate(contenu());
   }
 
+  function enregistrerModele() {
+    const err = verifier();
+    if (err) { setErreur(err); return; }
+    if (!nomModele?.trim()) { setErreur("Donne un nom au modèle."); return; }
+    setErreur(null);
+    modele.mutate({ nom: nomModele.trim(), ...contenu() });
+  }
+
+  function basculer(mode) {
+    if (mode === "blocs" && !structure) {
+      const texte = f.description.trim();
+      const lue = texte ? structureDepuisDescription(f.description, f.sport) : null;
+      const s = lue || structureVide(typePourSport(f.sport));
+      origine.current = texte ? { texte: f.description, structure: s } : null;
+      setAvisBlocs(!texte ? null : lue
+        ? "Le texte a été découpé en blocs : vérifie-les avant d'enregistrer. Tant que tu ne changes rien, revenir sur « Texte » rend le texte d'origine."
+        : "Ce texte n'a pas pu être découpé : les blocs partent d'une séance vide. Reviens sur « Texte » pour le retrouver ; enregistrer en blocs le remplacera.");
+      setStructure(s);
+    } else if (mode === "texte" && structure) {
+      const o = origine.current;
+      const inchange = o && JSON.stringify(o.structure) === JSON.stringify(structure);
+      setF((p) => ({ ...p, description: inchange ? o.texte : descriptionDepuis(structure) }));
+      origine.current = null;
+      setAvisBlocs(null);
+      setStructure(null);
+    }
+  }
+
+  function changerSport(e) {
+    const sport = e.target.value;
+    setF((p) => ({ ...p, sport }));
+    // l'éditeur change de forme (étapes ↔ exercices) : on repart d'une séance vide du bon type
+    if (structure && typePourSport(sport) !== structure.type) setStructure(structureVide(typePourSport(sport)));
+    // allure sans objet pour ce sport : retirée (champ masqué, rien de caché n'est écrit)
+    else if (structure?.type === "endurance" && !SPORTS_ALLURE.has(sport)) {
+      setStructure((s) => ({ ...s, etapes: s.etapes.map((e) => ({ ...e, allure_min: null, allure_max: null })) }));
+    }
+  }
+
+  function appliquer(m) {
+    setF({
+      sport: m.sport, titre: m.titre ?? "", duree_min: versChamp(m.duree_min), distance_km: versChamp(m.distance_km),
+      dplus_m: versChamp(m.dplus_m), rpe_cible: versChamp(m.rpe_cible), description: m.description ?? "",
+    });
+    setStructure(m.structure ?? null);
+    origine.current = null;
+    setAvisBlocs(null);
+    setModeles(false);
+    setBiblio(false);
+  }
+
+  const occupe = enregistrer.isPending;
+  const libelle = edition ? "Enregistrer" : "Ajouter";
+
   return (
-    <Feuille as="form" onSubmit={soumettre} onClose={onClose} titre="Séance prévue"
-      action={<button type="submit" className="btn-texte font-semibold" disabled={creer.isPending}>{creer.isPending ? "…" : "Ajouter"}</button>}>
-      <button type="button" className="btn-teinte w-full" onClick={() => setBiblio(true)}>Choisir une séance type</button>
-      {biblio && (
-        <SeancesTypes onClose={() => setBiblio(false)}
-          onChoisir={(t) => {
-            setF((p) => ({ ...p, sport: t.sport, titre: t.titre, duree_min: t.duree_min ?? "", rpe_cible: t.rpe_cible ?? "", description: t.description ?? "" }));
-            setBiblio(false);
-          }} />
-      )}
+    <Feuille as="form" onSubmit={soumettre} onClose={onClose} titre={edition ? "Modifier la séance" : "Séance prévue"} large={!!structure}
+      action={<button type="submit" className="btn-texte font-semibold" disabled={occupe}>{occupe ? "…" : libelle}</button>}>
+      <div className="flex gap-2">
+        <button type="button" className="btn-teinte flex-1" onClick={() => setBiblio(true)}>Séance type</button>
+        <button type="button" className="btn-teinte flex-1" onClick={() => setModeles(true)}>Mes modèles</button>
+      </div>
+      {biblio && <SeancesTypes onClose={() => setBiblio(false)} onChoisir={(t) => appliquer({ ...t, structure: null })} />}
+      {modeles && <MesModeles onClose={() => setModeles(false)} onChoisir={appliquer} />}
+
       <div className="grid grid-cols-2 gap-x-3 gap-y-4">
         <L label="Sport" className="col-span-2">
-          <select className={inputCls} value={f.sport} onChange={set("sport")}>
+          <select className={inputCls} value={f.sport} onChange={changerSport}>
             {Object.entries(SPORTS).map(([k, s]) => <option key={k} value={k}>{s.emoji} {s.label}</option>)}
           </select>
         </L>
         <L label="Titre" className="col-span-2">
-          <input required className={inputCls} value={f.titre} onChange={set("titre")} placeholder="Footing, fractionné, renfo…" />
+          <input required maxLength={200} className={inputCls} value={f.titre} onChange={set("titre")} placeholder="Footing, fractionné, renfo…" />
         </L>
         <L label="Durée (min)">
-          <input inputMode="numeric" className={inputCls} value={f.duree_min} onChange={set("duree_min")} />
+          <input inputMode="numeric" className={inputCls} value={f.duree_min} onChange={set("duree_min")}
+            placeholder={estimee ? `≈ ${Math.round(estimee)}` : ""} />
         </L>
         <L label="Distance (km)">
           <input inputMode="decimal" className={inputCls} value={f.distance_km} onChange={set("distance_km")} />
+        </L>
+        <L label="Dénivelé (m)">
+          <input inputMode="numeric" className={inputCls} value={f.dplus_m} onChange={set("dplus_m")} />
         </L>
         <L label="RPE cible">
           <select className={inputCls} value={f.rpe_cible} onChange={set("rpe_cible")}>
@@ -472,12 +735,75 @@ function ModalPrevue({ semaine, onClose }) {
             {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => <option key={n} value={n}>{n}</option>)}
           </select>
         </L>
-        <L label="Contenu" className="col-span-2">
-          <textarea rows={f.description ? 7 : 4} className={inputCls} value={f.description} onChange={set("description")} />
-        </L>
       </div>
-      {erreur && <p className="text-[13px] text-ios-red text-center">{erreur}</p>}
-      <button type="submit" className="btn-primaire w-full" disabled={creer.isPending}>{creer.isPending ? "…" : "Ajouter au plan"}</button>
+
+      <section className="space-y-2.5">
+        <div className="flex items-center justify-between gap-3">
+          <span className="libelle !mb-0">Contenu</span>
+          <Segmente label="Saisie du contenu" options={[["texte", "Texte"], ["blocs", "Blocs"]]}
+            valeur={structure ? "blocs" : "texte"} onChange={basculer} />
+        </div>
+        {structure ? (
+          <>
+            {avisBlocs && <p className="text-[13px] leading-5 text-label-2 px-0.5" role="status">{avisBlocs}</p>}
+            <EditeurBlocs structure={structure} sport={f.sport} onChange={setStructure} />
+            <details className="card px-3.5 py-2.5">
+              <summary className="text-[13px] text-label-2 cursor-pointer">Aperçu du texte</summary>
+              <p className="mt-2 text-[14px] whitespace-pre-line">{descriptionDepuis(structure) || "—"}</p>
+            </details>
+          </>
+        ) : (
+          <textarea rows={f.description ? 7 : 4} className={inputCls} value={f.description} onChange={set("description")}
+            aria-label="Contenu de la séance" />
+        )}
+      </section>
+
+      {!edition && (
+        <section className="card p-3.5 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-[15px]">Répéter cette séance</span>
+            <Interrupteur actif={rep.actif} onChange={(v) => setRep((r) => ({ ...r, actif: v }))} label="Répéter cette séance" />
+          </div>
+          {rep.actif && (
+            <>
+              <Segmente label="Fréquence" options={[[1, "Chaque semaine"], [2, "Une semaine sur deux"]]}
+                valeur={rep.toutes} onChange={(v) => setRep((r) => ({ ...r, toutes: Number(v) }))} />
+              <label className="flex items-center justify-between gap-3">
+                <span className="text-[15px]">Nombre de séances</span>
+                <select className={`${inputCls} !w-24`} value={rep.fois} onChange={(e) => setRep((r) => ({ ...r, fois: Number(e.target.value) }))}>
+                  {Array.from({ length: 25 }, (_, i) => i + 2).map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </label>
+              <p className="text-[12px] leading-4 text-label-2">
+                Jusqu’à la semaine du {fmtDate(ajouter(new Date(`${semaine}T00:00`), 7 * rep.toutes * (rep.fois - 1)), { day: "numeric", month: "long" })}.
+                Chaque séance reste modifiable une à une.
+              </p>
+            </>
+          )}
+        </section>
+      )}
+
+      {nomModele == null ? (
+        <button type="button" className="btn-gris w-full" onClick={() => { setNomModele(f.titre); setModeleOk(null); }}>
+          Enregistrer comme modèle
+        </button>
+      ) : (
+        <div className="flex gap-2">
+          <input className={`${inputCls} flex-1`} value={nomModele} maxLength={100} autoFocus placeholder="Nom du modèle"
+            aria-label="Nom du modèle" onChange={(e) => setNomModele(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); enregistrerModele(); } }} />
+          <button type="button" className="btn-gris" disabled={modele.isPending} onClick={enregistrerModele}>
+            {modele.isPending ? "…" : "OK"}
+          </button>
+          <button type="button" className="btn-texte" onClick={() => setNomModele(null)}>Annuler</button>
+        </div>
+      )}
+      {modeleOk && <p className="text-[13px] text-ios-green text-center" role="status">{modeleOk}</p>}
+
+      {erreur && <p className="text-[13px] text-ios-red text-center" role="alert">{erreur}</p>}
+      <button type="submit" className="btn-primaire w-full" disabled={occupe}>
+        {occupe ? "…" : edition ? "Enregistrer les modifications" : rep.actif ? `Ajouter ${rep.fois} séances` : "Ajouter au plan"}
+      </button>
     </Feuille>
   );
 }

@@ -324,8 +324,28 @@ class SeancePrevue(Base):
     lien_manuel: Mapped[bool] = mapped_column(Boolean, default=False, comment="Rapprochement fixé à la main : ne pas recalculer")
     commentaire: Mapped[Optional[str]] = mapped_column(Text, comment="Note de l'athlète (pourquoi sautée, ressenti…)")
     deroule: Mapped[Optional[str]] = mapped_column(Text, comment="Séance guidée (JSON) : durée, séries faites, difficulté et ressenti par exercice")
+    structure: Mapped[Optional[str]] = mapped_column(Text, comment="Blocs de l'éditeur (JSON) : la description en est tirée, ils servent à rééditer et à l'envoi sur la montre")
+    envoi_montre: Mapped[Optional[str]] = mapped_column(Text, comment="Envoi sur Intervals.icu (JSON) : event_id, jour, date d'envoi, empreinte du contenu envoyé")
     cree_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     maj_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
+
+
+class ModeleSeance(Base):
+    """Séance enregistrée par l'athlète pour la reprendre plus tard (« Mes modèles »)."""
+    __tablename__ = "modeles_seance"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    utilisateur_id: Mapped[int] = mapped_column(ForeignKey("utilisateurs.id"), nullable=False, index=True)
+    nom: Mapped[str] = mapped_column(String(100), nullable=False)
+    sport: Mapped[str] = mapped_column(String(30), nullable=False)
+    titre: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text)
+    duree_min: Mapped[Optional[int]] = mapped_column(Integer)
+    distance_km: Mapped[Optional[float]] = mapped_column(Float)
+    dplus_m: Mapped[Optional[int]] = mapped_column(Integer)
+    rpe_cible: Mapped[Optional[float]] = mapped_column(Float)
+    structure: Mapped[Optional[str]] = mapped_column(Text)
+    cree_le: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
 class Objectif(Base):

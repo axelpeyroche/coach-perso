@@ -181,8 +181,8 @@ function Endurance({ r }) {
   );
 }
 
-export default function ContenuSeance({ description, couleur }) {
-  const r = analyserDescription(description);
+export default function ContenuSeance({ description, couleur, muscu = false }) {
+  const r = analyserDescription(description, { muscu });
   if (!r) return null;
   if (r.type === "muscu") return <Muscu r={r} couleur={couleur} />;
   if (r.type === "endurance") return <Endurance r={r} />;
