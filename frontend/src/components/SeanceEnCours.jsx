@@ -507,19 +507,22 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
       <ol className={clsx("rounded-[16px] bg-[#1c1c1e] divide-y divide-white/[0.08]", enCours ? "mt-4" : "mt-5")}>
         {etape.ks.map((i) => {
           const e = exercices[i];
+          const voir = anims[i] ? () => setMouvement(i) : undefined;
           return (
-            <li key={i} className={clsx("flex items-center gap-3 px-3.5", enCours ? "py-2" : "py-3")}>
+            <li key={i}>
+             <button type="button" onClick={voir} disabled={!voir} aria-label={voir ? `Voir le mouvement : ${e.nom}` : undefined}
+              className={clsx("w-full text-left flex items-center gap-3 px-3.5 disabled:cursor-default", voir && "active:bg-white/[0.06] transition-colors", enCours ? "py-2" : "py-3")}>
               <Pictogramme traces={pictos[i]} className="w-6 h-6 shrink-0 text-white/60" />
               <span className="flex-1 min-w-0">
                 <span className="block text-[15px] lg:text-[17px] font-semibold truncate">{e.nom}</span>
                 {!enCours && (e.charge || e.consigne) && <span className="block text-[13px] text-white/60 truncate">{[e.charge, e.consigne].filter(Boolean).join(" · ")}</span>}
               </span>
               <span className="font-rounded text-[17px] lg:text-[19px] font-bold chiffres shrink-0">{e.reps ?? "?"}{e.unite ? <span className="ml-1 text-[13px] font-semibold text-white/60">{e.unite}</span> : null}</span>
-              {!enCours && anims[i] && (
-                <button type="button" onClick={() => setMouvement(i)} aria-label={`Voir le mouvement : ${e.nom}`}
-                  className="w-8 h-8 shrink-0 rounded-full flex items-center justify-center active:scale-95 transition-transform"
-                  style={{ background: "rgba(175,82,222,.18)", color: "#D9A6F0" }}><Lecture className="w-2.5 h-3" /></button>
+              {voir && (
+                <span aria-hidden className={clsx("shrink-0 rounded-full flex items-center justify-center", enCours ? "w-7 h-7" : "w-8 h-8")}
+                  style={{ background: "rgba(175,82,222,.18)", color: "#D9A6F0" }}><Lecture className="w-2.5 h-3" /></span>
               )}
+             </button>
             </li>
           );
         })}
@@ -738,8 +741,11 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
           return (
             <div key={i}>
               {sectionNouvelle && <p className="mx-2.5 mt-3 mb-0.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-white/30">{e.section}</p>}
-              <div className={clsx("flex items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-[14px]",
-                enCours ? "bg-[#2c2c2e] font-semibold text-white" : fait ? "text-white/30" : "text-white/60")}>
+              <button type="button" disabled={!anims[i]} onClick={() => setMouvement(i)}
+                title={anims[i] ? "Voir le mouvement en 3D" : undefined}
+                className={clsx("w-full text-left flex items-center gap-2.5 rounded-[10px] px-2.5 py-2 text-[14px] disabled:cursor-default",
+                enCours ? "bg-[#2c2c2e] font-semibold text-white" : fait ? "text-white/30" : "text-white/60",
+                anims[i] && !enCours && "hover:bg-white/[0.05]")}>
                 <b className="w-[22px] h-[22px] shrink-0 rounded-full flex items-center justify-center text-[11px] chiffres"
                   style={enCours ? { background: "#fff", color: "#000" } : fait && !x.passe ? { background: VIOLET, color: "#fff" } : { background: "#2c2c2e" }}>
                   {e.numero}
@@ -748,7 +754,7 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
                 <em className="not-italic text-[12px] text-white/30 chiffres shrink-0">
                   {x.passe ? "passé" : e.amrap ? prescription(e) : enCours && !e.emom ? `${x.series_faites ?? 0}/${e.series}` : e.emom ? `${e.series}′` : prescription(e)}
                 </em>
-              </div>
+              </button>
             </div>
           );
         })}

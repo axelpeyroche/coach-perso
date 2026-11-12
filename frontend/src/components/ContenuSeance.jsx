@@ -1,4 +1,7 @@
+import { useState } from "react";
 import { analyserDescription } from "../seance";
+import { animationExercice, useAnimations } from "../animations";
+import LecteurMouvement from "./LecteurMouvement";
 
 // Contenu d'une séance prévue, mis en forme : tableau d'exercices (muscu),
 // déroulé par phases (endurance) ou texte brut.
@@ -33,7 +36,16 @@ function Pastille({ children, className = "" }) {
 // ── Muscu : tableau d'exercices ─────────────────────────────────────────────
 const COLONNES = "md:grid md:grid-cols-[minmax(0,1fr)_64px_84px_64px_150px] md:gap-x-4";
 
-function LigneExercice({ e, couleur }) {
+// Petit bouton « 3D » au bout de la ligne : toute la ligne ouvre le mouvement
+function Badge3D() {
+  return (
+    <span aria-hidden className="w-7 h-7 shrink-0 rounded-full flex items-center justify-center bg-ios-purple/15 text-ios-purple">
+      <svg viewBox="0 0 24 24" className="w-3 h-3 ml-[1px]" fill="currentColor"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10-6.5a1 1 0 0 0 0-1.72l-10-6.5A1 1 0 0 0 8 5.5z" /></svg>
+    </span>
+  );
+}
+
+function LigneExercice({ e, couleur, onVoir }) {
   const notes = (
     <>
       {e.notes.length > 0 && <p className="mt-0.5 text-[13px] leading-[18px] text-label-2">{e.notes.join(" · ")}</p>}
@@ -57,8 +69,10 @@ function LigneExercice({ e, couleur }) {
       style={{ backgroundColor: `${couleur}26`, color: couleur }}>{e.numero}</span>
   );
 
+  const Ligne = onVoir ? "button" : "div";
   return (
-    <div className={`px-4 py-3 ${COLONNES} md:items-center`}>
+    <Ligne {...(onVoir ? { type: "button", onClick: onVoir, "aria-label": `Voir le mouvement en 3D : ${e.nom}` } : {})}
+      className={`relative w-full text-left px-4 py-3 ${COLONNES} md:items-center ${onVoir ? "pr-12 active:bg-remplissage md:hover:bg-remplissage/60 transition-colors" : ""}`}>
       {/* Téléphone : nom à gauche, « séries × reps » et récup à droite */}
       <div className="flex gap-3 md:hidden">
         {numero}
@@ -88,11 +102,14 @@ function LigneExercice({ e, couleur }) {
       </div>
       <p className="hidden md:block text-[15px] text-label-2 chiffres">{e.recup ?? "—"}</p>
       <p className="hidden md:block text-[14px] leading-5">{e.charge ?? <span className="text-label-2">—</span>}</p>
-    </div>
+      {onVoir && <span className="absolute right-3 top-1/2 -translate-y-1/2"><Badge3D /></span>}
+    </Ligne>
   );
 }
 
 function Muscu({ r, couleur }) {
+  const catalogue = useAnimations();
+  const [mouvement, setMouvement] = useState(null);
   return (
     <>
       {r.intro.length > 0 && <p className="px-1 text-[15px] leading-6 text-label-2">{r.intro.join(" ")}</p>}
@@ -108,11 +125,16 @@ function Muscu({ r, couleur }) {
             <div className={`hidden ${COLONNES} px-4 py-2 text-[12px] font-semibold uppercase tracking-[0.02em] text-label-2`}>
               <span className="pl-9">Exercice</span><span>Séries</span><span>Reps</span><span>Récup</span><span>Charge</span>
             </div>
-            {s.exercices.map((e) => <LigneExercice key={e.numero} e={e} couleur={couleur} />)}
+            {s.exercices.map((e) => {
+              const anim = animationExercice(e.nom, catalogue);
+              return <LigneExercice key={e.numero} e={e} couleur={couleur}
+                onVoir={anim ? () => setMouvement({ nom: e.nom, anim }) : undefined} />;
+            })}
           </div>
         </section>
       ))}
       <Info lignes={r.fin} />
+      {mouvement && <LecteurMouvement nom={mouvement.nom} animation={mouvement.anim} onClose={() => setMouvement(null)} />}
     </>
   );
 }
