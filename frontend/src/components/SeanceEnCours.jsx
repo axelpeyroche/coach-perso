@@ -399,6 +399,14 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
     }
     return (siennes.filter(([, j]) => j < etat.idx).length + enCours) / siennes.length;
   });
+  // Segments de la barre : les exercices d'un même AMRAP n'en font qu'un
+  const segments = [];
+  avancement.forEach((p, i) => {
+    const am = etapes.find((et) => et.type === "amrap" && et.ks.includes(i));
+    const dernier = segments[segments.length - 1];
+    if (am && dernier?.amrap === am) { dernier.n += 1; return; }
+    segments.push({ i, p, n: 1, amrap: am ?? null, minutes: am?.minutes });
+  });
 
   const decompte = etat.decompteFin ? Math.max(1, Math.ceil((etat.decompteFin - now) / 1000)) : null;
   const reste = etat.minuteurFin ? Math.max(0, (etat.minuteurFin - now) / 1000) : null;
@@ -687,14 +695,18 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
             className="w-[30px] h-[30px] shrink-0 rounded-full bg-[#2c2c2e] text-white/60 flex items-center justify-center"><Croix /></button>
           {/* Un segment par exercice, son pictogramme dessous (hors de l'alignement de la barre) :
               fait estompé, en cours violet, à venir gris */}
-          <div className="flex-1 flex gap-[3px] -mb-[18px] lg:-mb-[21px]">
-            {avancement.map((p, i) => (
-              <div key={i} className="flex-1 min-w-0 flex flex-col items-center gap-[5px]" title={exercices[i].nom}>
+          {/* Un circuit AMRAP = un seul segment (le temps du circuit), sans pictogrammes : ils sont dans la liste */}
+          <div className={clsx("flex-1 flex gap-[3px]", segments.some((g) => !g.amrap) && "-mb-[18px] lg:-mb-[21px]")}>
+            {segments.map((g) => (
+              <div key={g.i} className={clsx("min-w-0 flex flex-col items-center gap-[5px]", !g.amrap && "flex-1")}
+                style={g.amrap ? { flex: `${g.n} 1 0%` } : undefined} title={g.amrap ? `AMRAP ${g.minutes ?? ""} min` : exercices[g.i].nom}>
                 <i className="block w-full h-1 rounded-full bg-[#2c2c2e] overflow-hidden">
-                  <i className="block h-full rounded-full transition-[width] duration-300" style={{ width: `${p * 100}%`, background: VIOLET }} />
+                  <i className="block h-full rounded-full transition-[width] duration-300" style={{ width: `${g.p * 100}%`, background: VIOLET }} />
                 </i>
-                <Pictogramme traces={pictos[i]} className="w-[13px] h-[13px] lg:w-4 lg:h-4 shrink-0 transition-colors duration-300"
-                  style={{ color: i === k && etape.type !== "fin" ? VIOLET : p >= 1 ? "rgba(255,255,255,0.28)" : "rgba(255,255,255,0.55)" }} />
+                {!g.amrap && (
+                  <Pictogramme traces={pictos[g.i]} className="w-[13px] h-[13px] lg:w-4 lg:h-4 shrink-0 transition-colors duration-300"
+                    style={{ color: g.i === k && etape.type !== "fin" ? VIOLET : g.p >= 1 ? "rgba(255,255,255,0.28)" : "rgba(255,255,255,0.55)" }} />
+                )}
               </div>
             ))}
           </div>
