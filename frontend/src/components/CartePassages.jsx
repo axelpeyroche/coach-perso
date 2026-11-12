@@ -357,6 +357,27 @@ export default function CartePassages({ annee: fixe } = {}) {
       : VIDE);
   }, [troncon, selection, prete]);
 
+  // La vue se recadre pour montrer en entier les tracés passés par le tronçon (hors panneau)
+  useEffect(() => {
+    const m = carte.current;
+    if (!prete || !m || !visibles?.length) return;
+    let o = Infinity, s = Infinity, e = -Infinity, n = -Infinity;
+    for (const v of visibles) {
+      const [co, cs, ce, cn] = cadres[v.i];
+      o = Math.min(o, co); s = Math.min(s, cs); e = Math.max(e, ce); n = Math.max(n, cn);
+    }
+    const el = m.getContainer();
+    const large = window.matchMedia("(min-width: 640px)").matches;
+    const padding = large
+      ? { top: 40, bottom: 40, left: 40, right: 18 * 16 + 40 }
+      : { top: 50, left: 24, right: 24, bottom: Math.round(el.clientHeight * 0.58) + 24 };
+    // Carte trop petite pour ces marges : on garde le cadrage brut plutôt que d'échouer
+    if (padding.top + padding.bottom >= el.clientHeight - 40 || padding.left + padding.right >= el.clientWidth - 40) {
+      padding.top = padding.bottom = padding.left = padding.right = 16;
+    }
+    m.fitBounds([[o, s], [e, n]], { padding, duration: 700, maxZoom: 16 });
+  }, [visibles, cadres, prete]);
+
   // Adresse enregistrée ou modifiée dans le Profil : la carte s'y recentre
   const centree = useRef(null);
   useEffect(() => {
