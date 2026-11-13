@@ -574,7 +574,7 @@ export default function App() {
               {/* ── Sidebar desktop ── */}
               <aside className="barre-laterale hidden md:flex flex-col w-60 shrink-0 border-r-[0.5px] border-separateur bg-surface/70 backdrop-blur-xl px-3 py-6 gap-0.5 fixed top-0 left-0 h-full z-20 overflow-y-auto">
                 <NavLink to="/" className="block px-3 mb-5">
-                  <h1 className="text-[22px] font-bold tracking-[-0.02em]">Carnet</h1>
+                  <h1 className="text-[22px] font-bold tracking-[-0.02em]">Mon Carnet</h1>
                   {user && (
                     <p className="text-[13px] text-label-2 truncate">
                       {user.prenom} {user.nom}

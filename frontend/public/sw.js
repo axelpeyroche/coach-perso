@@ -47,7 +47,7 @@ self.addEventListener("push", (event) => {
   try { data = event.data.json(); } catch { data = { body: event.data.text() }; }
   event.waitUntil(
     Promise.all([
-      self.registration.showNotification(data.title || "Carnet", {
+      self.registration.showNotification(data.title || "Mon Carnet", {
         body: data.body || "",
         icon: "/icon-192.png",
         badge: "/icon-192.png",

@@ -634,7 +634,7 @@ function Musique() {
     <Groupe titre="Musique"
       pied={erreur ? "Connexion impossible : réessaie." : connecte
         ? "Pendant la séance guidée, un bandeau pilote l'appli Spotify ; les titres likés se lancent au début si rien ne joue."
-        : "Compte Premium requis. La musique est jouée par l'appli Spotify, Carnet la pilote pendant la séance guidée."}>
+        : "Compte Premium requis. La musique est jouée par l'appli Spotify, Mon Carnet la pilote pendant la séance guidée."}>
       <div className="ligne" style={{ "--inset": "3.75rem" }}>
         <Picto couleur="#1DB954"><path d="M9 18V6l11-2v12" /><circle cx="6.5" cy="18" r="2.5" /><circle cx="17.5" cy="16" r="2.5" /></Picto>
         <span className="flex-1 text-[17px]">Spotify</span>

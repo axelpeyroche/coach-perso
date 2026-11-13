@@ -1,5 +1,5 @@
 // Télécommande Spotify (Web API, partie « Player ») : c'est l'appli Spotify qui
-// joue la musique, Carnet la pilote. Connexion PKCE sans secret ; les jetons
+// joue la musique, Mon Carnet la pilote. Connexion PKCE sans secret ; les jetons
 // restent dans ce navigateur. Compte Premium obligatoire pour les commandes.
 
 const CLIENT_ID = import.meta.env.VITE_SPOTIFY_CLIENT_ID;

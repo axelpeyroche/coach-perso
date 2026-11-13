@@ -1,5 +1,5 @@
 """
-API FastAPI — Carnet de suivi multi-sport.
+API FastAPI — Mon Carnet, suivi multi-sport.
 
 Point d'entrée de l'application : création de l'app, middleware CORS, gestion
 d'erreur globale et montage des routers par domaine (voir `routers/`).
@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 from routers import admin, auth, carnet, coaching, corps, intervals, itineraires, materiel, plan, qualite, suivi, utilisateur
 
 app = FastAPI(
-    title="Carnet — API",
+    title="Mon Carnet — API",
     description="API du carnet de suivi multi-sport (séances, imports, objectifs, statistiques).",
     version="2.0.0",
 )
@@ -156,7 +156,7 @@ app.include_router(qualite.router)
 
 @app.get("/", include_in_schema=False)
 def racine():
-    return {"statut": "Carnet opérationnel", "docs": "/docs"}
+    return {"statut": "Mon Carnet opérationnel", "docs": "/docs"}
 
 
 @app.get("/health", include_in_schema=False)
