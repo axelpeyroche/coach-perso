@@ -11,6 +11,7 @@ const PORTEES = [
 ].join(" ");
 const CLE = "spotify";
 const CLE_VERIF = "spotify-verificateur";
+const CLE_PERDU = "spotify-perdu";
 
 export const spotifyDisponible = !!CLIENT_ID;
 const retour = () => `${window.location.origin}/spotify`;
@@ -23,18 +24,26 @@ function ecrireJetons(j) {
 }
 export function spotifyConnecte() { return !!lireJetons()?.refresh; }
 export function deconnecterSpotify() {
-  try { localStorage.removeItem(CLE); } catch { /* idem */ }
+  try { localStorage.removeItem(CLE); localStorage.removeItem(CLE_PERDU); } catch { /* idem */ }
+}
+// Connexion perdue sans l'avoir demandé (Spotify a refusé le renouvellement) : le bandeau
+// de séance le dit et propose de se reconnecter, au lieu de disparaître sans explication.
+export function spotifyPerdu() {
+  try { return localStorage.getItem(CLE_PERDU) === "1"; } catch { return false; }
+}
+function perdre() {
+  try { localStorage.removeItem(CLE); localStorage.setItem(CLE_PERDU, "1"); } catch { /* idem */ }
 }
 
 const base64url = (octets) => btoa(String.fromCharCode(...new Uint8Array(octets)))
   .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 
 // Départ vers la page de connexion Spotify
-export async function connecterSpotify() {
+export async function connecterSpotify(revenir = null) {
   const verif = base64url(crypto.getRandomValues(new Uint8Array(48)));
   const defi = base64url(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verif)));
   const etat = base64url(crypto.getRandomValues(new Uint8Array(12)));
-  localStorage.setItem(CLE_VERIF, JSON.stringify({ verif, etat }));
+  localStorage.setItem(CLE_VERIF, JSON.stringify({ verif, etat, revenir }));
   const p = new URLSearchParams({
     client_id: CLIENT_ID, response_type: "code", redirect_uri: retour(), scope: PORTEES,
     code_challenge_method: "S256", code_challenge: defi, state: etat,
@@ -56,6 +65,7 @@ async function demanderJeton(corps) {
     expire: Date.now() + (d.expires_in - 60) * 1000,
   };
   ecrireJetons(j);
+  try { localStorage.removeItem(CLE_PERDU); } catch { /* idem */ }
   return j;
 }
 
@@ -67,6 +77,9 @@ export async function terminerConnexion(params) {
   if (params.get("error")) throw new Error(params.get("error"));
   if (!attendu || params.get("state") !== attendu.etat || !params.get("code")) throw new Error("état invalide");
   await demanderJeton({ grant_type: "authorization_code", code: params.get("code"), redirect_uri: retour(), code_verifier: attendu.verif });
+  // Page d'où la connexion est partie (chemin interne seulement)
+  const r = attendu.revenir;
+  return typeof r === "string" && r.startsWith("/") && !r.startsWith("//") ? r : null;
 }
 
 let renouvellement = null;
@@ -76,7 +89,15 @@ async function jeton() {
   if (j.access && Date.now() < j.expire) return j.access;
   // Un seul renouvellement à la fois : le jeton de renouvellement change à chaque usage
   renouvellement ??= demanderJeton({ grant_type: "refresh_token", refresh_token: j.refresh })
-    .catch((e) => { if (/ 400$/.test(e.message)) deconnecterSpotify(); throw e; })
+    .catch((e) => {
+      if (/ 400$/.test(e.message)) {
+        // Un autre onglet a peut-être déjà renouvelé le jeton : on reprend le sien
+        const n = lireJetons();
+        if (n?.refresh && n.refresh !== j.refresh) return n;
+        perdre();
+      }
+      throw e;
+    })
     .finally(() => { renouvellement = null; });
   return (await renouvellement).access;
 }

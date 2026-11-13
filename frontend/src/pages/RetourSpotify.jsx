@@ -12,7 +12,7 @@ export default function RetourSpotify() {
     if (fait.current) return;  // le code ne sert qu'une fois (double appel en développement)
     fait.current = true;
     terminerConnexion(new URLSearchParams(window.location.search))
-      .then(() => navigate("/profil?spotify=ok", { replace: true }))
+      .then((revenir) => navigate(revenir ?? "/profil?spotify=ok", { replace: true }))
       .catch((e) => setErreur(e.message === "access_denied" ? "Connexion annulée."
         : e.message === "état invalide" ? "Cette page s'ouvre seule après la connexion : passe par Profil, groupe Musique, Connecter."
         : "La connexion à Spotify a échoué."));

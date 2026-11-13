@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { melangerSon } from "../son";
-import { spotifyDisponible, spotifyConnecte, etatLecteur, lire, pause, suivant, precedent, mesPlaylists, titresPlaylist, aleatoire, chercher, ajouterFile } from "../spotify";
+import { useAuth } from "../AuthContext";
+import { spotifyDisponible, spotifyConnecte, spotifyPerdu, connecterSpotify, etatLecteur, lire, pause, suivant, precedent, mesPlaylists, titresPlaylist, aleatoire, chercher, ajouterFile } from "../spotify";
 
 // Bandeau Spotify de la séance guidée : titre en cours, précédent, pause et suivant ;
 // touché, il se déplie en lecteur avec la liste des playlists (toucher une playlist
@@ -282,9 +283,26 @@ function Progression({ lecteur, recu }) {
 
 export default function BandeauSpotify({ sp }) {
   const [sortie, setSortie] = useState(false);   // feuille en train de se refermer
+  const { user } = useAuth();
   const { actif, lecteur, endormi, erreur, deplie, setDeplie, playlists, change, recu, lancer, commande,
     basculerAleatoire, vue, ouvrir, titres, plusDeTitres, requete, setRequete, resultats, ajouter, ajoutes } = sp;
-  if (!actif) return null;
+  if (!actif) {
+    // Connexion perdue en route : on le dit, avec de quoi la rétablir (la séance est sauvegardée)
+    // (pour le propriétaire, même sans trace d'une perte : il s'en sert à chaque séance)
+    if (!spotifyDisponible || !(spotifyPerdu() || user?.est_admin)) return null;
+    return (
+      <div className="mb-3" data-spotify>
+        <div className="flex items-center gap-2.5 rounded-[14px] bg-[#1c1c1e] px-3 py-2.5 text-white">
+          <div className="flex-1 min-w-0">
+            <p className="text-[14px] font-semibold">Spotify est déconnecté</p>
+            <p className="text-[12px] text-white/60">Ta séance est gardée, tu la reprendras au retour.</p>
+          </div>
+          <button type="button" className="px-2 text-[15px] font-semibold" style={{ color: VERT }}
+            onClick={() => connecterSpotify(window.location.pathname + window.location.search).catch(() => {})}>Reconnecter</button>
+        </div>
+      </div>
+    );
+  }
   const fermer = () => {
     if (sortie) return;
     setSortie(true);
