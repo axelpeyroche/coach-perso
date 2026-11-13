@@ -104,6 +104,8 @@ def creer_tables() -> None:
         # Éditeur de séance par blocs et envoi des séances sur la montre (via Intervals.icu)
         "ALTER TABLE seances_prevues ADD COLUMN IF NOT EXISTS structure TEXT",
         "ALTER TABLE seances_prevues ADD COLUMN IF NOT EXISTS envoi_montre TEXT",
+        # Assistant « Mon IA crée mon plan » : réponses de l'utilisateur (objectif, disponibilités, contraintes)
+        "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS reglages_ia TEXT",
         # Séance « Autre » rattachée à la main à une séance prévue : elle prend le sport du plan
         "UPDATE activites SET sport = p.sport FROM seances_prevues p "
         "WHERE p.activite_id = activites.id AND p.lien_manuel AND activites.sport = 'autre' AND p.sport <> 'autre'",

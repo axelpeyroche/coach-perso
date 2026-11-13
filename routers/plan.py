@@ -16,7 +16,7 @@ from datetime import date, datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StrictInt
 from sqlalchemy.orm import Session
 
 import animations as an
@@ -268,7 +268,10 @@ def importer_plan(
     if payload.remplacer_semaines:
         lundis = [x["jour"] - timedelta(days=x["jour"].weekday()) for x in items]
         remplacer = (min(lundis), max(lundis) + timedelta(days=6))
-    bilan = cs.enregistrer_plan(db, current_user.id, items, remplacer=remplacer)
+    try:
+        bilan = cs.enregistrer_plan(db, current_user.id, items, remplacer=remplacer)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     db.commit()
     return {"ok": True, **bilan}
 
@@ -530,6 +533,79 @@ def supprimer_modele(modele_id: int, current_user: Utilisateur = Depends(get_cur
     return {"ok": True}
 
 
+# ---------------------------------------------------------------------------
+# Assistant « Mon IA crée mon plan » : les réponses de l'utilisateur
+# ---------------------------------------------------------------------------
+
+JOURS_IA = ("lun", "mar", "mer", "jeu", "ven", "sam", "dim")
+IAS_ASSISTANT = ("claude", "chatgpt", "gemini", "lechat", "copilot", "autre")
+REGLAGES_IA_DEFAUT = {"ia": "claude", "autre_ia": "", "objectif": "", "sports": [],
+                      "dispos": {j: 0 for j in JOURS_IA}, "contraintes": "", "niveau": "semi"}
+
+
+class ReglagesIaSchema(BaseModel):
+    ia: str = Field("claude", pattern="^(claude|chatgpt|gemini|lechat|copilot|autre)$")
+    autre_ia: str = Field("", max_length=40)
+    objectif: str = Field("", max_length=600)
+    sports: list[str] = Field(default_factory=list, max_length=12)
+    dispos: dict[str, StrictInt] = Field(default_factory=dict)   # minutes disponibles par jour, 0 = pas de séance
+    contraintes: str = Field("", max_length=1500)
+    niveau: str = Field("semi", pattern="^(semi|auto)$")
+
+
+def _reglages_ia(user: Utilisateur) -> dict:
+    try:
+        lu = json.loads(user.reglages_ia) if user.reglages_ia else {}
+    except ValueError:
+        lu = {}
+    if not isinstance(lu, dict):
+        lu = {}
+    # relecture défensive : une valeur mal formée en base retombe sur le défaut, jamais sur une erreur
+    res = dict(REGLAGES_IA_DEFAUT)
+    for k in ("autre_ia", "objectif", "contraintes"):
+        if isinstance(lu.get(k), str):
+            res[k] = lu[k]
+    if lu.get("ia") in IAS_ASSISTANT:
+        res["ia"] = lu["ia"]
+    if lu.get("niveau") in ("semi", "auto"):
+        res["niveau"] = lu["niveau"]
+    sports = lu.get("sports") if isinstance(lu.get("sports"), list) else []
+    res["sports"] = [s for s in sports if isinstance(s, str) and s in cs.SPORTS]
+    dispos = lu.get("dispos") if isinstance(lu.get("dispos"), dict) else {}
+    res["dispos"] = {j: (v if type(v) is int and 0 <= v <= 600 else 0)
+                     for j in JOURS_IA for v in [dispos.get(j)]}
+    return {**res, "rempli": bool(user.reglages_ia)}
+
+
+@router.get("/api/assistant-ia", summary="Réponses enregistrées de l'assistant « Mon IA crée mon plan »")
+def lire_reglages_ia(current_user: Utilisateur = Depends(get_current_user)):
+    return _reglages_ia(current_user)
+
+
+@router.put("/api/assistant-ia", summary="Enregistre les réponses de l'assistant « Mon IA crée mon plan »")
+def enregistrer_reglages_ia(
+    payload: ReglagesIaSchema,
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(obtenir_session),
+):
+    if any(j not in JOURS_IA for j in payload.dispos):
+        raise HTTPException(400, "Jour inconnu dans les disponibilités")
+    if any(not 0 <= m <= 600 for m in payload.dispos.values()):
+        raise HTTPException(400, "Durée disponible hors limites (0 à 600 min)")
+    sports = []
+    for s in payload.sports:
+        s = cs.normaliser_sport(s)
+        if s not in sports:
+            sports.append(s)
+    current_user.reglages_ia = json.dumps({
+        "ia": payload.ia, "autre_ia": payload.autre_ia.strip(), "objectif": payload.objectif.strip(),
+        "sports": sports, "dispos": {j: payload.dispos.get(j, 0) for j in JOURS_IA},
+        "contraintes": payload.contraintes.strip(), "niveau": payload.niveau,
+    }, ensure_ascii=False)
+    db.commit()
+    return _reglages_ia(current_user)
+
+
 @router.get("/api/claude/token", summary="Retourne (et génère si besoin) le token Claude")
 def get_claude_token(
     current_user: Utilisateur = Depends(get_current_user),
@@ -604,10 +680,13 @@ def claude_envoyer_plan(
         anims = an.enregistrer(db, user.id, payload.animations)
     except ValueError as e:
         raise HTTPException(400, str(e))
-    bilan = cs.enregistrer_plan(
-        db, user.id, _items(db, user, payload.seances),
-        remplacer=(payload.remplacer.depuis, payload.remplacer.jusqu_a) if payload.remplacer else None,
-    )
+    try:
+        bilan = cs.enregistrer_plan(
+            db, user.id, _items(db, user, payload.seances),
+            remplacer=(payload.remplacer.depuis, payload.remplacer.jusqu_a) if payload.remplacer else None,
+        )
+    except ValueError as e:
+        raise HTTPException(400, str(e))
     descriptions = [x.description for x in payload.seances]
     manquants, approchants = pg.a_verifier(db, user.id, descriptions)
     anims_manquantes, anims_approchantes = an.a_verifier(db, user.id, descriptions)
@@ -638,6 +717,10 @@ def claude_supprimer(
                                       SeancePrevue.id_externe == id_externe).first()
     if not p:
         raise HTTPException(404, "Séance prévue introuvable")
+    if cs.est_protegee(p):
+        # même règle que « remplacer » : le jeton ne retire ni l'historique ni ce que l'athlète a ajouté
+        raise HTTPException(409, "Séance réalisée, sautée, commentée ou ajoutée par l'athlète : "
+                                 "elle se retire depuis l'onglet Plan")
     db.delete(p)
     db.commit()
     return {"ok": True}

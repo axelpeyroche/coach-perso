@@ -2,7 +2,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../AuthContext";
 
 // Page publique (accessible sans compte) : ce que Mon Carnet enregistre et pourquoi
-const MISE_A_JOUR = "12 novembre 2026";
+const MISE_A_JOUR = "13 novembre 2026";
 
 function Bloc({ titre, children }) {
   return (
@@ -41,6 +41,7 @@ export default function Confidentialite() {
             <li>Tes séances : sport, durée, distance, fréquence cardiaque, tracé GPS, ressentis et notes.</li>
             <li>Tes mesures de santé : FC de repos, VFC, sommeil, poids, douleurs que tu notes.</li>
             <li>Tes plans, objectifs et parcours enregistrés.</li>
+            <li>Tes réponses à l'assistant « Mon IA crée mon plan » : objectif, disponibilités, contraintes et blessures que tu y écris. Elles sont recopiées dans la consigne que tu donnes toi-même à ton IA ; le carnet ne les envoie à personne.</li>
           </ul>
           <p>Ces données de santé ne sont enregistrées qu'avec ton accord, donné à la création du compte.</p>
         </Bloc>
@@ -48,8 +49,19 @@ export default function Confidentialite() {
         <Bloc titre="Pourquoi">
           <p>
             Uniquement pour te les afficher et calculer tes analyses (charge, zones, records, tendances).
-            Pas de publicité, pas de revente, pas de profilage. Personne d'autre n'a accès à ton carnet :
-            l'administration de la bêta ne voit que la liste des comptes invités, jamais leur contenu.
+            Pas de publicité, pas de revente, pas de profilage. Personne d'autre n'a accès à ton carnet,
+            sauf les IA à qui tu donnes toi-même ton lien ou ton jeton : l'administration de la bêta ne voit que la
+            liste des comptes invités, jamais leur contenu.
+          </p>
+        </Bloc>
+
+        <Bloc titre="Si tu utilises une IA">
+          <p>
+            Le carnet n'envoie rien à aucune IA de sa propre initiative. Si tu colles la consigne de l'assistant dans une IA,
+            tu lui donnes un lien en lecture seule (ou, au niveau automatique avec Claude, un jeton d'envoi). Cette IA et
+            son éditeur peuvent alors lire tout ton carnet, données de santé comprises, tant que tu ne changes pas ce lien
+            ou ce jeton dans Sources. Le jeton d'envoi permet en plus d'ajouter, de modifier et de retirer des séances
+            prévues ; il ne retire ni tes séances réalisées ni celles que tu as ajoutées toi-même.
           </p>
         </Bloc>
 

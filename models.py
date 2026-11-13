@@ -91,6 +91,8 @@ class Utilisateur(Base):
     intervals_cle: Mapped[Optional[str]] = mapped_column(String(100))
     intervals_derniere_synchro: Mapped[Optional[datetime]] = mapped_column(DateTime)
     montre: Mapped[Optional[str]] = mapped_column(String(20))  # apple, garmin, coros… (conseils de l'assistant de connexion)
+    # Assistant « Mon IA crée mon plan » : réponses de l'utilisateur (JSON), reprises dans la consigne qu'il copie
+    reglages_ia: Mapped[Optional[str]] = mapped_column(Text)
 
     # Physiologie
     fc_max: Mapped[Optional[int]] = mapped_column(Integer, comment="FC max mesurée (bpm)")

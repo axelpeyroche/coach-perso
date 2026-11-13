@@ -709,7 +709,14 @@ function BlocPlanIA() {
         ChatGPT, Gemini, Claude ou une autre IA, puis recolle sa réponse. Les séances s'ajoutent à la semaine choisie
         et, une fois réalisées, ton activité prend leur nom.
       </p>
-      <Link to="/plan" className={btnP}>Ouvrir le Plan</Link>
+      <p className="text-[13px] text-label-2">
+        Pour que ton IA s'en charge chaque semaine, l'assistant écrit une consigne sur mesure à partir de ton objectif,
+        de tes disponibilités et de tes contraintes.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <Link to="/mon-ia" className={btnP}>Mon IA crée mon plan</Link>
+        <Link to="/plan" className={btn}>Ouvrir le Plan</Link>
+      </div>
     </Bloc>
   );
 }
@@ -738,7 +745,7 @@ function BlocPlanClaude() {
             <button className={btn} disabled={!token} onClick={() => copier(ligneEnv, "env")}>{copie === "env" ? "✓" : "Copier"}</button>
           </div>
           <p className="text-[13px] text-label-2">
-            Ce token donne la lecture de tout le carnet et l'écriture du plan : ne le partage pas.
+            Ce token permet de lire tout le carnet et d'ajouter, modifier ou retirer des séances prévues (jamais les séances réalisées ni celles ajoutées à la main) : ne le partage pas.
           </p>
           <button className={lienDanger} onClick={() => setConfirmRegen(true)}>
             Régénérer le token (invalide l'ancien)
@@ -746,7 +753,7 @@ function BlocPlanClaude() {
         </div>
       </Bloc>
       <ConfirmDialog open={confirmRegen} title="Régénérer le token Claude ?" danger
-        message="L'ancien token ne fonctionnera plus : il faudra mettre à jour le fichier .env."
+        message="L'ancien token ne fonctionnera plus : il faudra redonner la consigne à Claude (assistant « Mon IA crée mon plan ») ou mettre à jour le fichier .env."
         onConfirm={async () => { await regenererClaudeToken(); qc.invalidateQueries({ queryKey: ["claude-token"] }); setConfirmRegen(false); }}
         onCancel={() => setConfirmRegen(false)} />
     </>

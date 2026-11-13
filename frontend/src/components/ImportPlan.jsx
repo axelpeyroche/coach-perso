@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import Feuille from "./Feuille";
 import { Interrupteur } from "./ui";
@@ -87,6 +88,13 @@ export default function ImportPlan({ semaine, onClose }) {
             Fonctionne avec n'importe quelle IA, même gratuite : ChatGPT, Gemini, Claude, Le Chat, Copilot…
             Semaine visée : <strong>{fmtSemaine(semaine)}</strong>.
           </p>
+          <Link to="/mon-ia" onClick={onClose} className="tuile p-3.5 flex items-center gap-3">
+            <span className="flex-1 min-w-0">
+              <span className="block text-[15px] font-semibold">Mon IA crée mon plan chaque semaine</span>
+              <span className="block text-[13px] text-label-2">Une consigne sur mesure, à donner une seule fois à ton IA. Tu as déjà sa réponse ? Colle-la à l'étape 3.</span>
+            </span>
+            <span aria-hidden className="text-label-3 text-[20px]">›</span>
+          </Link>
 
           <Etape n={1} titre="Copie la consigne et ton carnet">
             <button className="btn-primaire btn-sm w-full" disabled={chargement} onClick={copierAvecCarnet}>

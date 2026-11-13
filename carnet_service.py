@@ -2029,9 +2029,17 @@ def lister_plan(db: Session, user_id: int, depuis: date, jusqu_a: date,
 
 
 def est_saisie_athlete(p: SeancePrevue) -> bool:
-    """Séance que l'athlète a construite (blocs, série répétée) ou envoyée sur sa montre :
-    un plan envoyé ou importé ne la remplace jamais."""
-    return bool(p.structure or p.envoi_montre or (p.id_externe or "").startswith("rec-"))
+    """Séance que l'athlète a ajoutée lui-même (à la main, par blocs, série répétée, test planifié)
+    ou envoyée sur sa montre : un plan envoyé ou importé ne la remplace jamais."""
+    return bool(p.structure or p.envoi_montre
+                or (p.id_externe or "").startswith(("rec-", "manuel-", "test-")))
+
+
+def est_protegee(p: SeancePrevue) -> bool:
+    """Séance qu'un plan envoyé (ou un jeton d'envoi) ne retire jamais : faite, sautée, commentée,
+    déroulée en séance guidée, ou ajoutée par l'athlète."""
+    return bool(p.activite_id is not None or p.statut == "sautee" or p.commentaire or p.deroule
+                or est_saisie_athlete(p))
 
 
 def enregistrer_plan(db: Session, user_id: int, items: list[dict],
@@ -2045,17 +2053,20 @@ def enregistrer_plan(db: Session, user_id: int, items: list[dict],
     l'envoi, sauf celles des semaines passées, réalisées, sautées ou commentées (l'historique reste).
     """
     auj = aujourd_hui or date.today()
-    bilan = {"cree": 0, "maj": 0, "supprime": 0}
+    bilan = {"cree": 0, "maj": 0, "supprime": 0, "conserve": 0}
     envoyes: set[str] = set()
     for x in items:
         if not x.get("jour"):
             x["jour"] = _lundi(auj)
         id_ext = x.get("id_externe") or f"{x['jour'].isoformat()}-{x['sport']}-{x.get('ordre') or 0}"
+        if id_ext in envoyes:
+            # deux séances sous le même identifiant : la seconde écraserait la première
+            raise ValueError(f"Identifiant en double dans l'envoi : {id_ext}")
         envoyes.add(id_ext)
         p = (db.query(SeancePrevue)
              .filter(SeancePrevue.utilisateur_id == user_id, SeancePrevue.id_externe == id_ext).first())
         if p and statut_prevue(p, auj) == "realisee":
-            bilan["conserve"] = bilan.get("conserve", 0) + 1  # séance faite : jamais réécrite
+            bilan["conserve"] += 1  # séance faite : jamais réécrite
             continue
         if p:
             if _lundi(p.jour) != _lundi(x["jour"]) and not p.lien_manuel:
@@ -2077,8 +2088,7 @@ def enregistrer_plan(db: Session, user_id: int, items: list[dict],
         for p in (db.query(SeancePrevue)
                   .filter(SeancePrevue.utilisateur_id == user_id,
                           SeancePrevue.jour >= max(depuis, _lundi(auj)), SeancePrevue.jour <= jusqu_a).all()):
-            if (p.id_externe not in envoyes and p.activite_id is None and p.statut != "sautee"
-                    and not p.commentaire and not p.deroule and not est_saisie_athlete(p)):
+            if p.id_externe not in envoyes and not est_protegee(p):
                 db.delete(p)
                 bilan["supprime"] += 1
     db.flush()

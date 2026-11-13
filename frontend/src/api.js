@@ -275,6 +275,8 @@ export const supprimerModele = (id) => api.delete(`/modeles/${id}`).then((r) => 
 export const planifierTest = (payload) => api.post("/plan/tests", payload).then((r) => r.data);
 export const lierParcoursObjectif = (id, itineraire_id) => api.put(`/objectifs/${id}/parcours`, { itineraire_id }).then((r) => r.data);
 export const getActivitesProches = (id) => api.get(`/plan/${id}/activites`).then((r) => r.data);
+export const getReglagesIa = () => api.get("/assistant-ia").then((r) => r.data);
+export const enregistrerReglagesIa = (payload) => api.put("/assistant-ia", payload).then((r) => r.data);
 export const getClaudeToken = () => api.get("/claude/token").then((r) => r.data);
 export const regenererClaudeToken = () => api.post("/claude/token/regenerer").then((r) => r.data);
 

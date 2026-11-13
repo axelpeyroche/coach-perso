@@ -188,3 +188,105 @@ def test_synchro_matin_des_autres_comptes(monkeypatch, db):
     bilan = intervals.synchro_matin_autres_comptes(sauf_id=a.id)
     assert a.id not in vus and c.id not in vus and b.id in vus
     assert bilan["erreurs"] >= 1
+
+
+# ── Assistant « Mon IA crée mon plan » ───────────────────────────────────────
+
+def test_assistant_ia_enregistre_les_reponses_par_compte(client, db):
+    a, b = _compte(db, "ia-a@exemple.test"), _compte(db, "ia-b@exemple.test")
+    vide = client.get("/api/assistant-ia", headers=_jeton(a.id)).json()
+    assert vide["rempli"] is False and vide["niveau"] == "semi" and set(vide["dispos"]) == {"lun", "mar", "mer", "jeu", "ven", "sam", "dim"}
+
+    r = client.put("/api/assistant-ia", headers=_jeton(a.id), json={
+        "ia": "chatgpt", "objectif": "  10 km en 50 min  ", "sports": ["course", "Footing", "muscu"],
+        "dispos": {"mar": 45, "sam": 90}, "contraintes": "genou droit sensible", "niveau": "semi"})
+    assert r.status_code == 200
+    lu = client.get("/api/assistant-ia", headers=_jeton(a.id)).json()
+    assert lu["rempli"] is True and lu["ia"] == "chatgpt" and lu["objectif"] == "10 km en 50 min"
+    assert lu["sports"] == ["course", "muscu"]                      # normalisés, sans doublon
+    assert lu["dispos"]["mar"] == 45 and lu["dispos"]["lun"] == 0
+    # l'autre compte ne voit rien de ces réponses
+    assert client.get("/api/assistant-ia", headers=_jeton(b.id)).json()["rempli"] is False
+    assert client.get("/api/assistant-ia").status_code == 401
+
+
+def test_assistant_ia_refuse_les_valeurs_hors_limites(client, db):
+    u = _compte(db, "ia-c@exemple.test")
+    base = {"ia": "claude", "sports": ["course"], "dispos": {"lun": 60}}
+    for mauvais in ({"ia": "skynet"}, {"dispos": {"lundi": 60}}, {"dispos": {"lun": 5000}}, {"dispos": {"lun": -5}},
+                    {"niveau": "total"}, {"objectif": "x" * 601}):
+        assert client.put("/api/assistant-ia", headers=_jeton(u.id), json={**base, **mauvais}).status_code in (400, 422)
+    assert client.get("/api/assistant-ia", headers=_jeton(u.id)).json()["rempli"] is False
+
+
+def test_envoi_automatique_reserve_au_jeton_du_compte(client, db):
+    """Le niveau automatique passe par /api/claude/plan : le jeton d'un compte n'écrit que dans son plan."""
+    from models import SeancePrevue
+    a, b = _compte(db, "ia-d@exemple.test"), _compte(db, "ia-e@exemple.test")
+    jeton = client.get("/api/claude/token", headers=_jeton(a.id)).json()["claude_token"]
+    corps = {"seances": [{"jour": "2030-01-07", "sport": "course", "titre": "Footing", "id_externe": "2030-01-07-footing"}],
+             "remplacer": {"depuis": "2030-01-07", "jusqu_a": "2030-01-13"}}
+    assert client.post("/api/claude/plan", json=corps).status_code == 401
+    assert client.post("/api/claude/plan", json=corps, headers={"X-Carnet-Token": "x" * 40}).status_code == 401
+    r = client.post("/api/claude/plan", json=corps, headers={"X-Carnet-Token": jeton})
+    assert r.status_code == 200 and r.json()["ok"] is True and r.json()["cree"] == 1
+    assert client.get("/api/claude/export?format=md", headers={"X-Carnet-Token": jeton}).status_code == 200
+    db.expire_all()
+    assert db.query(SeancePrevue).filter_by(utilisateur_id=a.id).count() == 1
+    assert db.query(SeancePrevue).filter_by(utilisateur_id=b.id).count() == 0
+
+
+def test_assistant_ia_cloisonne_et_relit_sans_erreur(client, db):
+    a, b = _compte(db, "ia-f@exemple.test"), _compte(db, "ia-g@exemple.test")
+    client.put("/api/assistant-ia", headers=_jeton(a.id), json={"ia": "gemini", "sports": ["velo"], "dispos": {"lun": 60}})
+    client.put("/api/assistant-ia", headers=_jeton(b.id), json={"ia": "lechat", "sports": ["natation"], "dispos": {"dim": 30}})
+    la, lb = (client.get("/api/assistant-ia", headers=_jeton(x.id)).json() for x in (a, b))
+    assert la["ia"] == "gemini" and la["sports"] == ["velo"] and la["dispos"]["lun"] == 60 and la["dispos"]["dim"] == 0
+    assert lb["ia"] == "lechat" and lb["sports"] == ["natation"] and lb["dispos"]["dim"] == 30
+    # un booléen n'est pas une durée
+    assert client.put("/api/assistant-ia", headers=_jeton(a.id), json={"dispos": {"lun": True}}).status_code == 422
+    # une valeur mal formée en base retombe sur les défauts, sans erreur
+    for brut in ('{"dispos": {"lun": "abc", "mar": [60]}, "sports": "course", "ia": 3, "objectif": 12}', "[1, 2]", "{pas du json"):
+        a.reglages_ia = brut
+        db.commit()
+        r = client.get("/api/assistant-ia", headers=_jeton(a.id))
+        assert r.status_code == 200
+        assert r.json()["dispos"]["lun"] == 0 and r.json()["sports"] == [] and r.json()["ia"] == "claude" and r.json()["objectif"] == ""
+
+
+def test_jeton_d_envoi_ne_retire_ni_l_historique_ni_les_ajouts_de_l_athlete(client, db):
+    from datetime import date
+    from models import SeancePrevue
+    a, b = _compte(db, "ia-h@exemple.test"), _compte(db, "ia-i@exemple.test")
+    ja = {"X-Carnet-Token": client.get("/api/claude/token", headers=_jeton(a.id)).json()["claude_token"]}
+    jb = {"X-Carnet-Token": client.get("/api/claude/token", headers=_jeton(b.id)).json()["claude_token"]}
+    lundi = date(2031, 1, 6)
+    for id_ext, extra in (("manuel-abc", {}), ("test-seuil-2031", {}), ("plan-commente", {"commentaire": "jambes lourdes"}),
+                          ("plan-saute", {"statut": "sautee"}), ("plan-simple", {})):
+        db.add(SeancePrevue(utilisateur_id=a.id, id_externe=id_ext, jour=lundi, sport="course", titre=id_ext,
+                            statut=extra.get("statut", "prevue"), commentaire=extra.get("commentaire"), ordre=0))
+    db.commit()
+    corps = {"seances": [{"jour": "2031-01-07", "sport": "course", "titre": "Footing", "id_externe": "2031-01-07-footing"}],
+             "remplacer": {"depuis": "2031-01-06", "jusqu_a": "2031-01-12"}}
+    r = client.post("/api/claude/plan", json=corps, headers=ja)
+    assert r.status_code == 200 and r.json()["supprime"] == 1 and r.json()["conserve"] == 0
+    db.expire_all()
+    restantes = {p.id_externe for p in db.query(SeancePrevue).filter_by(utilisateur_id=a.id)}
+    assert restantes == {"manuel-abc", "test-seuil-2031", "plan-commente", "plan-saute", "2031-01-07-footing"}
+    # suppression directe : même protection, et jamais dans le plan d'un autre compte
+    for id_ext in ("manuel-abc", "test-seuil-2031", "plan-commente", "plan-saute"):
+        assert client.delete(f"/api/claude/plan/{id_ext}", headers=ja).status_code == 409
+    assert client.delete("/api/claude/plan/2031-01-07-footing", headers=jb).status_code == 404
+    assert client.get("/api/claude/plan?depuis=2031-01-06&jusqu_a=2031-01-12", headers=jb).json()["seances"] == []
+    assert client.delete("/api/claude/plan/2031-01-07-footing", headers=ja).status_code == 200
+    # deux séances sous le même identifiant : refus net, rien n'est écrit
+    double = {"seances": [{"jour": "2031-01-08", "sport": "course", "titre": "A", "id_externe": "x-1"},
+                          {"jour": "2031-01-09", "sport": "velo", "titre": "B", "id_externe": "x-1"}]}
+    r = client.post("/api/claude/plan", json=double, headers=ja)
+    assert r.status_code == 400 and "x-1" in r.json()["detail"]
+    db.expire_all()
+    assert db.query(SeancePrevue).filter_by(utilisateur_id=a.id, id_externe="x-1").count() == 0
+    # changer le jeton coupe l'ancien
+    client.post("/api/claude/token/regenerer", headers=_jeton(a.id))
+    assert client.post("/api/claude/plan", json=corps, headers=ja).status_code == 401
+    assert client.get("/api/claude/export?format=md", headers=ja).status_code == 401

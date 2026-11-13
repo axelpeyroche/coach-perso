@@ -27,6 +27,7 @@ const Saison = lazy(() => import("./pages/Saison"));
 const Alertes = lazy(() => import("./pages/Alertes"));
 const SanteCarnet = lazy(() => import("./pages/SanteCarnet"));
 const PreparationCourse = lazy(() => import("./pages/PreparationCourse"));
+const MonIA = lazy(() => import("./pages/MonIA"));
 const Confidentialite = lazy(() => import("./pages/Confidentialite"));
 
 // ── SVG Icons ──────────────────────────────────────────────────────────────
@@ -607,6 +608,7 @@ export default function App() {
                   <Route path="/itineraires/creer" element={<CreerParcours />} />
                   <Route path="/profil"     element={<Profil theme={theme} setTheme={setTheme} />} />
                   <Route path="/saison"     element={<Saison />} />
+                  <Route path="/mon-ia"     element={<MonIA />} />
                   <Route path="/alertes"    element={<Alertes />} />
                   <Route path="/sante-carnet" element={<SanteCarnet />} />
                   <Route path="/objectifs/preparation" element={<PreparationCourse />} />
