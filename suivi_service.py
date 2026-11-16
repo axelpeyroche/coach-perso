@@ -63,7 +63,7 @@ def heure_notif(user: Utilisateur) -> str:
 
 def notif_matin_due(user: Utilisateur) -> bool:
     """Pas encore envoyée aujourd'hui et heure choisie atteinte (à 10 min près : la tâche
-    GitHub passe toutes les 30 min, avec parfois du retard)."""
+    GitHub passe une fois par heure à h20, avec parfois du retard)."""
     now = _maintenant(user)
     if user.notif_matin_le == now.date():
         return False

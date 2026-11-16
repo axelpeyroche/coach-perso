@@ -8,10 +8,13 @@ name: Synchro du matin Intervals.icu
 
 on:
   schedule:
-    # Toutes les 30 min de 03:20 à 10:50 UTC (5 h 20 → 12 h 50 à Paris selon la saison) : le serveur
+    # Une fois par heure, à h20, de 03:20 à 10:20 UTC (4 h 20 → 12 h 20 à Paris selon la saison) : le serveur
     # envoie la notification une seule fois, au premier passage après l'heure choisie dans le profil
-    # (Profil → Notifications → Heure d'envoi). GitHub peut retarder ou sauter un passage : le suivant rattrape.
-    - cron: "20,50 3-10 * * *"
+    # (Profil → Notifications → Heure d'envoi, à 10 min près : 7 h 30 → 7 h 20, 8 h → 8 h 20).
+    # Un passage par heure seulement : entre deux, le serveur gratuit de Render s'endort et ne consomme
+    # pas les heures gratuites du compte (partagées avec d'autres applications). GitHub peut retarder
+    # ou sauter un passage : le suivant rattrape.
+    - cron: "20 3-10 * * *"
   workflow_dispatch:        # bouton « Run workflow » pour tester : notification envoyée tout de suite
 
 jobs:
