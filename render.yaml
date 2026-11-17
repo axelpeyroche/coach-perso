@@ -22,12 +22,13 @@ services:
   - type: web
     name: coach-perso-frontend
     runtime: static
-    buildCommand: cd frontend && npm install && npm run build
-    staticPublishPath: frontend/dist
+    # Mon Carnet a déménagé sur Northflank (17/11/2026) : ce site ne sert plus qu'une page de redirection
+    buildCommand: echo redirection
+    staticPublishPath: frontend/redirection
     routes:
-      - type: rewrite
+      - type: redirect
         source: /*
-        destination: /index.html
+        destination: https://p01--mon-carnet--fqnw5psrcspx.code.run/*
     # En-têtes de sécurité (appliqués si le service est géré par ce blueprint)
     headers:
       - path: /*
