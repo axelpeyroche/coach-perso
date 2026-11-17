@@ -247,7 +247,8 @@ function DetailSeance({ s, onClose, onOuvrirActivite }) {
         </Link>
       )}
 
-      {aFaire && <BlocMontre key={s.id} s={s} />}
+      {/* Muscu : pas d’envoi, la séance se lance en libre sur la montre (un envoi déjà fait reste retirable) */}
+      {aFaire && (s.montre || !(muscu || s.sport === "muscu")) && <BlocMontre key={s.id} s={s} />}
 
       {modifiable && (
         <button type="button" className="btn-gris w-full" onClick={() => setEdition(true)}>Modifier la séance</button>
