@@ -72,7 +72,7 @@ function LigneExercice({ e, couleur, onVoir }) {
   const Ligne = onVoir ? "button" : "div";
   return (
     <Ligne {...(onVoir ? { type: "button", onClick: onVoir, "aria-label": `Voir le mouvement en 3D : ${e.nom}` } : {})}
-      className={`relative w-full text-left px-4 py-3 ${COLONNES} md:items-center ${onVoir ? "pr-12 active:bg-remplissage md:hover:bg-remplissage/60 transition-colors" : ""}`}>
+      className={`relative w-full text-left px-4 py-3 ${COLONNES} md:items-center ${onVoir ? "pr-12 active:bg-remplissage md:hover:bg-remplissage/60 transition-colors" : "md:pr-12"}`}>
       {/* Téléphone : nom à gauche, « séries × reps » et récup à droite */}
       <div className="flex gap-3 md:hidden">
         {numero}
@@ -124,7 +124,7 @@ function Muscu({ r, couleur }) {
             </span>
           </div>
           <div className="card divide-y-[0.5px] divide-separateur overflow-hidden">
-            <div className={`hidden ${COLONNES} px-4 py-2 text-[12px] font-semibold uppercase tracking-[0.02em] text-label-2`}>
+            <div className={`hidden ${COLONNES} px-4 md:pr-12 py-2 text-[12px] font-semibold uppercase tracking-[0.02em] text-label-2`}>
               <span className="pl-9">Exercice</span><span>Séries</span><span>Reps</span><span>Récup</span><span>Charge</span>
             </div>
             {s.exercices.map((e) => {
