@@ -113,7 +113,7 @@ def test_type_fartlek():
 
 def test_plan_respecte():
     r = ex.analyser(_plan(FARTLEK), _fartlek([60] * 6, [90] * 5), None, "intervals")
-    assert r["mode"] == "allure" and r["type"] == "fartlek"
+    assert r["mode"] == "chrono" and r["type"] == "fartlek"
     assert [x["role"] for x in r["etapes"]] == ["echauffement"] + ["effort", "recup"] * 5 + ["effort", "retour"]
     efforts = _roles(r, "effort")
     assert all(x["etat"] == "ok" and x["etat_allure"] == "ok" for x in efforts)
@@ -125,16 +125,26 @@ def test_plan_respecte():
     assert res["note"] >= 85 and res["verdict"] == "Plan suivi de près"
 
 
-def test_efforts_trop_rapides_et_trop_longs():
-    r = ex.analyser(_plan(FARTLEK), _fartlek([90, 62, 40, 85, 110, 30], [140, 110, 90, 70, 120],
-                                             retour=330, marche=0, allure=260), None, "intervals")
+def test_efforts_trop_rapides_et_retour_ecourte():
+    r = ex.analyser(_plan(FARTLEK), _fartlek([60] * 6, [90] * 5, retour=330, allure=260), None, "intervals")
     efforts = _roles(r, "effort")
-    assert len(efforts) == 6 and all(x["fait"] for x in efforts)
-    assert [x["etat"] for x in efforts] == ["plus", "ok", "moins", "plus", "plus", "moins"]
-    assert all(x["etat_allure"] == "rapide" for x in efforts)
-    assert r["etapes"][-1]["etat"] == "moins"  # retour au calme écourté
-    assert r["resume"]["note"] < 65
+    assert len(efforts) == 6 and all(x["etat"] == "ok" and x["etat_allure"] == "rapide" for x in efforts)
+    fin = r["etapes"][-1]
+    assert (fin["etat"], fin["fait"]["duree_sec"], fin["ecart_sec"]) == ("moins", 330, -270)  # retour au calme écourté
     assert any("plus rapides" in p for p in r["phrases"])
+
+
+def test_decoupage_au_chrono_sans_les_pauses():
+    # efforts de durées irrégulières et 2 min de pause pendant l'échauffement : le plan fait foi, à l'horloge
+    s = _fartlek([75, 50, 60, 60, 60, 60], [90] * 5)
+    for i in range(600, s.n):
+        s.temps[i] += 120
+    r = ex.analyser(_plan(FARTLEK), s, None, "intervals")
+    assert r["mode"] == "chrono"
+    assert [x["fait"]["duree_sec"] for x in r["etapes"][:-1]] == [1200] + [60, 90] * 5 + [60]
+    assert [x["fait"]["debut_sec"] for x in r["etapes"][:2]] == [0, 1321]
+    assert all(x["etat"] == "ok" and x["ecart_sec"] == 0 for x in r["etapes"][:-1])
+    assert "au chrono de l'activité" in r["phrases"][0]
 
 
 def test_retour_au_calme_libre():
@@ -147,7 +157,7 @@ def test_retour_au_calme_libre():
 
 
 def test_efforts_manquants():
-    r = ex.analyser(_plan(FARTLEK), _fartlek([60] * 4, [90] * 3), None, "intervals")
+    r = ex.analyser(_plan(FARTLEK), _fartlek([60] * 4, [90] * 3, retour=0), None, "intervals")
     assert r["resume"]["efforts_faits"] == 4 and r["resume"]["efforts_prevus"] == 6
     assert sum(1 for x in _roles(r, "effort") if x["etat"] == "absent") == 2
 
@@ -171,11 +181,11 @@ def test_seuil_par_les_tours_de_la_montre():
 def test_fractionne_en_distance():
     seg = [(1200, 390, 130)]
     for i in range(10):
-        seg += [(90, 225, 175)] + ([(75, 420, 150)] if i < 9 else [])
+        seg += [(90, 225, 175)] + ([(84, 420, 150)] if i < 9 else [])
     seg.append((600, 400, 135))
     r = ex.analyser(_plan(VMA, "VMA 10 × 400 m"), _seance(seg), None, "intervals")
     efforts = _roles(r, "effort")
-    assert r["mode"] == "allure" and len(efforts) == 10
+    assert r["mode"] == "chrono" and len(efforts) == 10
     assert all(x["fait"] and abs(x["fait"]["distance_m"] - 400) <= 50 for x in efforts)
     assert all(x["etat_allure"] == "ok" for x in efforts)
 
@@ -187,11 +197,11 @@ def test_sorties_faciles_non_analysees():
     assert ex.analyser(_plan(longue, "Sortie longue"), footing) is None
 
 
-def test_etapes_introuvables():
-    # sortie à allure constante : aucune des étapes prévues n'est visible, et on le dit
+def test_sortie_sans_changement_d_allure():
+    # sortie à allure constante : les étapes sont quand même celles du plan, les efforts ressortent trop lents
     r = ex.analyser(_plan(FARTLEK), _seance([(2400, 390, 135)]), None, "trace")
-    assert r["mode"] == "theorique" and r["resume"]["note"] is None
-    assert r["resume"]["verdict"] == "Étapes non repérées dans l'enregistrement"
+    assert r["mode"] == "chrono" and r["resume"]["efforts_lents"] == 6
+    assert r["resume"]["note"] is not None and r["resume"]["verdict"] != "Plan suivi de près"
 
 
 # ── Dans le carnet ──────────────────────────────────────────────────────────
@@ -216,7 +226,7 @@ def test_bilan_de_la_fiche(db, user, monkeypatch):
     monkeypatch.setattr(iv, "seance_brute", brute)
     b = ss.bilan(db, user, a)
     assert b["type"]["cle"] == "fartlek"
-    assert b["execution"]["mode"] == "allure" and b["execution"]["prevue_id"] == p.id
+    assert b["execution"]["mode"] == "chrono" and b["execution"]["prevue_id"] == p.id
     assert b["repetitions"] is None and len(b["phrases"]) == 3
     det = json.loads(a.details)
     assert det["seance"]["prevue"] == p.id and det["execution"]["resume"]["efforts_faits"] == 6
@@ -235,16 +245,16 @@ def test_bilan_de_la_fiche(db, user, monkeypatch):
     # consigne suivie ce jour-là : propre à l'activité, le plan n'est pas touché
     monkeypatch.setattr(iv, "seance_brute", lambda u, act, points: (_fartlek([90] * 6, [90] * 5), None, "intervals"))
     avant = ss.bilan(db, user, a)["execution"]
-    assert not avant["consigne_suivie"] and avant["resume"]["efforts_mesure_ok"] == 0
+    assert not avant["consigne_suivie"] and avant["etapes"][1]["prevu"]["duree_sec"] == 60
     cs.fusionner_details(a, {"consigne_suivie": SUIVIE}, ecraser=True)
     b = ss.bilan(db, user, a)
-    assert b["execution"]["consigne_suivie"] and b["execution"]["resume"]["efforts_mesure_ok"] == 6
+    assert b["execution"]["consigne_suivie"] and b["execution"]["etapes"][1]["prevu"]["duree_sec"] == 90
     assert b["consigne"] == {"plan": FARTLEK, "suivie": SUIVIE} and p.description == FARTLEK
     assert "consigne réellement suivie" in "\n".join(ex.texte_markdown({"jour": "2026-11-15", **b["execution"]}))
     det = json.loads(a.details)
     det.pop("consigne_suivie")
     a.details = json.dumps(det)
-    assert ss.bilan(db, user, a)["execution"]["resume"]["efforts_mesure_ok"] == 0
+    assert ss.bilan(db, user, a)["execution"]["etapes"][1]["prevu"]["duree_sec"] == 60
     # séance détachée du plan : plus d'analyse, le type redevient celui de l'enregistrement
     p.activite_id = None
     db.flush()

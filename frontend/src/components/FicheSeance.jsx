@@ -404,7 +404,7 @@ export function RespectPlan({ id, total, onPosition }) {
       <p className="text-[12px] text-label-2">
         {introuvable ? "Comparaison impossible étape par étape."
           : e.mode === "tours" ? "Étapes lues d'après les tours enregistrés par la montre."
-          : "Étapes retrouvées d'après les changements d'allure, sans tour de montre."}
+          : "Étapes découpées au chrono de l'activité, pauses retirées, dans l'ordre et aux durées du plan."}
         {e.source === "trace" && " Calcul fait sur le tracé GPS seul : moins précis qu'avec l'enregistrement complet."}
         {!introuvable && " Vert : conforme au plan ; orange : écart."}
       </p>

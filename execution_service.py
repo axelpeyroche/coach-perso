@@ -30,12 +30,11 @@ import carnet_service as cs
 import decoupage as dc
 import seance_service as ss
 
-VERSION = 2
+VERSION = 3
 TYPES_INTENSES = ss.TYPES_INTENSES
 TYPES_FACILES = ("footing", "recuperation", "sortie_longue")
 
-ECART_MIN = 1.10          # les efforts doivent être au moins 10 % plus rapides que le reste
-PAUSE_FLUX_S = 15         # flux à la seconde : au-delà, la montre était en pause
+PAUSE_FLUX_S = 3          # flux à la seconde : un trou plus long, la montre était en pause (manuelle ou automatique)
 PAUSE_TRACE_S = 300       # tracé GPS (un point tous les 10 m) : un arrêt sur place reste compté
 MARGE_ALLURE = 3          # s/km de tolérance autour de l'allure visée
 MARGE_FC = 2              # battements de tolérance autour de la FC visée
@@ -170,7 +169,8 @@ class _Flux:
         """Point atteint en partant de `a` une fois la durée (ou la distance) prévue écoulée."""
         if e.get("duree_s"):
             return self.i_chrono(self.chrono[a] + e["duree_s"])
-        return min(self.n - 1, bisect_left(self.s.dist, self.s.dist[a] + e["distance_m"]))
+        # demi-mètre de marge : un point posé pile sur la distance prévue ne doit pas être dépassé d'un cran
+        return min(self.n - 1, bisect_left(self.s.dist, self.s.dist[a] + e["distance_m"] - 0.5))
 
 
 def _prevu_s(e: dict, vitesse: float) -> float:
@@ -210,82 +210,6 @@ def _par_tours(f: _Flux, seq: list[dict], tours: list[tuple[int, int]]) -> Optio
     return plages
 
 
-def _seuil(f: _Flux, seq: list[dict]) -> Optional[tuple[float, float, float]]:
-    """(vitesse du reste, vitesse des efforts, seuil entre les deux), cherchés au cœur de la séance."""
-    premier = next(i for i, e in enumerate(seq) if e["role"] == "effort")
-    dernier = max(i for i, e in enumerate(seq) if e["role"] == "effort")
-    avant = sum(e["duree_s"] or 0 for e in seq[:premier])
-    apres = sum(e["duree_s"] or 0 for e in seq[dernier + 1:])
-    a, b = f.i_chrono(0.5 * avant), f.i_chrono(f.chrono[-1] - 0.5 * apres)
-    if f.duree(a, b) < 120:
-        a, b = 0, f.n - 1
-    vals = [f.vit[i] for i in range(a + 1, b + 1) if f.pas[i] > 0]
-    poids = [f.pas[i] for i in range(a + 1, b + 1) if f.pas[i] > 0]
-    groupes = ss._deux_groupes(vals, poids)
-    if not groupes:
-        return None
-    lent, rapide = groupes[0], groupes[1]
-    if lent <= 0 or rapide / lent < ECART_MIN:
-        return None
-    return lent, rapide, (lent + rapide) / 2
-
-
-def _blocs_rapides(f: _Flux, seuil: float, trou_s: float, mini_s: float) -> list[tuple[int, int]]:
-    """Passages au-dessus du seuil ; un ralentissement plus court que `trou_s` ne les coupe pas."""
-    blocs, debut, fin = [], None, None
-    for i in range(1, f.n):
-        if f.pas[i] > 0 and f.vit[i] >= seuil:
-            if debut is None:
-                debut = i - 1
-            elif f.s.temps[i] - f.s.temps[fin] > trou_s:
-                blocs.append((debut, fin))
-                debut = i - 1
-            fin = i
-    if debut is not None:
-        blocs.append((debut, fin))
-    return [(a, b) for a, b in blocs if f.duree(a, b) >= mini_s]
-
-
-def _apparier(f: _Flux, efforts: list[dict], blocs: list[tuple[int, int]], repere_s: float) -> list[Optional[int]]:
-    """Rapproche dans l'ordre les efforts prévus des passages rapides trouvés (alignement de séquences) :
-    un passage en trop est ignoré, un effort introuvable est laissé sans passage."""
-    n, m = len(efforts), len(blocs)
-
-    def ecart(e: dict, bloc: tuple[int, int]) -> float:
-        a, b = bloc
-        if e.get("duree_s"):
-            return abs(f.duree(a, b) - e["duree_s"]) / e["duree_s"]
-        return abs(f.distance(a, b) - e["distance_m"]) / e["distance_m"]
-
-    saut = [1.5 + 0.5 * min(1.0, f.duree(a, b) / repere_s) for a, b in blocs]
-    inf = float("inf")
-    cout = [[inf] * (m + 1) for _ in range(n + 1)]
-    choix = [[0] * (m + 1) for _ in range(n + 1)]
-    cout[0][0] = 0.0
-    for i in range(n + 1):
-        for j in range(m + 1):
-            if i and j:
-                c = cout[i - 1][j - 1] + 0.9 * min(1.0, ecart(efforts[i - 1], blocs[j - 1]))
-                if c < cout[i][j]:
-                    cout[i][j], choix[i][j] = c, 1
-            if i and cout[i - 1][j] + 1.0 < cout[i][j]:
-                cout[i][j], choix[i][j] = cout[i - 1][j] + 1.0, 2
-            if j and cout[i][j - 1] + saut[j - 1] < cout[i][j]:
-                cout[i][j], choix[i][j] = cout[i][j - 1] + saut[j - 1], 3
-    liens: list[Optional[int]] = [None] * n
-    i, j = n, m
-    while i or j:
-        c = choix[i][j]
-        if c == 1:
-            liens[i - 1] = j - 1
-            i, j = i - 1, j - 1
-        elif c == 2:
-            i -= 1
-        else:
-            j -= 1
-    return liens
-
-
 def _repartir(f: _Flux, etapes: list[dict], a: int, b: int) -> list:
     """Partage [a, b] entre des étapes qui se suivent : chacune prend sa durée prévue, la dernière
     prend ce qui reste ; une étape pour laquelle il ne reste rien est absente (None)."""
@@ -300,58 +224,11 @@ def _repartir(f: _Flux, etapes: list[dict], a: int, b: int) -> list:
     return plages
 
 
-def _par_allure(f: _Flux, seq: list[dict]) -> Optional[list]:
-    """Efforts repérés à l'allure, puis tout le reste placé autour d'eux."""
-    seuils = _seuil(f, seq)
-    if not seuils:
-        return None
-    lent, rapide, seuil = seuils
-    pos = [i for i, e in enumerate(seq) if e["role"] == "effort"]
-    efforts = [seq[i] for i in pos]
-    durees = [_prevu_s(e, rapide) for e in efforts]
-    recups = [e["duree_s"] for e in seq if e["role"] == "recup" and e.get("duree_s")]
-    court = min(durees)
-    trou = min(20.0, max(8.0, 0.25 * court))
-    if recups:
-        trou = max(4.0, min(trou, 0.25 * min(recups)))
-    blocs = _blocs_rapides(f, seuil, trou, max(8.0, 0.2 * court))
-    if not blocs:
-        return None
-    # Plus de passages rapides que prévu : on garde les plus marqués (temps passé × vitesse en plus),
-    # et jamais un passage sans commune mesure avec les autres (une relance, un faux plat)
-    poids = [sum((f.vit[i] - lent) * f.pas[i] for i in range(a + 1, b + 1)) for a, b in blocs]
-    gardes = sorted(range(len(blocs)), key=lambda i: -poids[i])[:len(efforts)]
-    plancher = 0.2 * median(poids[i] for i in gardes)
-    blocs = [blocs[i] for i in sorted(gardes) if poids[i] >= plancher]
-    liens = _apparier(f, efforts, blocs, median(durees))
-    if sum(1 for x in liens if x is not None) < max(1, (len(efforts) + 1) // 2):
-        return None
-    plages: list = [None] * len(seq)
-    for i, lien in zip(pos, liens):
-        if lien is not None:
-            plages[i] = blocs[lien]
-    # Les étapes entre deux efforts se partagent l'intervalle qui les sépare
-    curseur, i = 0, 0
-    while i < len(seq):
-        if seq[i]["role"] == "effort":
-            if plages[i]:
-                curseur = plages[i][1]
-            i += 1
-            continue
-        j = i
-        while j < len(seq) and seq[j]["role"] != "effort":
-            j += 1
-        suivant = next((plages[k][0] for k in range(j, len(seq)) if plages[k]), None)
-        orphelin = i > 0 and plages[i - 1] is None and suivant is not None  # suit un effort introuvable
-        if not orphelin:
-            fin = suivant if suivant is not None else f.n - 1
-            plages[i:j] = _repartir(f, seq[i:j], curseur, fin)
-            curseur = max(curseur, fin)
-        i = j
-    return plages
-
-
-def _theorique(f: _Flux, seq: list[dict]) -> list:
+def _au_chrono(f: _Flux, seq: list[dict]) -> list:
+    """Découpage au chrono de l'activité (pauses retirées), dans l'ordre du plan : chaque étape prend sa
+    durée prévue à la suite de la précédente, la dernière va jusqu'à l'arrêt de l'enregistrement.
+    La montre guide la séance étape par étape : c'est le plan qui dit où chacune commence et finit,
+    pas les changements d'allure."""
     return _repartir(f, seq, 0, f.n - 1)
 
 
@@ -521,11 +398,8 @@ def _resume(lignes: list[dict], mode: str, sport: str) -> tuple[dict, list[str]]
         "note": round(sum(x["note"] * POIDS[x["role"]] for x in lignes) / poids) if poids else None,
     }
     note = resume["note"] or 0
-    if mode == "theorique":
-        resume["note"], resume["verdict"] = None, "Étapes non repérées dans l'enregistrement"
-    else:
-        resume["verdict"] = ("Plan suivi de près" if note >= 85 else "Plan suivi dans l'ensemble" if note >= 65
-                             else "Plan suivi en partie" if note >= 40 else "Séance différente du plan")
+    resume["verdict"] = ("Plan suivi de près" if note >= 85 else "Plan suivi dans l'ensemble" if note >= 65
+                         else "Plan suivi en partie" if note >= 40 else "Séance différente du plan")
     return resume, _phrases(lignes, resume, mode, sport)
 
 
@@ -559,12 +433,10 @@ def _phrases(lignes: list[dict], r: dict, mode: str, sport: str) -> list[str]:
     pn, pk = ("s" if n > 1 else ""), ("s" if k > 1 else "")
     if mode == "tours":
         tete = f"{k} effort{pk} sur {n} prévu{pn}, suivi{pk} tour par tour à la montre"
-    elif mode == "allure":
-        tete = f"{k} effort{pk} repéré{pk} à l'allure sur {n} prévu{pn}"
     else:
-        tete = (f"Aucun changement d'allure net dans l'enregistrement : les {len(lignes)} étapes sont découpées "
-                "aux durées prévues, à titre indicatif")
-    if mode != "theorique" and faits:
+        tete = (f"Séance découpée au chrono de l'activité, pauses retirées, selon les étapes du plan : "
+                f"{k} effort{pk} sur {n} prévu{pn}")
+    if mode == "tours" and faits:
         mesures = {_mesure_prevue(x["prevu"]) for x in faits}
         ecarts = [x for x in faits if x["etat"] != "ok"]
         quoi = "la durée prévue" if all(x["prevu"]["duree_sec"] for x in faits) else "la distance prévue"
@@ -574,7 +446,7 @@ def _phrases(lignes: list[dict], r: dict, mode: str, sport: str) -> list[str]:
                               for x in ecarts[:6])
             tete += f", {'les autres' if len(ecarts) > 1 else 'un autre'} à {liste}" + ("…" if len(ecarts) > 6 else "")
     phrases.append(tete + ".")
-    if r["effort_allure_sec_km"] and mode != "theorique":
+    if r["effort_allure_sec_km"]:
         nom = "Allure des efforts ramenée au plat" if sport == "trail" else "Allure moyenne des efforts"
         phrase = f"{nom} : {cs.fmt_allure(r['effort_allure_sec_km'])}"
         cibles = {tuple(x["prevu"]["allure"]) for x in faits if x["prevu"]["allure"]}
@@ -595,7 +467,7 @@ def _phrases(lignes: list[dict], r: dict, mode: str, sport: str) -> list[str]:
             phrase += f" ; FC moyenne {r['effort_fc']}"
         phrases.append(phrase + ".")
     recups = [x for x in lignes if x["role"] == "recup" and x["fait"] and x["sur"] > 1]
-    if recups and mode != "theorique":
+    if recups:
         moy = sum(x["fait"]["duree_sec"] for x in recups) / len(recups)
         prevues = {x["prevu"]["duree_sec"] for x in recups if x["prevu"]["duree_sec"]}
         phrase = f"Récupérations : {_duree(moy)} en moyenne"
@@ -605,13 +477,12 @@ def _phrases(lignes: list[dict], r: dict, mode: str, sport: str) -> list[str]:
         if allures and len(allures) == len(recups):
             phrase += f", à {cs.fmt_allure(median(allures))}"
         phrases.append(phrase + ".")
-    if mode != "theorique":
-        premier = next((i for i, x in enumerate(lignes) if x["role"] == "effort"), 0)
-        dernier = max((i for i, x in enumerate(lignes) if x["role"] == "effort"), default=len(lignes) - 1)
-        for nom, part in (("Échauffement", lignes[:premier]), ("Retour au calme", lignes[dernier + 1:])):
-            phrase = _phrase_bord(nom, part)
-            if phrase:
-                phrases.append(phrase)
+    premier = next((i for i, x in enumerate(lignes) if x["role"] == "effort"), 0)
+    dernier = max((i for i, x in enumerate(lignes) if x["role"] == "effort"), default=len(lignes) - 1)
+    for nom, part in (("Échauffement", lignes[:premier]), ("Retour au calme", lignes[dernier + 1:])):
+        phrase = _phrase_bord(nom, part)
+        if phrase:
+            phrases.append(phrase)
     return phrases
 
 
@@ -646,10 +517,7 @@ def analyser(p, seance: dc.Seance, intervalles: Optional[list] = None, source: O
         if meilleure:
             mode, seq, plages = "tours", meilleure[1], meilleure[2]
     if not plages:
-        plages = _par_allure(f, seq)
-        mode = "allure" if plages else None
-    if not plages:
-        plages, mode = _theorique(f, seq), "theorique"
+        plages, mode = _au_chrono(f, seq), "chrono"
     lignes = [_comparer(e, _mesure(f, *pl) if pl else None, mode, seance.sport) for e, pl in zip(seq, plages)]
     resume, phrases = _resume(lignes, mode, seance.sport)
     cle = ss.type_du_plan(p)
