@@ -99,8 +99,9 @@ api.interceptors.response.use(
 export default api;
 
 // --- Réveil du serveur ---
-// L'hébergement gratuit (Render) endort l'API après 15 min d'inactivité : la première
+// Un hébergement gratuit peut endormir l'API après une période d'inactivité : la première
 // requête peut alors attendre ~1 min, voire échouer (502/503, coupure réseau sur mobile).
+// API à la même adresse que l'interface (hébergement tout-en-un) : pas de réveil à attendre.
 const URL_SANTE = (() => {
   try {
     const base = api.defaults.baseURL;

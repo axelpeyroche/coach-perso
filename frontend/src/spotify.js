@@ -2,7 +2,9 @@
 // joue la musique, Mon Carnet la pilote. Connexion PKCE sans secret ; les jetons
 // restent dans ce navigateur. Compte Premium obligatoire pour les commandes.
 
-const CLIENT_ID = import.meta.env.VITE_SPOTIFY_CLIENT_ID;
+// Au build (VITE_SPOTIFY_CLIENT_ID) ou, en hébergement tout-en-un, glissé dans la page par le serveur
+const CLIENT_ID = import.meta.env.VITE_SPOTIFY_CLIENT_ID
+  || document.querySelector('meta[name="spotify-client-id"]')?.content || "";
 const COMPTES = "https://accounts.spotify.com";
 const API = "https://api.spotify.com/v1";
 const PORTEES = [

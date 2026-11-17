@@ -10,14 +10,17 @@ from __future__ import annotations
 
 from datetime import datetime
 
+import html
 import logging
+import os
+from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 
 import jwt
 
@@ -33,6 +36,19 @@ app = FastAPI(
     description="API du carnet de suivi multi-sport (séances, imports, objectifs, statistiques).",
     version="2.0.0",
 )
+
+# Hébergement tout-en-un (Koyeb) : l'API sert aussi l'interface construite (frontend/dist),
+# à la même adresse. Activé seulement si DOSSIER_INTERFACE pointe vers ce dossier (voir Dockerfile).
+_DIST = Path(os.getenv("DOSSIER_INTERFACE", "")).resolve() if os.getenv("DOSSIER_INTERFACE") else None
+if _DIST is not None and not (_DIST / "index.html").is_file():
+    logger.warning("DOSSIER_INTERFACE=%s sans index.html : interface non servie", _DIST)
+    _DIST = None
+_HORS_INTERFACE = ("/health", "/docs", "/redoc", "/openapi.json")
+
+
+def _chemin_interface(chemin: str) -> bool:
+    return _DIST is not None and not chemin.startswith("/api/") and chemin != "/api" and chemin not in _HORS_INTERFACE
+
 
 _ALLOWED_ORIGINS = [
     "https://coach-perso-frontend.onrender.com",
@@ -91,10 +107,22 @@ _ENTETES_SECURITE = {
 }
 
 
+# Pages de l'interface : leur politique de contenu est dans index.html (balise meta, voir vite.config.js)
+_ENTETES_INTERFACE = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+    "Content-Security-Policy": "frame-ancestors 'none'",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+}
+
+
 @app.middleware("http")
 async def _entetes_securite(request: Request, call_next):
     reponse = await call_next(request)
-    for k, v in _ENTETES_SECURITE.items():
+    entetes = _ENTETES_INTERFACE if _chemin_interface(request.url.path) else _ENTETES_SECURITE
+    for k, v in entetes.items():
         reponse.headers.setdefault(k, v)
     if request.url.path.startswith("/api/"):
         reponse.headers["Cache-Control"] = "no-store"
@@ -156,9 +184,48 @@ app.include_router(qualite.router)
 
 @app.get("/", include_in_schema=False)
 def racine():
+    if _DIST is not None:
+        return _page_interface()
     return {"statut": "Mon Carnet opérationnel", "docs": "/docs"}
 
 
-@app.get("/health", include_in_schema=False)
+@app.api_route("/health", methods=["GET", "HEAD"], include_in_schema=False)  # HEAD : moniteurs (UptimeRobot)
 def sante():
     return {"statut": "ok", "timestamp": datetime.utcnow().isoformat()}
+
+
+# ---------------------------------------------------------------------------
+# Interface (hébergement tout-en-un seulement, voir _DIST)
+# ---------------------------------------------------------------------------
+
+def _index_html() -> str:
+    page = (_DIST / "index.html").read_text(encoding="utf-8")
+    # Identifiant (public) de l'app Spotify : lu au démarrage plutôt qu'au build de l'interface
+    spotify = os.getenv("SPOTIFY_CLIENT_ID", "").strip()
+    if spotify:
+        page = page.replace("<head>", '<head>\n    <meta name="spotify-client-id" content="' + html.escape(spotify) + '" />', 1)
+    return page
+
+
+_INDEX = _index_html() if _DIST is not None else ""
+
+
+def _page_interface():
+    return HTMLResponse(_INDEX, headers={"Cache-Control": "no-cache"})
+
+
+if _DIST is not None:
+    @app.api_route("/{chemin:path}", methods=["GET", "HEAD"], include_in_schema=False)
+    def interface(chemin: str):
+        if chemin == "api" or chemin.startswith("api/"):
+            raise HTTPException(status_code=404, detail="Not Found")
+        fichier = (_DIST / chemin).resolve()
+        if chemin and fichier.is_file() and _DIST in fichier.parents:
+            if chemin.startswith("assets/"):  # noms avec empreinte : jamais modifiés
+                cache = "public, max-age=31536000, immutable"
+            elif chemin in ("sw.js", "manifest.json", "index.html"):
+                cache = "no-cache"
+            else:
+                cache = "public, max-age=86400"
+            return FileResponse(fichier, headers={"Cache-Control": cache})
+        return _page_interface()  # routes de l'application (React Router)

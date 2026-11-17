@@ -1,0 +1,23 @@
+# Jamais dans l'image : secrets, données personnelles, environnements locaux
+.env
+.env.*
+**/.env
+**/.env.*
+.git
+.github
+.claude
+.venv
+venv
+**/__pycache__
+**/node_modules
+frontend/dist
+frontend/package-lock.json
+exports
+programme_muscu
+*.csv
+*.fit
+*.gpx
+*.db
+*.sqlite3
+tests
+docs

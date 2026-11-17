@@ -4,7 +4,8 @@ import react from "@vitejs/plugin-react";
 // Politique de sécurité du contenu (build uniquement : le serveur de dev a besoin de scripts en ligne).
 // Bloque l'exécution de scripts injectés et l'envoi de données vers un domaine non prévu.
 function csp(apiUrl) {
-  let api = "https://coach-perso.onrender.com";
+  // API à une autre adresse (VITE_API_URL absolue) ; sinon même adresse que l'interface, couverte par 'self'
+  let api = "";
   try { if (apiUrl) api = new URL(apiUrl).origin; } catch { /* URL relative : même origine */ }
   const tuiles = "https://tile.openstreetmap.org https://server.arcgisonline.com https://s3.amazonaws.com https://*.tile.opentopomap.org https://data.geopf.fr";
   const regles = [
@@ -13,7 +14,7 @@ function csp(apiUrl) {
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
     `img-src 'self' data: blob: ${tuiles} https://*.scdn.co https://*.spotifycdn.com`,
-    `connect-src 'self' ${api} ${tuiles} https://photon.komoot.io https://api.open-meteo.com https://archive-api.open-meteo.com https://accounts.spotify.com https://api.spotify.com`,
+    `connect-src 'self'${api ? " " + api : ""} ${tuiles} https://photon.komoot.io https://api.open-meteo.com https://archive-api.open-meteo.com https://accounts.spotify.com https://api.spotify.com`,
     "media-src 'self' blob:",
     "worker-src 'self' blob:",
     "child-src blob:",
