@@ -49,7 +49,6 @@ def _chemin_interface(chemin: str) -> bool:
 
 
 _ALLOWED_ORIGINS = [
-    "https://coach-perso-frontend.onrender.com",
     "http://localhost:5173",
     "http://localhost:4173",
 ]

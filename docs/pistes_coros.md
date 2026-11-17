@@ -5,8 +5,8 @@ Fiche rédigée le 2026-11-04, avant l'achat. Le compte COROS est connecté par 
 ## Comment les données arriveraient
 
 - **Par Intervals (sans rien faire)** : séances avec GPS, FC, cadence et puissance. Pour la santé, seulement la durée du sommeil et la FC de repos : ni VFC, ni phases.
-- **Par l'outil COROS** : il tourne sur le PC (connexion stockée dans `~/.coros-mcp-skill-gateway-ts`), pas sur Render.
-  - La synchro du matin GitHub/Render ne peut pas l'appeler directement.
+- **Par l'outil COROS** : il tourne sur le PC (connexion stockée dans `~/.coros-mcp-skill-gateway-ts`), pas sur Northflank.
+  - La synchro du matin GitHub/Northflank ne peut pas l'appeler directement.
   - Deux façons de l'utiliser :
     1. **une tâche planifiée sur le PC** (comme le plan hebdo) qui lit COROS et envoie au carnet via `carnet.py envoyer` (nouveaux types de mesures à accepter côté API). Elle ne tourne que si le PC est allumé ;
     2. plus tard, l'**API officielle COROS** (programme partenaires, sur dossier) pour une synchro serveur vraiment automatique.

@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./carnet.db")
 
-# Render injecte une URL postgres:// — SQLAlchemy requiert postgresql://
+# Certains hébergeurs fournissent une URL postgres:// — SQLAlchemy requiert postgresql://
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
