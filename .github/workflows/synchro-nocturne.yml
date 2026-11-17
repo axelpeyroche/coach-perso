@@ -25,7 +25,8 @@ jobs:
       - name: Synchroniser
         env:
           TOKEN: ${{ secrets.CARNET_IMPORT_TOKEN }}
-          API: https://coach-perso.onrender.com
+          # Adresse de l'API : variable GitHub CARNET_API_URL (Settings → Variables), Render par défaut
+          API: ${{ vars.CARNET_API_URL || 'https://coach-perso.onrender.com' }}
           NOTIFIER: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
           if [ -z "$TOKEN" ]; then echo "::error::Secret CARNET_IMPORT_TOKEN manquant"; exit 1; fi
