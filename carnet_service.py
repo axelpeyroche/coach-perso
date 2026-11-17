@@ -1487,6 +1487,8 @@ def series_mesures(db: Session, user_id: int, jours: int = 365, aujourd_hui: Opt
 
 CHAMPS_PREVUE = ("jour", "ordre", "sport", "titre", "description", "duree_min", "distance_km",
                  "dplus_m", "rpe_cible", "objectif_id", "structure")
+# Ce qu'une correction explicite peut réécrire sur une séance déjà réalisée
+CHAMPS_CORRECTION = ("titre", "description", "duree_min", "distance_km", "dplus_m", "rpe_cible")
 
 
 # Rattachement automatique : jamais au hasard. Le jour écrit dans le plan ne compte pas
@@ -1824,13 +1826,15 @@ def est_protegee(p: SeancePrevue) -> bool:
 
 def enregistrer_plan(db: Session, user_id: int, items: list[dict],
                      remplacer: Optional[tuple[date, date]] = None,
-                     aujourd_hui: Optional[date] = None) -> dict:
+                     aujourd_hui: Optional[date] = None, corriger: bool = False) -> dict:
     """
     Crée ou met à jour des séances prévues (clé : id_externe).
     Le statut, le rapprochement et le commentaire de l'athlète sont conservés.
     `jour` ne sert qu'à rattacher la séance à sa semaine (absent : semaine en cours).
     `remplacer=(depuis, jusqu_a)` supprime les séances de la période absentes de
     l'envoi, sauf celles des semaines passées, réalisées, sautées ou commentées (l'historique reste).
+    Une séance déjà réalisée n'est jamais réécrite, sauf demande explicite `corriger` : seuls son titre,
+    sa consigne et ses cibles changent alors ; jour, sport, statut, lien et commentaire restent.
     """
     auj = aujourd_hui or date.today()
     bilan = {"cree": 0, "maj": 0, "supprime": 0, "conserve": 0}
@@ -1846,7 +1850,15 @@ def enregistrer_plan(db: Session, user_id: int, items: list[dict],
         p = (db.query(SeancePrevue)
              .filter(SeancePrevue.utilisateur_id == user_id, SeancePrevue.id_externe == id_ext).first())
         if p and statut_prevue(p, auj) == "realisee":
-            bilan["conserve"] += 1  # séance faite : jamais réécrite
+            if not corriger:
+                bilan["conserve"] += 1  # séance faite : jamais réécrite
+                continue
+            if "description" in x and x["description"] != p.description:
+                p.structure = None
+            for k in CHAMPS_CORRECTION:
+                if k in x:
+                    setattr(p, k, x[k])
+            bilan["maj"] += 1
             continue
         if p:
             if _lundi(p.jour) != _lundi(x["jour"]) and not p.lien_manuel:

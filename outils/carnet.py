@@ -146,8 +146,12 @@ def cmd_envoyer(a):
     corps = {"seances": contenu} if isinstance(contenu, list) else contenu
     if a.remplacer:
         corps["remplacer"] = {"depuis": a.remplacer[0], "jusqu_a": a.remplacer[1]}
+    if a.corriger:
+        corps["corriger"] = True
     res = _appel("POST", "/claude/plan", corps=corps)
     print(f"{res['cree']} créée(s), {res['maj']} mise(s) à jour, {res['supprime']} supprimée(s)")
+    if res.get("conserve"):
+        print(f"{res['conserve']} séance(s) déjà réalisée(s) laissée(s) telle(s) quelle(s) (--corriger pour les réécrire)")
     if res.get("pictogrammes"):
         print(f"{res['pictogrammes']} pictogramme(s) enregistré(s)")
     if res.get("pictogrammes_manquants"):
@@ -210,6 +214,8 @@ def main():
     en.add_argument("fichier")
     en.add_argument("--remplacer", nargs=2, metavar=("DEPUIS", "JUSQU_A"),
                     help="Supprime les séances à venir de la période absentes du fichier")
+    en.add_argument("--corriger", action="store_true",
+                    help="Réécrit aussi le titre et la consigne des séances déjà réalisées (jamais par défaut)")
     en.set_defaults(f=cmd_envoyer)
 
     pi = sp.add_parser("pictos", help="Liste les pictogrammes d'exercices connus")

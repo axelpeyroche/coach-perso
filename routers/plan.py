@@ -73,6 +73,7 @@ class PeriodeSchema(BaseModel):
 class EnvoiPlanSchema(BaseModel):
     seances: list[SeancePrevueSchema]
     remplacer: Optional[PeriodeSchema] = None
+    corriger: bool = False  # réécrit aussi la consigne d'une séance déjà réalisée (demande explicite)
     # Nom d'exercice → tracés SVG (24 × 24) de son pictogramme, pour les nouveaux exercices
     pictogrammes: dict[str, list[str]] = Field(default_factory=dict, max_length=60)
     # Nom d'exercice → animation 3D du mannequin (voir animations.py), pour les nouveaux exercices
@@ -684,6 +685,7 @@ def claude_envoyer_plan(
         bilan = cs.enregistrer_plan(
             db, user.id, _items(db, user, payload.seances),
             remplacer=(payload.remplacer.depuis, payload.remplacer.jusqu_a) if payload.remplacer else None,
+            corriger=payload.corriger,
         )
     except ValueError as e:
         raise HTTPException(400, str(e))

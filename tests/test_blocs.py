@@ -103,6 +103,13 @@ def test_plan_ne_reecrit_pas_une_seance_realisee(db, user):
     db.refresh(p)
     assert (p.titre, p.description) == ("Haut du corps", "A")
     assert bilan.get("conserve") == 1 and bilan.get("supprime", 0) == 0
+    # correction explicite : la consigne change, pas le jour ni le sport ni le déroulé
+    bilan = cs.enregistrer_plan(db, user.id, [{**item, "titre": "Autre", "description": "B", "sport": "course",
+                                               "jour": lundi + timedelta(days=14)}], corriger=True)
+    db.commit()
+    db.refresh(p)
+    assert (p.titre, p.description, p.sport, p.jour, bool(p.deroule)) == ("Autre", "B", item["sport"], item["jour"], True)
+    assert bilan["maj"] == 1 and bilan["conserve"] == 0
 
 
 # ── Routes ──────────────────────────────────────────────────────────────────
