@@ -1,0 +1,585 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Migration Mon Carnet vers Koyeb</title>
+<style>
+:root{
+  --fond:#f6f5f2;--carte:#ffffff;--texte:#1d1d1f;--texte-2:#5f5f66;--ligne:#e3e1dc;
+  --accent:#0a6cff;--accent-doux:#e8f0ff;--ok:#1f8a4c;--ok-doux:#e6f4ec;
+  --alerte:#b25d00;--alerte-doux:#fff3e0;--danger:#c0392b;--danger-doux:#fdecea;
+  --code:#f0eee9;--toi:#6a3fd1;--toi-doux:#f0eaff;--claude:#c2581f;--claude-doux:#fbece3;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --fond:#111113;--carte:#1c1c1f;--texte:#ececf0;--texte-2:#a1a1aa;--ligne:#2e2e33;
+  --accent:#5b9bff;--accent-doux:#16233a;--ok:#4cc27e;--ok-doux:#132a1d;
+  --alerte:#f0a24a;--alerte-doux:#2d2214;--danger:#ff7b6e;--danger-doux:#2f1715;
+  --code:#26262b;--toi:#b59bff;--toi-doux:#241d38;--claude:#f29a66;--claude-doux:#2f1f15;
+}}
+:root[data-theme="dark"]{
+  --fond:#111113;--carte:#1c1c1f;--texte:#ececf0;--texte-2:#a1a1aa;--ligne:#2e2e33;
+  --accent:#5b9bff;--accent-doux:#16233a;--ok:#4cc27e;--ok-doux:#132a1d;
+  --alerte:#f0a24a;--alerte-doux:#2d2214;--danger:#ff7b6e;--danger-doux:#2f1715;
+  --code:#26262b;--toi:#b59bff;--toi-doux:#241d38;--claude:#f29a66;--claude-doux:#2f1f15;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--fond);color:var(--texte);font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+main{max-width:860px;margin:0 auto;padding:24px 16px 80px}
+h1{font-size:28px;line-height:1.2;margin:8px 0 6px}
+h2{font-size:21px;margin:40px 0 12px;padding-top:8px;display:flex;gap:10px;align-items:baseline}
+h2 .num{color:var(--accent);font-variant-numeric:tabular-nums}
+h3{font-size:17px;margin:0 0 6px}
+p{margin:8px 0}
+.sous{color:var(--texte-2);margin:0 0 20px}
+code,.c{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.88em;background:var(--code);padding:1px 6px;border-radius:5px;word-break:break-all}
+.carte{background:var(--carte);border:1px solid var(--ligne);border-radius:14px;padding:16px 18px;margin:12px 0}
+.etape{display:grid;grid-template-columns:28px 1fr;gap:12px;background:var(--carte);border:1px solid var(--ligne);border-radius:14px;padding:16px 18px;margin:12px 0}
+.etape.faite{opacity:.55}
+.etape input[type=checkbox]{width:22px;height:22px;margin:2px 0 0;accent-color:var(--ok);cursor:pointer}
+.qui{display:inline-block;font-size:12px;font-weight:600;padding:2px 8px;border-radius:99px;margin-right:6px;vertical-align:2px}
+.qui.toi{background:var(--toi-doux);color:var(--toi)}
+.qui.claude{background:var(--claude-doux);color:var(--claude)}
+.qui.tous{background:var(--accent-doux);color:var(--accent)}
+.duree{font-size:13px;color:var(--texte-2);font-weight:400}
+ol,ul{padding-left:22px;margin:8px 0}
+li{margin:4px 0}
+.note{border-left:4px solid var(--accent);background:var(--accent-doux);padding:10px 14px;border-radius:0 10px 10px 0;margin:10px 0}
+.attention{border-left:4px solid var(--alerte);background:var(--alerte-doux);padding:10px 14px;border-radius:0 10px 10px 0;margin:10px 0}
+.danger{border-left:4px solid var(--danger);background:var(--danger-doux);padding:10px 14px;border-radius:0 10px 10px 0;margin:10px 0}
+.bon{border-left:4px solid var(--ok);background:var(--ok-doux);padding:10px 14px;border-radius:0 10px 10px 0;margin:10px 0}
+table{border-collapse:collapse;width:100%;font-size:15px;margin:8px 0}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--ligne);vertical-align:top}
+th{color:var(--texte-2);font-weight:600;font-size:13px}
+.tablewrap{overflow-x:auto}
+.adresse{position:sticky;top:0;z-index:5;background:var(--fond);padding:10px 0 12px;border-bottom:1px solid var(--ligne);margin-bottom:8px}
+.adresse label{font-size:13px;color:var(--texte-2);display:block;margin-bottom:4px}
+.adresse .ligne{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.adresse input{flex:1;min-width:220px;font:inherit;padding:8px 12px;border-radius:10px;border:1px solid var(--ligne);background:var(--carte);color:var(--texte)}
+.progres{font-size:13px;color:var(--texte-2);white-space:nowrap}
+.barre{height:6px;background:var(--ligne);border-radius:99px;margin-top:8px;overflow:hidden}
+.barre div{height:100%;width:0;background:var(--ok);transition:width .3s}
+.adr{color:var(--accent);font-weight:600}
+.copier{font:inherit;font-size:12px;border:1px solid var(--ligne);background:var(--carte);color:var(--texte-2);border-radius:6px;padding:0 6px;margin-left:4px;cursor:pointer;vertical-align:1px}
+.sommaire{columns:2 260px;font-size:15px}
+.sommaire a{color:var(--accent);text-decoration:none}
+.message{white-space:pre-wrap;background:var(--code);border-radius:10px;padding:12px 14px;font-size:15px}
+details{background:var(--carte);border:1px solid var(--ligne);border-radius:12px;padding:10px 16px;margin:8px 0}
+summary{cursor:pointer;font-weight:600}
+@media print{.adresse{position:static}.copier{display:none}}
+</style>
+</head>
+<body>
+<main>
+
+<p class="sous" style="margin:0">Mon Carnet · hébergement</p>
+<h1>Quitter Render pour Koyeb, pas à pas</h1>
+<p class="sous">Guide préparé le 17/11/2026, pour une migration début janvier 2027. Toutes tes données restent dans la base Neon : seul l'endroit où tourne l'application change.</p>
+
+<div class="adresse">
+  <label for="adr">Une fois le service Koyeb créé (phase B), colle ici son adresse. Elle sera reprise partout dans le guide.</label>
+  <div class="ligne">
+    <input id="adr" type="url" placeholder="https://mon-carnet-xxxx.koyeb.app" autocomplete="off" spellcheck="false">
+    <span class="progres" id="progres">0 étape cochée</span>
+  </div>
+  <div class="barre"><div id="barre"></div></div>
+</div>
+
+<div class="carte">
+  <h3>En bref</h3>
+  <ul>
+    <li><b>Durée totale :</b> environ 1 h 30 le jour J, plus 10 min par appareil, et une dernière étape un mois plus tard.</li>
+    <li><b>Coût :</b> 0 €. Koyeb demande une carte bancaire à l'inscription, bloque 29 $ puis les débloque aussitôt.</li>
+    <li><b>Il te faut :</b> accès à Render, GitHub, UptimeRobot, developer.spotify.com, une carte bancaire, ton iPhone et ton ordinateur.</li>
+    <li><b>Quand :</b> à partir du 1<sup>er</sup> janvier. Ce jour-là, Render a de nouveau des heures gratuites, donc l'ancienne version peut redémarrer en cas de retour arrière.</li>
+    <li><b>Qui fait quoi :</b> <span class="qui toi">Toi</span> pour tout ce qui touche à tes comptes, <span class="qui claude">Claude</span> pour le code et les vérifications, <span class="qui tous">Tout le monde</span> pour chaque appareil, invités compris.</li>
+  </ul>
+  <p>Tes cases cochées et l'adresse restent mémorisées dans ce navigateur. Tu peux fermer la page et revenir plus tard.</p>
+</div>
+
+<div class="carte">
+  <h3>Sommaire</h3>
+  <div class="sommaire">
+    <a href="#a">A. Préparer (la veille)</a><br>
+    <a href="#b">B. Créer le service Koyeb</a><br>
+    <a href="#c">C. Tester sans rien casser</a><br>
+    <a href="#d">D. Couper les anciennes notifications</a><br>
+    <a href="#e">E. La bascule</a><br>
+    <a href="#f">F. Sur chaque appareil</a><br>
+    <a href="#g">G. Ce que toi seul refais</a><br>
+    <a href="#h">H. Vérifications</a><br>
+    <a href="#i">I. Un mois plus tard : adieu Render</a><br>
+    <a href="#retour">Retour arrière</a><br>
+    <a href="#pannes">En cas de problème</a>
+  </div>
+</div>
+
+<!-- ===================== A ===================== -->
+<h2 id="a"><span class="num">A</span> Préparer <span class="duree">la veille · 15 min</span></h2>
+
+<div class="etape" data-id="a1"><input type="checkbox" aria-label="Fait"><div>
+  <h3><span class="qui toi">Toi</span>Télécharger une sauvegarde complète</h3>
+  <ol>
+    <li>Ouvre Mon Carnet (l'adresse actuelle) puis <b>Profil</b>.</li>
+    <li>Section <b>Données du compte</b> : touche <b>Sauvegarde complète</b> (JSON).</li>
+    <li>Range le fichier dans un endroit sûr (pas dans le dossier du code).</li>
+  </ol>
+  <p>La migration n'écrit rien dans la base. C'est une précaution.</p>
+</div></div>
+
+<div class="etape" data-id="a2"><input type="checkbox" aria-label="Fait"><div>
+  <h3><span class="qui toi">Toi</span>Vérifier la restauration chez Neon</h3>
+  <ol>
+    <li>Connecte-toi sur <b>console.neon.tech</b> et ouvre le projet de Mon Carnet.</li>
+    <li>Dans les réglages du projet, regarde la durée d'historique conservée (<i>history retention</i> / <i>restore window</i>).</li>
+  </ol>
+  <p>Ne change rien : il s'agit seulement de savoir jusqu'où tu pourrais revenir en arrière.</p>
+</div></div>
+
+<div class="etape" data-id="a3"><input type="checkbox" aria-label="Fait"><div>
+  <h3><span class="qui toi">Toi</span>Repérer les variables à recopier sur Render</h3>
+  <p>Sur <b>dashboard.render.com</b>, ouvre le service <b>coach-perso</b> (l'API), puis l'onglet <b>Environment</b>. Note la <b>liste des noms</b> présents. Les valeurs, tu les copieras directement de Render vers Koyeb à l'étape B3.</p>
+  <div class="tablewrap"><table>
+    <tr><th>Variable</th><th>À quoi elle sert</th><th>Si elle est fausse</th></tr>
+    <tr><td><code>DATABASE_URL</code></td><td>Adresse de la base Neon</td><td>L'app ne trouve plus tes données</td></tr>
+    <tr><td><code>JWT_SECRET</code></td><td>Signature des connexions et des jetons (Mon IA, liens partagés)</td><td>Jetons et liens partagés invalides</td></tr>
+    <tr><td><code>VAPID_PUBLIC_KEY</code><br><code>VAPID_PRIVATE_KEY</code><br><code>VAPID_EMAIL</code></td><td>Notifications</td><td>Plus aucune notification</td></tr>
+    <tr><td><code>ADMIN_EMAIL</code></td><td>Compte administrateur</td><td>L'admin devient « le compte le plus actif »</td></tr>
+    <tr><td><code>ORS_API_KEY</code> <i>(si présente)</i></td><td>Itinéraires de secours</td><td>Seul le secours ne marche plus</td></tr>
+    <tr><td><code>INSCRIPTIONS_FERMEES</code> / <code>INSCRIPTIONS_LIBRES</code> <i>(si présentes)</i></td><td>Règle d'inscription</td><td>Les invitations changent de comportement</td></tr>
+  </table></div>
+  <p>Ouvre aussi le site statique <b>coach-perso-frontend</b>, onglet <b>Environment</b> : repère <code>VITE_SPOTIFY_CLIENT_ID</code>. Chez Koyeb, la même valeur s'appellera <code>SPOTIFY_CLIENT_ID</code>.</p>
+  <p>Ne recopie pas <code>PYTHON_VERSION</code> ni <code>VITE_API_URL</code> : ils ne servent plus.</p>
+  <div class="danger">Ne colle jamais ces valeurs dans une conversation avec une IA, Claude compris. Copie-les directement de l'onglet Render vers l'onglet Koyeb.</div>
+</div></div>
+
+<!-- ===================== B ===================== -->
+<h2 id="b"><span class="num">B</span> Créer le service Koyeb <span class="duree">30 min, dont 5 à 10 d'attente</span></h2>
+<div class="bon">Pendant toute la phase B, Render continue de tourner. Ni toi ni tes invités ne voyez de différence.</div>
+
+<div class="etape" data-id="b1"><input type="checkbox" aria-label="Fait"><div>
+  <h3><span class="qui toi">Toi</span>Créer le compte Koyeb</h3>
+  <ol>
+    <li>Va sur <b>app.koyeb.com</b> et inscris-toi <b>avec ton compte GitHub</b> : la connexion au dépôt sera déjà faite.</li>
+    <li>Choisis l'offre gratuite (<b>Hobby</b>). Ne prends pas d'offre payante.</li>
+    <li>Entre ta carte bancaire. Koyeb bloque 29 $ pour vérifier la carte, puis débloque aussitôt. Rien n'est facturé sur l'instance gratuite.</li>
+  </ol>
+</div></div>
+
+<div class="etape" data-id="b2"><input type="checkbox" aria-label="Fait"><div>
+  <h3><span class="qui toi">Toi</span>Lancer la création du service</h3>
+  <ol>
+    <li><b>Create Web Service</b> (ou <b>Create service</b>), puis <b>GitHub</b>.</li>
+    <li>Si Koyeb demande l'accès à GitHub, choisis <b>Only select repositories</b> et coche seulement le dépôt de Mon Carnet.</li>
+    <li>Choisis le dépôt et la branche <code>master</code>.</li>
+    <li><b>Builder</b> : <b>Dockerfile</b>. Le fichier est à la racine du dépôt. Laisse vides le chemin, la commande et les arguments : tout est déjà dans le Dockerfile.</li>
+    <li><b>Instance</b> : celle nommée <b>Free</b>.</li>
+    <li><b>Region</b> : <b>Frankfurt</b>, là où est la base Neon. Les requêtes seront plus rapides.</li>
+  </ol>
+  <p>Ne clique pas encore sur <b>Deploy</b>.</p>
+</div></div>
+
+<div class="etape" data-id="b3"><input type="checkbox" aria-label="Fait"><div>
+  <h3><span class="qui toi">Toi</span>Recopier les variables</h3>
+  <ol>
+    <li>Section <b>Environment variables</b> (<i>and files</i>) : ajoute une ligne par variable repérée en A3, avec <b>le même nom et la même valeur</b> que sur Render.</li>
+    <li>Pour les valeurs sensibles (<code>DATABASE_URL</code>, <code>JWT_SECRET</code>, <code>VAPID_PRIVATE_KEY</code>, <code>ORS_API_KEY</code>), choisis le type <b>Secret</b> si Koyeb le propose.</li>
+    <li>Ajoute <code>SPOTIFY_CLIENT_ID</code> avec la valeur de <code>VITE_SPOTIFY_CLIENT_ID</code> du site statique. Cette valeur n'est pas secrète.</li>
+    <li>N'ajoute ni <code>PORT</code> ni <code>DOSSIER_INTERFACE</code> : c'est déjà réglé.</li>
+  </ol>
+  <div class="attention">Vérifie chaque valeur deux fois : un espace en trop au début ou à la fin suffit pour que <code>DATABASE_URL</code> ou <code>JWT_SECRET</code> ne marchent plus.</div>
+</div></div>
+
+<div class="etape" data-id="b4"><input type="checkbox" aria-label="Fait"><div>
+  <h3><span class="qui toi">Toi</span>Port et contrôle de santé</h3>
+  <ol>
+    <li><b>Exposed ports</b> : port <code>8000</code>, protocole <b>HTTP</b>, chemin <code>/</code>. C'est souvent la valeur par défaut.</li>
+    <li><b>Health checks</b> : remplace <b>TCP</b> par <b>HTTP</b>, chemin <code>/health</code>, port <code>8000</code>.</li>
+    <li>S'il existe un champ <b>Grace period</b>, mets 60 s : au premier démarrage, l'app vérifie la base avant d'ouvrir.</li>
+  </ol>
+</div></div>
+
+<div class="etape" data-id="b5"><input type="checkbox" aria-label="Fait"><div>
+  <h3><span class="qui toi">Toi</span>Nommer et déployer</h3>
+  <ol>
+    <li><b>Service name</b> : par exemple <code>mon-carnet</code>. L'adresse sera du type <code>https://mon-carnet-&lt;ton-organisation&gt;.koyeb.app</code>. C'est elle que tes invités utiliseront : choisis un nom simple.</li>
+    <li>Laisse activé le redéploiement automatique à chaque push sur <code>master</code>.</li>
+    <li>Clique sur <b>Deploy</b>. La première construction prend 5 à 10 minutes : interface, puis Python.</li>
+    <li>Quand le statut passe à <b>Healthy</b> (vert), copie l'adresse publique du service et colle-la <b>en haut de cette page</b>.</li>
+  </ol>
+</div></div>
+
+<div class="etape" data-id="b6"><input type="checkbox" aria-label="Fait"><div>
+  <h3><span class="qui toi">Toi</span>Lire les journaux de démarrage</h3>
+  <p>Dans le service Koyeb, onglet <b>Logs</b> (journaux d'exécution, pas ceux de construction), tu dois voir :</p>
+  <ul>
+    <li><code>[startup] Tables et migrations OK.</code></li>
+    <li>puis une ligne d'uvicorn du type <code>Uvicorn running on http://0.0.0.0:8000</code>.</li>
+  </ul>
+  <p>Si le déploiement échoue, va voir <a href="#pannes">En cas de problème</a>.</p>
+</div></div>
+
+<!-- ===================== C ===================== -->
+<h2 id="c"><span class="num">C</span> Tester sans rien casser <span class="duree">10 min</span></h2>
+
+<div class="etape" data-id="c1"><input type="checkbox" aria-label="Fait"><div>
+  <h3><span class="qui claude">Claude</span>Contrôle technique</h3>
+  <p>Envoie à Claude : <span class="message" style="display:inline-block;padding:4px 10px">Le service Koyeb est en ligne : <span class="adr">[adresse Koyeb]</span>. Vérifie-le.</span></p>
+  <p>Claude vérifie, sans rien écrire :</p>
+  <ul>
+    <li><code>/health</code> répond ;</li>
+    <li>la page d'accueil s'affiche ;</li>
+    <li>une page protégée refuse l'accès sans connexion ;</li>
+    <li>les protections du navigateur sont en place.</li>
+  </ul>
+</div></div>
+
+<div class="etape" data-id="c2"><input type="checkbox" aria-label="Fait"><div>
+  <h3><span class="qui toi">Toi</span>Essai sur ordinateur</h3>
+  <ol>
+    <li>Ouvre <span class="adr">[adresse Koyeb]</span> dans ton navigateur.</li>
+    <li>Connecte-toi avec ton e-mail et ton mot de passe habituels. C'est la même base, donc le même compte.</li>
+    <li>Vérifie le carnet (toutes tes séances), une fiche d'activité avec sa carte, un itinéraire et le Plan.</li>
+  </ol>
+  <div class="note">Si tout s'affiche, la partie difficile est faite. N'active pas encore les notifications sur cette adresse : ce sera à l'étape F3.</div>
+</div></div>
+
+<!-- ===================== D ===================== -->
+<h2 id="d"><span class="num">D</span> Couper les anciennes notifications <span class="duree">2 min par appareil</span></h2>
+
+<div class="etape" data-id="d1"><input type="checkbox" aria-label="Fait"><div>
+  <h3><span class="qui tous">Tout le monde</span>Désactiver les notifications dans l'ancienne app</h3>
+  <p>À faire <b>avant la bascule</b>, tant que l'ancienne API Render répond. Sinon, un appareil risque de recevoir chaque notification en double : une par l'ancienne app, une par la nouvelle.</p>
+  <ol>
+    <li>Sur chaque appareil où les notifications sont actives (iPhone, ordinateur…), ouvre l'<b>ancienne</b> Mon Carnet.</li>
+    <li><b>Profil</b>, section <b>Notifications</b> : désactive <b>Notifications du matin</b>.</li>
+  </ol>
+  <p>Pour tes invités, envoie le premier message de l'étape G4 quelques jours avant.</p>
+  <p>Un oubli n'a rien de grave : voir « notifications en double » dans <a href="#pannes">En cas de problème</a>.</p>
+</div></div>
+
+<!-- ===================== E ===================== -->
+<h2 id="e"><span class="num">E</span> La bascule <span class="duree">20 min, dans cet ordre</span></h2>
+
+<div class="etape" data-id="e1"><input type="checkbox" aria-label="Fait"><div>
+  <h3><span class="qui toi">Toi</span>Diriger la synchro du matin vers Koyeb</h3>
+  <ol>
+    <li>Sur GitHub, ouvre le dépôt de Mon Carnet, puis <b>Settings</b>.</li>
+    <li>Menu de gauche : <b>Secrets and variables</b> &gt; <b>Actions</b>, puis l'onglet <b>Variables</b>. Pas l'onglet Secrets.</li>
+    <li><b>New repository variable</b> :
+      <ul>
+        <li>Name : <code>CARNET_API_URL</code> <button class="copier" data-copie="CARNET_API_URL">copier</button></li>
+        <li>Value : <span class="adr">[adresse Koyeb]</span> <button class="copier" data-copie-adr>copier</button>, <b>sans</b> <code>/api</code> et sans barre finale.</li>
+      </ul>
+    </li>
+    <li><b>Add variable</b>.</li>
+  </ol>
+</div></div>
+
+<div class="etape" data-id="e2"><input type="checkbox" aria-label="Fait"><div>
+  <h3><span class="qui claude">Claude</span>Le commit du jour J</h3>
+  <p>Envoie à Claude : <span class="message" style="display:inline-block;padding:4px 10px">Bascule Koyeb : fais le commit du jour J avec <span class="adr">[adresse Koyeb]</span>.</span></p>
+  <p>Claude met à jour :</p>
+  <ul>
+    <li>l'adresse de l'outil d'envoi IA (<code>outils/carnet.py</code>) ;</li>
+    <li>la fiche des raccourcis iOS ;</li>
+    <li>la page <b>Confidentialité</b> : application chez Koyeb, base chez Neon à Francfort ;</li>
+    <li>la synchro du matin, qui repasse à deux passages par heure pour une notification à 10 min près.</li>
+  </ul>
+  <p>Koyeb se redéploie tout seul après le push (environ 5 min).</p>
+</div></div>
+
+<div class="etape" data-id="e3"><input type="checkbox" aria-label="Fait"><div>
+  <h3><span class="qui toi">Toi</span>Autoriser la nouvelle adresse chez Spotify</h3>
+  <ol>
+    <li>Va sur <b>developer.spotify.com</b> &gt; <b>Dashboard</b>, puis ouvre ton app.</li>
+    <li><b>Settings</b> &gt; <b>Edit</b>. Dans <b>Redirect URIs</b>, ajoute <span class="adr" data-suffixe="/spotify">[adresse Koyeb]/spotify</span> <button class="copier" data-copie-adr="/spotify">copier</button>.</li>
+    <li>Garde l'ancienne adresse pour l'instant, puis <b>Save</b> en bas de la page.</li>
+  </ol>
+</div></div>
+
+<div class="etape" data-id="e4"><input type="checkbox" aria-label="Fait"><div>
+  <h3><span class="qui toi">Toi</span>Garder Koyeb éveillé avec UptimeRobot</h3>
+  <ol>
+    <li>Sur <b>uptimerobot.com</b>, s'il reste un ancien moniteur vers <code>onrender.com</code>, supprime-le. Il ne faut jamais pinguer Render.</li>
+    <li><b>New monitor</b> :
+      <ul>
+        <li>type <b>HTTP(s)</b> ;</li>
+        <li>URL <span class="adr" data-suffixe="/health">[adresse Koyeb]/health</span> <button class="copier" data-copie-adr="/health">copier</button> ;</li>
+        <li>intervalle de <b>10 minutes</b> (tout ce qui est sous 1 h suffit).</li>
+      </ul>
+    </li>
+    <li>Enregistre. Le moniteur doit passer au vert (<b>Up</b>) en quelques minutes.</li>
+  </ol>
+  <p>Chez Koyeb, l'instance s'endort après 1 h sans visite. Ce moniteur l'en empêche, sans rien consommer ni coûter.</p>
+</div></div>
+
+<div class="etape" data-id="e5"><input type="checkbox" aria-label="Fait"><div>
+  <h3><span class="qui toi">Toi</span>Rediriger l'ancienne adresse</h3>
+  <ol>
+    <li>Sur Render, ouvre le site statique <b>coach-perso-frontend</b>, onglet <b>Redirects/Rewrites</b>.</li>
+    <li>Il y a une règle <code>/*</code> → <code>/index.html</code> (action <i>Rewrite</i>). Modifie-la :
+      <ul>
+        <li>Source : <code>/*</code></li>
+        <li>Destination : <span class="adr" data-suffixe="/*">[adresse Koyeb]/*</span> <button class="copier" data-copie-adr="/*">copier</button></li>
+        <li>Action : <b>Redirect</b></li>
+      </ul>
+    </li>
+    <li><b>Save</b>, puis ouvre l'ancienne adresse <code>coach-perso-frontend.onrender.com</code> : tu dois arriver sur Koyeb.</li>
+  </ol>
+  <p>Pendant un mois, les anciens favoris et les liens déjà envoyés mèneront à la bonne adresse. Un site statique ne consomme aucune heure Render.</p>
+  <div class="note">Si la page du service mentionne un <b>Blueprint</b>, dis-le à Claude : il fera la même modification dans <code>render.yaml</code>, sinon Render pourrait remettre l'ancienne règle.</div>
+</div></div>
+
+<div class="etape" data-id="e6"><input type="checkbox" aria-label="Fait"><div>
+  <h3><span class="qui toi">Toi</span>Suspendre l'ancienne API Render</h3>
+  <ol>
+    <li>Sur Render, ouvre le service <b>coach-perso</b> (l'API), puis <b>Settings</b>.</li>
+    <li>Tout en bas : <b>Suspend Web Service</b>.</li>
+  </ol>
+  <div class="attention"><b>Suspendre, pas supprimer.</b> Pendant un mois, c'est ton retour arrière. Un service suspendu ne consomme aucune heure.</div>
+</div></div>
+
+<!-- ===================== F ===================== -->
+<h2 id="f"><span class="num">F</span> Sur chaque appareil <span class="duree">5 à 10 min par appareil</span></h2>
+<p>Pour le navigateur, la nouvelle adresse est un nouveau site. Tes données sont toutes là, mais ce qui dépend de l'appareil se refait une seule fois.</p>
+
+<div class="etape" data-id="f1"><input type="checkbox" aria-label="Fait"><div>
+  <h3><span class="qui tous">Tout le monde</span>Se reconnecter</h3>
+  <p>Ouvre <span class="adr">[adresse Koyeb]</span> et connecte-toi avec ton e-mail et ton mot de passe habituels.</p>
+  <p>Les préférences d'affichage (filtres, onglets mémorisés) reviennent à leurs valeurs par défaut. Ce ne sont pas des données du carnet.</p>
+</div></div>
+
+<div class="etape" data-id="f2"><input type="checkbox" aria-label="Fait"><div>
+  <h3><span class="qui tous">Tout le monde</span>iPhone : réinstaller l'app sur l'écran d'accueil</h3>
+  <ol>
+    <li>Appui long sur l'ancienne icône Mon Carnet, puis <b>Supprimer l'app</b>. Tu n'effaces que le raccourci : tes données sont en ligne.</li>
+    <li>Dans <b>Safari</b>, ouvre <span class="adr">[adresse Koyeb]</span> et connecte-toi.</li>
+    <li>Bouton <b>Partager</b>, puis <b>Sur l'écran d'accueil</b>, puis <b>Ajouter</b>.</li>
+    <li>Ouvre Mon Carnet <b>depuis la nouvelle icône</b> : connecte-toi de nouveau si demandé.</li>
+  </ol>
+</div></div>
+
+<div class="etape" data-id="f3"><input type="checkbox" aria-label="Fait"><div>
+  <h3><span class="qui tous">Tout le monde</span>Réactiver les notifications</h3>
+  <ol>
+    <li>Sur iPhone, depuis la <b>nouvelle icône</b> (iOS n'envoie de notifications qu'aux apps de l'écran d'accueil) : <b>Profil</b>, section <b>Notifications</b>.</li>
+    <li>Active <b>Notifications du matin</b> et accepte la demande d'iOS.</li>
+    <li>Règle l'heure, puis touche <b>Envoyer une notification de test</b> : elle doit arriver tout de suite.</li>
+    <li>Fais de même sur l'ordinateur si tu y recevais des notifications.</li>
+  </ol>
+</div></div>
+
+<div class="etape" data-id="f4"><input type="checkbox" aria-label="Fait"><div>
+  <h3><span class="qui tous">Tout le monde</span>Reconnecter Spotify (si utilisé)</h3>
+  <p><b>Profil</b>, ligne <b>Spotify</b> : connecte-toi de nouveau et accepte. Il faut que l'étape E3 soit faite.</p>
+</div></div>
+
+<!-- ===================== G ===================== -->
+<h2 id="g"><span class="num">G</span> Ce que toi seul refais <span class="duree">15 min</span></h2>
+
+<div class="etape" data-id="g1"><input type="checkbox" aria-label="Fait"><div>
+  <h3><span class="qui toi">Toi</span>Consignes Mon IA</h3>
+  <ol>
+    <li>Dans la nouvelle Mon Carnet, ouvre <b>/mon-ia</b>.</li>
+    <li>Copie la consigne, qui contient maintenant la nouvelle adresse, et remplace l'ancienne dans chaque IA qui l'utilise : projet Claude, tâche planifiée, etc.</li>
+  </ol>
+  <p>Le jeton ne change pas : seule l'adresse dans la consigne est différente.</p>
+</div></div>
+
+<div class="etape" data-id="g2"><input type="checkbox" aria-label="Fait"><div>
+  <h3><span class="qui toi">Toi</span>Liens en lecture seule déjà partagés</h3>
+  <p>Ils pointent vers l'ancienne API, désormais suspendue. Recopie le lien depuis <b>/mon-ia</b> (ou Sources) et renvoie-le aux personnes ou aux IA qui l'avaient. Le jeton reste le même.</p>
+</div></div>
+
+<div class="etape" data-id="g3"><input type="checkbox" aria-label="Fait"><div>
+  <h3><span class="qui toi">Toi</span>Raccourcis iOS (s'il t'en reste)</h3>
+  <p>Dans <b>Raccourcis</b>, ouvre chaque raccourci qui appelle Mon Carnet. Dans chaque action <b>Obtenir le contenu de l'URL</b>, remplace <code>https://coach-perso.onrender.com</code> par <span class="adr">[adresse Koyeb]</span> et garde la suite (<code>/api/…</code>). Au premier lancement, iOS demandera d'autoriser le nouveau domaine.</p>
+</div></div>
+
+<div class="etape" data-id="g4"><input type="checkbox" aria-label="Fait"><div>
+  <h3><span class="qui toi">Toi</span>Prévenir tes invités</h3>
+  <p><b>Quelques jours avant</b> (pour l'étape D) :</p>
+  <div class="message">Petit déménagement de Mon Carnet le [date] : l'adresse va changer, tes données restent toutes là. D'ici là, si tu reçois les notifications du matin, désactive-les dans Profil &gt; Notifications. Je t'envoie la nouvelle adresse le jour J.</div>
+  <p><b>Le jour J</b> :</p>
+  <div class="message">Mon Carnet a déménagé : <span class="adr">[adresse Koyeb]</span>
+Connecte-toi avec ton e-mail et ton mot de passe habituels, tout est là.
+Sur iPhone : supprime l'ancienne icône, puis dans Safari, Partager &gt; Sur l'écran d'accueil.
+Ensuite, si tu veux les notifications : Profil &gt; Notifications du matin (et reconnecte Spotify si tu l'utilisais).</div>
+  <button class="copier" id="copier-message" style="margin:8px 0 0">copier le message du jour J</button>
+</div></div>
+
+<!-- ===================== H ===================== -->
+<h2 id="h"><span class="num">H</span> Vérifications</h2>
+
+<div class="etape" data-id="h1"><input type="checkbox" aria-label="Fait"><div>
+  <h3><span class="qui toi">Toi</span>Le jour J : lancer la synchro à la main</h3>
+  <ol>
+    <li>GitHub, onglet <b>Actions</b>, workflow <b>Synchro du matin</b>.</li>
+    <li><b>Run workflow</b>, puis encore <b>Run workflow</b>.</li>
+    <li>Au bout d'une minute, la coche doit être verte. Ouvre l'exécution : la réponse doit être un code 200.</li>
+  </ol>
+</div></div>
+
+<div class="etape" data-id="h2"><input type="checkbox" aria-label="Fait"><div>
+  <h3><span class="qui toi">Toi</span>Le jour J : tour de l'app</h3>
+  <p>Sur iPhone et sur ordinateur : le carnet complet, une fiche d'activité, un itinéraire, le Plan, une séance guidée (lancer puis quitter), et Mon IA (un appel de lecture).</p>
+</div></div>
+
+<div class="etape" data-id="h3"><input type="checkbox" aria-label="Fait"><div>
+  <h3><span class="qui toi">Toi</span>Le lendemain matin</h3>
+  <p>La synchro automatique est passée (GitHub Actions, coche verte) et la notification est arrivée à l'heure choisie.</p>
+</div></div>
+
+<div class="etape" data-id="h4"><input type="checkbox" aria-label="Fait"><div>
+  <h3><span class="qui toi">Toi</span>Une semaine plus tard</h3>
+  <p>UptimeRobot est à 100 % et les journaux Koyeb ne montrent pas de redémarrages en boucle. Tu peux demander à Claude un bilan rapide.</p>
+</div></div>
+
+<!-- ===================== I ===================== -->
+<h2 id="i"><span class="num">I</span> Un mois plus tard : adieu Render <span class="duree">10 min</span></h2>
+
+<div class="etape" data-id="i1"><input type="checkbox" aria-label="Fait"><div>
+  <h3><span class="qui claude">Claude</span>Nettoyer le code</h3>
+  <p>Envoie à Claude : <span class="message" style="display:inline-block;padding:4px 10px">Koyeb tourne depuis un mois, retire Render du code.</span></p>
+  <p>Claude supprime <code>render.yaml</code> et les anciennes adresses Render qui restent dans le code.</p>
+</div></div>
+
+<div class="etape" data-id="i2"><input type="checkbox" aria-label="Fait"><div>
+  <h3><span class="qui toi">Toi</span>Supprimer les services Render</h3>
+  <ol>
+    <li>Service <b>coach-perso</b> (l'API suspendue) : <b>Settings</b> &gt; <b>Delete Web Service</b>, puis confirme en tapant le nom.</li>
+    <li>Site <b>coach-perso-frontend</b> (la redirection) : <b>Settings</b> &gt; <b>Delete Static Site</b>. Fais-le quand tes invités utilisent tous la nouvelle adresse.</li>
+  </ol>
+  <div class="danger">Cette suppression est définitive, et après elle le retour arrière n'est plus possible. Tes données ne sont pas concernées : elles sont chez Neon.</div>
+  <p>Tes 3 autres outils gardent les 750 h gratuites de Render pour eux seuls.</p>
+</div></div>
+
+<div class="etape" data-id="i3"><input type="checkbox" aria-label="Fait"><div>
+  <h3><span class="qui toi">Toi</span>Spotify : retirer l'ancienne adresse de retour</h3>
+  <p>Sur developer.spotify.com, dans les réglages de l'app, supprime l'adresse <code>https://coach-perso-frontend.onrender.com/spotify</code>, puis <b>Save</b>.</p>
+</div></div>
+
+<!-- ===================== Retour ===================== -->
+<h2 id="retour"><span class="num">↺</span> Retour arrière <span class="duree">avant la phase I seulement</span></h2>
+<div class="carte">
+  <p>Si quelque chose ne va pas chez Koyeb et que tu veux revenir à Render en attendant :</p>
+  <ol>
+    <li><b>Render</b>, service <b>coach-perso</b> : <b>Resume Web Service</b>.</li>
+    <li><b>Render</b>, site <b>coach-perso-frontend</b>, <b>Redirects/Rewrites</b> : remets la règle <code>/*</code> → <code>/index.html</code>, action <b>Rewrite</b>.</li>
+    <li><b>GitHub</b>, Variables : supprime <code>CARNET_API_URL</code>. La synchro retourne vers Render.</li>
+    <li><b>UptimeRobot</b> : mets le moniteur Koyeb en pause et ne crée surtout pas de moniteur vers Render.</li>
+    <li>Préviens Claude, qui rétablit les adresses Render dans le code si besoin.</li>
+  </ol>
+  <div class="bon">Il n'y a aucune donnée à restaurer : Render et Koyeb lisent la même base. Ce qui a été saisi sur Koyeb reste visible sur Render.</div>
+</div>
+
+<!-- ===================== Pannes ===================== -->
+<h2 id="pannes"><span class="num">?</span> En cas de problème</h2>
+
+<details><summary>La construction échoue chez Koyeb (Build failed)</summary>
+<p>Ouvre les journaux de <b>construction</b> (<i>Build logs</i>) et copie à Claude les 30 dernières lignes, en vérifiant qu'elles ne contiennent aucune valeur secrète. C'est en général une dépendance à corriger dans le code. Render n'est pas touché.</p></details>
+
+<details><summary>Le service reste « Unhealthy » ou redémarre en boucle</summary>
+<ul>
+  <li>Vérifie que le contrôle de santé est en <b>HTTP</b> sur <code>/health</code>, port <code>8000</code>.</li>
+  <li>Allonge la <b>grace period</b> (60 à 120 s).</li>
+  <li>Dans les journaux d'exécution, cherche une erreur de connexion à la base : c'est presque toujours <code>DATABASE_URL</code> mal recopiée (espace, guillemet, morceau manquant).</li>
+</ul></details>
+
+<details><summary>Page blanche ou « Erreur serveur interne » après connexion</summary>
+<p>Vide le cache de la page (sur ordinateur, rechargement forcé : Ctrl+Maj+R). Si l'erreur persiste, regarde les journaux Koyeb au moment de l'erreur et transmets la ligne d'erreur à Claude.</p></details>
+
+<details><summary>« Session expirée » ou jeton refusé en boucle</summary>
+<p><code>JWT_SECRET</code> n'est pas identique à celui de Render. Recopie-le, enregistre : Koyeb redéploie seul.</p></details>
+
+<details><summary>Aucune notification n'arrive</summary>
+<ul>
+  <li>Vérifie les trois variables <code>VAPID_…</code> : elles doivent être identiques à Render.</li>
+  <li>Sur iPhone, les notifications ne marchent que depuis l'icône de l'écran d'accueil, pas dans Safari.</li>
+  <li>Réglages iOS &gt; Notifications &gt; Mon Carnet : autorisées ?</li>
+  <li>Utilise <b>Envoyer une notification de test</b> dans Profil.</li>
+</ul></details>
+
+<details><summary>Notifications en double sur un appareil</summary>
+<ul>
+  <li><b>iPhone :</b> supprime l'ancienne icône Mon Carnet. L'ancien abonnement meurt avec elle et le serveur le retire au premier envoi refusé.</li>
+  <li><b>Ordinateur :</b> dans les réglages du navigateur, section Notifications, bloque le site <code>coach-perso-frontend.onrender.com</code>.</li>
+  <li>Sinon, dans la nouvelle app, sur l'appareil principal : <b>Profil &gt; Ne garder que cet appareil</b>. Réactive ensuite les notifications sur tes autres appareils.</li>
+</ul></details>
+
+<details><summary>Spotify affiche « INVALID_CLIENT: Invalid redirect URI »</summary>
+<p>L'adresse <span class="adr" data-suffixe="/spotify">[adresse Koyeb]/spotify</span> n'est pas, à l'identique, dans les <b>Redirect URIs</b> de l'app Spotify (étape E3). Vérifie le https, l'absence de barre finale et le <b>Save</b>. Si le bouton Spotify n'apparaît pas du tout dans Profil, c'est <code>SPOTIFY_CLIENT_ID</code> qui manque chez Koyeb.</p></details>
+
+<details><summary>La synchro du matin échoue (croix rouge sur GitHub)</summary>
+<ul>
+  <li><b>Code 404 :</b> la variable <code>CARNET_API_URL</code> se termine probablement par <code>/api</code> ou par une barre. Mets seulement <span class="adr">[adresse Koyeb]</span>.</li>
+  <li><b>Code 401 ou 403 :</b> le secret GitHub <code>CARNET_IMPORT_TOKEN</code> n'a pas bougé. C'est donc <code>JWT_SECRET</code> qui diffère chez Koyeb.</li>
+</ul></details>
+
+<details><summary>La page met plusieurs secondes à s'ouvrir</summary>
+<p>L'instance s'était endormie : UptimeRobot ne la pingue plus. Vérifie que le moniteur est actif et toujours en <b>Up</b>.</p></details>
+
+<p class="sous" style="margin-top:32px">Version texte de référence pour Claude : <code>docs/migration-koyeb.md</code>.</p>
+</main>
+
+<script>
+(function(){
+  var CLE = "guide-koyeb-v1";
+  var etat = {};
+  try { etat = JSON.parse(localStorage.getItem(CLE) || "{}") || {}; } catch (e) { etat = {}; }
+  function sauver(){ try { localStorage.setItem(CLE, JSON.stringify(etat)); } catch (e) {} }
+
+  var champ = document.getElementById("adr");
+  function adresse(){ return (champ.value || "").trim().replace(/\/+$/, ""); }
+  function majAdresse(){
+    var a = adresse();
+    document.querySelectorAll(".adr").forEach(function(el){
+      var suf = el.getAttribute("data-suffixe") || "";
+      el.textContent = a ? a + suf : "[adresse Koyeb]" + suf;
+    });
+  }
+  champ.value = etat.adresse || "";
+  champ.addEventListener("input", function(){ etat.adresse = champ.value; sauver(); majAdresse(); });
+  majAdresse();
+
+  var cases = document.querySelectorAll(".etape");
+  function majProgres(){
+    var n = 0;
+    cases.forEach(function(e){ if (e.querySelector("input").checked) n++; });
+    document.getElementById("progres").textContent = n + " / " + cases.length + " étapes";
+    document.getElementById("barre").style.width = (100 * n / cases.length) + "%";
+  }
+  cases.forEach(function(e){
+    var id = e.getAttribute("data-id"), c = e.querySelector("input");
+    c.checked = !!(etat.cases && etat.cases[id]);
+    e.classList.toggle("faite", c.checked);
+    c.addEventListener("change", function(){
+      etat.cases = etat.cases || {};
+      etat.cases[id] = c.checked; sauver();
+      e.classList.toggle("faite", c.checked); majProgres();
+    });
+  });
+  majProgres();
+
+  function copier(texte, bouton){
+    var fini = function(){ var t = bouton.textContent; bouton.textContent = "copié"; setTimeout(function(){ bouton.textContent = t; }, 1200); };
+    if (navigator.clipboard) navigator.clipboard.writeText(texte).then(fini, function(){});
+  }
+  document.querySelectorAll("[data-copie]").forEach(function(b){
+    b.addEventListener("click", function(){ copier(b.getAttribute("data-copie"), b); });
+  });
+  document.querySelectorAll("[data-copie-adr]").forEach(function(b){
+    b.addEventListener("click", function(){
+      if (!adresse()) { champ.focus(); return; }
+      copier(adresse() + (b.getAttribute("data-copie-adr") || ""), b);
+    });
+  });
+  document.getElementById("copier-message").addEventListener("click", function(){
+    var m = this.previousElementSibling;
+    copier(m.innerText, this);
+  });
+})();
+</script>
+</body>
+</html>
