@@ -238,8 +238,21 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
   function validerSerie(i) {
     setEtat((st) => aller(st, st.idx + 1, { ...st.ex, [k]: { ...st.ex[k], series_faites: i } }));
   }
+  // EMOM en alternance : l'exercice (ou le repos, null) de la minute `m`, comptée à partir de 0
+  const tourDe = (et, m) => et.rotation[m % et.rotation.length];
+  const minutesEmom = etape.type === "emom" ? etape.minutes ?? ex.series : 0;
   function finEmom(faites) {
-    setEtat((st) => aller(st, st.idx + 1, { ...st.ex, [k]: { ...st.ex[k], series_faites: faites } }));
+    setEtat((st) => {
+      const exS = { ...st.ex };
+      if (etape.rotation) {
+        etape.ks.forEach((i) => {
+          let n = 0;
+          for (let m = 0; m < faites; m += 1) if (tourDe(etape, m) === i) n += 1;
+          exS[i] = { ...exS[i], series_faites: n };
+        });
+      } else exS[k] = { ...exS[k], series_faites: faites };
+      return aller(st, st.idx + 1, exS);
+    });
   }
   // Un circuit AMRAP couvre plusieurs exercices : ils se terminent ensemble
   const blocDe = (et) => et.ks ?? [et.k];
@@ -298,14 +311,15 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
       } else if (r <= 3 && bipUneFois(`m${etat.minuteurFin}-${r}`)) bipCourt(r, motFin, etat.minuteurFin - now);
     } else if (etape.type === "emom" && etat.emomDebut) {
       const ecoule = now - etat.emomDebut;
-      if (ecoule >= ex.series * 60000) {
-        if (bipUneFois(`e-fin${etat.emomDebut}`)) { bipLong("repos"); finEmom(ex.series); }
+      if (ecoule >= minutesEmom * 60000) {
+        if (bipUneFois(`e-fin${etat.emomDebut}`)) { bipLong("repos"); finEmom(minutesEmom); }
       } else {
         const m = Math.floor(ecoule / 60000);
         const r = Math.ceil((60000 - (ecoule % 60000)) / 1000);
-        if (m > 0 && bipUneFois(`g${etat.emomDebut}-${m}`)) bipLong("go");
-        else if (r <= 3 && bipUneFois(`e${etat.emomDebut}-${m}-${r}`))
-          bipCourt(r, m === ex.series - 1 ? "repos" : "go", 60000 - (ecoule % 60000));
+        // minute de repos d'un EMOM en alternance : « repos » au lieu de « go »
+        const mot = (mm) => (mm >= minutesEmom || (etape.rotation && tourDe(etape, mm) == null) ? "repos" : "go");
+        if (m > 0 && bipUneFois(`g${etat.emomDebut}-${m}`)) bipLong(mot(m));
+        else if (r <= 3 && bipUneFois(`e${etat.emomDebut}-${m}-${r}`)) bipCourt(r, mot(m + 1), 60000 - (ecoule % 60000));
       }
     } else if (etape.type === "amrap" && etat.amrapDebut) {
       const total = etape.minutes * 60000;
@@ -329,7 +343,7 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
         exercices: exercices.map((e, i) => {
           const x = etat.ex[i] || {};
           return {
-            numero: e.numero, nom: e.nom, emom: e.emom, prescription: prescription(e), reps: e.reps ?? null, charge: e.charge,
+            numero: e.numero, nom: e.nom, emom: e.emom || !!e.tournant, prescription: prescription(e), reps: e.reps ?? null, charge: e.charge,
             series_prevues: e.series, series_faites: x.series_faites ?? 0, passe: !!x.passe,
             difficulte: x.difficulte ?? null, ressenti: (x.ressenti || "").trim() || null,
             duree_s: x.debut && x.fin ? Math.round((x.fin - x.debut) / 1000) : null,
@@ -383,7 +397,8 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
     if (k == null) return 0;
     if (etape.ks?.includes(i)) {
       if (etape.type === "ressenti") return 1;
-      return etat.amrapDebut ? Math.min(1, (now - etat.amrapDebut) / (etape.minutes * 60000)) : 0;
+      const depart = etat.amrapDebut ?? etat.emomDebut;
+      return depart ? Math.min(1, (now - depart) / (etape.minutes * 60000)) : 0;
     }
     if (i < k) return 1;
     if (i > k) return 0;
@@ -402,7 +417,7 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
   // Segments de la barre : les exercices d'un même AMRAP n'en font qu'un
   const segments = [];
   avancement.forEach((p, i) => {
-    const am = etapes.find((et) => et.type === "amrap" && et.ks.includes(i));
+    const am = etapes.find((et) => (et.type === "amrap" || et.type === "emom") && et.ks?.includes(i));
     const dernier = segments[segments.length - 1];
     if (am && dernier?.amrap === am) { dernier.n += 1; return; }
     segments.push({ i, p, n: 1, amrap: am ?? null, minutes: am?.minutes });
@@ -420,6 +435,7 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
       const titre = et.k === k && e.series > 1 ? `Série ${et.i} · ${e.reps}` : `${e.nom} · ${prescription(e)}`;
       return [titre, e.charge];
     }
+    if (et.type === "emom" && et.rotation) return [`EMOM ${et.minutes} min`, `${et.ks.length} exercices en alternance`];
     if (et.type === "emom") return [`${e.nom} · EMOM ${e.series} min`, e.reps ? `${e.reps} reps` : null];
     if (et.type === "amrap") return [`AMRAP ${et.minutes} min`, `${et.ks.length} exercices`];
     if (et.type === "repos") return ["Repos", fmtChrono(et.duree)];
@@ -442,6 +458,8 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
         <div className="flex-1" />
         {premier && (premier.amrap
           ? <Ensuite titre={`AMRAP ${premier.amrap} min`} detail={`${etapes.find((et) => et.type === "amrap")?.ks.length ?? 1} exercices`} />
+          : premier.tournant
+          ? <Ensuite titre={`EMOM ${premier.tournant} min`} detail={`${etapes.find((et) => et.type === "emom")?.ks?.length ?? 1} exercices en alternance`} />
           : <Ensuite titre={`${premier.nom} · ${prescription(premier)}`} detail={premier.emom ? `${premier.reps} reps` : premier.charge} />)}
         <div className="h-3" />
         {musique}
@@ -465,6 +483,71 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
           <Bouton sombre className="!h-12 !text-[15px]" onClick={ajouter15}>+15 s</Bouton>
           <Bouton sombre className="!h-12 !text-[15px]" onClick={suivant}>Passer</Bouton>
         </div>
+      </>
+    );
+  } else if (etape.type === "emom" && etape.rotation) {
+    // EMOM en alternance : un exercice par minute, à tour de rôle, jusqu'au bout du temps
+    const enCours = !!etat.emomDebut;
+    const ecoule = enCours ? now - etat.emomDebut : 0;
+    const minute = Math.min(etape.minutes, Math.floor(ecoule / 60000) + 1);
+    const resteMinute = 60 - (ecoule % 60000) / 1000;
+    const n = etape.rotation.length;
+    const actif = enCours ? (minute - 1) % n : -1;
+    const iActif = enCours ? etape.rotation[actif] : null;
+    const eActif = iActif != null ? exercices[iActif] : null;
+    const tours = Math.round((etape.minutes / n) * 10) / 10;
+    const rotation = (
+      <ol className={clsx("rounded-[16px] bg-[#1c1c1e] divide-y divide-white/[0.08]", enCours ? "mt-4" : "mt-5")}>
+        {etape.rotation.map((i, r) => {
+          const e = i != null ? exercices[i] : null;
+          const voir = i != null && anims[i] ? () => setMouvement(i) : undefined;
+          const ici = r === actif;
+          return (
+            <li key={r} style={ici ? { background: "rgba(255,159,10,.14)" } : undefined} className="first:rounded-t-[16px] last:rounded-b-[16px]">
+              <button type="button" onClick={voir} disabled={!voir} aria-label={voir ? `Voir le mouvement : ${e.nom}` : undefined}
+                aria-current={ici ? "step" : undefined}
+                className={clsx("w-full text-left flex items-center gap-3 px-3.5 disabled:cursor-default", voir && "active:bg-white/[0.06] transition-colors", enCours ? "py-2" : "py-3")}>
+                <span className="w-11 shrink-0 text-[12px] font-semibold uppercase tracking-[0.04em] chiffres" style={{ color: ici ? ORANGE : "rgba(255,255,255,.3)" }}>min {r + 1}</span>
+                {e ? <Pictogramme traces={pictos[i]} className="w-6 h-6 shrink-0 text-white/60" /> : <span className="w-6 h-6 shrink-0" />}
+                <span className="flex-1 min-w-0">
+                  <span className={clsx("block text-[15px] lg:text-[17px] font-semibold truncate", !e && "text-white/60")}>{e ? e.nom : "Repos"}</span>
+                  {e && !enCours && (e.charge || e.consigne) && <span className="block text-[13px] text-white/60 truncate">{[e.charge, e.consigne].filter(Boolean).join(" · ")}</span>}
+                </span>
+                {e && <span className="font-rounded text-[17px] lg:text-[19px] font-bold chiffres shrink-0">{e.reps ?? "?"}{e.unite ? <span className="ml-1 text-[13px] font-semibold text-white/60">{e.unite}</span> : null}</span>}
+                {voir && (
+                  <span aria-hidden className={clsx("shrink-0 rounded-full flex items-center justify-center", enCours ? "w-7 h-7" : "w-8 h-8")}
+                    style={{ background: "rgba(175,82,222,.18)", color: "#D9A6F0" }}><Lecture className="w-2.5 h-3" /></span>
+                )}
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+    );
+    corps = enCours ? (
+      <>
+        <Surtitre couleur={eActif ? ORANGE : VERT}>Minute {minute} / {etape.minutes}</Surtitre>
+        <Nom>{eActif ? `${eActif.nom}${eActif.reps ? ` · ${eActif.reps}${eActif.unite ? ` ${eActif.unite}` : " reps"}` : ""}` : "Repos"}</Nom>
+        <div className="h-4" />
+        <Anneau part={resteMinute / 60} couleur={eActif ? ORANGE : VERT} className="w-[190px] lg:w-[260px]">
+          <span className="font-rounded text-[52px] lg:text-[72px] font-bold leading-none tracking-[-0.03em] chiffres">{fmtChrono(Math.ceil(resteMinute))}</span>
+          <span className="mt-1.5 text-[13px] lg:text-[15px] text-white/60">{minute < etape.minutes ? `avant la minute ${minute + 1}` : "dernière minute"}</span>
+        </Anneau>
+        {rotation}
+        <div className="flex-1 min-h-4" />
+        <p className="text-center text-[13px] text-white/60 mb-3">Bips automatiques à 3, 2, 1, GO</p>
+        {musique}
+        <Bouton sombre onClick={() => finEmom(minute)}>Arrêter l'EMOM</Bouton>
+      </>
+    ) : (
+      <>
+        <Surtitre couleur={ORANGE}>EMOM · {etape.minutes} min</Surtitre>
+        <Nom>Un exercice par minute, à tour de rôle</Nom>
+        <p className="mt-2 text-[14px] leading-5 text-white/60">Au début de chaque minute, fais les répétitions de l'exercice de la minute, puis récupère jusqu'au bip suivant. {Number.isInteger(tours) ? `La rotation se fait ${tours} fois.` : `La rotation tourne pendant ${etape.minutes} min.`}</p>
+        {rotation}
+        <div className="flex-1 min-h-4" />
+        {musique}
+        <Bouton couleur={ORANGE} onClick={lancerDecompte}><Lecture />Lancer l'EMOM</Bouton>
       </>
     );
   } else if (etape.type === "emom") {
@@ -623,8 +706,8 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
       </>
     ) : (
       <>
-        <Surtitre couleur={VERT}>Exercice terminé</Surtitre>
-        <Nom>{ex.nom}</Nom>
+        <Surtitre couleur={VERT}>{etape.tournant ? "EMOM terminé" : "Exercice terminé"}</Surtitre>
+        <Nom>{etape.tournant ? etape.ks.map((i) => exercices[i].nom).join(" · ") : ex.nom}</Nom>
         {ex.max && (
           <>
             <label htmlFor="reps-faites" className={libelle}>Répétitions faites</label>
@@ -656,7 +739,7 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
     );
   } else {
     const faits = exercices.filter((_, i) => !etat.ex[i]?.passe && (etat.ex[i]?.series_faites ?? 0) > 0).length;
-    const series = exercices.reduce((n, e, i) => n + (e.emom || e.amrap ? 0 : etat.ex[i]?.series_faites ?? 0), 0);
+    const series = exercices.reduce((n, e, i) => n + (e.emom || e.amrap || e.tournant ? 0 : etat.ex[i]?.series_faites ?? 0), 0);
     const notes = exercices.filter((_, i) => (etat.ex[i]?.ressenti || "").trim() || etat.ex[i]?.difficulte).length;
     const stats = [["Durée", fmtChrono((now - etat.debut) / 1000)], ["Exercices", `${faits}/${exercices.length}`], ["Séries", series], ["Ressentis", notes]];
     corps = (
@@ -699,7 +782,7 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
           <div className={clsx("flex-1 flex gap-[3px]", segments.some((g) => !g.amrap) && "-mb-[18px] lg:-mb-[21px]")}>
             {segments.map((g) => (
               <div key={g.i} className={clsx("min-w-0 flex flex-col items-center gap-[5px]", !g.amrap && "flex-1")}
-                style={g.amrap ? { flex: `${g.n} 1 0%` } : undefined} title={g.amrap ? `AMRAP ${g.minutes ?? ""} min` : exercices[g.i].nom}>
+                style={g.amrap ? { flex: `${g.n} 1 0%` } : undefined} title={g.amrap ? `${g.amrap.type === "emom" ? "EMOM" : "AMRAP"} ${g.minutes ?? ""} min` : exercices[g.i].nom}>
                 <i className="block w-full h-1 rounded-full bg-[#2c2c2e] overflow-hidden">
                   <i className="block h-full rounded-full transition-[width] duration-300" style={{ width: `${g.p * 100}%`, background: VIOLET }} />
                 </i>
@@ -764,7 +847,7 @@ export default function SeanceEnCours({ s, contenu, onClose, onEnregistree }) {
                 </b>
                 <span className="flex-1 min-w-0 truncate">{e.nom}</span>
                 <em className="not-italic text-[12px] text-white/30 chiffres shrink-0">
-                  {x.passe ? "passé" : e.amrap ? prescription(e) : enCours && !e.emom ? `${x.series_faites ?? 0}/${e.series}` : e.emom ? `${e.series}′` : prescription(e)}
+                  {x.passe ? "passé" : e.amrap || e.tournant ? prescription(e) : enCours && !e.emom ? `${x.series_faites ?? 0}/${e.series}` : e.emom ? `${e.series}′` : prescription(e)}
                 </em>
               </button>
             </div>

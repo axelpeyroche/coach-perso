@@ -262,7 +262,7 @@ function Exercice({ x, i, mode, onChange, outils }) {
         <input className={champ} value={x.notes} maxLength={150} placeholder="tempo, amplitude, consigne…"
           onChange={(ev) => set("notes")(ev.target.value)} />
       </Champ>
-      {!test && !amrap && (
+      {!test && !amrap && mode !== "emom" && (
         <div className="flex items-center justify-between gap-3 px-0.5">
           <span className="text-[14px]">EMOM <span className="text-label-2 text-[12px]">(une série au début de chaque minute)</span></span>
           <Interrupteur actif={x.emom} onChange={set("emom")} label={`EMOM pour l'exercice ${i + 1}`} />
@@ -285,7 +285,7 @@ function Section({ s, i, total, onChange, outils }) {
       </div>
       <div className="flex items-center gap-2">
         <Segmente className="flex-1" label={`Format du bloc ${i + 1}`} options={MODES_SECTION} valeur={s.mode}
-          onChange={(mode) => onChange({ ...s, mode, duree_min: mode === "amrap" ? s.duree_min || 10 : s.duree_min })} />
+          onChange={(mode) => onChange({ ...s, mode, duree_min: mode === "amrap" ? s.duree_min || 10 : mode === "emom" ? s.duree_min || 9 : s.duree_min })} />
         {s.mode !== "test" && (
           <label className="flex items-center gap-1.5 shrink-0">
             <input className={`${champ} !w-14 text-center`} inputMode="numeric" value={s.duree_min ?? ""}
@@ -298,6 +298,9 @@ function Section({ s, i, total, onChange, outils }) {
           </label>
         )}
       </div>
+      {s.mode === "emom" && (
+        <p className="text-[12px] leading-4 text-label-2 px-0.5">Un exercice par minute, à tour de rôle, pendant la durée du bloc. Un exercice nommé « Repos » = une minute de repos. Séries = nombre de passages.</p>
+      )}
       {s.mode === "amrap" && (
         <p className="text-[12px] leading-4 text-label-2 px-0.5">Enchaîner les exercices en boucle, le plus de tours possible dans le temps.</p>
       )}

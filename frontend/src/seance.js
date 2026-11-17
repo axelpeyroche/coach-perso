@@ -36,8 +36,18 @@ function lireEntete(ligne) {
     amrap = a ? Number(a[1]) : m ? Number(m[1]) : 10;
     if (!duree) duree = `${amrap} min`;
   }
-  return { titre: majuscule(titre.toLowerCase()).replace(/amrap/i, "AMRAP"), duree, amrap };
+  // « EMOM 12 MIN » : EMOM en alternance, un exercice du bloc par minute, à tour de rôle
+  // (une ligne « Repos » = une minute de repos dans la rotation)
+  let emom = null;
+  const e = amrap ? null : /\bEMOM\D{0,3}(\d+)\s*(?:'|′|min)/i.exec(titre);
+  if (e) {
+    emom = Number(e[1]);
+    if (!duree) duree = `${emom} min`;
+  }
+  return { titre: majuscule(titre.toLowerCase()).replace(/amrap/i, "AMRAP").replace(/emom/i, "EMOM"), duree, amrap, emom };
 }
+
+export const estRepos = (nom) => /^repos$/i.test((nom ?? "").trim());
 
 // Partage « a. b » à la première fin de phrase (point suivi d'une espace)
 function couperPhrase(t) {
@@ -111,7 +121,7 @@ function lireMuscu(lignes) {
     if (!ligne) continue;
     const ex = RE_EXERCICE.exec(ligne);
     if (ex) {
-      if (!sections.length) sections.push({ titre: null, duree: null, amrap: null, exercices: [] });
+      if (!sections.length) sections.push({ titre: null, duree: null, amrap: null, emom: null, exercices: [] });
       sections[sections.length - 1].exercices.push(lireExercice(ex[1], ex[2], ex[3]));
     } else if (estEntete(ligne)) {
       sections.push({ ...lireEntete(ligne), exercices: [] });
@@ -184,7 +194,7 @@ export function resumeSeance(texte, options) {
   const formats = FORMATS.filter(([, re]) => re.test(texte ?? "")).map(([f]) => f);
   const r = analyserDescription(texte, options);
   const exercices = r?.type === "muscu"
-    ? r.sections.flatMap((s) => s.exercices.map((e) => e.nom.replace(/\s*\([^)]*\)/g, "").trim()))
+    ? r.sections.flatMap((s) => s.exercices.filter((e) => !estRepos(e.nom)).map((e) => e.nom.replace(/\s*\([^)]*\)/g, "").trim()))
     : [];
   return { formats, exercices };
 }

@@ -1,3 +1,5 @@
+import { estRepos } from "./seance";
+
 // Séance de muscu guidée : transforme le contenu lu par `analyserDescription`
 // en une suite d'étapes affichées une à une en plein écran.
 //   echauffement → (repos avant EMOM) → emom | serie, repos, serie… → ressenti → … → fin
@@ -55,10 +57,11 @@ function preparer(e, section) {
     unite: e.unite, // « par bras », « par côté »…
     charge: e.charge,
     recup: secondes(e.recup),
-    pause: e.emom ? pauseAvant(e.notes) : null,
+    pause: e.emom || section?.emom ? pauseAvant(e.notes) : null,
     historique: e.historique || (histoNote ? histoNote.replace(RE_HISTO, "") : null),
     consigne: notes[0] ?? null,
     amrap: section?.amrap ?? null, // minutes du circuit AMRAP auquel l'exercice appartient
+    tournant: section?.emom ?? null, // minutes de l'EMOM en alternance auquel l'exercice appartient
     max, // test : on note les reps faites
   };
 }
@@ -66,7 +69,23 @@ function preparer(e, section) {
 export function construireSeance(r) {
   const sections = r.sections.slice();
   const sectionEchauffement = sections[0] && /échauff/i.test(sections[0].titre ?? "") ? sections.shift() : null;
-  const exercices = sections.flatMap((s, j) => s.exercices.map((e) => ({ ...preparer(e, s), bloc: j })));
+  // EMOM en alternance : la rotation garde l'ordre des lignes, « Repos » compris (null), sans en faire un exercice
+  const exercices = [];
+  const rotations = {};
+  sections.forEach((s, j) => {
+    const rotation = [];
+    s.exercices.forEach((e) => {
+      if (s.emom && estRepos(e.nom)) { rotation.push(null); return; }
+      rotation.push(exercices.length);
+      exercices.push({ ...preparer(e, s), bloc: j });
+    });
+    if (!s.emom) return;
+    rotations[j] = rotation;
+    // Séries d'un exercice = ses passages sur la durée de l'EMOM
+    rotation.forEach((i, r) => {
+      if (i != null) exercices[i].series = Math.max(1, Math.ceil((s.emom - r) / rotation.length));
+    });
+  });
 
   const etapes = [{ type: "echauffement", texte: echauffement(r.intro, sectionEchauffement) }];
   exercices.forEach((e, k) => {
@@ -76,6 +95,13 @@ export function construireSeance(r) {
       const ks = exercices.map((x, i) => (x.amrap && x.bloc === e.bloc ? i : -1)).filter((i) => i >= 0);
       etapes.push({ type: "amrap", k, ks, minutes: e.amrap });
       etapes.push({ type: "ressenti", k, ks, amrap: true });
+      return;
+    } else if (e.tournant) {
+      if (k > 0 && exercices[k - 1].tournant && exercices[k - 1].bloc === e.bloc) return;
+      const ks = exercices.map((x, i) => (x.tournant && x.bloc === e.bloc ? i : -1)).filter((i) => i >= 0);
+      if (e.pause) etapes.push({ type: "repos", k, duree: e.pause, avantEmom: true });
+      etapes.push({ type: "emom", k, ks, rotation: rotations[e.bloc], minutes: e.tournant });
+      etapes.push({ type: "ressenti", k, ks, tournant: true });
       return;
     } else if (e.emom) {
       if (e.pause) etapes.push({ type: "repos", k, duree: e.pause, avantEmom: true });
@@ -96,6 +122,7 @@ export function construireSeance(r) {
 export function prescription(e) {
   if (e.emom) return `EMOM ${e.series} min`;
   if (e.amrap) return `${e.reps ?? "?"}${e.unite ? ` ${e.unite}` : ""} / tour`;
+  if (e.tournant) return `${e.series} × ${e.reps ?? "?"}${e.unite ? ` ${e.unite}` : ""}`;
   if (e.max && e.series <= 1) return e.reps ?? "Max";
   return `${e.series} × ${e.reps ?? "?"}`;
 }

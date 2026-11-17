@@ -141,7 +141,9 @@ def enregistrer(db: Session, utilisateur_id: int, pictos: dict[str, list[str]]) 
 
 
 def exercices(description: str | None) -> list[str]:
-    return [m.group(2).strip() for l in (description or "").splitlines() if (m := RE_EXERCICE.match(l))]
+    # « Repos » : minute de repos d'un EMOM en alternance, pas un exercice
+    return [m.group(2).strip() for l in (description or "").splitlines()
+            if (m := RE_EXERCICE.match(l)) and m.group(2).strip().lower() != "repos"]
 
 
 def a_verifier(db: Session, utilisateur_id: int, descriptions: list[str | None]) -> tuple[list[str], list[dict]]:

@@ -60,7 +60,7 @@ class Exercice(BaseModel):
 
 class Section(BaseModel):
     titre: str = Field("", max_length=60)
-    mode: Literal["series", "amrap", "test"] = "series"
+    mode: Literal["series", "amrap", "emom", "test"] = "series"
     duree_min: Optional[int] = Field(None, ge=1, le=180)
     exercices: list[Exercice] = Field(..., min_length=1, max_length=30)
 

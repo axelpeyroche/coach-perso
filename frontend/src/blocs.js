@@ -13,7 +13,7 @@ export const GENRES = [
   ["recup", "Récupération"],
   ["retour", "Retour au calme"],
 ];
-export const MODES_SECTION = [["series", "Séries"], ["amrap", "AMRAP"], ["test", "Test"]];
+export const MODES_SECTION = [["series", "Séries"], ["amrap", "AMRAP"], ["emom", "EMOM"], ["test", "Test"]];
 
 const SPORTS_MUSCU = new Set(["muscu", "hiit", "yoga"]);
 export const typePourSport = (sport) => (SPORTS_MUSCU.has(sport) ? "muscu" : "endurance");
@@ -101,6 +101,8 @@ function ligneEtape(e, nBloc) {
 function enteteSection(s, i) {
   const brut = sansParentheses(s.titre).toUpperCase();
   if (s.mode === "amrap") return `${brut.replace(/\s*\bAMRAP\b.*$/, "")} AMRAP ${s.duree_min || 10} MIN`.trim();
+  // EMOM en alternance : un exercice du bloc par minute, à tour de rôle
+  if (s.mode === "emom") return `${brut.replace(/\s*\bEMOM\b.*$/, "")} EMOM ${s.duree_min || 9} MIN`.trim();
   if (s.mode === "test") return /\bTEST\b/.test(brut) ? brut : `${brut} TEST`.trim();
   const titre = brut || `BLOC ${i + 1}`;
   return s.duree_min ? `${titre} (${s.duree_min}')` : titre;
@@ -116,6 +118,8 @@ function ligneExercice(x, n, mode) {
     presc = `${series} × max en ${reps || "1'"}`;
   } else if (mode === "amrap") {
     presc = `${reps || "?"}${unite ? ` ${unite}` : ""}`;
+  } else if (mode === "emom") {
+    presc = `${series} × ${reps || "?"}${unite ? ` ${unite}` : ""}`;
   } else if (x.emom) {
     presc = `${series} × ${reps || "?"}${unite ? ` ${unite}` : ""} (1 série au début de chaque minute)`;
   } else {
@@ -124,7 +128,7 @@ function ligneExercice(x, n, mode) {
   }
   const charge = sansSeparateurs(x.charge).replace(/,/g, " ");
   const notes = sansParentheses(x.notes);
-  return `${n}. ${nom}${x.emom && mode !== "test" ? " EMOM" : ""} : ${presc}${charge ? ` — ${charge}` : ""}${notes ? ` (${notes})` : ""}`;
+  return `${n}. ${nom}${x.emom && mode !== "test" && mode !== "emom" ? " EMOM" : ""} : ${presc}${charge ? ` — ${charge}` : ""}${notes ? ` (${notes})` : ""}`;
 }
 
 // ── Description lisible ────────────────────────────────────────────────────
@@ -160,6 +164,7 @@ export function dureeEstimee(structure) {
     if (propre(structure.echauffement)) s += 600;
     for (const sec of structure.sections) {
       if (sec.mode === "amrap") { s += (sec.duree_min || 10) * 60; continue; }
+      if (sec.mode === "emom") { s += (sec.duree_min || 9) * 60; continue; }
       if (sec.duree_min) { s += sec.duree_min * 60; continue; }
       for (const x of sec.exercices) {
         const n = Math.max(1, Number(x.series) || 1);
@@ -241,9 +246,9 @@ const estTest = (s) => !s.amrap && (/\bTEST\b/i.test(s.titre ?? "") || s.exercic
 
 function muscuDepuis(r) {
   const sections = r.sections.slice(0, 12).map((s) => ({
-    titre: (s.titre ?? "").replace(/\s*AMRAP.*$/i, "").replace(/^bloc \d+$/i, "").trim().slice(0, 60),
-    mode: s.amrap ? "amrap" : estTest(s) ? "test" : "series",
-    duree_min: s.amrap ?? (s.duree ? parseInt(s.duree, 10) || null : null),
+    titre: (s.titre ?? "").replace(/\s*(?:AMRAP|EMOM \d).*$/i, "").replace(/^bloc \d+$/i, "").trim().slice(0, 60),
+    mode: s.amrap ? "amrap" : s.emom ? "emom" : estTest(s) ? "test" : "series",
+    duree_min: s.amrap ?? s.emom ?? (s.duree ? parseInt(s.duree, 10) || null : null),
     exercices: s.exercices.slice(0, 30).map((e) => ({
       nom: e.nom.slice(0, 80),
       series: Math.max(1, Math.min(60, parseInt(e.series, 10) || 1)),
