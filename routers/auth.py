@@ -197,7 +197,7 @@ def me(current_user: Utilisateur = Depends(get_current_user), db: Session = Depe
     }
 
 
-@router.get("/api/auth/import-token", summary="Retourne (et génère si besoin) le token d'import du raccourci iOS")
+@router.get("/api/auth/import-token", summary="Retourne (et génère si besoin) le token de synchro (GitHub Actions)")
 def get_import_token(current_user: Utilisateur = Depends(get_current_user), db: Session = Depends(obtenir_session)):
     if not current_user.import_token:
         current_user.import_token = _secrets.token_urlsafe(32)

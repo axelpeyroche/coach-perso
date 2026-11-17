@@ -70,7 +70,7 @@ def creer_tables() -> None:
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS strava_derniere_synchro TIMESTAMP",
         # Token Claude (plan d'entraînement)
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS claude_token VARCHAR(64)",
-        # Séances détectées par le raccourci puis supprimées
+        # Séances reçues automatiquement puis supprimées
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS seances_ignorees TEXT",
         # Synchro Intervals.icu (séances + tracés GPS)
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS intervals_athlete_id VARCHAR(30)",

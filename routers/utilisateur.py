@@ -253,6 +253,7 @@ _PURGE_ANCIENNES_TABLES = [
     "DELETE FROM biometries_utilisateurs WHERE utilisateur_id = :u",
     "DELETE FROM push_subscriptions WHERE utilisateur_id = :u",
     "DELETE FROM messages_chat_coach WHERE utilisateur_id = :u",
+    "DELETE FROM echantillons_sante WHERE utilisateur_id = :u",  # ancien raccourci iOS (retiré)
 ]
 
 

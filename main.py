@@ -16,8 +16,6 @@ import os
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.exceptions import RequestValidationError
-from fastapi.exception_handlers import request_validation_exception_handler
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
@@ -129,18 +127,6 @@ async def _entetes_securite(request: Request, call_next):
     elif request.url.path in ("/docs", "/redoc"):
         del reponse.headers["Content-Security-Policy"]  # la page de doc charge ses scripts depuis un CDN
     return reponse
-
-
-@app.exception_handler(RequestValidationError)
-async def _handler_validation(request: Request, exc: RequestValidationError):
-    """Le raccourci iOS n'affiche rien d'une réponse 422 : pour l'import, on renvoie 200 avec la cause."""
-    if request.url.path == "/api/activites/import":
-        e = (exc.errors() or [{}])[0]
-        lieu = ".".join(str(x) for x in e.get("loc", ()) if x != "body")
-        recu = repr(e.get("input"))[:80] if e.get("type") != "missing" else ""
-        return JSONResponse({"ok": False, "message": f"Requête refusée : {e.get('msg', 'invalide')}"
-                             + (f" (champ {lieu})" if lieu else "") + (f" — reçu {recu}" if recu else "")})
-    return await request_validation_exception_handler(request, exc)
 
 
 @app.exception_handler(Exception)

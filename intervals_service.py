@@ -7,7 +7,7 @@ Chaque séance est fusionnée avec celle du carnet qui commence au même moment 
 puis son tracé est enregistré et rattaché comme un GPX de l'export Santé. Le flux de FC sert
 à calculer les zones et la dérive cardiaque, les autres flux donnent la puissance, la foulée,
 l'oscillation verticale, le temps de contact et les pas ; le suivi « wellness » apporte le sommeil,
-la FC au repos, la VFC et la VO2max (sans écraser les valeurs envoyées par le raccourci).
+la FC au repos, la VFC et la VO2max (sans écraser les valeurs déjà présentes).
 """
 from __future__ import annotations
 
@@ -211,7 +211,7 @@ def analyse_fc(streams: list, user: Utilisateur, sport: str, duree_sec: Optional
 
 
 def resume_flux(streams: list, sport: str) -> dict:
-    """Moyennes de la séance tirées de ses flux, avec les mêmes clés que le raccourci iOS :
+    """Moyennes de la séance tirées de ses flux, (mêmes clés que l'ancien raccourci iOS) :
     puissance moyenne / max, foulée, oscillation verticale, temps de contact, pas, FC min."""
     par_type = {s.get("type"): (s.get("data") or []) for s in streams or []}
     temps = par_type.get("time") or []
@@ -256,8 +256,8 @@ def resume_flux(streams: list, sport: str) -> dict:
 
 def synchroniser_wellness(db: Session, user: Utilisateur, depuis, jusqu_a, completer: bool = False) -> tuple[int, dict]:
     """Sommeil de chaque nuit (durée, phases et score via Intervals Companion, FC moyenne, SpO2, respiration),
-    pas de la journée ; FC repos, VFC (SDNN) et VO2max seulement pour les jours où le
-    raccourci n'a rien envoyé (ses valeurs restent la référence).
+    pas de la journée ; FC repos, VFC (SDNN) et VO2max seulement pour les jours sans valeur
+    (celles déjà présentes, dont l'ancien raccourci iOS, restent la référence).
     completer=True : n'ajoute que les jours absents du carnet, sans modifier aucune valeur existante.
     Retourne (mesures enregistrées, {type: nombre de jours fournis par Intervals.icu})."""
     athlete = user.intervals_athlete_id or "0"
@@ -428,7 +428,7 @@ def synchroniser(db: Session, user: Utilisateur, force: bool = False) -> dict:
         streams = _appel(user.intervals_cle, f"/activity/{urllib.parse.quote(iid)}/streams.json", params)
         if besoin_fc:
             analyse = analyse_fc(streams, user, act.sport, act.duree_sec)
-            # Les valeurs déjà présentes (raccourci, export Santé, saisie) restent
+            # Les valeurs déjà présentes (ancien raccourci, export Santé, saisie) restent
             cs.fusionner_details(act, {"zones_fc": analyse.get("zones_fc"), **resume_flux(streams, act.sport)})
             cs.fusionner_details(act, {"derive_fc": analyse.get("derive_fc"), "durabilite_pct": analyse.get("durabilite_pct"),
                                        "fc_soutenue": analyse.get("fc_soutenue"),

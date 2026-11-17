@@ -19,7 +19,7 @@ from typing import Iterable, Optional
 from sqlalchemy import or_, text
 from sqlalchemy.orm import Session
 
-from models import Activite, EchantillonSante, MesureSante, Objectif, SeancePrevue, TraceGPS, Utilisateur
+from models import Activite, MesureSante, Objectif, SeancePrevue, TraceGPS, Utilisateur
 
 # ---------------------------------------------------------------------------
 # Sports
@@ -333,7 +333,7 @@ def importer_activite(db: Session, user_id: int, source: str, donnees: dict,
             if det_p.get("fin") and not _sans_heure(debut) and debut > fin_activite(p) + timedelta(minutes=1):
                 continue  # commence après la fin connue de la séance : sortie suivante
             if _detectee_auto(p) and not _sans_heure(debut) and abs((p.debut - debut).total_seconds()) <= 15 * 60:
-                # Séance reconstituée par le raccourci : la vraie séance (export Santé…)
+                # Ancienne séance reconstituée par le raccourci iOS : la vraie séance
                 # la remplace, en gardant ce qui a été calculé ou saisi entre-temps
                 _remplacer_detectee(p, donnees)
                 if id_externe and p.source == source:
@@ -1166,32 +1166,8 @@ def importer_mesures(db: Session, user_id: int, items: Iterable[tuple[str, date,
     return bilan
 
 
-# ---------------------------------------------------------------------------
-# Échantillons Apple Santé rattachés aux séances (raccourci iOS)
-# ---------------------------------------------------------------------------
-
-# type d'échantillon → unité attendue (conversions faites par le routeur)
-ECHANTILLONS = {
-    "fc":          "bpm",
-    "puissance":   "W",
-    "vitesse":     "km/h",
-    "foulee":      "m",
-    "oscillation": "cm",
-    "contact_sol": "ms",
-    "pas":         "pas",
-    "effort":      "effort noté (1-10)",
-    "effort_estime": "effort estimé par la montre (1-10)",
-    # Servent à reconstituer les séances quand Raccourcis ne donne pas les entraînements
-    "exercice":      "min",
-    "distance":      "km (marche et course)",
-    "distance_velo": "km",
-    "energie":       "kcal",
-}
+# Titre des anciennes séances reconstituées par le raccourci iOS (fonction retirée)
 TITRE_A_PRECISER = "Séance à préciser"
-SEANCE_MIN = 15          # minutes d'exercice consécutives pour former une séance
-SEANCE_MIN_COURTE = 6    # suffisent si la course ou le vélo est avéré (vélotaf)
-MARGE_CUMULS = timedelta(minutes=3)  # distance et énergie comptées encore un peu après la fin de l'exercice
-PAUSE_MAX = 5            # minutes sans exercice tolérées dans une séance
 
 
 def _details_dict(a: Activite) -> dict:
@@ -1219,16 +1195,6 @@ def fusionner_details(a: Activite, nouveaux: dict, ecraser: bool = False) -> Non
         if v is not None and (ecraser or k not in det):
             det[k] = v
     a.details = json.dumps(det, ensure_ascii=False) if det else None
-
-
-def _moyenne_ponderee(points: list[tuple[datetime, float]], fin: datetime) -> tuple[float, list[float]]:
-    """Moyenne pondérée par le temps (un point vaut jusqu'au suivant, 30 s max)."""
-    poids = []
-    for i, (d, _) in enumerate(points):
-        suivant = points[i + 1][0] if i + 1 < len(points) else min(fin, d + timedelta(seconds=5))
-        poids.append(max(1.0, min(30.0, (suivant - d).total_seconds())))
-    total = sum(poids)
-    return sum(v * p for (_, v), p in zip(points, poids)) / total, poids
 
 
 def bornes_utilisateur(user: Utilisateur) -> Optional[list[int]]:
@@ -1290,160 +1256,6 @@ def _zones_fc(points, poids, fc_max: Optional[int], fc_repos: Optional[int],
         minutes[sum(v >= b for b in bornes)] += p / 60
     lim = [None] + bornes + [None]
     return [{"min": lim[i], "max": lim[i + 1], "min_passees": round(minutes[i], 1)} for i in range(5)]
-
-
-def enrichir_activites(db: Session, user: Utilisateur, ech: dict[str, list[tuple[datetime, float]]]) -> int:
-    """
-    Complète les séances avec les échantillons bruts envoyés par le raccourci
-    (FC, puissance, vitesse, foulée, oscillation, temps de contact, pas, effort).
-    Un champ n'est rempli que s'il est vide ou s'il a déjà été calculé ainsi :
-    les valeurs de l'export Santé ou saisies à la main ne sont pas écrasées.
-    Retourne le nombre de séances complétées.
-    """
-    dates = [d for pts in ech.values() for d, _ in pts]
-    if not dates:
-        return 0
-    acts = (
-        db.query(Activite)
-        .filter(Activite.utilisateur_id == user.id,
-                Activite.debut >= min(dates) - timedelta(days=1), Activite.debut <= max(dates))
-        .all()
-    )
-    fenetres = {a.id: (a.debut, fin_activite(a)) for a in acts if a.duree_sec}
-
-    # Un score d'effort se rattache à la séance dont le début est le plus proche
-    efforts: dict[tuple[int, str], float] = {}
-    for t in ("effort", "effort_estime"):
-        for d, v in ech.get(t, []):
-            proches = [(abs((d - deb).total_seconds()), aid) for aid, (deb, fin) in fenetres.items()
-                       if deb - timedelta(minutes=3) <= d <= fin + timedelta(minutes=3)]
-            if proches:
-                efforts[(min(proches)[1], t)] = v
-
-    n = 0
-    for a in acts:
-        if a.id not in fenetres:
-            continue
-        debut, fin = fenetres[a.id]
-        det = _details_dict(a)
-        calc = set(det.get("champs_raccourci", []))
-        avant = (a.fc_moyenne_bpm, a.fc_max_bpm, a.rpe, a.calories, a.distance_km, a.details)
-
-        def colonne(champ, v):
-            if v is not None and (getattr(a, champ) is None or champ in calc):
-                setattr(a, champ, v)
-                calc.add(champ)
-
-        def detail(cle, v):
-            if v is not None and (cle not in det or cle in calc):
-                det[cle] = v
-                calc.add(cle)
-
-        nb = dict(det.get("nb_echantillons") or {})
-
-        def dans(t, marge=timedelta(0)):
-            # Un envoi plus pauvre que le précédent (fenêtre tronquée) ne recalcule rien
-            pts = sorted((d, v) for d, v in ech.get(t, []) if debut <= d <= fin + marge)
-            if not pts or len(pts) < nb.get(t, 0):
-                return []
-            nb[t] = len(pts)
-            return pts
-
-        fc = dans("fc")
-        if len(fc) >= 3:
-            moy, poids = _moyenne_ponderee(fc, fin)
-            colonne("fc_moyenne_bpm", round(moy))
-            colonne("fc_max_bpm", round(max(v for _, v in fc)))
-            detail("fc_min_bpm", round(min(v for _, v in fc)))
-            detail("zones_fc", _zones_fc(fc, poids, user.fc_max, user.fc_repos, bornes_utilisateur(user)))
-            if a.sport in SPORTS_PIED:
-                detail("fc_soutenue", fc_soutenue([((d - fc[0][0]).total_seconds(), v) for d, v in fc]))
-        for t, cle_moy, cle_max in (("puissance", "puissance_moy_w", "puissance_max_w"),
-                                    ("vitesse", "vitesse_moy_kmh", None), ("foulee", "foulee_m", None),
-                                    ("oscillation", "oscillation_cm", None), ("contact_sol", "contact_sol_ms", None)):
-            pts = dans(t)
-            if pts:
-                detail(cle_moy, round(_moyenne_ponderee(pts, fin)[0], 2))
-                if cle_max:
-                    detail(cle_max, round(max(v for _, v in pts), 2))
-        if det.get("detection_auto"):
-            # Séance reconstituée : distance et calories peuvent arriver par un autre raccourci
-            # Un cumul ne fait que grandir avec plus de données : une valeur plus grande remplace
-            cal = sum(v for _, v in dans("energie", MARGE_CUMULS))
-            if cal and (a.calories is None or round(cal) > a.calories):
-                a.calories = round(cal)
-                calc.add("calories")
-            t_dist = {"course": "distance", "velo": "distance_velo"}.get(a.sport)
-            dist = sum(v for _, v in dans(t_dist, MARGE_CUMULS)) if t_dist else 0
-            if dist >= 0.1 and (a.distance_km is None or round(dist, 3) > a.distance_km):
-                a.distance_km = round(dist, 3)
-                calc.add("distance_km")
-        pas = dans("pas")
-        if pas:
-            detail("pas", round(sum(v for _, v in pas)))
-
-        note = efforts.get((a.id, "effort"))
-        estime = efforts.get((a.id, "effort_estime"))
-        if estime is not None:
-            detail("effort_estime_apple", round(estime, 1))
-        if note is not None and (a.rpe is None or det.get("rpe_source") == "estime_apple"):
-            a.rpe = max(1, min(10, round(note)))  # effort noté sur la montre = RPE confirmé
-            det.pop("rpe_source", None)
-        elif estime is not None and (a.rpe is None or det.get("rpe_source") == "estime_apple"):
-            a.rpe = max(1, min(10, round(estime)))
-            det["rpe_source"] = "estime_apple"
-
-        if calc:
-            det["champs_raccourci"] = sorted(calc)
-        if nb:
-            det["nb_echantillons"] = nb
-        a.details = json.dumps(det, ensure_ascii=False) if det else None
-        if (a.fc_moyenne_bpm, a.fc_max_bpm, a.rpe, a.calories, a.distance_km, a.details) != avant:
-            n += 1
-    db.flush()
-    return n
-
-
-CONSERVATION_ECHANTILLONS = 21  # jours
-
-
-def stocker_echantillons(db: Session, user_id: int,
-                         ech: dict[str, list[tuple[datetime, float]]],
-                         autour: Iterable[datetime] = ()) -> dict[str, list[tuple[datetime, float]]]:
-    """
-    Enregistre les échantillons reçus (chaque type remplace ce qui était stocké sur sa
-    période) et renvoie tous ceux connus autour de cette période, tous types confondus.
-    Plusieurs raccourcis peuvent ainsi envoyer chacun une partie des données (FC d'un
-    côté, minutes d'exercice de l'autre) : la séance est détectée et complétée avec
-    l'ensemble, quel que soit l'ordre des envois. `autour` : dates à couvrir en plus
-    (entraînements reçus sans échantillon dans le même envoi).
-    """
-    dates = [d for pts in ech.values() for d, _ in pts] + list(autour)
-    if not dates:
-        return {}
-    for t, pts in ech.items():
-        uniques = dict(sorted(pts))  # une valeur par horodatage, la dernière reçue
-        (db.query(EchantillonSante)
-           .filter(EchantillonSante.utilisateur_id == user_id, EchantillonSante.type == t,
-                   EchantillonSante.horodatage >= min(uniques), EchantillonSante.horodatage <= max(uniques))
-           .delete(synchronize_session=False))
-        db.execute(EchantillonSante.__table__.insert(), [
-            {"utilisateur_id": user_id, "type": t, "horodatage": d, "valeur": v} for d, v in uniques.items()
-        ])
-    (db.query(EchantillonSante)
-       .filter(EchantillonSante.utilisateur_id == user_id,
-               EchantillonSante.horodatage < datetime.now() - timedelta(days=CONSERVATION_ECHANTILLONS))
-       .delete(synchronize_session=False))
-    db.flush()
-    connus: dict[str, list[tuple[datetime, float]]] = defaultdict(list)
-    for t, d, v in (db.query(EchantillonSante.type, EchantillonSante.horodatage, EchantillonSante.valeur)
-                    .filter(EchantillonSante.utilisateur_id == user_id, EchantillonSante.valeur > 0,
-                            EchantillonSante.horodatage >= min(dates) - timedelta(days=1),
-                            EchantillonSante.horodatage <= max(dates) + timedelta(days=1))
-                    .order_by(EchantillonSante.horodatage)):
-        if t != "fc" or v <= 250:  # FC additionnée par un envoi « groupé par minute »
-            connus[t].append((d, v))
-    return dict(connus)
 
 
 # ---------------------------------------------------------------------------
@@ -1575,85 +1387,10 @@ def _ignorees(user: Utilisateur) -> list[str]:
 
 
 def memoriser_seance_ignoree(user: Utilisateur, a: Activite) -> None:
-    """Une séance reconstituée (ou reçue d'Intervals.icu) qu'on supprime ne doit pas réapparaître
-    au prochain envoi."""
+    """Une séance reçue d'Intervals.icu (ou reconstituée par l'ancien raccourci) qu'on supprime
+    ne doit pas réapparaître à la synchro suivante."""
     if (_detectee_auto(a) or _details_dict(a).get("intervals_id")) and a.debut:
         user.seances_ignorees = json.dumps((_ignorees(user) + [a.debut.isoformat()])[-60:])
-
-
-def _blocs_exercice(points: list[tuple[datetime, float]]) -> list[tuple[datetime, datetime, float]]:
-    """Regroupe les minutes d'exercice en blocs continus → [(début, fin, minutes)]."""
-    blocs = []
-    for d, minutes in sorted(points):
-        fin = d + timedelta(minutes=max(1.0, minutes))
-        if blocs and d - blocs[-1][1] <= timedelta(minutes=PAUSE_MAX):
-            deb, f, m = blocs[-1]
-            blocs[-1] = (deb, max(f, fin), m + minutes)
-        else:
-            blocs.append((d, fin, minutes))
-    return [b for b in blocs if b[2] >= SEANCE_MIN_COURTE]
-
-
-def detecter_seances(db: Session, user: Utilisateur, ech: dict[str, list[tuple[datetime, float]]]) -> int:
-    """
-    Reconstitue les séances à partir des minutes d'exercice de l'Apple Watch,
-    quand Raccourcis ne donne pas accès aux entraînements. Le type est déduit des
-    autres échantillons : métriques de course → course, distance à vélo → vélo,
-    marche rapide → ignorée, sinon « Séance à préciser ». Sur iPhone, Raccourcis
-    plante en lisant les distances : sans aucune distance reçue, un bloc sans
-    métrique de course est compté comme du vélo (corrigeable dans le carnet).
-    Un créneau déjà couvert
-    par une séance (importée, saisie ou détectée) n'est pas recréé.
-    Retourne le nombre de séances créées.
-    """
-    blocs = _blocs_exercice(ech.get("exercice", []))
-    if not blocs:
-        return 0
-    existantes = [
-        (a.debut, fin_activite(a)) for a in db.query(Activite)
-        .filter(Activite.utilisateur_id == user.id,
-                Activite.debut >= blocs[0][0] - timedelta(days=1), Activite.debut <= blocs[-1][1])
-        .all()
-    ]
-    ignorees = set(_ignorees(user))
-    somme = lambda t, deb, fin: sum(v for d, v in ech.get(t, []) if deb <= d < fin)
-    compte = lambda t, deb, fin: sum(1 for d, _ in ech.get(t, []) if deb <= d < fin)
-    sans_distance = not ech.get("distance") and not ech.get("distance_velo")
-
-    n = 0
-    for deb, fin, minutes in blocs:
-        deb, fin = deb.replace(second=0, microsecond=0), fin.replace(second=0, microsecond=0)
-        if deb.isoformat() in ignorees or any(d <= fin and f >= deb for d, f in existantes):
-            continue
-        heures = (fin - deb).total_seconds() / 3600
-        fin_cumuls = fin + MARGE_CUMULS
-        dist_pied, dist_velo = somme("distance", deb, fin_cumuls), somme("distance_velo", deb, fin_cumuls)
-        course = sum(compte(t, deb, fin) for t in ("vitesse", "puissance", "foulee", "oscillation", "contact_sol"))
-        if course >= 3 or (dist_pied >= 1 and dist_pied / heures >= 7.5):
-            sport, dist = "course", dist_pied
-        elif dist_velo >= 1:
-            sport, dist = "velo", dist_velo
-        elif sans_distance:
-            sport, dist = "velo", None
-        elif dist_pied >= 1 and dist_pied / heures >= 3:
-            continue  # marche rapide : pas une séance d'entraînement
-        else:
-            sport, dist = "autre", None
-        # Un bloc court n'est gardé que si le sport est avéré (métriques de course, distance à vélo)
-        if minutes < SEANCE_MIN and not (course >= 3 or dist_velo >= 1):
-            continue
-        cal = somme("energie", deb, fin_cumuls)
-        donnees = {
-            "sport": sport, "titre": TITRE_A_PRECISER if sport == "autre" else None,
-            "debut": deb, "duree_sec": int((fin - deb).total_seconds()),
-            "distance_km": round(dist, 3) if dist else None, "calories": round(cal) if cal else None,
-            "details": {"fin": fin.isoformat(timespec="seconds"), "detection_auto": True, "sport_detecte": sport},
-        }
-        importer_activite(db, user.id, "apple_sante", donnees, id_externe=f"auto-{deb:%Y%m%dT%H%M}")
-        existantes.append((deb, fin))
-        n += 1
-    db.flush()
-    return n
 
 
 def parser_csv_mesures(contenu: str) -> Optional[list[tuple[str, date, float]]]:

@@ -74,8 +74,8 @@ class Utilisateur(Base):
     # Token Claude : lecture du carnet + écriture du plan (script outils/carnet.py)
     claude_token: Mapped[Optional[str]] = mapped_column(String(64))
 
-    # Séances détectées automatiquement puis supprimées (JSON : débuts ISO),
-    # pour ne pas les recréer au prochain envoi du raccourci
+    # Séances reçues automatiquement (Intervals.icu, ancien raccourci iOS) puis supprimées
+    # (JSON : débuts ISO), pour ne pas les recréer à la synchro suivante
     seances_ignorees: Mapped[Optional[str]] = mapped_column(Text)
 
     # Ancienne connexion Strava OAuth (conservée, non utilisée)
@@ -185,28 +185,6 @@ class NuitSommeil(Base):
     score_interruptions: Mapped[Optional[float]] = mapped_column(Float)
 
 
-class EchantillonSante(Base):
-    """
-    Échantillon brut reçu du raccourci iOS (FC, énergie, distance, minutes d'exercice…),
-    gardé quelques semaines pour que plusieurs raccourcis puissent envoyer chacun
-    une partie des données, dans n'importe quel ordre.
-    """
-    __tablename__ = "echantillons_sante"
-    __table_args__ = (
-        UniqueConstraint("utilisateur_id", "type", "horodatage", name="uq_echantillon_sante"),
-    )
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    utilisateur_id: Mapped[int] = mapped_column(ForeignKey("utilisateurs.id"), nullable=False, index=True)
-    type: Mapped[str] = mapped_column(String(20), nullable=False)
-    horodatage: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-    valeur: Mapped[float] = mapped_column(Float, nullable=False)
-
-
-# ---------------------------------------------------------------------------
-# Ancien objectif course (migré vers Objectif au besoin)
-# ---------------------------------------------------------------------------
-
 class ObjectifCourse(Base):
     """
     Prochain objectif de course de l'utilisateur.
@@ -234,7 +212,7 @@ class Activite(Base):
     """
     Une activité sportive réellement effectuée — cœur du carnet.
 
-    Provient d'une saisie manuelle, d'Apple Santé (raccourci iOS) ou d'un
+    Provient d'une saisie manuelle, d'Intervals.icu, d'Apple Santé (ancien raccourci iOS) ou d'un
     fichier importé (export Strava, CSV générique).
     `id_externe` permet de dédoublonner les imports répétés d'une même source.
     """

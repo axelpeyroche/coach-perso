@@ -10,10 +10,10 @@ import logging
 import re
 import secrets as _secrets
 from datetime import date, datetime, timedelta, timezone
-from typing import Any, Optional, Union
+from typing import Any, Optional
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import PlainTextResponse, Response
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
@@ -483,114 +483,9 @@ def carte_traces(
                     media_type="application/json")
 
 
-class ActiviteImportee(BaseModel):
-    """Format souple accepté depuis un raccourci iOS (Apple Santé) ou un script.
-    Les nombres peuvent arriver tels que iOS les écrit (« 10,2 km », « 690 kcal »,
-    « 52 min ») et les dates au format ISO ou localisé (« 5 oct. 2026 à 07:30 »)."""
-    id: Optional[str] = None
-    type: Optional[str] = None           # "Running", "Course à pied", "Cycling"…
-    sport: Optional[str] = None
-    titre: Optional[str] = None
-    debut: Union[str, float]
-    fin: Optional[Union[str, float]] = None
-    duree: Any = None                    # unité libre (« 52 min », « 1:02:03 », secondes)
-    duree_sec: Any = None
-    duree_min: Any = None
-    distance: Any = None                 # unité libre (km par défaut, « 10 200 m », « 6,3 mi »)
-    distance_km: Any = None
-    distance_m: Any = None
-    dplus_m: Any = None
-    fc_moyenne: Any = None
-    fc_moyenne_bpm: Any = None
-    fc_max_bpm: Any = None
-    calories: Any = None                 # kcal (« 690 kcal », « 2 890 kJ »)
-    energie: Any = None
-    rpe: Any = None
-    notes: Optional[str] = None
-
-
-class MesureImportee(BaseModel):
-    type: str                            # fc_repos | vfc | vo2max (ou nom Apple)
-    date: Union[str, float]
-    valeur: Any
-
-
-class ImportActivitesSchema(BaseModel):
-    """En plus des listes ci-dessous, accepte à plat :
-    - une séance (champs d'ActiviteImportee à la racine, dès que `debut` est fourni) ;
-    - des mesures en listes parallèles `<type>_valeurs` / `<type>_dates`, sous forme de
-      liste JSON ou de texte (une valeur par ligne, comme iOS insère une liste)."""
-    model_config = ConfigDict(extra="allow")
-    token: str
-    source: str = "apple_sante"
-    activites: Optional[list[ActiviteImportee]] = None
-    activite: Optional[ActiviteImportee] = None
-    mesures: Optional[list[MesureImportee]] = None
-
-
-_RE_NOMBRE = re.compile(r"[-+]?(?:\d{1,3}(?:[   ]\d{3})+|\d+)(?:[.,]\d+)?")
 _MOIS = [("jan", 1), ("fev", 2), ("feb", 2), ("mar", 3), ("avr", 4), ("apr", 4), ("mai", 5), ("may", 5),
          ("juin", 6), ("jun", 6), ("juil", 7), ("jul", 7), ("aou", 8), ("aug", 8), ("sep", 9), ("oct", 10),
          ("nov", 11), ("dec", 12)]
-
-
-def _vide(v: Any) -> bool:
-    return v is None or (isinstance(v, str) and not v.strip())
-
-
-def _nombre_unite(v: Any) -> tuple[Optional[float], str]:
-    """« 10,2 km » → (10.2, "km") ; 42 → (42.0, "")."""
-    if _vide(v) or isinstance(v, bool):
-        return None, ""
-    if isinstance(v, (int, float)):
-        return float(v), ""
-    s = str(v).strip()
-    m = _RE_NOMBRE.search(s)
-    if not m:
-        return None, ""
-    n = float(re.sub(r"[   ]", "", m.group()).replace(",", "."))
-    return n, cs._sans_accents(s[m.end():]).strip().strip(".")
-
-
-def _distance_km(v: Any) -> Optional[float]:
-    n, u = _nombre_unite(v)
-    if n is None or n <= 0:
-        return None
-    if u.startswith("km"):
-        return n
-    if u.startswith("mi"):
-        return n * 1.609344
-    if u.startswith("m") or (not u and n > 300):
-        return n / 1000
-    return n
-
-
-def _duree_sec(v: Any, ecoule: Optional[float]) -> Optional[float]:
-    """Durée exprimée librement. Un nombre nu est lu en secondes ou en minutes
-    selon ce qui colle le mieux au temps écoulé entre début et fin."""
-    if _vide(v):
-        return None
-    s = re.sub(r"(?<=\d)[   ](?=\d{3}\b)", "", cs._sans_accents(str(v)).strip())
-    if re.fullmatch(r"\d+:\d{2}(:\d{2})?", s):
-        p = [int(x) for x in s.split(":")]
-        return p[0] * 3600 + p[1] * 60 + p[2] if len(p) == 3 else p[0] * 60 + p[1]
-    morceaux = re.findall(r"(\d+(?:[.,]\d+)?)\s*(h|min|mn|m|s)", s)
-    if morceaux:
-        mult = {"h": 3600, "min": 60, "mn": 60, "m": 60, "s": 1}
-        return sum(float(n.replace(",", ".")) * mult[u] for n, u in morceaux)
-    n, _ = _nombre_unite(v)
-    if n is None or n <= 0:
-        return None
-    if ecoule:
-        return min((n, n * 60), key=lambda d: abs(d - ecoule) if d <= ecoule * 1.05 else float("inf"))
-    return n if n > 300 else n * 60
-
-
-def _calories(v: Any) -> Optional[float]:
-    n, u = _nombre_unite(v)
-    if n is None or n <= 0:
-        return None
-    return n / 4.184 if u.startswith("kj") else n
 
 
 def _date_localisee(s: str) -> Optional[datetime]:
@@ -630,7 +525,7 @@ def _date_localisee(s: str) -> Optional[datetime]:
 
 def _date_import(v: Any, tz: ZoneInfo) -> datetime:
     """Comme _parse_datetime, mais une date avec fuseau (ex. « …Z ») est ramenée à
-    l'heure locale de l'utilisateur, et les formats localisés d'iOS sont acceptés."""
+    l'heure locale de l'utilisateur, et les formats localisés (« 5 oct. 2026 à 07:30 ») sont acceptés."""
     if isinstance(v, str):
         s = v.strip()
         try:
@@ -648,203 +543,6 @@ def _fuseau(user: Utilisateur) -> ZoneInfo:
         return ZoneInfo(user.fuseau_horaire or "Europe/Paris")
     except Exception:
         return ZoneInfo("Europe/Paris")
-
-
-def _convertir_import(x: ActiviteImportee, tz: ZoneInfo) -> tuple[str, dict]:
-    debut = _date_import(x.debut, tz)
-    ecoule = (_date_import(x.fin, tz) - debut).total_seconds() if not _vide(x.fin) else None
-    if ecoule is not None and ecoule <= 0:
-        ecoule = None
-    duree = _nombre_unite(x.duree_sec)[0]
-    if duree is None and _nombre_unite(x.duree_min)[0] is not None:
-        duree = _nombre_unite(x.duree_min)[0] * 60
-    if duree is None:
-        duree = _duree_sec(x.duree, ecoule)
-    if duree is None:
-        duree = ecoule
-    dist = _nombre_unite(x.distance_km)[0]
-    if dist is None:
-        m = _nombre_unite(x.distance_m)[0]
-        dist = m / 1000 if m else _distance_km(x.distance)
-    sport = cs.normaliser_sport(x.sport or x.type)
-    entier = lambda v: int(round(v)) if v else None
-    num = lambda v: _nombre_unite(v)[0]
-    rpe = num(x.rpe)
-    donnees = {
-        # Le type Apple ne sert de titre que s'il n'a pas d'équivalent dans le carnet (« Danse »…)
-        "sport": sport, "titre": x.titre or (x.type if x.type and not x.sport and sport == "autre" else None),
-        "debut": debut, "duree_sec": entier(duree), "distance_km": round(dist, 3) if dist else None,
-        "dplus_m": entier(num(x.dplus_m)), "fc_moyenne_bpm": entier(num(x.fc_moyenne_bpm) or num(x.fc_moyenne)),
-        "fc_max_bpm": entier(num(x.fc_max_bpm)), "calories": entier(_calories(x.calories) or _calories(x.energie)),
-        "rpe": rpe if rpe and 1 <= rpe <= 10 else None, "notes": x.notes,
-    }
-    id_ext = x.id or f"{sport}-{debut:%Y%m%dT%H%M}"
-    return id_ext, donnees
-
-
-def _liste(v: Any) -> list:
-    if _vide(v):
-        return []
-    if isinstance(v, list):
-        return v
-    return [l for l in str(v).splitlines() if l.strip()]
-
-
-def _serie(extra: dict, t: str, tz: ZoneInfo) -> list[tuple[datetime, float, str]]:
-    """Listes parallèles `<t>_valeurs` / `<t>_dates` → [(date, valeur, unité)]."""
-    points = []
-    for v, d in zip(_liste(extra.get(f"{t}_valeurs")), _liste(extra.get(f"{t}_dates"))):
-        n, unite = _nombre_unite(v)
-        try:
-            quand = _date_import(d, tz)
-        except HTTPException:
-            continue
-        if n is not None:
-            points.append((quand, n, unite))
-    return points
-
-
-def _mesures_a_plat(extra: dict, tz: ZoneInfo) -> list[tuple[str, date, float]]:
-    """Séries quotidiennes (FC repos, VFC, VO2max) : moyenne du jour, dernière valeur pour la VO2max."""
-    par_jour: dict[tuple[str, date], list[tuple[datetime, float]]] = {}
-    for t in ("fc_repos", "vfc", "vo2max"):  # le sommeil arrive par Intervals.icu (durée par nuit, pas une moyenne)
-        for quand, n, _ in _serie(extra, t, tz):
-            par_jour.setdefault((t, quand.date()), []).append((quand, n))
-    res = []
-    for (t, j), pts in sorted(par_jour.items(), key=lambda x: x[0][1]):
-        vs = [v for _, v in sorted(pts)]
-        res.append((t, j, vs[-1] if t == "vo2max" else sum(vs) / len(vs)))
-    return res
-
-
-def _entrainements_a_plat(extra: dict) -> list[ActiviteImportee]:
-    """Entraînements de la montre envoyés en listes parallèles (une ligne par entraînement) :
-    `entrainement_debuts` obligatoire, `entrainement_types` / `_fins` / `_durees` /
-    `_distances` / `_energies` facultatifs. Raccourcis saute les lignes vides : une liste
-    facultative qui n'a pas autant de lignes que les débuts est ignorée plutôt que décalée."""
-    debuts = _liste(extra.get("entrainement_debuts"))
-    if not debuts:
-        return []
-    colonnes = {}
-    for cle, champ in (("types", "type"), ("fins", "fin"), ("durees", "duree"),
-                       ("distances", "distance"), ("energies", "energie")):
-        valeurs = _liste(extra.get(f"entrainement_{cle}"))
-        if len(valeurs) == len(debuts):
-            colonnes[champ] = valeurs
-    return [ActiviteImportee(debut=d, **{c: v[i] for c, v in colonnes.items()}) for i, d in enumerate(debuts)]
-
-
-def _unite_echantillon(t: str, n: float, unite: str) -> Optional[float]:
-    """Ramène un échantillon à l'unité du carnet (km/h, m, cm, ms)."""
-    u = unite.lower().replace(" ", "")
-    if t == "vitesse":
-        if u in ("m/s", "ms") or (not u and n < 8):
-            return n * 3.6
-        if u in ("mi/h", "mph"):
-            return n * 1.609344
-        return n
-    if t == "foulee":
-        return n / 100 if u == "cm" or (not u and n > 3) else n
-    if t == "oscillation":
-        return n * 100 if u == "m" or (not u and n < 0.5) else (n / 10 if u == "mm" else n)
-    if t == "contact_sol":
-        return n * 1000 if u == "s" or (not u and n < 3) else n
-    if t == "puissance" and u == "kw":
-        return n * 1000
-    if t in ("distance", "distance_velo"):
-        return n / 1000 if u == "m" else (n * 1.609344 if u == "mi" else n)
-    if t == "energie":
-        return n / 4.184 if u == "kj" else n
-    if t == "exercice":
-        return n / 60 if u == "s" else (n * 60 if u == "h" else n)
-    return n
-
-
-def _echantillons(extra: dict, tz: ZoneInfo) -> dict[str, list[tuple[datetime, float]]]:
-    ech = {}
-    for t in cs.ECHANTILLONS:
-        pts = [(q, _unite_echantillon(t, n, u)) for q, n, u in _serie(extra, t, tz)]
-        # « Grouper par minute » renvoie aussi les minutes vides, à 0 : ce ne sont pas des mesures
-        pts = [(q, v) for q, v in pts if v and v > 0]
-        if t == "fc":
-            # Une FC « groupée par minute » est additionnée par Raccourcis (1 300 « bpm ») : invalide
-            pts = [(q, v) for q, v in pts if 25 <= v <= 250]
-        if pts:
-            ech[t] = pts
-    return ech
-
-
-@router.post("/api/activites/import", summary="Import d'activités (raccourci iOS / script) — auth par token d'import")
-def importer_activites(payload: ImportActivitesSchema, taches: BackgroundTasks,
-                       db: Session = Depends(obtenir_session)):
-    try:
-        return _importer_activites(payload, db, taches)
-    except HTTPException as e:
-        # Même chose pour un token invalide ou un envoi vide : le raccourci doit afficher la raison
-        return {"ok": False, "message": str(e.detail)}
-    except Exception as e:
-        # Le raccourci iOS n'affiche qu'un « problème est survenu » sur une erreur 500 : message lisible,
-        # mais sans le détail de l'exception (structure interne), qui reste dans les journaux du serveur.
-        db.rollback()
-        _log.exception("Import raccourci en échec")
-        return {"ok": False, "message": f"Erreur serveur ({type(e).__name__}) : réessaie plus tard"}
-
-
-def _importer_activites(payload: ImportActivitesSchema, db: Session, taches: Optional[BackgroundTasks] = None):
-    token = (payload.token or "").strip()
-    user = db.query(Utilisateur).filter(Utilisateur.import_token == token).first() if token else None
-    if not user:
-        raise HTTPException(401, "Token invalide : recopie-le depuis la page Sources du carnet")
-    tz = _fuseau(user)
-    extra = payload.model_extra or {}
-    lot = list(payload.activites or []) + ([payload.activite] if payload.activite else [])
-    if not _vide(extra.get("debut")):
-        lot.append(ActiviteImportee(**extra))
-    lot += _entrainements_a_plat(extra)  # importés avant la détection : leur créneau n'est pas redétecté
-    items_mesures = [(m.type, _date_import(m.date, tz).date(), _nombre_unite(m.valeur)[0])
-                     for m in payload.mesures or []] + _mesures_a_plat(extra, tz)
-    ech = _echantillons(extra, tz)
-    if not lot and not items_mesures and not ech:
-        recus = ", ".join(f"{k} ({len(_liste(v))})" for k, v in extra.items()) or "aucun"
-        exemple = next((str(_liste(v)[0])[:40] for k, v in extra.items() if k.endswith("_dates") and _liste(v)), None)
-        raise HTTPException(400, "Aucune activité ni mesure exploitable. Champs reçus : " + recus
-                            + (f". Exemple de date reçue : « {exemple} »" if exemple else ""))
-    source = payload.source if payload.source in ("apple_sante", "fichier", "strava") else "apple_sante"
-    bilan = {"cree": 0, "maj": 0, "fusion": 0, "inchange": 0}
-    for x in lot:
-        id_ext, donnees = _convertir_import(x, tz)
-        act, statut = cs.importer_activite(db, user.id, source, donnees, id_externe=id_ext)
-        bilan[statut] += 1
-        if act is not None and not _vide(x.fin):
-            # La fin réelle (pauses comprises) sert à rattacher les échantillons à la séance
-            cs.fusionner_details(act, {"fin": _date_import(x.fin, tz).isoformat(timespec="seconds")})
-    db.flush()
-    mesures = cs.importer_mesures(db, user.id, items_mesures)
-    recus = sum(len(p) for p in ech.values())
-    debuts = [_date_import(x.debut, tz) for x in lot]
-    ech = cs.stocker_echantillons(db, user.id, ech, autour=debuts)  # + ceux envoyés par les autres raccourcis
-    detectees = cs.detecter_seances(db, user, ech) if ech else 0
-    completees = cs.enrichir_activites(db, user, ech) if ech else 0  # FC, zones… des séances reçues aussi
-    cs.rattacher_traces(db, user.id)  # tracés importés avant que la séance n'existe
-    db.commit()
-    if taches is not None and user.intervals_cle:
-        from routers.intervals import synchro_en_arriere_plan
-        taches.add_task(synchro_en_arriere_plan, user.id)  # séances de la montre avec leur tracé GPS
-    morceaux = []
-    if lot:
-        morceaux.append(f"{len(lot)} séance(s) : {bilan['cree']} nouvelle(s), {bilan['maj'] + bilan['fusion']} déjà connue(s)")
-    if items_mesures:
-        morceaux.append(f"{mesures['cree'] + mesures['maj']} mesure(s) de forme"
-                        + (f", {mesures['ignore']} ignorée(s)" if mesures["ignore"] else ""))
-    if detectees:
-        morceaux.append(f"{detectees} séance(s) détectée(s)")
-    if recus:
-        morceaux.append(f"{recus} échantillon(s) reçu(s)")
-    if recus or completees:
-        morceaux.append(f"{completees} séance(s) complétée(s) (FC, puissance, effort…)")
-    return {"ok": True, **bilan, "mesures": mesures, "seances_detectees": detectees,
-            "seances_completees": completees,
-            "message": " · ".join(morceaux)}
 
 
 @router.post("/api/activites/import-fichier", summary="Import CSV (export Strava activities.csv ou CSV du carnet)")

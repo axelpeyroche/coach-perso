@@ -288,7 +288,7 @@ export const exporterCarnet = (format = "md") =>
   api.get("/export/carnet", { params: { format }, responseType: format === "json" ? "json" : "text" })
     .then((r) => r.data);
 
-// URL absolue de l'API (pour les liens à partager : lien d'analyse, raccourci iOS)
+// URL absolue de l'API (pour les liens à partager : lien d'analyse)
 export const urlApiAbsolue = () => {
   const base = api.defaults.baseURL || "/api";
   return base.startsWith("http") ? base.replace(/\/$/, "") : `${window.location.origin}${base}`;

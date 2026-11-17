@@ -254,21 +254,6 @@ def synchro_matin_autres_comptes(sauf_id: int) -> dict:
     return bilan
 
 
-def synchro_en_arriere_plan(user_id: int) -> None:
-    """Après un envoi du raccourci : récupère les nouvelles séances sans faire attendre l'iPhone."""
-    db = SessionLocal()
-    try:
-        user = db.get(Utilisateur, user_id)
-        if user and user.intervals_cle:
-            iv.synchroniser(db, user)
-            db.commit()
-    except Exception:
-        db.rollback()
-        _log.exception("Synchro Intervals.icu en arrière-plan en échec")
-    finally:
-        db.close()
-
-
 # ── Nuits importées par l'ancien raccourci / l'export Santé (fonction retirée) ──
 # Leur durée et leur score maison avaient remplacé ceux d'Intervals.icu : l'utilisateur peut les effacer,
 # puis le sommeil de ces jours est relu sur Intervals.icu.
