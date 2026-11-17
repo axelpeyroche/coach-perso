@@ -325,7 +325,7 @@ def _appel_unique(profil: str, corps: dict) -> dict:
         except Exception:
             msg = None
         if e.code in (401, 403):
-            raise ItineraireErreur("Clé OpenRouteService refusée : vérifie ORS_API_KEY dans Render.")
+            raise ItineraireErreur("Clé OpenRouteService refusée : vérifie ORS_API_KEY chez l'hébergeur.")
         if e.code == 429:
             raise ItineraireErreur("Quota OpenRouteService atteint pour le moment. Réessaie dans une minute.")
         if e.code in (500, 502, 503, 504):

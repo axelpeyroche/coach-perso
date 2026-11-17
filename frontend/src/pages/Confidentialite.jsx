@@ -2,7 +2,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../AuthContext";
 
 // Page publique (accessible sans compte) : ce que Mon Carnet enregistre et pourquoi
-const MISE_A_JOUR = "13 novembre 2026";
+const MISE_A_JOUR = "17 novembre 2026";
 
 function Bloc({ titre, children }) {
   return (
@@ -66,7 +66,7 @@ export default function Confidentialite() {
         </Bloc>
 
         <Bloc titre="Où sont stockées les données">
-          <p>Sur les serveurs de Render (hébergement de l'application et de la base de données), avec une connexion chiffrée.</p>
+          <p>L'application est hébergée par Northflank (Londres, Royaume-Uni) et la base de données par Neon (Francfort, Allemagne). Les échanges sont chiffrés.</p>
         </Bloc>
 
         <Bloc titre="Services tiers">

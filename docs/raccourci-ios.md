@@ -36,7 +36,7 @@ Chaque raccourci d'envoi suit le même modèle :
 2. **Définir la variable** : nom indiqué, entrée *Échantillons de santé*.
 
 **4. Obtenir le contenu de l'URL**
-- URL : `https://coach-perso.onrender.com/api/activites/import`
+- URL : `https://p01--mon-carnet--fqnw5psrcspx.code.run/api/activites/import`
 - **Afficher plus** → Méthode : **POST** · Corps de la requête : **JSON**
 - Champ `token` (Texte) : variable *Token*.
 - Pour chaque variable, deux champs **Texte** :
@@ -145,9 +145,8 @@ La séance est ensuite complétée : FC moyenne / max / min, zones, calories, di
 
 1. Lance **chaque** raccourci d'envoi une fois à la main (▶︎).
 2. iOS demande l'accès à Santé : **Tout activer** puis **Autoriser**.
-3. iOS demande l'autorisation d'envoyer N échantillons à `coach-perso.onrender.com` : choisis **Toujours autoriser**. Cette autorisation se donne raccourci par raccourci ; la refuser fait échouer le raccourci avec un message générique.
-4. Le premier appel peut prendre jusqu'à une minute : le serveur gratuit Render se réveille.
-5. Lance ensuite **Carnet – Master** : les 4 notifications doivent s'afficher.
+3. iOS demande l'autorisation d'envoyer N échantillons à `p01--mon-carnet--fqnw5psrcspx.code.run` : choisis **Toujours autoriser**. Cette autorisation se donne raccourci par raccourci ; la refuser fait échouer le raccourci avec un message générique.
+4. Lance ensuite **Carnet – Master** : les 4 notifications doivent s'afficher.
 
 ---
 

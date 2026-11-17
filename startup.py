@@ -1,5 +1,5 @@
 """
-Script de démarrage exécuté avant uvicorn sur Render.
+Script de démarrage exécuté avant uvicorn (voir Dockerfile).
 Crée les tables manquantes et applique les migrations de colonnes.
 """
 from database import creer_tables

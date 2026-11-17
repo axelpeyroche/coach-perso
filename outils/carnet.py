@@ -4,7 +4,7 @@ les séances et envoyer le plan d'entraînement.
 
 Configuration (variables d'environnement ou fichier `.env` à la racine du dépôt) :
     CARNET_TOKEN=...   token Claude (Sources → « Plan avec Claude Code »)
-    CARNET_API=...     facultatif, défaut https://coach-perso.onrender.com/api
+    CARNET_API=...     facultatif, défaut https://p01--mon-carnet--fqnw5psrcspx.code.run/api
 
 Exemples :
     python outils/carnet.py export                  # carnet complet en Markdown
@@ -46,7 +46,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-API_DEFAUT = "https://coach-perso.onrender.com/api"
+API_DEFAUT = "https://p01--mon-carnet--fqnw5psrcspx.code.run/api"
 RACINE = Path(__file__).resolve().parent.parent
 
 
@@ -75,7 +75,7 @@ def _appel(methode: str, chemin: str, params: dict | None = None, corps=None):
         "X-Carnet-Token": token, "Content-Type": "application/json", "User-Agent": "carnet-cli",
     })
     try:
-        # Render (offre gratuite) peut mettre ~1 min à sortir de veille
+        # Marge pour les calculs longs (le serveur ne dort pas sur Northflank)
         with urllib.request.urlopen(req, timeout=120) as r:
             brut = r.read().decode("utf-8")
             return json.loads(brut) if "json" in r.headers.get("Content-Type", "") else brut

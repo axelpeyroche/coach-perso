@@ -1,4 +1,4 @@
-# Mon Carnet en un seul service (Koyeb) : l'API FastAPI sert aussi l'interface React construite.
+# Mon Carnet en un seul service (Northflank) : l'API FastAPI sert aussi l'interface React construite.
 # La base de données reste à l'extérieur (Neon, DATABASE_URL) : rien n'est stocké dans le conteneur.
 
 # 1. Construction de l'interface (VITE_API_URL vide : l'API est à la même adresse, sous /api)

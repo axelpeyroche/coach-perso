@@ -48,7 +48,7 @@ class LoginSchema(BaseModel):
     password: str = Field(..., max_length=128)
 
 
-# Mettre INSCRIPTIONS_FERMEES=1 sur Render pour empêcher la création de nouveaux comptes
+# Mettre INSCRIPTIONS_FERMEES=1 chez l'hébergeur pour empêcher la création de nouveaux comptes
 INSCRIPTIONS_FERMEES = os.getenv("INSCRIPTIONS_FERMEES", "").strip().lower() in ("1", "true", "oui", "yes")
 # Bêta fermée : un code d'invitation est demandé, sauf INSCRIPTIONS_LIBRES=1 (ou base vide : premier compte)
 INSCRIPTIONS_LIBRES = os.getenv("INSCRIPTIONS_LIBRES", "").strip().lower() in ("1", "true", "oui", "yes")

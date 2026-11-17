@@ -37,7 +37,7 @@ app = FastAPI(
     version="2.0.0",
 )
 
-# Hébergement tout-en-un (Koyeb) : l'API sert aussi l'interface construite (frontend/dist),
+# Hébergement tout-en-un (Northflank) : l'API sert aussi l'interface construite (frontend/dist),
 # à la même adresse. Activé seulement si DOSSIER_INTERFACE pointe vers ce dossier (voir Dockerfile).
 _DIST = Path(os.getenv("DOSSIER_INTERFACE", "")).resolve() if os.getenv("DOSSIER_INTERFACE") else None
 if _DIST is not None and not (_DIST / "index.html").is_file():

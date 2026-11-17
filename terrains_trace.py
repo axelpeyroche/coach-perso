@@ -5,7 +5,7 @@ Les itinéraires calculés reçoivent le type de voie de BRouter ; une sortie en
 des positions. On rapproche donc chaque portion du tracé de la voie OSM la plus proche, lue
 dans les tuiles vectorielles gratuites d'OpenFreeMap (zoom 14, couche « transportation »),
 avec les mêmes règles que pour les itinéraires. Les tuiles sont lues une par une et oubliées
-aussitôt (mémoire limitée sur Render) ; seul le résultat par tracé est gardé en mémoire.
+aussitôt (mémoire limitée sur le serveur) ; seul le résultat par tracé est gardé en mémoire.
 """
 from __future__ import annotations
 

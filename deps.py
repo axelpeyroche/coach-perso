@@ -112,7 +112,7 @@ def verifier_mot_de_passe_robuste(mdp: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Limitation des tentatives (en mémoire : une seule instance sur Render)
+# Limitation des tentatives (en mémoire : une seule instance)
 # ---------------------------------------------------------------------------
 
 _tentatives: dict[str, deque] = defaultdict(deque)
@@ -120,7 +120,7 @@ _verrou = threading.Lock()
 
 
 def ip_client(request: Request) -> str:
-    # Derrière le proxy de Render : la dernière adresse ajoutée est celle vue par le proxy
+    # Derrière le proxy de l'hébergeur : la dernière adresse ajoutée est celle vue par le proxy
     fwd = request.headers.get("x-forwarded-for", "")
     return fwd.split(",")[-1].strip() if fwd else (request.client.host if request.client else "?")
 
