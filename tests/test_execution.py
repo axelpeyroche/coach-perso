@@ -38,7 +38,12 @@ def _seance(segments, sport="course"):
     return dc.Seance(temps, dist, [100.0] * len(temps), fc, None, sport)
 
 
-def _fartlek(efforts, recups, echauffement=1200, retour=600, marche=300, allure=297):
+SUIVIE = """Échauffement : 20' en endurance fondamentale, FC sous 145.
+Corps de séance : 6 × 1'30 allure 10 km (environ 4'55-5'00/km) · 1'30 de trot très lent entre chaque.
+Retour au calme : trot très facile jusqu'à la fin de la séance."""
+
+
+def _fartlek(efforts, recups, echauffement=1200, retour=600, marche=0, allure=297):
     seg = [(echauffement, 390, 130)]
     for i, d in enumerate(efforts):
         seg.append((d, allure, 165))
@@ -63,7 +68,8 @@ def test_fartlek_envoye_tel_que_prevu():
     assert "Échauffement\n- endurance fondamentale 20m" in texte
     # 6 efforts d'une minute à l'allure visée, puis 1 min 30 de récupération sans allure imposée
     assert "Corps de séance 6x\n- 1m 4:55/km-5:00/km Pace\n- trot très lent 1m30s" in texte
-    assert "- trot très facile 10m" in texte and "- marche 5m" in texte
+    # le retour au calme reste en endurance : pas de marche à la fin
+    assert "- trot très facile 10m" in texte and "marche" not in texte
     lignes = [l for l in texte.splitlines() if l.startswith("- ")]
     assert [l for l in lignes if "Pace" in l] == ["- 1m 4:55/km-5:00/km Pace"]
 
@@ -71,12 +77,25 @@ def test_fartlek_envoye_tel_que_prevu():
 def test_etapes_lues_dans_la_description():
     e = bl.etapes_depuis_description(FARTLEK)
     assert [(x["genre"], x["repetitions"], x["duree_s"]) for x in e] == [
-        ("echauffement", 1, 1200), ("corps", 6, 60), ("retour", 1, 600), ("retour", 1, 300)]
+        ("echauffement", 1, 1200), ("corps", 6, 60), ("retour", 1, 600)]
     assert (e[1]["recup_s"], e[1]["allure_min"], e[1]["allure_max"], e[0]["fc_max"]) == (90, "4:55", "5:00", 145)
     e = bl.etapes_depuis_description(VMA)
     assert (e[1]["repetitions"], e[1]["distance_m"], e[1]["recup_m"], e[1]["allure_min"]) == (10, 400, 200, "3:45")
     texte, _ = bl.texte_intervals("course", SEUIL, None)
     assert "Corps de séance 3x\n- au seuil 8m 4:40/km-4:45/km Pace\n- trot lent 2m" in texte
+
+
+def test_marche_seule_et_retour_libre():
+    # une séance course/marche garde sa marche : c'est tout son retour au calme
+    e = bl.etapes_depuis_description(SEUIL.replace("10' de trot facile", "5' de marche"))
+    assert (e[-1]["genre"], e[-1]["duree_s"]) == ("retour", 300)
+    # retour au calme sans durée : rien à guider sur la montre, mais l'étape existe pour l'analyse
+    e = bl.etapes_depuis_description(SUIVIE)
+    assert [(x["genre"], x["repetitions"], x["duree_s"]) for x in e] == [
+        ("echauffement", 1, 1200), ("corps", 6, 90), ("retour", 1, None)]
+    assert e[-1]["libre"] and e[1]["recup_s"] == 90
+    texte, guide = bl.texte_intervals("course", SUIVIE, None)
+    assert guide and "Retour au calme" not in texte and "Corps de séance 6x\n- 1m30s 4:55/km-5:00/km Pace" in texte
 
 
 # ── Reconnaissance du type ──────────────────────────────────────────────────
@@ -95,7 +114,7 @@ def test_type_fartlek():
 def test_plan_respecte():
     r = ex.analyser(_plan(FARTLEK), _fartlek([60] * 6, [90] * 5), None, "intervals")
     assert r["mode"] == "allure" and r["type"] == "fartlek"
-    assert [x["role"] for x in r["etapes"]] == ["echauffement"] + ["effort", "recup"] * 5 + ["effort", "retour", "retour"]
+    assert [x["role"] for x in r["etapes"]] == ["echauffement"] + ["effort", "recup"] * 5 + ["effort", "retour"]
     efforts = _roles(r, "effort")
     assert all(x["etat"] == "ok" and x["etat_allure"] == "ok" for x in efforts)
     assert all(abs(x["fait"]["duree_sec"] - 60) <= 8 for x in efforts)
@@ -113,9 +132,18 @@ def test_efforts_trop_rapides_et_trop_longs():
     assert len(efforts) == 6 and all(x["fait"] for x in efforts)
     assert [x["etat"] for x in efforts] == ["plus", "ok", "moins", "plus", "plus", "moins"]
     assert all(x["etat_allure"] == "rapide" for x in efforts)
-    assert r["etapes"][-1]["etat"] == "absent"  # la marche finale n'a pas été faite
+    assert r["etapes"][-1]["etat"] == "moins"  # retour au calme écourté
     assert r["resume"]["note"] < 65
     assert any("plus rapides" in p for p in r["phrases"])
+
+
+def test_retour_au_calme_libre():
+    r = ex.analyser(_plan(SUIVIE), _fartlek([90] * 6, [90] * 5, retour=420), None, "intervals")
+    assert all(x["etat"] == "ok" and abs(x["fait"]["duree_sec"] - 90) <= 8 for x in _roles(r, "effort"))
+    fin = r["etapes"][-1]
+    assert (fin["role"], fin["etat"], fin["prevu"]["libre"], fin["ecart_sec"]) == ("retour", "ok", True, None)
+    assert abs(fin["fait"]["duree_sec"] - 420) <= 10 and r["resume"]["verdict"] == "Plan suivi de près"
+    assert "| jusqu’à la fin |" in "\n".join(ex.texte_markdown({"jour": "2026-11-15", **r}))
 
 
 def test_efforts_manquants():
@@ -203,6 +231,20 @@ def test_bilan_de_la_fiche(db, user, monkeypatch):
     # export : une section dédiée, avec le tableau des étapes
     md = "\n".join(ex.texte_markdown({"jour": "2026-11-15", **b["execution"]}))
     assert "| Effort 6/6 |" in md and "Plan suivi de près" in md
+    p.description = FARTLEK
+    # consigne suivie ce jour-là : propre à l'activité, le plan n'est pas touché
+    monkeypatch.setattr(iv, "seance_brute", lambda u, act, points: (_fartlek([90] * 6, [90] * 5), None, "intervals"))
+    avant = ss.bilan(db, user, a)["execution"]
+    assert not avant["consigne_suivie"] and avant["resume"]["efforts_mesure_ok"] == 0
+    cs.fusionner_details(a, {"consigne_suivie": SUIVIE}, ecraser=True)
+    b = ss.bilan(db, user, a)
+    assert b["execution"]["consigne_suivie"] and b["execution"]["resume"]["efforts_mesure_ok"] == 6
+    assert b["consigne"] == {"plan": FARTLEK, "suivie": SUIVIE} and p.description == FARTLEK
+    assert "consigne réellement suivie" in "\n".join(ex.texte_markdown({"jour": "2026-11-15", **b["execution"]}))
+    det = json.loads(a.details)
+    det.pop("consigne_suivie")
+    a.details = json.dumps(det)
+    assert ss.bilan(db, user, a)["execution"]["resume"]["efforts_mesure_ok"] == 0
     # séance détachée du plan : plus d'analyse, le type redevient celui de l'enregistrement
     p.activite_id = None
     db.flush()

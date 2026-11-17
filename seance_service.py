@@ -703,4 +703,6 @@ def bilan(db: Session, user: Utilisateur, a: Activite) -> dict:
         "repetitions": reps,
         "prevu": pr,
         "execution": execution,
+        # Consigne du plan et, si elle a été saisie, celle réellement suivie ce jour-là
+        "consigne": {"plan": prevue.description or "", "suivie": ex.consigne_suivie(a)} if execution else None,
     }

@@ -1,8 +1,9 @@
 // Lecture d'une séance : bilan en trois phrases, type de séance (corrigeable),
 // répétitions détectées et comparaison avec la séance prévue au plan.
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
-import { getBilanActivite, setTypeSeance } from "../api";
+import { getBilanActivite, setConsigneSuivie, setTypeSeance } from "../api";
 import { fmtDuree, nombre } from "../carnet";
 import Aide from "./Aide";
 import { mmss } from "./FicheExtras";
@@ -253,6 +254,61 @@ function visee(p) {
   return p.zone ? `Z${p.zone}` : "";
 }
 
+// La séance faite a suivi une autre consigne que celle du plan : on la saisit ici, pour cette activité seulement.
+// La séance du plan n'est pas modifiée ; les étapes sont recomparées à la consigne saisie.
+function ConsigneSuivie({ id, consigne }) {
+  const qc = useQueryClient();
+  const [ouvert, setOuvert] = useState(false);
+  const [texte, setTexte] = useState("");
+  const maj = useMutation({
+    mutationFn: (t) => setConsigneSuivie(id, t),
+    onSuccess: (bilan) => {
+      qc.setQueryData(["bilan", id], bilan);
+      ["activites", "analyses"].forEach((k) => qc.invalidateQueries({ queryKey: [k] }));
+      setOuvert(false);
+    },
+  });
+  if (!consigne) return null;
+  const suivie = consigne.suivie;
+  const ouvrir = () => { maj.reset(); setTexte(suivie || consigne.plan || ""); setOuvert(true); };
+
+  if (!ouvert) {
+    return (
+      <p className="text-[13px] text-label-2 leading-snug">
+        {suivie && "Comparée à la consigne suivie ce jour-là, différente de celle du plan. "}
+        <button type="button" className="text-brand font-semibold" onClick={ouvrir}>
+          {suivie ? "Modifier" : "Consigne différente ce jour-là ?"}
+        </button>
+      </p>
+    );
+  }
+  return (
+    <div className="space-y-2">
+      <p className="text-[13px] text-label-2 leading-snug">
+        Écris la consigne réellement suivie, une ligne par phase, comme dans le plan. Elle ne vaut que pour cette
+        séance : le plan n'est pas modifié.
+      </p>
+      <textarea className="champ w-full min-h-[120px] text-[14px]" value={texte} maxLength={4000}
+        onChange={(ev) => setTexte(ev.target.value)} />
+      {maj.isError && (
+        <p className="text-[13px] text-ios-red">
+          {maj.error?.response?.data?.detail ?? "Enregistrement impossible. Réessaie."}
+        </p>
+      )}
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className="btn-teinte btn-sm" disabled={maj.isPending || !texte.trim()}
+          onClick={() => maj.mutate(texte)}>Enregistrer</button>
+        <button type="button" className="btn-gris btn-sm" disabled={maj.isPending} onClick={() => setOuvert(false)}>Annuler</button>
+        {suivie && (
+          <button type="button" className="btn-gris btn-sm" disabled={maj.isPending} onClick={() => maj.mutate(null)}>
+            Revenir au plan
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // Séance d'intensité liée au plan : chaque étape prévue retrouvée dans l'enregistrement et comparée
 export function RespectPlan({ id, total, onPosition }) {
   const { data: bilan } = useBilan(id);
@@ -307,7 +363,8 @@ export function RespectPlan({ id, total, onPosition }) {
             </div>
             {e.etapes.map((x, i) => {
               const f = x.fait;
-              const enDuree = x.prevu.duree_sec != null;
+              const libre = x.prevu.libre;
+              const enDuree = x.prevu.duree_sec != null || libre;
               const ecart = enDuree ? x.ecart_sec : x.ecart_m;
               const effort = x.role === "effort";
               // Deux étapes du même nom (trot puis marche au retour au calme) : sur petit écran, la consigne les distingue
@@ -320,7 +377,7 @@ export function RespectPlan({ id, total, onPosition }) {
                     <span className={clsx(effort && "font-semibold", jumelle && "hidden sm:inline")}>{ROLES[x.role]}{x.sur > 1 && ` ${x.rep}`}</span>
                     {x.libelle && x.sur === 1 && <span className={clsx("text-label-2", !jumelle && "hidden sm:inline")}><span className="hidden sm:inline"> · </span>{x.libelle}</span>}
                   </span>
-                  <span className="text-right text-label-2">{enDuree ? court(x.prevu.duree_sec) : metres(x.prevu.distance_m)}</span>
+                  <span className="text-right text-label-2">{libre ? "libre" : enDuree ? court(x.prevu.duree_sec) : metres(x.prevu.distance_m)}</span>
                   <span className={clsx("text-right font-semibold", f ? TON[x.etat] : "text-ios-red")}>
                     {f ? (enDuree ? court(f.duree_sec) : metres(f.distance_m)) : "non faite"}
                   </span>
@@ -343,6 +400,7 @@ export function RespectPlan({ id, total, onPosition }) {
           )}
         </>
       )}
+      <ConsigneSuivie id={id} consigne={bilan.consigne} />
       <p className="text-[12px] text-label-2">
         {introuvable ? "Comparaison impossible étape par étape."
           : e.mode === "tours" ? "Étapes lues d'après les tours enregistrés par la montre."

@@ -406,6 +406,47 @@ def corriger_type(
     return cs.serialiser_activite(a)
 
 
+class ConsigneSuivieSchema(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    texte: Optional[str] = Field(default=None, max_length=4000)
+
+
+@router.put("/api/activites/{activite_id}/consigne-suivie",
+            summary="Consigne réellement suivie ce jour-là (vide = celle du plan)")
+def consigne_suivie(
+    activite_id: int,
+    payload: ConsigneSuivieSchema,
+    current_user: Utilisateur = Depends(get_current_user),
+    db: Session = Depends(obtenir_session),
+):
+    """La séance du plan n’est pas modifiée : la consigne est gardée sur l’activité, dans ses champs d’analyse,
+    et les étapes sont comparées à elle. Renvoie le bilan recalculé."""
+    import execution_service as ex
+    import seance_service as ss
+    from models import SeancePrevue
+    a = _activite_utilisateur(db, current_user, activite_id)
+    p = (db.query(SeancePrevue).filter(SeancePrevue.utilisateur_id == current_user.id, SeancePrevue.activite_id == a.id)
+         .order_by(SeancePrevue.id).first())
+    if not p:
+        raise HTTPException(status_code=409, detail="Cette activité n’est reliée à aucune séance du plan")
+    texte = (payload.texte or "").strip()
+    if texte == (p.description or "").strip():
+        texte = ""
+    if texte:
+        essai = ex.plan_suivi(a, p, texte)
+        if not ex.concerne(essai, ex.derouler(ex.etapes_plan(essai))):
+            raise HTTPException(status_code=422, detail="Aucune étape minutée reconnue dans cette consigne")
+    det = cs._details_dict(a)
+    det.pop("consigne_suivie", None)
+    det.pop("execution", None)
+    if texte:
+        det["consigne_suivie"] = texte
+    a.details = json.dumps(det, ensure_ascii=False) if det else None
+    res = ss.bilan(db, current_user, a)
+    db.commit()
+    return res
+
+
 @router.get("/api/activites/{activite_id}/meteo", summary="Météo pendant la séance (Open-Meteo)")
 def meteo_activite(
     activite_id: int,

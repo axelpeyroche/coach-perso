@@ -377,6 +377,7 @@ def etapes_depuis_description(description: str) -> list[dict]:
         if not m or not m.group(2).strip():
             continue
         genre = _genre(m.group(1))
+        avant = len(etapes)
         for partie in _parties(m.group(2).strip()):
             t = _tete(_sans_allure(partie))
             if not t:
@@ -394,7 +395,29 @@ def etapes_depuis_description(description: str) -> list[dict]:
                 **_cibles(partie), "recup_s": recup_s, "recup_m": recup_m, "recup_texte": recup_texte,
                 "brut": partie.strip(),
             })
-    return etapes if len(etapes) >= 2 else []
+        contenu = m.group(2).strip()
+        if genre == "retour" and len(etapes) == avant and _RE_LIBRE.search(contenu):
+            # « trot facile jusqu’à la fin de la séance » : pas de durée, l’étape prend ce qui reste
+            etapes.append({
+                "genre": genre, "repetitions": 1, "duree_s": None, "distance_m": None, "libre": True,
+                "texte": contenu.rstrip(" ."), **_cibles(contenu),
+                "recup_s": None, "recup_m": None, "recup_texte": "", "brut": contenu,
+            })
+    return _sans_marche_finale(etapes)
+
+
+_RE_LIBRE = re.compile(r"jusqu|\breste\b|fin de (?:la )?s[ée]ance|\blibre\b", re.IGNORECASE)
+_RE_MARCHE = re.compile(r"\bmarch\w*", re.IGNORECASE)
+
+
+def _sans_marche_finale(etapes: list) -> list:
+    """Pas de marche après le trot du retour au calme : l’endurance suffit pour redescendre.
+    Un retour au calme fait seulement de marche (séance course/marche) est gardé."""
+    def marche(e):
+        return e["genre"] == "retour" and bool(_RE_MARCHE.search(e.get("brut") or e.get("texte") or ""))
+    if any(e["genre"] == "retour" and not marche(e) for e in etapes):
+        etapes = [e for e in etapes if not marche(e)]
+    return etapes if len([e for e in etapes if e.get("duree_s") or e.get("distance_m")]) >= 2 else []
 
 
 def texte_intervals(sport: str, description: Optional[str], structure: Optional[dict]) -> tuple[str, bool]:

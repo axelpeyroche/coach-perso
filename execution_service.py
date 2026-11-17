@@ -22,6 +22,7 @@ import json
 import re
 from bisect import bisect_left
 from statistics import median
+from types import SimpleNamespace
 from typing import Optional
 
 import blocs_service as bl
@@ -29,7 +30,7 @@ import carnet_service as cs
 import decoupage as dc
 import seance_service as ss
 
-VERSION = 1
+VERSION = 2
 TYPES_INTENSES = ss.TYPES_INTENSES
 TYPES_FACILES = ("footing", "recuperation", "sortie_longue")
 
@@ -73,11 +74,15 @@ def derouler(etapes: list[dict], recup_finale: bool = False) -> list[dict]:
     seq: list[dict] = []
     for k, e in enumerate(etapes):
         duree, dist = e.get("duree_s") or None, e.get("distance_m") or None
-        if not duree and not dist:
-            continue
         n = int(e.get("repetitions") or 1)
         genre, texte = e.get("genre"), (e.get("texte") or "").strip()
         cibles = _cibles(e)
+        if not duree and not dist:
+            if e.get("libre") and genre == "retour" and k == len(etapes) - 1 and seq:
+                # retour au calme « jusqu’à la fin » : tout ce qui suit le dernier effort
+                seq.append({"role": "retour", "groupe": k, "rep": 1, "sur": 1, "libelle": texte,
+                            "duree_s": None, "distance_m": None, "libre": True, **cibles})
+            continue
         if n > 1:
             recup = e.get("recup_s") or e.get("recup_m")
             for i in range(n):
@@ -390,7 +395,8 @@ def _tolerance(role: str, prevu: float, mode: str, distance: bool) -> float:
 
 
 def _comparer(e: dict, fait: Optional[dict], mode: str, sport: str) -> dict:
-    prevu = {"duree_sec": e.get("duree_s"), "distance_m": e.get("distance_m"), "allure": e.get("allure"),
+    prevu = {"duree_sec": e.get("duree_s"), "distance_m": e.get("distance_m"), "libre": bool(e.get("libre")),
+             "allure": e.get("allure"),
              "fc_min": e.get("fc_min"), "fc_max": e.get("fc_max"), "zone": e.get("zone"), "rpe": e.get("rpe")}
     ligne = {"role": e["role"], "libelle": e.get("libelle") or "", "rep": e["rep"], "sur": e["sur"], "groupe": e["groupe"],
              "prevu": prevu, "fait": fait, "etat": "absent", "ecart_sec": None, "ecart_m": None,
@@ -398,15 +404,19 @@ def _comparer(e: dict, fait: Optional[dict], mode: str, sport: str) -> dict:
     if not fait:
         return ligne
     notes = []
-    if e.get("duree_s"):
-        ecart, base = fait["duree_sec"] - e["duree_s"], float(e["duree_s"])
-        ligne["ecart_sec"] = ecart
+    if e.get("libre"):  # sans durée fixée : ce qui a été fait convient
+        ligne["etat"] = "ok"
+        notes.append(100.0)
     else:
-        ecart, base = fait["distance_m"] - e["distance_m"], float(e["distance_m"])
-        ligne["ecart_m"] = ecart
-    tol = _tolerance(e["role"], base, mode, not e.get("duree_s"))
-    ligne["etat"] = "ok" if abs(ecart) <= tol else "plus" if ecart > 0 else "moins"
-    notes.append(max(0.0, 100 - max(0.0, abs(ecart) - tol) / base * 150))
+        if e.get("duree_s"):
+            ecart, base = fait["duree_sec"] - e["duree_s"], float(e["duree_s"])
+            ligne["ecart_sec"] = ecart
+        else:
+            ecart, base = fait["distance_m"] - e["distance_m"], float(e["distance_m"])
+            ligne["ecart_m"] = ecart
+        tol = _tolerance(e["role"], base, mode, not e.get("duree_s"))
+        ligne["etat"] = "ok" if abs(ecart) <= tol else "plus" if ecart > 0 else "moins"
+        notes.append(max(0.0, 100 - max(0.0, abs(ecart) - tol) / base * 150))
     allure = (fait.get("gap_sec_km") if sport == "trail" else None) or fait.get("allure_sec_km")
     if e.get("allure") and allure:
         rapide, lent = e["allure"]
@@ -451,7 +461,9 @@ def _signe(x: float, unite: str) -> str:
 
 
 def _mesure_prevue(prevu: dict) -> str:
-    return _duree(prevu["duree_sec"]) if prevu.get("duree_sec") else f"{prevu['distance_m']} m"
+    if prevu.get("duree_sec"):
+        return _duree(prevu["duree_sec"])
+    return f"{prevu['distance_m']} m" if prevu.get("distance_m") else "jusqu’à la fin"
 
 
 def _cv(valeurs: list[float]) -> float:
@@ -645,7 +657,23 @@ def analyser(p, seance: dc.Seance, intervalles: Optional[list] = None, source: O
         "v": VERSION, "prevue_id": getattr(p, "id", None), "empreinte": empreinte(p), "source": source,
         "mode": mode, "type": cle, "type_label": cs.TYPES_SEANCE.get(cle) if cle else None,
         "titre": p.titre, "etapes": lignes, "resume": resume, "phrases": phrases,
+        "consigne_suivie": bool(getattr(p, "suivie", False)),
     }
+
+
+def consigne_suivie(a) -> Optional[str]:
+    """Consigne réellement suivie ce jour-là, quand elle diffère de celle du plan (saisie sur la fiche)."""
+    t = cs._details_dict(a).get("consigne_suivie")
+    return t.strip() if isinstance(t, str) and t.strip() else None
+
+
+def plan_suivi(a, p, texte: Optional[str] = None):
+    """Séance prévue `p` telle qu’elle a été suivie : la consigne propre à l’activité remplace celle du plan.
+    La séance du plan elle-même n’est jamais modifiée."""
+    t = texte if texte is not None else consigne_suivie(a)
+    if p is None or not t:
+        return p
+    return SimpleNamespace(id=p.id, titre=p.titre, description=t, structure=None, sport=p.sport, suivie=True)
 
 
 def stockee(a, p) -> Optional[dict]:
@@ -664,6 +692,7 @@ def pour_activite(db, user, a, p) -> Optional[dict]:
     ou si elle venait du tracé GPS alors que l'enregistrement complet d'Intervals est disponible."""
     import intervals_service as iv
     from models import TraceGPS
+    p = plan_suivi(a, p)
     if p is None or a.sport not in cs.SPORTS_PIED or not concerne(p, derouler(etapes_plan(p))):
         return None
     det = cs._details_dict(a)
@@ -696,6 +725,8 @@ def texte_markdown(r: dict) -> list[str]:
     note = f" ({res['note']}/100)" if res.get("note") is not None else ""
     lignes = [f"### {r.get('jour', '')} — {cs._cell(r.get('titre'))} ({r.get('type_label') or 'Intensité'}) : "
               f"{res.get('verdict', '')}{note}", ""]
+    if r.get("consigne_suivie"):
+        lignes.append("- Comparée à la consigne réellement suivie ce jour-là, différente de celle du plan.")
     lignes += [f"- {p}" for p in r.get("phrases") or []]
     if r.get("mode") == "theorique":
         return lignes
@@ -709,7 +740,9 @@ def texte_markdown(r: dict) -> list[str]:
         if not fait:
             lignes.append(f"| {nom_etape(x)} | {cs._cell(x['libelle'])} | {_mesure_prevue(prevu)} | non repérée | | | {visee} | |")
             continue
-        if x["ecart_sec"] is not None:
+        if prevu.get("libre"):
+            mesure, ecart = _duree(fait["duree_sec"]), ""
+        elif x["ecart_sec"] is not None:
             mesure, ecart = _duree(fait["duree_sec"]), (_signe(x["ecart_sec"], "s") if x["ecart_sec"] else "0")
         else:
             mesure, ecart = f"{fait['distance_m']} m", (_signe(x["ecart_m"], "m") if x["ecart_m"] else "0")
