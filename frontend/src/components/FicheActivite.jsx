@@ -8,7 +8,7 @@ import CarteTrace from "./CarteTrace";
 import ModalActivite from "./ModalActivite";
 import EnteteFiche, { ancre } from "./EnteteFiche";
 import { allureAjustee, Decoupage, enMouvement, MemeParcours, Partager, SegmentsSeance } from "./FicheExtras";
-import { BilanSeance, Intervalles, PrevuRealise } from "./FicheSeance";
+import { BilanSeance, Intervalles, PrevuRealise, RespectPlan, useBilan } from "./FicheSeance";
 import { Portion, Repartition } from "./FicheAnalyse";
 import Comparer from "./Comparaison";
 import { BoutonPDF } from "./BilanBlocs";
@@ -244,6 +244,9 @@ export default function FicheActivite({ activite: initiale, onClose, voisines, o
   const s = sportInfo(a.sport);
   const det = a.details || {};
 
+  const { data: bilan } = useBilan(a.id);
+  // Étapes du plan retrouvées dans l’enregistrement : elles remplacent les répétitions devinées
+  const etapesPlan = !!bilan?.execution && bilan.execution.mode !== "theorique";
   const { data: flux, isLoading } = useQuery({
     queryKey: ["flux", a.id], queryFn: () => getFlux(a.id), staleTime: 30 * 60 * 1000,
   });
@@ -338,7 +341,9 @@ export default function FicheActivite({ activite: initiale, onClose, voisines, o
 
         <PrevuRealise id={a.id} />
 
-        <Intervalles intervalles={["footing", "recuperation", "sortie_longue"].includes(a.type_seance?.cle) ? null : flux?.intervalles} total={flux?.decoupage?.splits?.at(-1)?.fin_km} onPosition={onPositionProfil} />
+        <RespectPlan id={a.id} total={flux?.decoupage?.splits?.at(-1)?.fin_km} onPosition={onPositionProfil} />
+
+        <Intervalles intervalles={etapesPlan || ["footing", "recuperation", "sortie_longue"].includes(a.type_seance?.cle) ? null : flux?.intervalles} total={flux?.decoupage?.splits?.at(-1)?.fin_km} onPosition={onPositionProfil} />
 
         <Decoupage decoupage={flux?.decoupage} sport={a.sport} onPosition={onPositionProfil} />
 

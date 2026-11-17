@@ -121,14 +121,23 @@ LIBELLES = {"echauffement": "Échauffement", "corps": "Corps de séance", "recup
             "retour": "Retour au calme"}
 
 # Ce qu'Intervals.icu lirait comme une durée, une distance, une zone ou une répétition dans une consigne
-_JETONS = re.compile(r"\b\d+(?:[.,]\d+)?\s*(?:h|m|s|km|mtr|min|mi|w|rpm|bpm)\b|\b[zZ]\d\b|\d+\s*%|\b\d+\s*[x×]\b|\b(?:hr|lthr|pace|ftp|ramp|freeride)\b",
+_JETONS = re.compile(r"\b\d+(?:[.,]\d+)?\s*(?:h|m|s|km|mtr|min|mn|sec|mi|w|rpm|bpm)\b|\b[zZ]\d\b|\d+\s*%|\b\d+\s*[x×]\b|\b(?:hr|lthr|pace|ftp|ramp|freeride)\b",
                     re.IGNORECASE)
+# Mots qui n'ont plus de sens une fois leur chiffre retiré (« allure 10 km » → « allure »)
+_PENDANTS = re.compile(r"(?:^|\s+)(?:allure|à|a|de|du|d['’]|en|sous|sur|vers|environ|fc|rpe|et|ou|avec|entre|puis)$", re.IGNORECASE)
+_BORDS = " ,;:·+/-–—'’′\""
 
 
 def _consigne(texte: str) -> str:
+    """Consigne affichée sur la montre : des mots seulement. Tout ce qui porte un chiffre est retiré
+    (Intervals.icu prend la première durée qu'il trouve dans la ligne : 1'30, 5', 10 km…)."""
     t = _JETONS.sub(" ", texte or "")
+    t = re.sub(r"\S*\d\S*", " ", t)
     t = re.sub(r"[()\[\]]", " ", t)
-    return re.sub(r"\s+", " ", t).strip(" ,;:-–—")[:60]
+    t = re.sub(r"\s+", " ", t).strip(_BORDS)
+    while _PENDANTS.search(t):
+        t = _PENDANTS.sub("", t).strip(_BORDS)
+    return t[:60].strip()
 
 
 def _duree(secondes: int) -> str:
@@ -171,15 +180,20 @@ def _etapes_intervals(etapes: list[dict], sport: str) -> list[str]:
             titre = f"Bloc {n_bloc}"
         else:
             titre = LIBELLES.get(genre, "Corps de séance")
-        cible = _cible(e.get("zone"), e.get("allure_min"), e.get("allure_max"), sport) if genre in ("corps", "bloc") else ""
+        # L'allure ne vise que l'effort ; une zone écrite pour l'échauffement ou le retour est gardée
+        if genre in ("corps", "bloc"):
+            cible = _cible(e.get("zone"), e.get("allure_min"), e.get("allure_max"), sport)
+        else:
+            cible = _cible(e.get("zone"), None, None, sport)
         travail = _ligne(e.get("texte", ""), e.get("duree_s"), e.get("distance_m"), cible)
         if not travail:
             continue
         n = int(e.get("repetitions") or 1)
         if n > 1:
             lignes = [f"{titre} {n}x", travail]
-            if e.get("recup_s"):
-                lignes.append(_ligne(e.get("recup_texte") or "Récup", e["recup_s"], None, "") or "")
+            if e.get("recup_s") or e.get("recup_m"):
+                # La récupération n'a jamais de cible : l'allure de l'effort ne s'y applique pas
+                lignes.append(_ligne(e.get("recup_texte") or "Récup", e.get("recup_s"), e.get("recup_m"), "") or "")
             blocs.append("\n".join(x for x in lignes if x))
         else:
             blocs.append(f"{titre}\n{travail}")
@@ -200,11 +214,35 @@ def _texte_libre(texte: str) -> str:
 # Lecture d'une description classique (celle du plan hebdo, des séances types, d'une IA)
 _RE_PHASE = re.compile(r"^(échauffement|corps de séance|retour au calme|récupération|récup|puis|ensuite|bloc \d+)\b\s*:?\s*(.*)$",
                        re.IGNORECASE)
-_RE_TETE = re.compile(r"^(?:(\d+)\s*[×x]\s*)?(\d+)\s*(?:['′’](\d{2})?|\s*min\b)\s*(?:de\s+|d['’]\s*)?", re.IGNORECASE)
-_RE_RECUP = re.compile(r",?\s*r[ée]cup(?:[ée]ration)?\s*(?:de\s+)?(\d+)\s*(?:['′’]\s*(\d{2})?|\s*(min|s|sec)\b)([^,.;]*)",
-                       re.IGNORECASE)
 _RE_ZONE = re.compile(r"\bZ([1-5])\b")
 _RE_ALLURE = re.compile(r"(\d{1,2})[:'’′](\d{2})\s*(?:(?:[-–—]|à)\s*(\d{1,2})[:'’′](\d{2}))?\s*/\s*km")
+_RE_RPE = re.compile(r"\bRPE\s*(\d{1,2}(?:[.,]\d)?)", re.IGNORECASE)
+_RE_FC_PLAGE = re.compile(r"\bFC\b[^\d,.;·()]{0,25}?(\d{2,3})\s*(?:[-–—]|à)\s*(\d{2,3})(?!\s*%)", re.IGNORECASE)
+_RE_FC_SOUS = re.compile(r"\bFC\b\s*(?:max(?:imale)?\s*)?(?:sous|inférieure à|en dessous de|<|≤|jusqu['’]à|max\.?)\s*(?:les\s+)?(\d{2,3})(?!\s*%)",
+                         re.IGNORECASE)
+# Une durée ou une distance écrite à la française : 20', 1'30, 30'', 20 min, 45 s, 1 h 15, 400 m, 2 km.
+# Jamais une allure (4'55/km), une plage (165-175) ni la fin d'un nombre.
+_MES = re.compile(r"""
+    (?<![\d:'’′.,/–-])
+    (?:
+        (?P<h>\d{1,2})\s*h\s*(?P<hm>[0-5]\d)?(?![a-zà-ÿ\d])
+      | (?P<m>\d{1,3})\s*(?:['′’](?!['′’])\s?|(?:min(?:utes?)?|mn)\b\s*)
+            (?:(?P<ms>[0-5]\d)(?!\s*(?:km|m\b|h\b|%|bpm|[x×]))(?:\s*(?:''|’’|"|″|”|s\b|sec\b))?)?
+      | (?P<s>\d{1,3})\s*(?:''|’’|"|″|”|s\b|sec(?:ondes?)?\b)
+      | (?P<km>\d{1,3}(?:[.,]\d+)?)\s*km\b
+      | (?P<mt>\d{2,5})\s*m(?:ètres?)?\b
+    )
+    (?!\d)(?!\s*/)(?!\s*[-–]\s*\d)
+""", re.VERBOSE | re.IGNORECASE)
+_RE_FOIS = re.compile(r"^(\d{1,2})\s*[×x*]\s*", re.IGNORECASE)
+# « 4 lignes droites de 80 m », « 6 côtes de 30'' » : des répétitions sans le signe ×
+_RE_NOMBRE = re.compile(r"^(\d{1,2})\s+((?:lignes?\s+droites?|accélérations?|côtes?|sprints?|montées?)(?:\s+progressives?)?)\s*"
+                        r"(?:de\s+|d['’]\s*|sur\s+)?", re.IGNORECASE)
+_RE_ARTICLE = re.compile(r"^\s*(?:de\s+|d['’]\s*|en\s+)", re.IGNORECASE)
+_RE_ENTRE = re.compile(r"\bentre\s+(?:chaque|chacune?s?|les|deux)\b[^,.;·+]*", re.IGNORECASE)
+_RE_RECUP = re.compile(r"\br[ée]cup(?:[ée]ration)?s?\b", re.IGNORECASE)
+_RE_RETOUR = re.compile(r"\bretour\s+(?:en\s+march\w+|march\w+|au\s+trot|en\s+trottinant|trottin\w+|au\s+pas)", re.IGNORECASE)
+_SEPARATEURS = ",.;·+"
 
 
 def _genre(libelle: str) -> str:
@@ -218,37 +256,144 @@ def _genre(libelle: str) -> str:
     return "bloc" if l.startswith("bloc") else "corps"
 
 
+def _valeur(m: re.Match) -> tuple[Optional[int], Optional[int]]:
+    """(durée en secondes, distance en mètres) d'une mesure reconnue par _MES."""
+    g = m.groupdict()
+    if g["h"]:
+        return int(g["h"]) * 3600 + int(g["hm"] or 0) * 60, None
+    if g["m"]:
+        return int(g["m"]) * 60 + int(g["ms"] or 0), None
+    if g["s"]:
+        return int(g["s"]), None
+    if g["km"]:
+        return None, round(float(g["km"].replace(",", ".")) * 1000)
+    return None, int(g["mt"])
+
+
+def _clause(texte: str) -> str:
+    """Premier membre de phrase, sans parenthèses : ce qui décrit l'étape, pas la suite."""
+    t = re.sub(r"\([^)]*\)", " ", texte or "")
+    t = re.split(r"[.;·,]|\s\+(?:\s|$)|\s[-–—]\s|\bpuis\b|\bensuite\b", t.strip(" .;·,+"), maxsplit=1)[0]
+    t = re.sub(r"\s+", " ", t).strip(_BORDS)
+    while _PENDANTS.search(t) and not re.search(r"\d", t):
+        t = _PENDANTS.sub("", t).strip(_BORDS)
+    return t
+
+
+def _bornes(texte: str, debut: int, fin: int) -> tuple[int, int]:
+    """Élargit [debut, fin] au membre de phrase qui le contient (entre deux séparateurs)."""
+    a = max(texte.rfind(c, 0, debut) for c in _SEPARATEURS) + 1
+    suivants = [i for i in (texte.find(c, fin) for c in _SEPARATEURS) if i >= 0]
+    return a, (min(suivants) if suivants else len(texte))
+
+
+def _recuperation(reste: str) -> tuple[Optional[int], Optional[int], str, str]:
+    """Récupération entre les répétitions : (secondes, mètres, texte, reste sans elle).
+    Lit « récup 2' en trottinant », « 2' de récup », « 1'30 de trot très lent entre chaque »,
+    « retour en marchant 1' »."""
+    for motif in (_RE_ENTRE, _RE_RECUP, _RE_RETOUR):
+        for trouve in motif.finditer(reste):
+            a, b = _bornes(reste, trouve.start(), trouve.end())
+            membre = reste[a:b]
+            mes = _MES.search(membre)
+            if not mes:
+                continue
+            duree, dist = _valeur(mes)
+            if motif is _RE_RETOUR:
+                mots = trouve.group(0)
+            else:
+                mots = membre[:mes.start()] + " " + membre[mes.end():]
+                mots = _RE_ENTRE.sub(" ", _RE_RECUP.sub(" ", mots))
+            mots = _RE_ARTICLE.sub("", re.sub(r"\s+", " ", mots).strip(" :,-–—"))
+            suite = (reste[:a].rstrip(" ,·;+") + " " + reste[b:].lstrip(" ,·;+")).strip()
+            return duree, dist, _clause(mots), suite
+    return None, None, "", reste
+
+
+def _tete(texte: str) -> Optional[tuple]:
+    """Début d'une étape : (répétitions, secondes, mètres, nom, forme « N lignes droites », suite)."""
+    t = texte.lstrip(" :,-–—")
+    n, nom, nomme = 1, "", False
+    f = _RE_FOIS.match(t)
+    if f:
+        n, t = int(f.group(1)), t[f.end():]
+    else:
+        f = _RE_NOMBRE.match(t)
+        if f:
+            n, nom, nomme, t = int(f.group(1)), re.sub(r"s\b", "", f.group(2).lower()), True, t[f.end():]
+    mes = _MES.match(t)
+    if not mes:
+        return None
+    duree, dist = _valeur(mes)
+    if not duree and not dist:
+        return None
+    return max(1, min(n, 60)), duree, dist, nom, nomme, _RE_ARTICLE.sub("", t[mes.end():])
+
+
+_RE_SUITE = re.compile(r"\s\+\s*|[,.;·]?\s*\b(?:puis|ensuite|suivie?s?\s+de|et\s+enfin)\b\s*", re.IGNORECASE)
+
+
+def _sans_allure(texte: str) -> str:
+    """Allures et parenthèses retirées avant de chercher les durées : 4'55/km n'est pas 4 min 55."""
+    return re.sub(r"\([^)]*\)", " ", _RE_ALLURE.sub(" ", texte))
+
+
+def _parties(contenu: str) -> list[str]:
+    """« 10' de trot + 5' de marche », « 15' en EF, puis 4 × 30'' vite » : une partie par étape minutée."""
+    coupes = [0]
+    for m in _RE_SUITE.finditer(contenu):
+        if _tete(_sans_allure(contenu[m.end():])):
+            coupes.append(m.end())
+    return [contenu[a:b] for a, b in zip(coupes, coupes[1:] + [len(contenu)])]
+
+
+def _cibles(texte: str) -> dict:
+    zone, allure, rpe = _RE_ZONE.search(texte), _RE_ALLURE.search(texte), _RE_RPE.search(texte)
+    plage, sous = _RE_FC_PLAGE.search(texte), _RE_FC_SOUS.search(texte)
+    fc_min = fc_max = None
+    if plage and 60 <= int(plage.group(1)) < int(plage.group(2)) <= 230:
+        fc_min, fc_max = int(plage.group(1)), int(plage.group(2))
+    elif sous and 60 <= int(sous.group(1)) <= 230:
+        fc_max = int(sous.group(1))
+    effort = float(rpe.group(1).replace(",", ".")) if rpe else None
+    return {
+        "zone": int(zone.group(1)) if zone else None,
+        "allure_min": f"{allure.group(1)}:{allure.group(2)}" if allure else None,
+        "allure_max": f"{allure.group(3)}:{allure.group(4)}" if allure and allure.group(3) else None,
+        "rpe": effort if effort and 1 <= effort <= 10 else None,
+        "fc_min": fc_min, "fc_max": fc_max,
+    }
+
+
 def etapes_depuis_description(description: str) -> list[dict]:
-    """Phases minutées d'une description classique ; liste vide si rien n'est guidable."""
+    """Phases minutées d'une description classique ; liste vide si rien n'est guidable.
+
+    Une ligne « Phase : … » peut donner plusieurs étapes (« 10' de trot + 5' de marche »).
+    Les répétitions portent leur récupération, quelle que soit la façon de l'écrire ; l'allure,
+    la zone, la FC et l'effort visés sont lus à part et ne restent jamais dans la consigne."""
     etapes = []
     for ligne in (description or "").splitlines():
         m = _RE_PHASE.match(ligne.strip())
         if not m or not m.group(2).strip():
             continue
-        contenu = m.group(2).strip()
-        t = _RE_TETE.match(contenu)
-        if not t:
-            continue
-        n = int(t.group(1) or 1)
-        duree = int(t.group(2)) * 60 + int(t.group(3) or 0)
-        reste = contenu[t.end():]
-        recup_s, recup_texte = None, ""
-        r = _RE_RECUP.search(reste) if n > 1 else None
-        if r:
-            v = int(r.group(1))
-            recup_s = v if (r.group(3) or "").lower() in ("s", "sec") else v * 60 + int(r.group(2) or 0)
-            recup_texte = re.sub(r"^\s*(en|de)\s+", "", r.group(4).strip())
-            reste = reste[:r.start()] + reste[r.end():]
-        zone = _RE_ZONE.search(reste)
-        allure = _RE_ALLURE.search(reste)
-        etapes.append({
-            "genre": _genre(m.group(1)), "repetitions": min(n, 60), "duree_s": duree,
-            "texte": re.sub(r"\([^)]*\)", "", reste).strip(),
-            "zone": int(zone.group(1)) if zone else None,
-            "allure_min": f"{allure.group(1)}:{allure.group(2)}" if allure else None,
-            "allure_max": f"{allure.group(3)}:{allure.group(4)}" if allure and allure.group(3) else None,
-            "recup_s": recup_s, "recup_texte": recup_texte,
-        })
+        genre = _genre(m.group(1))
+        for partie in _parties(m.group(2).strip()):
+            t = _tete(_sans_allure(partie))
+            if not t:
+                continue
+            n, duree, dist, nom, nomme, reste = t
+            recup_s = recup_m = None
+            recup_texte = ""
+            if n > 1:
+                recup_s, recup_m, recup_texte, reste = _recuperation(reste)
+                if nomme and not (recup_s or recup_m):
+                    continue  # des lignes droites sans récupération dite : rien à minuter
+            etapes.append({
+                "genre": genre, "repetitions": n, "duree_s": duree, "distance_m": dist,
+                "texte": " ".join(x for x in (nom, _clause(reste)) if x),
+                **_cibles(partie), "recup_s": recup_s, "recup_m": recup_m, "recup_texte": recup_texte,
+                "brut": partie.strip(),
+            })
     return etapes if len(etapes) >= 2 else []
 
 

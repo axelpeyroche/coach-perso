@@ -153,6 +153,7 @@ TYPES_SEANCE = {
     "footing": "Footing",
     "recuperation": "Récupération",
     "sortie_longue": "Sortie longue",
+    "fartlek": "Fartlek",
     "fractionne_court": "Fractionné court",
     "fractionne_long": "Fractionné long",
     "seuil": "Seuil / tempo",
@@ -177,6 +178,9 @@ def serialiser_activite(a: Activite) -> dict:
         details = json.loads(a.details) if a.details else None
     except ValueError:
         details = None
+    if isinstance(details, dict) and isinstance(details.get("execution"), dict):
+        # Le détail étape par étape reste dans le bilan de la fiche : les listes n’en ont pas besoin
+        details = {**details, "execution": {k: v for k, v in details["execution"].items() if k != "etapes"}}
     # Temps en mouvement de la montre ; sinon la fiche le recalcule depuis le tracé
     mouv = mouvement_montre(a)
     # Allure et vitesse sur le temps en mouvement (pauses enlevées), comme la fiche de l'activité
@@ -713,6 +717,34 @@ def _profil(db: Session, user: Utilisateur) -> dict:
     }
 
 
+def _executions(db: Session, user: Utilisateur, jours: int = 28) -> list[dict]:
+    """Respect du plan des séances d’intensité reliées des dernières semaines (calculé si besoin)."""
+    import execution_service as ex
+    prevues = (db.query(SeancePrevue)
+               .filter(SeancePrevue.utilisateur_id == user.id, SeancePrevue.activite_id.isnot(None),
+                       SeancePrevue.jour >= date.today() - timedelta(days=jours))
+               .order_by(SeancePrevue.jour, SeancePrevue.id).all())
+    ids = [p.activite_id for p in prevues]
+    acts = {a.id: a for a in db.query(Activite).filter(Activite.id.in_(ids)).all()} if ids else {}
+    out = []
+    for p in prevues:
+        a = acts.get(p.activite_id)
+        if not a:
+            continue
+        try:
+            r = ex.pour_activite(db, user, a, p)
+        except Exception:  # une analyse qui échoue ne bloque jamais l’export
+            r = None
+        if r:
+            out.append({"jour": p.jour.isoformat(), "activite_id": a.id, **r})
+    if out:
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+    return out
+
+
 def construire_export(db: Session, user: Utilisateur) -> dict:
     acts = (
         db.query(Activite).filter(Activite.utilisateur_id == user.id)
@@ -725,6 +757,8 @@ def construire_export(db: Session, user: Utilisateur) -> dict:
     stats = calculer_stats(acts)
     import analyses_service  # import local : le module d'analyses s'appuie sur celui-ci
     import corps_service
+    plan = lister_plan(db, user.id, date.today() - timedelta(days=28), date.today() + timedelta(days=42))
+    executions = _executions(db, user)
     return {
         "corps": corps_service.export(db, user.id),
         "genere_le": datetime.utcnow().isoformat(timespec="seconds") + "Z",
@@ -732,7 +766,8 @@ def construire_export(db: Session, user: Utilisateur) -> dict:
         "objectifs": [progression_objectif(o, acts) for o in objectifs],
         "stats": {k: v for k, v in stats.items() if k not in ("allures",)},
         "forme": series_mesures(db, user.id),
-        "plan": lister_plan(db, user.id, date.today() - timedelta(days=28), date.today() + timedelta(days=42)),
+        "plan": plan,
+        "respect_plan": executions,
         "analyses": analyses_service.resume(analyses_service.calculer_analyses(db, user)),
         "activites":[serialiser_activite(a) for a in acts],
     }
@@ -929,6 +964,14 @@ def export_markdown(data: dict) -> str:
                 fait, " — ".join(x for x in [p["commentaire"], texte_deroule(p.get("deroule"))] if x), p["id_externe"],
             ]) + " |")
         l.append("")
+
+    if data.get("respect_plan"):
+        import execution_service as ex
+        l += ["## Respect du plan — séances d’intensité (4 dernières semaines)", "",
+              "Chaque étape prévue (échauffement, efforts, récupérations, retour au calme) est retrouvée dans "
+              "l’enregistrement puis comparée au plan.", ""]
+        for r in data["respect_plan"]:
+            l += ex.texte_markdown(r) + [""]
 
     l += [f"## Activités ({len(data['activites'])})", "",
           "_RPE suivi de « (est.) » : effort estimé par l'Apple Watch, non noté par l'athlète._", "",
@@ -1453,8 +1496,8 @@ CHAMPS_PREVUE = ("jour", "ordre", "sport", "titre", "description", "duree_min", 
 NOTE_MIN_PIED = 70     # conformité minimale (sur 100) d'une sortie à pied avec la séance prévue
 MARGE_PIED = 10        # avance exigée sur une autre séance prévue (différente) qui irait aussi
 FAMILLES_TYPE = {"footing": "facile", "recuperation": "facile", "sortie_longue": "long",
-                 "fractionne_court": "intense", "fractionne_long": "intense", "seuil": "intense",
-                 "cotes": "intense", "course": "course", "test": "test"}
+                 "fartlek": "intense", "fractionne_court": "intense", "fractionne_long": "intense",
+                 "seuil": "intense", "cotes": "intense", "course": "course", "test": "test"}
 
 
 def _groupe(sport: str) -> str:

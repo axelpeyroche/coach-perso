@@ -19,9 +19,10 @@ import carnet_service as cs
 import decoupage as dc
 from models import Activite, SeancePrevue, TraceGPS, Utilisateur
 
-VERSION_SEANCE = 2
+VERSION_SEANCE = 3
 
 TYPES = cs.TYPES_SEANCE
+TYPES_INTENSES = ("fartlek", "fractionne_court", "fractionne_long", "seuil", "cotes")
 
 VITESSE_MARCHE = 1.9      # m/s (≈ 8:45/km à plat) : en dessous, ce n'est pas de la course
 ECART_MIN = 1.16          # le travail doit aller au moins 16 % plus vite que la récupération
@@ -225,6 +226,7 @@ def _plat(texte: Optional[str]) -> str:
 _MOTS = (
     ("test", r"\btest\b|\bcooper\b"),
     ("cotes", r"\bcotes?\b"),
+    ("fartlek", r"\bfartleks?\b"),
     ("fractionne_court", r"\bvma\b|\bfractionne\b|\b30\s*/\s*30\b|\b\d+\s*[x×]\s*(?:[1-9]\d?\s*(?:''|\"|s\b|sec)|1\s*(?:'|min)|[1-4]00\s*m)"),
     ("fractionne_long", r"\b\d+\s*[x×]\s*(?:[2-7]\s*(?:'|min)|(?:[6-9]00|1[0-9]00|2000)\s*m)"),
     ("seuil", r"\bseuil\b|\btempo\b|\ballure (?:semi|10 ?km|marathon)\b|\b\d+\s*[x×]\s*(?:[89]|1\d|20)\s*(?:'|min)"),
@@ -244,6 +246,24 @@ def type_du_texte(*textes: Optional[str]) -> Optional[str]:
             if re.search(motif, t):
                 return cle
     return None
+
+
+def type_du_plan(p) -> Optional[str]:
+    """Type d'intensité annoncé par une séance du plan (fartlek, fractionné, seuil, côtes), sinon None."""
+    if p is None or p.sport not in cs.SPORTS_PIED:
+        return None
+    t = type_du_texte(p.titre, p.description)
+    return t if t in TYPES_INTENSES else None
+
+
+def _plans_lies(db: Session, user_id: int, ids) -> dict:
+    """{activité: séance du plan qui lui est reliée}."""
+    ids = list(ids)
+    if not ids:
+        return {}
+    lies = (db.query(SeancePrevue).filter(SeancePrevue.utilisateur_id == user_id, SeancePrevue.activite_id.in_(ids))
+            .order_by(SeancePrevue.id.desc()).all())
+    return {p.activite_id: p for p in lies}
 
 
 def _contexte(a: Activite, acts: list[Activite]) -> dict:
@@ -273,8 +293,9 @@ def _efficacite(a: Activite) -> Optional[float]:
     return a.distance_km * 1000 / (d / 60) / a.fc_moyenne_bpm
 
 
-def classer(a: Activite, reps: Optional[dict], ctx: dict) -> Optional[str]:
-    """Type d'une séance à pied. `reps` = résumé des répétitions détectées, s'il y en a."""
+def classer(a: Activite, reps: Optional[dict], ctx: dict, prevu: Optional[str] = None) -> Optional[str]:
+    """Type d'une séance à pied. `reps` = résumé des répétitions détectées, s'il y en a.
+    `prevu` = type d'intensité de la séance du plan reliée : c'est lui qui fait foi."""
     if a.sport not in cs.SPORTS_PIED:
         return None
     det = cs._details_dict(a)
@@ -283,6 +304,8 @@ def classer(a: Activite, reps: Optional[dict], ctx: dict) -> Optional[str]:
         return "course"
     if titre == "test":
         return "test"
+    if prevu or titre == "fartlek":
+        return prevu or "fartlek"
     # Un titre qui annonce une sortie facile l'emporte sur des variations d'allure prises pour des répétitions
     if reps and titre not in ("footing", "recuperation", "sortie_longue"):
         if reps.get("cotes"):
@@ -314,8 +337,13 @@ def type_seance(a: Activite) -> Optional[dict]:
 
 def maj_types_page(db: Session, user_id: int, items: list[Activite]) -> int:
     """Reconnaît le type des séances d'une page du carnet qui n'en ont pas encore."""
-    manquants = [a for a in items if a.sport in cs.SPORTS_PIED
-                 and (cs._details_dict(a).get("seance") or {}).get("v") != VERSION_SEANCE]
+    lies = _plans_lies(db, user_id, [a.id for a in items if a.sport in cs.SPORTS_PIED])
+
+    def a_revoir(a: Activite) -> bool:
+        s = cs._details_dict(a).get("seance") or {}
+        return s.get("v") != VERSION_SEANCE or s.get("prevue") != (lies[a.id].id if a.id in lies else None)
+
+    manquants = [a for a in items if a.sport in cs.SPORTS_PIED and a_revoir(a)]
     if not manquants:
         return 0
     debut, fin = min(a.debut for a in manquants), max(a.debut for a in manquants)
@@ -335,9 +363,12 @@ def maj_types(db: Session, user_id: int, acts: list[Activite], limite: int = 150
     traces = dict(db.query(TraceGPS.activite_id, TraceGPS.id)
                   .filter(TraceGPS.utilisateur_id == user_id, TraceGPS.activite_id.in_(list(pied))).all())
 
+    lies = _plans_lies(db, user_id, pied)
+
     def a_jour(a: Activite) -> bool:
         s = cs._details_dict(a).get("seance") or {}
-        return s.get("v") == VERSION_SEANCE and s.get("trace") == traces.get(a.id)
+        return (s.get("v") == VERSION_SEANCE and s.get("trace") == traces.get(a.id)
+                and s.get("prevue") == (lies[a.id].id if a.id in lies else None))
 
     a_faire = sorted((a for a in pied.values() if not a_jour(a)), key=lambda a: a.debut, reverse=True)[:limite]
     if not a_faire:
@@ -357,8 +388,10 @@ def maj_types(db: Session, user_id: int, acts: list[Activite], limite: int = 150
             s = seance_depuis_trace(points[a.id], a.sport)
             trouve = detecter_intervalles(s) if s else None
             reps = trouve["resume"] if trouve else None
-        cle = classer(a, reps, _contexte(a, tous))
+        prevue = lies.get(a.id)
+        cle = classer(a, reps, _contexte(a, tous), type_du_plan(prevue))
         cs.fusionner_details(a, {"seance": {"v": VERSION_SEANCE, "trace": traces.get(a.id), "type": cle,
+                                            "prevue": prevue.id if prevue else None,
                                             **({"reps": reps} if reps else {})}}, ecraser=True)
     db.flush()
     return len(a_faire)
@@ -425,9 +458,7 @@ def prevu_realise(a: Activite, p: SeancePrevue) -> dict:
     # Type annoncé par le plan contre type reconnu
     prevu_type, fait = type_du_texte(p.titre, p.description), type_seance(a)
     if prevu_type and fait:
-        familles = {"footing": "facile", "recuperation": "facile", "sortie_longue": "long",
-                    "fractionne_court": "intense", "fractionne_long": "intense", "seuil": "intense",
-                    "cotes": "intense", "course": "course", "test": "test"}
+        familles = cs.FAMILLES_TYPE
         meme = prevu_type == fait["cle"]
         proche = familles[prevu_type] == familles[fait["cle"]]
         lignes.append({"cle": "type", "label": "Type de séance", "prevu": TYPES[prevu_type], "realise": fait["label"],
@@ -514,7 +545,7 @@ def _phrase_fait(a: Activite, typ: Optional[dict], reps: Optional[dict]) -> str:
         return f"{label} de {duree}" + (f" : {', '.join(bouts)}." if bouts else ".")
     cle = typ["cle"] if typ else "footing"
     label = TYPES.get(cle, "Séance")
-    if reps and cle in ("fractionne_court", "fractionne_long", "seuil", "cotes"):
+    if reps and cle in TYPES_INTENSES:
         quoi = f"{reps['n']} × {_duree_rep(reps['duree_sec'])}"
         if reps.get("cotes"):
             quoi += f" en côte ({cs_nombre(float(reps['pente_pct']))} % de pente, {reps['distance_m']} m)"
@@ -627,7 +658,7 @@ def _faits_notables(db: Session, a: Activite, typ: Optional[dict], reps: Optiona
             if haut >= 20:
                 faits.append(f"{round(haut)} % du temps en zones 4 et 5" + ("." if cle in ("course", "test") else
                                                                          " : une vraie séance d'intensité."))
-            elif cle in ("course", "test", "seuil", "fractionne_court", "fractionne_long", "cotes"):
+            elif cle in ("course", "test") + TYPES_INTENSES:
                 parts = [(z.get("min_passees") or 0) / total * 100 for z in zones]
                 k = max(range(5), key=lambda i: parts[i])
                 faits.append(f"La zone {k + 1} domine : {round(parts[k])} % du temps.")
@@ -653,15 +684,23 @@ def bilan(db: Session, user: Utilisateur, a: Activite) -> dict:
     prevue = (db.query(SeancePrevue).filter(SeancePrevue.utilisateur_id == user.id, SeancePrevue.activite_id == a.id)
               .order_by(SeancePrevue.id).first())
     pr = prevu_realise(a, prevue) if prevue else None
-    phrases = [_phrase_fait(a, typ, reps)]
-    deux = _phrase_plan(pr) if pr else _phrase_habitude(a, typ, ctx)
-    if deux:
-        phrases.append(deux)
-    phrases += _faits_notables(db, a, typ, reps, ctx)[:3 - len(phrases)]
+    import execution_service as ex
+    execution = ex.pour_activite(db, user, a, prevue) if prevue else None
+    if execution and execution.get("mode") != "theorique":
+        # Les étapes du plan ont été retrouvées dans l'enregistrement : elles remplacent les répétitions devinées
+        reps = None
+        phrases = [_phrase_fait(a, typ, None)] + execution["phrases"][:2]
+    else:
+        phrases = [_phrase_fait(a, typ, reps)]
+        deux = _phrase_plan(pr) if pr else _phrase_habitude(a, typ, ctx)
+        if deux:
+            phrases.append(deux)
+        phrases += _faits_notables(db, a, typ, reps, ctx)[:3 - len(phrases)]
     return {
         "type": typ,
         "types": [{"cle": k, "label": v} for k, v in TYPES.items()] if a.sport in cs.SPORTS_PIED else [],
         "phrases": phrases,
         "repetitions": reps,
         "prevu": pr,
+        "execution": execution,
     }

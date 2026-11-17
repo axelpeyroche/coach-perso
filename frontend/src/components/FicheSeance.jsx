@@ -239,3 +239,117 @@ export function PrevuRealise({ id }) {
     </section>
   );
 }
+
+const ROLES = { echauffement: "Échauffement", effort: "Effort", recup: "Récup", retour: "Retour au calme" };
+const COLS_PLAN = "grid-cols-[minmax(0,1fr)_3rem_3.3rem_3.3rem_2.2rem] sm:grid-cols-[minmax(0,1.5fr)_3.6rem_3.8rem_4.4rem_3.6rem_minmax(0,1fr)_2.6rem]";
+const metres = (m) => (m >= 1000 ? `${nombre(m / 1000, 2)} km` : `${Math.round(m)} m`);
+const TON = { ok: "text-ios-green", plus: "text-ios-orange", moins: "text-ios-orange", rapide: "text-ios-orange", lent: "text-ios-orange", haut: "text-ios-orange", bas: "text-ios-orange" };
+
+// Ce que la consigne visait pour une étape : une allure, sinon une FC
+function visee(p) {
+  if (p.allure) return p.allure[0] === p.allure[1] ? `${mmss(p.allure[0])}/km` : `${mmss(p.allure[0])}–${mmss(p.allure[1])}/km`;
+  if (p.fc_min && p.fc_max) return `FC ${p.fc_min}–${p.fc_max}`;
+  if (p.fc_max) return `FC < ${p.fc_max}`;
+  return p.zone ? `Z${p.zone}` : "";
+}
+
+// Séance d'intensité liée au plan : chaque étape prévue retrouvée dans l'enregistrement et comparée
+export function RespectPlan({ id, total, onPosition }) {
+  const { data: bilan } = useBilan(id);
+  const e = bilan?.execution;
+  if (!e?.etapes?.length) return null;
+  const r = e.resume ?? {};
+  const introuvable = e.mode === "theorique";
+  const montrer = (x) => x.fait && total && onPosition?.(((x.fait.debut_km + x.fait.fin_km) / 2) / total);
+  const ecartAllure = r.efforts_vises > 0 && r.efforts_allure_ok < r.efforts_vises;
+  const suite = (e.phrases ?? []).slice(2);
+
+  return (
+    <section className="card p-4 space-y-3">
+      <div className="flex items-center gap-3">
+        {r.note != null && <Note note={r.note} />}
+        <div className="min-w-0 flex-1">
+          <h3 className="text-[15px] font-semibold flex items-center gap-1.5">Étapes du plan <Aide sujet="respect_plan" /></h3>
+          <p className="text-[13px] text-label-2 leading-snug">
+            {r.verdict}{e.type_label && <> · {e.type_label}</>}{e.titre && <> · « {e.titre} »</>}
+          </p>
+        </div>
+      </div>
+
+      {introuvable ? (
+        <p className="text-[14px] leading-snug">
+          Les étapes prévues n'ont pas été retrouvées dans l'enregistrement : l'allure est restée trop régulière,
+          ou la séance faite est très différente de celle du plan.
+        </p>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <Chiffre label="Efforts faits" valeur={`${r.efforts_faits}/${r.efforts_prevus}`}
+              ton={r.efforts_faits === r.efforts_prevus ? "text-ios-green" : "text-ios-orange"} />
+            <Chiffre label="À la bonne mesure" valeur={`${r.efforts_mesure_ok}/${r.efforts_prevus}`}
+              ton={r.efforts_mesure_ok === r.efforts_prevus ? "text-ios-green" : "text-ios-orange"} />
+            <Chiffre label="Allure des efforts" valeur={mmss(r.effort_allure_sec_km)} unite="/km"
+              ton={r.efforts_vises > 0 ? (ecartAllure ? "text-ios-orange" : "text-ios-green") : undefined} />
+            {r.recup_duree_sec != null
+              ? <Chiffre label="Récupération moyenne" valeur={court(r.recup_duree_sec)} />
+              : <Chiffre label="FC des efforts" valeur={r.effort_fc ?? "—"} />}
+          </div>
+
+          <div className="text-[13px]" onMouseLeave={() => onPosition?.(null)}>
+            <div className={clsx("grid gap-2 px-1 pb-1.5 text-[11px] text-label-2 uppercase tracking-[0.02em]", COLS_PLAN)}>
+              <span>Étape</span>
+              <span className="text-right">Prévu</span>
+              <span className="text-right">Fait</span>
+              <span className="text-right hidden sm:block">Écart</span>
+              <span className="text-right">Allure</span>
+              <span className="hidden sm:block">Visé</span>
+              <span className="text-right">FC</span>
+            </div>
+            {e.etapes.map((x, i) => {
+              const f = x.fait;
+              const enDuree = x.prevu.duree_sec != null;
+              const ecart = enDuree ? x.ecart_sec : x.ecart_m;
+              const effort = x.role === "effort";
+              // Deux étapes du même nom (trot puis marche au retour au calme) : sur petit écran, la consigne les distingue
+              const jumelle = !!x.libelle && x.sur === 1 && e.etapes.filter((y) => y.role === x.role && y.sur === 1).length > 1;
+              return (
+                <button type="button" key={i} onMouseEnter={() => montrer(x)} onClick={() => montrer(x)}
+                  className={clsx("grid gap-2 items-center w-full text-left px-1 py-[5px] rounded-lg hover:bg-remplissage chiffres",
+                    COLS_PLAN, !effort && "text-label-2")}>
+                  <span className="min-w-0 truncate">
+                    <span className={clsx(effort && "font-semibold", jumelle && "hidden sm:inline")}>{ROLES[x.role]}{x.sur > 1 && ` ${x.rep}`}</span>
+                    {x.libelle && x.sur === 1 && <span className={clsx("text-label-2", !jumelle && "hidden sm:inline")}><span className="hidden sm:inline"> · </span>{x.libelle}</span>}
+                  </span>
+                  <span className="text-right text-label-2">{enDuree ? court(x.prevu.duree_sec) : metres(x.prevu.distance_m)}</span>
+                  <span className={clsx("text-right font-semibold", f ? TON[x.etat] : "text-ios-red")}>
+                    {f ? (enDuree ? court(f.duree_sec) : metres(f.distance_m)) : "non faite"}
+                  </span>
+                  <span className={clsx("text-right hidden sm:block", f && x.etat !== "ok" ? "text-ios-orange" : "text-label-2")}>
+                    {!f || ecart == null ? "—" : Math.round(ecart) === 0 ? "0"
+                      : `${ecart > 0 ? "+" : "−"}${enDuree ? court(Math.abs(ecart)) : metres(Math.abs(ecart))}`}
+                  </span>
+                  <span className={clsx("text-right", effort && "font-semibold", TON[x.etat_allure])}>{f ? mmss(f.allure_sec_km) : "—"}</span>
+                  <span className="hidden sm:block text-label-2 truncate">{visee(x.prevu)}</span>
+                  <span className={clsx("text-right", TON[x.etat_fc])}>{f?.fc ?? "—"}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {suite.length > 0 && (
+            <ul className="space-y-1 text-[13px] text-label-2 leading-snug">
+              {suite.map((p, i) => <li key={i}>{p}</li>)}
+            </ul>
+          )}
+        </>
+      )}
+      <p className="text-[12px] text-label-2">
+        {introuvable ? "Comparaison impossible étape par étape."
+          : e.mode === "tours" ? "Étapes lues d'après les tours enregistrés par la montre."
+          : "Étapes retrouvées d'après les changements d'allure, sans tour de montre."}
+        {e.source === "trace" && " Calcul fait sur le tracé GPS seul : moins précis qu'avec l'enregistrement complet."}
+        {!introuvable && " Vert : conforme au plan ; orange : écart."}
+      </p>
+    </section>
+  );
+}

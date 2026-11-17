@@ -510,6 +510,7 @@ def completer_fc_soutenue(db: Session, user: Utilisateur, depuis, limite: int = 
 # ---------------------------------------------------------------------------
 
 POINTS_GRAPHIQUE = 600
+_CACHE_BRUT: dict = {}      # (utilisateur, activité) → (séance, tours, source) : la matière des analyses fines
 _CACHE_FLUX: dict = {}      # (utilisateur, activité) → (instant, réponse) : évite de relire Intervals à chaque ouverture
 _CACHE_DUREE = timedelta(minutes=30)
 
@@ -704,7 +705,7 @@ def _depuis_streams(streams: list, sport: str, intervalles: Optional[list] = Non
     if not series:
         return None
     dist_km = [d / 1000 if isinstance(d, (int, float)) else None for d in dist] if len(dist) == n else None
-    decoupe, reps = {}, None
+    decoupe, reps, brut = {}, None, None
     if dist_km:
         par_cle = {s["cle"]: s["brut"] for s in series}
         alt = next((d for d in ((par_type.get(t) or {}).get("data") for t in ("fixed_altitude", "altitude"))
@@ -713,7 +714,9 @@ def _depuis_streams(streams: list, sport: str, intervalles: Optional[list] = Non
         decoupe = dc.decouper(seance, intervalles)
         _vitesse_ajustee(seance, series)
         reps = _repetitions(seance)
-    return {**_sortie("intervals", temps, dist_km, series, sauts), "decoupage": decoupe, "intervalles": reps}
+        brut = (seance, intervalles)
+    return {**_sortie("intervals", temps, dist_km, series, sauts), "decoupage": decoupe, "intervalles": reps,
+            "_brut": brut}
 
 
 def _depuis_trace(points: list, sport: str = "") -> Optional[dict]:
@@ -750,7 +753,16 @@ def _depuis_trace(points: list, sport: str = "") -> Optional[dict]:
     decoupe = dc.decouper(seance)
     _vitesse_ajustee(seance, series)
     return {**_sortie("trace", temps, [d / 1000 for d in dist], series), "decoupage": decoupe,
-            "intervalles": _repetitions(seance)}
+            "intervalles": _repetitions(seance), "_brut": (seance, None)}
+
+
+def seance_brute(user: Utilisateur, act: Activite, points_trace: Optional[list]) -> Optional[tuple]:
+    """(séance, tours, source) : les mesures point par point qui servent aux courbes, pour les analyses."""
+    cle = (user.id, act.id)
+    flux_seance(user, act, points_trace)
+    if cle not in _CACHE_BRUT and _CACHE_FLUX.pop(cle, None):
+        flux_seance(user, act, points_trace)
+    return _CACHE_BRUT.get(cle)
 
 
 def flux_seance(user: Utilisateur, act: Activite, points_trace: Optional[list]) -> dict:
@@ -779,6 +791,12 @@ def flux_seance(user: Utilisateur, act: Activite, points_trace: Optional[list]) 
         res = _depuis_trace(points_trace, act.sport)
     if res is None:
         res = {"source": None, "temps": [], "distance": None, "series": []}
+    brut = res.pop("_brut", None)
+    if brut:
+        _CACHE_BRUT.pop(cle_cache, None)
+        if len(_CACHE_BRUT) > 50:
+            _CACHE_BRUT.pop(next(iter(_CACHE_BRUT)))
+        _CACHE_BRUT[cle_cache] = (brut[0], brut[1], res.get("source"))
     if avertissement:
         res = {**res, "avertissement": avertissement}
     else:

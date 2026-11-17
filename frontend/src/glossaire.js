@@ -331,6 +331,12 @@ export const GLOSSAIRE = {
     calcul: "L'allure, ramenée au plat quand il y a du dénivelé, est séparée en deux groupes : rapide et lent. Une répétition est un passage rapide d'au moins 20 s, encadré par un ralentissement net. Il en faut au moins trois de durées voisines. L'écart entre répétitions est la dispersion de leurs allures ; « fin contre début » compare le dernier tiers au premier.",
     lire: "Un écart sous 3 % : séance très régulière. Un dernier tiers plus lent de plus de 5 % : départ trop rapide ou récupération trop courte. La ligne bleue est ta meilleure répétition. Un footing vallonné ou progressif n'est pas compté comme du fractionné.",
   },
+  respect_plan: {
+    titre: "Étapes du plan",
+    quoi: "Pour une séance d'intensité liée au plan (fartlek, fractionné, seuil, côtes) : chaque étape prévue — échauffement, efforts, récupérations, retour au calme — est retrouvée dans l'enregistrement et comparée à la consigne.",
+    calcul: "Si la montre a enregistré un tour par étape, ce sont les tours qui font foi. Sinon les efforts sont repérés aux changements d'allure : autant de passages rapides que le plan en prévoit, les plus marqués, dans l'ordre. Chaque étape est alors mesurée (durée ou distance, allure, FC moyenne) et comparée au prévu, avec une petite tolérance. L'allure et la FC ne sont jugées que si la consigne en donne. La note sur 100 pèse surtout les efforts, puis les récupérations, puis l'échauffement et le retour au calme.",
+    lire: "Vert : conforme ; orange : plus long, plus court, plus rapide ou plus lent que prévu ; « non faite » : étape absente de l'enregistrement. Une FC basse sur un effort de moins de 2 min n'est pas comptée : le cœur n'a pas le temps de monter. Touche une ligne pour la situer sur la carte et les courbes. Les sorties en endurance et les sorties longues ne sont pas découpées.",
+  },
   note_execution: {
     titre: "Prévu contre réalisé",
     quoi: "La séance faite comparée à celle du plan à laquelle elle est liée, avec une note d'exécution sur 100.",
