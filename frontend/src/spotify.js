@@ -154,6 +154,9 @@ async function commander(methode, chemin, corps) {
   }
 }
 
+// Spotify Connect : la lecture passe sur l'appareil choisi
+export const transferer = (id) => appel("PUT", "/me/player", { device_ids: [id], play: true });
+
 export const pause = () => commander("PUT", "/me/player/pause");
 export const suivant = () => commander("POST", "/me/player/next");
 export const precedent = () => commander("POST", "/me/player/previous");

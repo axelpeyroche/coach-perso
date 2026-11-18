@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { melangerSon } from "../son";
 import { useAuth } from "../AuthContext";
-import { spotifyDisponible, spotifyConnecte, spotifyPerdu, connecterSpotify, etatLecteur, lire, pause, suivant, precedent, mesPlaylists, titresPlaylist, aleatoire, chercher, ajouterFile } from "../spotify";
+import { spotifyDisponible, spotifyConnecte, spotifyPerdu, connecterSpotify, etatLecteur, lire, pause, suivant, precedent, mesPlaylists, titresPlaylist, aleatoire, chercher, ajouterFile, appareils, transferer } from "../spotify";
 
 // Bandeau Spotify de la séance guidée : titre en cours, précédent, pause et suivant ;
 // touché, il se déplie en lecteur avec la liste des playlists (toucher une playlist
@@ -22,6 +22,8 @@ const trait = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", stro
 const IcoAleatoire = ({ c = "w-[22px] h-[22px]" }) => <svg className={c} {...trait}><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5" /></svg>;
 const IcoChevron = ({ c = "w-[18px] h-[18px]", gauche }) => <svg className={c} {...trait}><path d={gauche ? "M15 18l-6-6 6-6" : "M9 6l6 6-6 6"} /></svg>;
 const IcoSon = () => <svg className="w-4 h-4 shrink-0" {...trait}><path d="M11 5L6 9H3v6h3l5 4V5zM15.5 8.5a5 5 0 010 7M18.5 5.5a9 9 0 010 13" /></svg>;
+const IcoConnect = ({ c = "w-[22px] h-[22px]" }) => <svg className={c} {...trait}><path d="M12 14H4.5A1.5 1.5 0 013 12.5v-7A1.5 1.5 0 014.5 4h10A1.5 1.5 0 0116 5.5V6M6 18h5" /><rect x="15" y="9" width="6" height="11" rx="1.5" /><path d="M18 16.5v.01M18 12.5v.01" /></svg>;
+const TYPES_APPAREIL = { Smartphone: "Téléphone", Computer: "Ordinateur", Speaker: "Enceinte", TV: "Télévision", Tablet: "Tablette", Automobile: "Voiture", AVR: "Ampli", CastAudio: "Enceinte", CastVideo: "Télévision", GameConsole: "Console" };
 const IcoNote = () => <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden><path d="M9 18V6l11-2v12" /><circle cx="6.5" cy="18" r="2.5" /><circle cx="17.5" cy="16" r="2.5" /></svg>;
 
 function Pochette({ src, taille, rayon = 7 }) {
@@ -72,6 +74,8 @@ export function useSpotify({ autoLancer = true } = {}) {
   const [requete, setRequete] = useState("");
   const [resultats, setResultats] = useState(null);  // { q, liste, charge, erreur }
   const [ajoutes, setAjoutes] = useState([]);        // titres ajoutés à la file il y a moins de 2 s
+
+  const [connect, setConnect] = useState(null);      // liste des appareils ouverte : { liste, charge, erreur }
 
   function appliquer(d) {
     recu.current = Date.now();
@@ -214,6 +218,35 @@ export function useSpotify({ autoLancer = true } = {}) {
     }
   }
 
+  // Spotify Connect : appareils visibles par Spotify à cet instant
+  async function chargerAppareils(ouvrir = false) {
+    setConnect((c) => (c || ouvrir ? { liste: c?.liste ?? [], charge: true } : c));
+    try {
+      const liste = await appareils();
+      setConnect((c) => c && { liste, charge: false });
+    } catch (e) {
+      console.warn("Spotify, appareils :", e.status, e.message);
+      setConnect((c) => c && { liste: [], charge: false, erreur: true });
+    }
+  }
+  const ouvrirConnect = (oui) => { if (oui) chargerAppareils(true); else setConnect(null); };
+  async function choisirAppareil(a) {
+    setErreur(null);
+    calme.current = Date.now() + 4000;
+    setChange(true);
+    setConnect((c) => c && { ...c, liste: c.liste.map((x) => ({ ...x, is_active: x.id === a.id })) });
+    try {
+      await transferer(a.id);
+      setEndormi(false);
+      await confirmer((d) => d?.device?.id === a.id);
+    } catch (e) {
+      setChange(false);
+      rafraichir();
+      signaler(e);
+    }
+    chargerAppareils();
+  }
+
   async function commande(fn) {
     setErreur(null);
     calme.current = Date.now() + 3000;
@@ -258,7 +291,7 @@ export function useSpotify({ autoLancer = true } = {}) {
   return {
     actif, lecteur, endormi, erreur, deplie, setDeplie, playlists, change, recu, lancer, commande,
     basculerAleatoire, vue, ouvrir, titres, plusDeTitres: () => vue && chargerTitres(vue, true),
-    requete, setRequete, resultats, ajouter, ajoutes,
+    requete, setRequete, resultats, ajouter, ajoutes, connect, ouvrirConnect, choisirAppareil,
   };
 }
 
@@ -288,7 +321,11 @@ export default function BandeauSpotify({ sp }) {
   const [sortie, setSortie] = useState(false);   // feuille en train de se refermer
   const { user } = useAuth();
   const { actif, lecteur, endormi, erreur, deplie, setDeplie, playlists, change, recu, lancer, commande,
-    basculerAleatoire, vue, ouvrir, titres, plusDeTitres, requete, setRequete, resultats, ajouter, ajoutes } = sp;
+    basculerAleatoire, vue, ouvrir, titres, plusDeTitres, requete, setRequete, resultats, ajouter, ajoutes, connect, ouvrirConnect, choisirAppareil } = sp;
+  // Feuille tirée vers le bas au doigt : elle suit le doigt, puis se referme ou revient en place
+  const [glisse, setGlisse] = useState(null);    // décalage en px pendant le geste
+  const [lache, setLache] = useState(false);     // refermée par le geste
+  const aBouge = useRef(false);
   if (!actif) {
     // Connexion perdue en route : on le dit, avec de quoi la rétablir (la séance est sauvegardée)
     // (pour le propriétaire, même sans trace d'une perte : il s'en sert à chaque séance)
@@ -306,10 +343,35 @@ export default function BandeauSpotify({ sp }) {
       </div>
     );
   }
-  const fermer = () => {
+  const fermer = (parGeste = false) => {
     if (sortie) return;
     setSortie(true);
-    setTimeout(() => { setDeplie(false); setSortie(false); ouvrir(null); setRequete(""); }, 220);
+    if (parGeste === true) setLache(true);
+    setTimeout(() => { setDeplie(false); setSortie(false); setLache(false); setGlisse(null); ouvrir(null); ouvrirConnect(false); setRequete(""); }, 220);
+  };
+  const debutTire = (ev) => {
+    if (sortie || (ev.pointerType === "mouse" && ev.button !== 0)) return;
+    const y0 = ev.clientY;
+    let py = y0, pt = ev.timeStamp, v = 0;
+    aBouge.current = false;
+    const suite = (e) => {
+      const d = e.clientY - y0;
+      if (Math.abs(d) > 6) aBouge.current = true;
+      if (e.timeStamp > pt) { v = (e.clientY - py) / (e.timeStamp - pt); py = e.clientY; pt = e.timeStamp; }
+      if (aBouge.current) setGlisse(Math.max(0, d));
+    };
+    const fin = (e) => {
+      window.removeEventListener("pointermove", suite);
+      window.removeEventListener("pointerup", fin);
+      window.removeEventListener("pointercancel", fin);
+      const d = e.clientY - y0;
+      // Assez loin, ou un coup de doigt franc vers le bas : on referme ; sinon retour en place
+      if (e.type === "pointerup" && aBouge.current && (d > 110 || (d > 30 && v > 0.5))) fermer(true);
+      else setGlisse(null);
+    };
+    window.addEventListener("pointermove", suite);
+    window.addEventListener("pointerup", fin);
+    window.addEventListener("pointercancel", fin);
   };
   const cherche = !!requete.trim();
   const melange = !!lecteur?.shuffle_state;
@@ -365,15 +427,24 @@ export default function BandeauSpotify({ sp }) {
       <div className="mb-3" data-spotify>{bandeau}</div>
       {deplie && createPortal(
         <div data-spotify className={`fixed inset-0 z-[70] text-white font-sans antialiased select-none flex items-end lg:items-center justify-center bg-black/60 ${sortie ? "animate-[fonduSortie_0.22s_ease-in_forwards]" : "animate-[fondu_0.2s_ease-out]"}`} onClick={fermer}>
-          <div className={`w-full max-w-[480px] max-h-[85vh] flex flex-col rounded-t-[20px] lg:rounded-[20px] bg-[#1c1c1e] px-4 pt-2.5 will-change-transform ${sortie ? "animate-[descend_0.22s_ease-in_forwards]" : "animate-[monte_0.32s_cubic-bezier(0.32,0.72,0,1)]"}`}
-            style={{ paddingBottom: "max(16px, env(safe-area-inset-bottom))" }}
+          <div className={`w-full max-w-[480px] max-h-[85vh] flex flex-col rounded-t-[20px] lg:rounded-[20px] bg-[#1c1c1e] px-4 pt-2.5 will-change-transform ${lache ? "" : sortie ? "animate-[descend_0.22s_ease-in_forwards]" : "animate-[monte_0.32s_cubic-bezier(0.32,0.72,0,1)]"}`}
+            style={{
+              paddingBottom: "max(16px, env(safe-area-inset-bottom))",
+              transform: lache ? "translateY(100%)" : glisse ? `translateY(${glisse}px)` : undefined,
+              transition: glisse != null && !lache ? "none" : "transform 0.22s cubic-bezier(0.32,0.72,0,1)",
+            }}
             onClick={(ev) => ev.stopPropagation()} role="dialog" aria-label="Lecteur Spotify">
-            <button type="button" onClick={fermer} aria-label="Refermer le lecteur" className="mx-auto mb-3 block w-10 h-[5px] rounded-full bg-[#3a3a3c]" />
-            <div className={`flex items-center gap-3 transition-opacity ${change ? "opacity-40" : ""}`}>
-              <Pochette src={grande} taille={64} rayon={10} />
-              <div className="min-w-0">
-                <p className="text-[16px] font-semibold truncate">{piste?.name ?? "Rien en lecture"}</p>
-                <p className="text-[13px] text-white/60 truncate">{piste ? [artiste, nomContexte].filter(Boolean).join(" · ") : "Choisis une playlist"}</p>
+            {/* Zone de prise : la barre et le titre en cours se tirent vers le bas pour refermer */}
+            <div onPointerDown={debutTire} className="-mx-4 -mt-2.5 px-4 pt-2.5 touch-none cursor-grab">
+              <button type="button" onClick={() => { if (!aBouge.current) fermer(); }} aria-label="Refermer le lecteur" className="mx-auto block w-16 pt-0 pb-3">
+                <i className="mx-auto block w-10 h-[5px] rounded-full bg-[#3a3a3c]" />
+              </button>
+              <div className={`flex items-center gap-3 transition-opacity ${change ? "opacity-40" : ""}`}>
+                <Pochette src={grande} taille={64} rayon={10} />
+                <div className="min-w-0">
+                  <p className="text-[16px] font-semibold truncate">{piste?.name ?? "Rien en lecture"}</p>
+                  <p className="text-[13px] text-white/60 truncate">{piste ? [artiste, nomContexte].filter(Boolean).join(" · ") : "Choisis une playlist"}</p>
+                </div>
               </div>
             </div>
             {piste && <Progression lecteur={lecteur} recu={recu} />}
@@ -389,9 +460,43 @@ export default function BandeauSpotify({ sp }) {
                 {joue ? <IcoPause c="w-7 h-7" /> : <IcoLecture c="w-7 h-7" />}
               </button>
               <button type="button" onClick={() => commande(suivant)} className="w-12 h-12 rounded-full flex items-center justify-center active:bg-white/10" aria-label="Morceau suivant"><IcoSuivant c="w-6 h-6" /></button>
-              <span className="w-11 h-11" aria-hidden />
+              <button type="button" onClick={() => ouvrirConnect(!connect)} aria-pressed={!!connect}
+                className="w-11 h-11 rounded-full flex items-center justify-center active:bg-white/10"
+                style={{ color: connect ? VERT : "rgba(255,255,255,0.6)" }} aria-label="Choisir l’appareil de lecture">
+                <IcoConnect />
+              </button>
             </div>
             {erreur && <p className="mb-2 text-center text-[13px] text-[#FF453A]">{erreur}</p>}
+            {connect ? (
+              <>
+                <div className="mt-1 mb-1.5 flex items-center justify-between">
+                  <button type="button" onClick={() => ouvrirConnect(false)} className="-ml-1 flex items-center gap-0.5 py-1 text-[15px]" style={{ color: VIOLET }}>
+                    <IcoChevron gauche /> Playlists
+                  </button>
+                  <button type="button" onClick={() => ouvrirConnect(true)} className="py-1 text-[15px]" style={{ color: VIOLET }}>Actualiser</button>
+                </div>
+                <p className="mb-1.5 text-[12px] font-semibold uppercase tracking-[0.06em] text-white/30">Écouter sur</p>
+                <div className="flex-1 min-h-0 overflow-y-auto scrollbar-hide -mx-1">
+                  {connect.liste.map((a) => (
+                    <button key={a.id ?? a.name} type="button" disabled={!a.id || a.is_restricted || a.is_active} onClick={() => choisirAppareil(a)}
+                      className="w-full flex items-center gap-2.5 rounded-[10px] px-1 py-2 text-left active:bg-white/10 disabled:active:bg-transparent">
+                      <span className="w-9 h-9 shrink-0 rounded-[8px] bg-[#2c2c2e] flex items-center justify-center" style={{ color: a.is_active ? VERT : "rgba(255,255,255,0.6)" }}><IcoConnect c="w-5 h-5" /></span>
+                      <span className={`flex-1 min-w-0 ${a.is_restricted && !a.is_active ? "opacity-40" : ""}`}>
+                        <span className="block truncate text-[15px]" style={a.is_active ? { color: VERT } : undefined}>{a.name}</span>
+                        <span className="block truncate text-[12px] text-white/60">
+                          {[TYPES_APPAREIL[a.type] ?? "Appareil", a.is_restricted ? "ne se pilote pas d’ici" : null].filter(Boolean).join(" · ")}
+                        </span>
+                      </span>
+                      {a.is_active && <span className="text-[12px] font-semibold" style={{ color: VERT }}>En cours</span>}
+                    </button>
+                  ))}
+                  {connect.charge && !connect.liste.length && <p className="py-3 text-center text-[13px] text-white/40">Recherche des appareils…</p>}
+                  {connect.erreur && <p className="py-3 text-center text-[13px] text-white/40">Liste des appareils indisponible</p>}
+                  {!connect.charge && !connect.erreur && !connect.liste.length && <p className="py-3 text-center text-[13px] text-white/40">Aucun appareil trouvé</p>}
+                  {!connect.charge && <p className="px-1 py-2 text-[12px] leading-4 text-white/40">Une enceinte n’apparaît que si Spotify la voit : même Wi-Fi, ou déjà reliée à ton compte.</p>}
+                </div>
+              </>
+            ) : (<>
             <div className="mt-1 mb-2 flex items-center gap-2">
               <label className="flex-1 min-w-0 h-9 flex items-center gap-2 rounded-[10px] bg-[#2c2c2e] px-2.5 text-white/45">
                 <svg className="w-4 h-4 shrink-0" {...trait}><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
@@ -503,6 +608,7 @@ export default function BandeauSpotify({ sp }) {
                 </div>
               </>
             )}
+            </>)}
           </div>
         </div>,
         document.body,
