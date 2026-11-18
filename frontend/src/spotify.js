@@ -129,28 +129,21 @@ export const etatLecteur = () => appel("GET", "/me/player?additional_types=episo
 export const appareils = async () => (await appel("GET", "/me/player/devices"))?.devices ?? [];
 
 // « Restricted device » : l'appareil qui joue (enceinte, voiture, montre…) n'accepte aucune
-// commande à distance. La lecture est alors reprise sur un appareil qui se laisse piloter
-// (le téléphone d'abord) ; s'il n'y en a pas, l'erreur porte le nom de l'appareil en cause.
+// commande à distance (limite de Spotify). Le son reste où il est : on ne déplace jamais la
+// lecture d'office vers un autre appareil ; l'erreur porte le nom de l'appareil en cause.
 const restreint = (e) => e.status === 403 && /restricted device/i.test(e.message);
-async function appareilPilotable() {
-  const liste = await appareils();
-  const libres = liste.filter((a) => a.id && !a.is_restricted);
-  const cible = libres.find((a) => a.type === "Smartphone") ?? libres[0];
-  if (cible) return cible;
-  const err = new Error("Restricted device");
-  err.status = 403;
-  err.restreint = (liste.find((a) => a.is_active) ?? liste[0])?.name ?? "";
-  throw err;
+async function nommerRestreint(e) {
+  if (restreint(e) && e.restreint === undefined) {
+    const liste = await appareils().catch(() => []);
+    e.restreint = liste.find((a) => a.is_active)?.name ?? "";
+  }
+  return e;
 }
 async function commander(methode, chemin, corps) {
   try {
     return await appel(methode, chemin, corps);
   } catch (e) {
-    if (!restreint(e)) throw e;
-    const cible = await appareilPilotable();
-    await appel("PUT", "/me/player", { device_ids: [cible.id], play: !chemin.endsWith("/pause") });
-    await new Promise((r) => setTimeout(r, 700));
-    return appel(methode, `${chemin}${chemin.includes("?") ? "&" : "?"}device_id=${cible.id}`, corps);
+    throw await nommerRestreint(e);
   }
 }
 
@@ -244,8 +237,8 @@ export async function lire(uri, titre) {
   try {
     return await essayer();
   } catch (e) {
-    // Appareil restreint : la lecture est lancée sur un appareil qui se laisse piloter
-    if (restreint(e) && e.restreint === undefined) return essayer((await appareilPilotable()).id);
+    // Appareil restreint : le son reste dessus, on signale seulement qu'il ne se pilote pas d'ici
+    if (restreint(e)) throw await nommerRestreint(e);
     if (e.status !== 404) throw e;
     const liste = (await appareils()).filter((a) => a.id && !a.is_restricted);
     const cible = liste.find((a) => a.is_active) ?? liste.find((a) => a.type === "Smartphone") ?? liste[0];

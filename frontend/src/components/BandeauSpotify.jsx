@@ -45,7 +45,7 @@ function message(e) {
   if (e.status === 401) return "Reconnecte Spotify depuis Profil";
   if (e.status === 403 && e.raison === "PREMIUM_REQUIRED") return "Compte Premium requis";
   if (e.status === 403 && /restricted device/i.test(e.message)) {
-    return `${e.restreint ? `« ${e.restreint} »` : "Cet appareil"} n’accepte pas les commandes à distance : change de titre dans l’appli Spotify`;
+    return `${e.restreint ? `« ${e.restreint} »` : "Cet appareil"} ne se pilote pas d’ici (limite de Spotify) : le son y reste, change de titre dans l’appli Spotify`;
   }
   if (e.status === 429) return "Trop de commandes, réessaie dans un instant";
   return `Spotify a refusé (${e.status}) : ${e.message}`;
@@ -493,7 +493,7 @@ export default function BandeauSpotify({ sp }) {
                   {connect.charge && !connect.liste.length && <p className="py-3 text-center text-[13px] text-white/40">Recherche des appareils…</p>}
                   {connect.erreur && <p className="py-3 text-center text-[13px] text-white/40">Liste des appareils indisponible</p>}
                   {!connect.charge && !connect.erreur && !connect.liste.length && <p className="py-3 text-center text-[13px] text-white/40">Aucun appareil trouvé</p>}
-                  {!connect.charge && <p className="px-1 py-2 text-[12px] leading-4 text-white/40">Une enceinte n’apparaît que si Spotify la voit : même Wi-Fi, ou déjà reliée à ton compte.</p>}
+                  {!connect.charge && <p className="px-1 py-2 text-[12px] leading-4 text-white/40">Spotify ne montre ici que les appareils qu’il laisse piloter à distance. Certaines enceintes (Sonos, entre autres) n’y figurent pas, ou seulement grisées pendant qu’elles jouent : pour elles, tout se règle dans l’appli Spotify.</p>}
                 </div>
               </>
             ) : (<>
