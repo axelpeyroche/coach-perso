@@ -42,6 +42,9 @@ function message(e) {
   if (!e.status) return "Spotify injoignable (réseau)";
   if (e.status === 401) return "Reconnecte Spotify depuis Profil";
   if (e.status === 403 && e.raison === "PREMIUM_REQUIRED") return "Compte Premium requis";
+  if (e.status === 403 && /restricted device/i.test(e.message)) {
+    return `${e.restreint ? `« ${e.restreint} »` : "Cet appareil"} n’accepte pas les commandes à distance : change de titre dans l’appli Spotify`;
+  }
   if (e.status === 429) return "Trop de commandes, réessaie dans un instant";
   return `Spotify a refusé (${e.status}) : ${e.message}`;
 }
