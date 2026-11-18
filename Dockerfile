@@ -2,7 +2,8 @@
 # La base de données reste à l'extérieur (Neon, DATABASE_URL) : rien n'est stocké dans le conteneur.
 
 # 1. Construction de l'interface (VITE_API_URL vide : l'API est à la même adresse, sous /api)
-FROM node:20-alpine AS interface
+# Image Debian (glibc) : sous Alpine (musl), l'analyseur de Rollup échoue (« Code is nested too deeply »)
+FROM node:22-slim AS interface
 WORKDIR /src/frontend
 COPY frontend/package.json ./
 RUN npm install --no-audit --no-fund
