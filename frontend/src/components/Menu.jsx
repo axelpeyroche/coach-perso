@@ -71,7 +71,7 @@ export const IconesMenu = {
 
 // Menu déroulant façon iOS (bouton pop-up) : la valeur suivie de ⌃⌄ ouvre une bulle de verre
 // où le choix courant est coché. options : [{ valeur, label }, { separateur: true }]
-export function MenuChoix({ valeur, options, onChange, label }) {
+export function MenuChoix({ valeur, options, onChange, label, className }) {
   const [pos, setPos] = useState(null);
   const btn = useRef(null);
   const courante = options.find((o) => !o.separateur && o.valeur === valeur);
@@ -93,7 +93,7 @@ export function MenuChoix({ valeur, options, onChange, label }) {
   return (
     <>
       <button ref={btn} type="button" aria-label={label} aria-haspopup="menu" aria-expanded={!!pos}
-        onClick={ouvrir} className="flex items-center gap-1 text-[17px] text-label-2 active:opacity-50 transition-opacity">
+        onClick={ouvrir} className={`flex items-center gap-1 active:opacity-50 transition-opacity ${className ?? "text-[17px] text-label-2"}`}>
         <span>{courante?.label}</span>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"
           className="w-[13px] h-[13px]" aria-hidden><path d="M8 9.5l4-4 4 4M8 14.5l4 4 4-4" /></svg>

@@ -7,6 +7,7 @@ import { cadresTraces, calculerPassages, decoderTraces, tracesPassantPar, traitT
 import { getActivite } from "../api";
 import { sportInfo } from "../carnet";
 import FicheActivite from "./FicheActivite";
+import { MenuChoix } from "./Menu";
 
 const TACTILE = typeof window !== "undefined" && !!window.matchMedia?.("(pointer: coarse)").matches;
 
@@ -431,11 +432,9 @@ export default function CartePassages({ annee: fixe } = {}) {
           </button>
         ))}
         {fixe == null && annees.length > 1 && (
-          <select aria-label="Année" value={annee ?? ""} onChange={(e) => setAnnee(e.target.value ? Number(e.target.value) : null)}
-            className="ml-auto px-3 py-1.5 rounded-full text-[14px] font-semibold bg-remplissage text-label border-0">
-            <option value="">Toutes les années</option>
-            {annees.map((a) => <option key={a} value={a}>{a}</option>)}
-          </select>
+          <MenuChoix label="Année" valeur={annee ?? null} onChange={setAnnee}
+            className="ml-auto px-3.5 py-1.5 rounded-full text-[14px] font-semibold bg-remplissage text-label"
+            options={[{ valeur: null, label: "Toutes les années" }, { separateur: true }, ...annees.map((a) => ({ valeur: a, label: String(a) }))]} />
         )}
       </div>
       <div ref={cadre} className="relative h-80 lg:h-[26rem] rounded-[14px] overflow-hidden bg-remplissage">
