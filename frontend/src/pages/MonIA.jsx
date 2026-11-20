@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Selecteur } from "../components/Menu";
 import { Link } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
@@ -229,10 +230,10 @@ export default function MonIA() {
             {JOURS_IA.map(([j, libelle]) => (
               <label key={j} className="ligne justify-between gap-3">
                 <span className="text-[15px]">{libelle}</span>
-                <select className="bg-transparent text-[15px] text-right text-brand font-medium chiffres"
+                <Selecteur className="bg-transparent text-[15px] text-right text-brand font-medium chiffres"
                   value={r.dispos[j] ?? 0} onChange={(e) => changer({ dispos: { ...r.dispos, [j]: Number(e.target.value) } })}>
                   {DUREES_IA.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                </select>
+                </Selecteur>
               </label>
             ))}
           </div>

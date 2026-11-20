@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Selecteur } from "./Menu";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import clsx from "clsx";
@@ -151,9 +152,9 @@ function NouvelleDouleur({ journal, initial, onClose, onCree }) {
       action={<button type="button" className="btn-primaire" disabled={creer.isPending} onClick={() => creer.mutate()}>Ajouter</button>}>
       <div className="grid gap-3 sm:grid-cols-2">
         <Champ label="Zone">
-          <select className="champ w-full" value={zone} onChange={(e) => setZone(e.target.value)}>
+          <Selecteur className="champ w-full" value={zone} onChange={(e) => setZone(e.target.value)}>
             {journal.zones.map((z) => <option key={z.zone} value={z.zone}>{z.label}</option>)}
-          </select>
+          </Selecteur>
         </Champ>
         <Champ label="Depuis le">
           <input type="date" className="champ w-full" value={debut} max={journal.jour} onChange={(e) => setDebut(e.target.value || journal.jour)} />

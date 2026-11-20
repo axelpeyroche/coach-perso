@@ -8,7 +8,7 @@ import { getErrorMessage } from "../utils/errors";
 import ConfirmDialog from "../components/ConfirmDialog";
 import Page from "../components/Page";
 import Feuille from "../components/Feuille";
-import { MenuChoix } from "../components/Menu";
+import { MenuChoix, Selecteur } from "../components/Menu";
 import ModalPoids from "../components/ModalPoids";
 import { imc } from "../components/Poids";
 import { nombre } from "../carnet";
@@ -362,11 +362,11 @@ function EditInfosModal({ user, onClose, onSaved }) {
           <Field label="Email"><input type="email" className="champ" value={form.email} onChange={set("email")} /></Field>
         </div>
         <Field label="Sexe">
-          <select className="champ" value={form.sexe} onChange={set("sexe")}>
+          <Selecteur className="champ" value={form.sexe} onChange={set("sexe")}>
             <option value="">—</option>
             <option value="M">Homme</option>
             <option value="F">Femme</option>
-          </select>
+          </Selecteur>
         </Field>
         <Field label="Poids (kg)">
           <input type="number" step="0.1" min="20" max="300" inputMode="decimal" className="champ" value={form.poids_kg} onChange={set("poids_kg")} />

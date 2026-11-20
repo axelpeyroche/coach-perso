@@ -1,4 +1,4 @@
-import { useState, useRef, useLayoutEffect } from "react";
+import { Children, Fragment, useEffect, useState, useRef, useLayoutEffect } from "react";
 import { createPortal } from "react-dom";
 
 // Menu contextuel en Liquid Glass (iOS 26) : un bouton « ⋯ » ouvre une
@@ -118,6 +118,91 @@ export function MenuChoix({ valeur, options, onChange, label, className }) {
                   <span className="flex-1 truncate">{o.label}</span>
                 </button>
               ))}
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
+
+// Remplaçant de <select> (mêmes props, mêmes <option> en enfants) : un champ suivi de ⌃⌄ qui
+// ouvre la bulle de verre au lieu de la liste native du navigateur. onChange reçoit
+// { target: { value } } avec la valeur en texte, comme un <select>.
+function lireOptions(enfants, sortie = []) {
+  Children.forEach(enfants, (c) => {
+    if (!c || typeof c !== "object") return;
+    if (c.type === Fragment) lireOptions(c.props.children, sortie);
+    else if (c.type === "option") {
+      const label = Children.toArray(c.props.children).join("");
+      sortie.push({ valeur: String(c.props.value ?? label), label, disabled: !!c.props.disabled });
+    }
+  });
+  return sortie;
+}
+
+export function Selecteur({ value, onChange, children, className = "", disabled, ...props }) {
+  const [pos, setPos] = useState(null);
+  const btn = useRef(null);
+  const options = lireOptions(children);
+  const valeur = String(value ?? "");
+  const courante = options.find((o) => o.valeur === valeur) ?? options[0];
+
+  const ouvrir = () => {
+    const r = btn.current.getBoundingClientRect();
+    const hauteur = options.length * 44 + 12;
+    const dessous = window.innerHeight - r.bottom - 18;
+    const dessus = r.top - 18;
+    const vertical = dessous < hauteur && dessus > dessous
+      ? { bottom: window.innerHeight - r.top + 6, max: dessus, v: "bottom" }
+      : { top: r.bottom + 6, max: dessous, v: "top" };
+    // La bulle s'aligne sur le bord du champ le plus proche du bord de l'écran
+    const aGauche = r.left < window.innerWidth - r.right;
+    setPos({
+      ...vertical,
+      ...(aGauche ? { left: Math.max(12, r.left) } : { right: Math.max(12, window.innerWidth - r.right) }),
+      origine: `${vertical.v} ${aGauche ? "left" : "right"}`,
+      largeur: Math.min(r.width, 340),
+    });
+  };
+  const fermer = () => setPos(null);
+
+  // Échap referme la bulle seule (pas la feuille qui la contient)
+  useEffect(() => {
+    if (!pos) return;
+    const f = (e) => { if (e.key === "Escape") { e.stopPropagation(); setPos(null); } };
+    window.addEventListener("keydown", f, true);
+    return () => window.removeEventListener("keydown", f, true);
+  }, [pos]);
+
+  return (
+    <>
+      <button ref={btn} type="button" aria-haspopup="listbox" aria-expanded={!!pos} disabled={disabled} {...props}
+        onClick={ouvrir} className={`inline-flex items-center justify-between gap-1.5 text-left disabled:opacity-50 ${className}`}>
+        <span className="min-w-0 truncate">{courante?.label}</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"
+          className="w-[13px] h-[13px] shrink-0 opacity-50" aria-hidden><path d="M8 9.5l4-4 4 4M8 14.5l4 4 4-4" /></svg>
+      </button>
+      {pos && createPortal(
+        <div className="fixed inset-0 z-[60]" onClick={(e) => { e.stopPropagation(); fermer(); }} onTouchMove={fermer} onWheel={fermer}>
+          <div role="listbox" aria-label={props["aria-label"]}
+            className="menu-verre fixed !min-w-[200px] !max-w-[min(340px,calc(100vw-24px))] !overflow-y-auto scrollbar-hide overscroll-contain"
+            style={{ top: pos.top, bottom: pos.bottom, left: pos.left, right: pos.right, maxHeight: pos.max, minWidth: pos.largeur, transformOrigin: pos.origine }}
+            onClick={(e) => e.stopPropagation()} onTouchMove={(e) => e.stopPropagation()} onWheel={(e) => e.stopPropagation()}>
+            {options.map((o, i) => (
+              <button key={i} type="button" role="option" aria-selected={o.valeur === valeur} disabled={o.disabled}
+                ref={o.valeur === valeur ? (el) => el?.scrollIntoView({ block: "center" }) : undefined}
+                onClick={() => { fermer(); if (o.valeur !== valeur) onChange?.({ target: { value: o.valeur } }); }}
+                className="menu-item !pl-3">
+                <span className="w-[19px] shrink-0 flex justify-center" aria-hidden>
+                  {o.valeur === valeur && (
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round"
+                      className="!w-[15px] !h-[15px]"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+                  )}
+                </span>
+                <span className="flex-1 truncate">{o.label}</span>
+              </button>
+            ))}
           </div>
         </div>,
         document.body

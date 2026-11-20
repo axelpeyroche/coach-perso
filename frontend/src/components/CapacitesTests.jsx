@@ -1,4 +1,5 @@
 // Capacités : tests guidés (planification, reconnaissance, comparaison) et prédiction de course par tronçon.
+import { Selecteur } from "./Menu";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -286,18 +287,18 @@ export function Prediction({ p }) {
           {p.objectifs.length > 1 && (
             <label className="block">
               <span className="text-[12px] font-medium text-label-2">Course</span>
-              <select className="champ w-full mt-1" value={o.id} onChange={(e) => setChoisi(e.target.value)}>
+              <Selecteur className="champ w-full mt-1" value={o.id} onChange={(e) => setChoisi(e.target.value)}>
                 {p.objectifs.map((x) => <option key={x.id} value={x.id}>{x.titre} · {court(x.date)}</option>)}
-              </select>
+              </Selecteur>
             </label>
           )}
           <label className="block">
             <span className="text-[12px] font-medium text-label-2">Parcours</span>
-            <select className="champ w-full mt-1" value={o.itineraire_id ?? ""} disabled={lier.isPending}
+            <Selecteur className="champ w-full mt-1" value={o.itineraire_id ?? ""} disabled={lier.isPending}
               onChange={(e) => lier.mutate({ id: o.id, itineraire_id: e.target.value ? Number(e.target.value) : null })}>
               <option value="">Sans tracé</option>
               {p.parcours.map((f) => <option key={f.id} value={f.id}>{f.nom} · {fmtDistance(f.distance_km, 1)}, {f.dplus_m} m D+</option>)}
-            </select>
+            </Selecteur>
             <span className="block text-[12px] text-label-2 leading-4 mt-1.5">
               {lier.isPending ? "Calcul en cours…" : (
                 <>Le tracé donne l'estimation par tronçon. <Link to="/itineraires/creer" className="text-brand whitespace-nowrap">Importer un GPX</Link></>

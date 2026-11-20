@@ -1,5 +1,6 @@
 // Lecture d'une séance : bilan en trois phrases, type de séance (corrigeable),
 // répétitions détectées et comparaison avec la séance prévue au plan.
+import { Selecteur } from "./Menu";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import clsx from "clsx";
@@ -34,12 +35,12 @@ function TypeSeance({ a, bilan, onChange }) {
       <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round" strokeLinejoin="round">
         <path d="M6 9l6 6 6-6" />
       </svg>
-      <select aria-label="Type de séance" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+      <Selecteur aria-label="Type de séance" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
         value={type && !type.auto ? type.cle : ""} disabled={maj.isPending}
         onChange={(e) => maj.mutate(e.target.value)}>
         <option value="">Type reconnu automatiquement</option>
         {bilan.types.map((t) => <option key={t.cle} value={t.cle}>{t.label}</option>)}
-      </select>
+      </Selecteur>
     </label>
   );
 }

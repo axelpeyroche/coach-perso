@@ -1,5 +1,6 @@
 // Capacités : « Mon profil d'athlète » (chaque repère avec sa tendance, ce sur quoi il repose et sa fraîcheur),
 // radar forces / faiblesses comparé à soi-même il y a un an, et la musculation suivie comme une discipline.
+import { Selecteur } from "./Menu";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
@@ -414,9 +415,9 @@ function Progression({ m }) {
         sousTitre={`${pluriel(ex.nb, "séance")} · dernière le ${court(ex.derniere)}`} />
       <label className="block mb-3">
         <span className="sr-only">Exercice</span>
-        <select className="champ w-full" value={ex.nom} onChange={(e) => setNom(e.target.value)}>
+        <Selecteur className="champ w-full" value={ex.nom} onChange={(e) => setNom(e.target.value)}>
           {m.exercices.map((e) => <option key={e.nom} value={e.nom}>{e.nom} ({e.nb})</option>)}
-        </select>
+        </Selecteur>
       </label>
       <div className="grid grid-cols-3 gap-2 mb-3">
         <Tuile label={mes.label} value={mes.fmt(ex.actuel)} sub={ex.par_main ? "charge par main" : "dernière séance"} />

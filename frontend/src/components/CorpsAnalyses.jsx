@@ -1,5 +1,6 @@
 // Ce que le carnet apprend du corps sur la durée : tendance de la VFC, fenêtre de sommeil,
 // effet des séances sur la nuit, temps de récupération, chaleur, saisons, composition corporelle.
+import { Selecteur } from "./Menu";
 import { useMemo, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -561,9 +562,9 @@ export function CompositionCorporelle() {
         {type && (
           <div className="min-w-0">
             {tracables.length > 1 && (
-              <select className="champ !w-auto !py-1.5 text-[13px] mb-2" value={type.type} onChange={(e) => setChoix(e.target.value)} aria-label="Mesure affichée">
+              <Selecteur className="champ !w-auto !py-1.5 text-[13px] mb-2" value={type.type} onChange={(e) => setChoix(e.target.value)} aria-label="Mesure affichée">
                 {tracables.map((t) => <option key={t.type} value={t.type}>{t.label}</option>)}
-              </select>
+              </Selecteur>
             )}
             <ResponsiveContainer width="100%" height={180}>
               <LineChart data={serie} margin={{ left: 0, right: 8, top: 6 }}>

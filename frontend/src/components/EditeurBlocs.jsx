@@ -4,6 +4,7 @@
 // Muscu : échauffement, sections (séries, AMRAP, test) et exercices.
 // Le composant ne fait que modifier la structure ; la description lisible est écrite
 // par `descriptionDepuis` (blocs.js) au moment d'enregistrer.
+import { Selecteur } from "./Menu";
 import { useEffect, useState } from "react";
 import { Segmente, Interrupteur } from "./ui";
 import {
@@ -99,10 +100,10 @@ function Etape({ e, i, total, sport, onChange, outils }) {
   return (
     <div className="rounded-2xl border border-separateur p-3 space-y-2.5">
       <div className="flex items-center gap-2">
-        <select className={`${champ} !w-auto flex-1 font-semibold`} value={e.genre} aria-label={`Type de l'étape ${i + 1}`}
+        <Selecteur className={`${champ} !w-auto flex-1 font-semibold`} value={e.genre} aria-label={`Type de l'étape ${i + 1}`}
           onChange={(ev) => onChange({ ...e, genre: ev.target.value })}>
           {GENRES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-        </select>
+        </Selecteur>
         {outils}
       </div>
 
@@ -136,10 +137,10 @@ function Etape({ e, i, total, sport, onChange, outils }) {
       {(
         <div className={`grid gap-2 ${allure ? "grid-cols-[4.5rem_1fr_1fr_4.5rem]" : "grid-cols-2"}`}>
           <Champ label="Zone">
-            <select className={champ} value={e.zone ?? ""} onChange={(ev) => set("zone")(ev.target.value ? Number(ev.target.value) : null)}>
+            <Selecteur className={champ} value={e.zone ?? ""} onChange={(ev) => set("zone")(ev.target.value ? Number(ev.target.value) : null)}>
               <option value="">—</option>
               {[1, 2, 3, 4, 5].map((z) => <option key={z} value={z}>Z{z}</option>)}
-            </select>
+            </Selecteur>
           </Champ>
           {allure && (
             <>
@@ -156,10 +157,10 @@ function Etape({ e, i, total, sport, onChange, outils }) {
             </>
           )}
           <Champ label="RPE">
-            <select className={champ} value={e.rpe ?? ""} onChange={(ev) => set("rpe")(ev.target.value ? Number(ev.target.value) : null)}>
+            <Selecteur className={champ} value={e.rpe ?? ""} onChange={(ev) => set("rpe")(ev.target.value ? Number(ev.target.value) : null)}>
               <option value="">—</option>
               {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((r) => <option key={r} value={r}>{r}</option>)}
-            </select>
+            </Selecteur>
           </Champ>
         </div>
       )}

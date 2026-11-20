@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
+import { Selecteur } from "../components/Menu";
 import { debutSemaine } from "../preferences";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
@@ -136,10 +137,10 @@ function BlocMontre({ s }) {
             {jours.length > 0 && (
               <label className="flex items-center justify-between gap-3">
                 <span className="text-[15px]">Jour</span>
-                <select className={`${inputCls} !w-auto`} value={jour ?? ""} onChange={(e) => setJour(e.target.value)}>
+                <Selecteur className={`${inputCls} !w-auto`} value={jour ?? ""} onChange={(e) => setJour(e.target.value)}>
                   {jours.map((d) => <option key={iso(d)} value={iso(d)}>{fmtJour(iso(d))}</option>)}
                   {envoi && !jours.some((d) => iso(d) === envoi.jour) && <option value={envoi.jour} disabled>{fmtJour(envoi.jour)}</option>}
-                </select>
+                </Selecteur>
               </label>
             )}
             <div className="flex gap-2">
@@ -713,9 +714,9 @@ function ModalPrevue({ semaine, seance = null, onClose }) {
 
       <div className="grid grid-cols-2 gap-x-3 gap-y-4">
         <L label="Sport" className="col-span-2">
-          <select className={inputCls} value={f.sport} onChange={changerSport}>
+          <Selecteur className={inputCls} value={f.sport} onChange={changerSport}>
             {Object.entries(SPORTS).map(([k, s]) => <option key={k} value={k}>{s.emoji} {s.label}</option>)}
-          </select>
+          </Selecteur>
         </L>
         <L label="Titre" className="col-span-2">
           <input required maxLength={200} className={inputCls} value={f.titre} onChange={set("titre")} placeholder="Footing, fractionné, renfo…" />
@@ -731,10 +732,10 @@ function ModalPrevue({ semaine, seance = null, onClose }) {
           <input inputMode="numeric" className={inputCls} value={f.dplus_m} onChange={set("dplus_m")} />
         </L>
         <L label="RPE cible">
-          <select className={inputCls} value={f.rpe_cible} onChange={set("rpe_cible")}>
+          <Selecteur className={inputCls} value={f.rpe_cible} onChange={set("rpe_cible")}>
             <option value="">—</option>
             {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => <option key={n} value={n}>{n}</option>)}
-          </select>
+          </Selecteur>
         </L>
       </div>
 
@@ -771,9 +772,9 @@ function ModalPrevue({ semaine, seance = null, onClose }) {
                 valeur={rep.toutes} onChange={(v) => setRep((r) => ({ ...r, toutes: Number(v) }))} />
               <label className="flex items-center justify-between gap-3">
                 <span className="text-[15px]">Nombre de séances</span>
-                <select className={`${inputCls} !w-24`} value={rep.fois} onChange={(e) => setRep((r) => ({ ...r, fois: Number(e.target.value) }))}>
+                <Selecteur className={`${inputCls} !w-24`} value={rep.fois} onChange={(e) => setRep((r) => ({ ...r, fois: Number(e.target.value) }))}>
                   {Array.from({ length: 25 }, (_, i) => i + 2).map((n) => <option key={n} value={n}>{n}</option>)}
-                </select>
+                </Selecteur>
               </label>
               <p className="text-[12px] leading-4 text-label-2">
                 Jusqu’à la semaine du {fmtDate(ajouter(new Date(`${semaine}T00:00`), 7 * rep.toutes * (rep.fois - 1)), { day: "numeric", month: "long" })}.

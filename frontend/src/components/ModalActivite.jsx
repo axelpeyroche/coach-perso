@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Selecteur } from "./Menu";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { creerActivite, modifierActivite, supprimerActivite } from "../api";
 import { SPORTS, sportInfo, parseDuree, dureeVersTexte, inputCls, SOURCES } from "../carnet";
@@ -147,14 +148,14 @@ export default function ModalActivite({ activite, onClose, onEnregistre, onSuppr
           )}
         </Champ>
         <Champ label="Ressenti">
-          <select className={inputCls} value={f.ressenti} onChange={set("ressenti")}>
+          <Selecteur className={inputCls} value={f.ressenti} onChange={set("ressenti")}>
             <option value="">—</option>
             <option value="1">😫 Très dur</option>
             <option value="2">😕 Difficile</option>
             <option value="3">😐 Correct</option>
             <option value="4">🙂 Bien</option>
             <option value="5">🤩 Excellent</option>
-          </select>
+          </Selecteur>
         </Champ>
         <Champ label="Calories">
           <input inputMode="numeric" className={inputCls} value={f.calories} onChange={set("calories")} />

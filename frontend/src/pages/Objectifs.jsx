@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Selecteur } from "../components/Menu";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import clsx from "clsx";
@@ -253,10 +254,10 @@ function ModalObjectif({ objectif, onClose }) {
             placeholder={f.type === "course" ? "Marathon de Paris" : "1000 km de course en 2026"} />
         </L>
         <L label="Sport">
-          <select className={inputCls} value={f.sport} onChange={set("sport")}>
+          <Selecteur className={inputCls} value={f.sport} onChange={set("sport")}>
             <option value="">Tous sports</option>
             {Object.entries(SPORTS).map(([k, s]) => <option key={k} value={k}>{s.emoji} {s.label}</option>)}
-          </select>
+          </Selecteur>
         </L>
         <L label={f.type === "course" ? "Date de la course" : "Échéance"}>
           <input type="date" className={inputCls} value={f.date_cible} onChange={set("date_cible")} />
@@ -280,9 +281,9 @@ function ModalObjectif({ objectif, onClose }) {
         ) : (
           <>
             <L label="Mesure" className="col-span-2">
-              <select className={inputCls} value={f.metrique} onChange={set("metrique")}>
+              <Selecteur className={inputCls} value={f.metrique} onChange={set("metrique")}>
                 {Object.entries(METRIQUES).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-              </select>
+              </Selecteur>
             </L>
             <L label="Début de la période"><input type="date" className={inputCls} value={f.date_debut} onChange={set("date_debut")} /></L>
             <L label="Valeur cible"><input inputMode="decimal" className={inputCls} value={f.valeur_cible} onChange={set("valeur_cible")} /></L>
@@ -297,11 +298,11 @@ function ModalObjectif({ objectif, onClose }) {
 
         {objectif && (
           <L label="Statut">
-            <select className={inputCls} value={f.statut} onChange={set("statut")}>
+            <Selecteur className={inputCls} value={f.statut} onChange={set("statut")}>
               <option value="actif">En cours</option>
               <option value="atteint">Atteint</option>
               <option value="abandonne">Abandonné</option>
-            </select>
+            </Selecteur>
           </L>
         )}
         {objectif && f.type === "course" && (
