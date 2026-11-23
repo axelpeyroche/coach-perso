@@ -9,9 +9,14 @@ Zones d'entraînement recalculées automatiquement à partir du carnet.
   (un effort maximal de 20 min se court ~3 % au-dessus du seuil, un semi ~5 % en dessous).
   On garde la meilleure estimation des 12 derniers mois, un peu dépréciée avec l'âge
   (0,3 bpm par mois) : la FC au seuil bouge peu, c'est l'allure au seuil qui progresse.
-- Zones cardiaques : méthode Friel (85 / 90 / 95 / 100 % de la FC au seuil) ; à défaut de seuil,
-  Karvonen (60 / 70 / 80 / 90 % de la FC de réserve).
-- Zones d'allure : pourcentages de la vitesse critique (meilleurs efforts des 90 derniers jours).
+- Zones cardiaques, modèle mixte : la FC au seuil reste la frontière Z4/Z5 (repère le plus fiable) ;
+  les zones basses se placent à 75 / 84 / 92 % de la réserve entre la FC de repos et le seuil
+  (apport de Karvonen : elles suivent la FC de repos) ; la Z5 est plafonnée par la FC max.
+  Sans FC de repos : Friel (85 / 90 / 95 / 100 % du seuil). Sans seuil : Karvonen
+  (60 / 70 / 80 / 90 % de la réserve repos → max).
+- Zones d'allure : pourcentages de la vitesse critique (meilleurs efforts des 90 derniers jours) ;
+  la Z5 s'arrête à l'allure VMA quand elle est connue. Une vitesse critique sous 82 % de la VMA
+  est signalée : il manque un effort soutenu récent, les allures sont sans doute trop lentes.
 """
 from __future__ import annotations
 
@@ -30,6 +35,10 @@ SEUIL_MIN_FRAC_FCMAX = 0.86  # en dessous, l'effort n'était pas assez soutenu p
 SEUIL_BORNES_FCMAX = (0.80, 0.95)
 FRIEL = (0.85, 0.90, 0.95, 1.00)
 KARVONEN = (0.60, 0.70, 0.80, 0.90)
+MIXTE = (0.75, 0.84, 0.92, 1.00)           # % de la réserve entre la FC de repos et la FC au seuil
+RESERVE_SEUIL_MIN = 60                      # en dessous, FC de repos ou seuil douteux : Friel seul
+VC_SUR_VMA_MIN = 0.82                       # une vitesse critique vaut d'ordinaire 85 à 90 % de la VMA
+MARGE_VMA = 1.03                            # la VMA ne borne la Z5 que si elle dépasse nettement son entrée
 ALLURE_PCT_VC = (0.72, 0.80, 0.90, 0.98)   # bornes des zones d'allure en % de la vitesse critique
 FENETRE_VC_J = 90
 NOMS = ["Récupération", "Endurance fondamentale", "Tempo", "Seuil", "VMA"]
@@ -128,6 +137,8 @@ def fc_seuil_au(cands: list[tuple[date, float, Activite]], j: date, fc_max: Opti
 
 def bornes_fc(fc_seuil: Optional[int], fc_max: Optional[int], fc_repos: Optional[int]) -> tuple[Optional[list[int]], Optional[str]]:
     """4 bornes (début des zones 2 à 5) et la méthode employée."""
+    if fc_seuil and fc_repos and fc_seuil - fc_repos >= RESERVE_SEUIL_MIN:
+        return [round(fc_repos + p * (fc_seuil - fc_repos)) for p in MIXTE], "mixte"
     if fc_seuil:
         return [round(p * fc_seuil) for p in FRIEL], "seuil"
     if fc_max and fc_repos and fc_max > fc_repos:
@@ -161,8 +172,11 @@ def _allure(vitesse_ms: float) -> int:
     return round(1000 / vitesse_ms)
 
 
-def zones(bornes: Optional[list[int]], vc_ms: Optional[float], vma_kmh: Optional[float] = None) -> list[dict]:
-    """Les 5 zones : bornes de FC (bpm) et d'allure (s/km, « min » = la plus lente)."""
+def zones(bornes: Optional[list[int]], vc_ms: Optional[float], vma_kmh: Optional[float] = None,
+          fc_max: Optional[int] = None) -> list[dict]:
+    """Les 5 zones : bornes de FC (bpm) et d'allure (s/km, « min » = la plus lente).
+
+    La Z5 est fermée en haut par la FC max et par l'allure VMA quand elles sont connues et cohérentes."""
     if not bornes:
         return []
     lim = [None] + bornes + [None]
@@ -175,9 +189,27 @@ def zones(bornes: Optional[list[int]], vc_ms: Optional[float], vma_kmh: Optional
             z["allure_lente"] = _allure(vc_ms * p[i]) if p[i] else None
             z["allure_rapide"] = _allure(vc_ms * p[i + 1]) if p[i + 1] else None
         out.append(z)
-    if vma_kmh and out and vc_ms:
+    if fc_max and fc_max > bornes[3]:
+        out[4]["fc_max"] = fc_max
+    if vma_kmh and vc_ms:
         out[4]["allure_vma"] = round(3600 / vma_kmh)
+        if vma_kmh / 3.6 >= vc_ms * ALLURE_PCT_VC[3] * MARGE_VMA:
+            out[4]["allure_rapide"] = out[4]["allure_vma"]
     return out
+
+
+def alerte_allures(vc_ms: Optional[float], vma_kmh: Optional[float]) -> Optional[dict]:
+    """Garde-fou : vitesse critique trop basse au regard de la VMA (faute d'effort soutenu récent)."""
+    if not vc_ms or not vma_kmh:
+        return None
+    ratio = vc_ms * 3.6 / vma_kmh
+    if ratio >= VC_SUR_VMA_MIN:
+        return None
+    return {"ratio_pct": round(ratio * 100),
+            "allure_critique_attendue": _allure(vma_kmh / 3.6 * 0.85),
+            "message": (f"Ta vitesse critique ne vaut que {round(ratio * 100)} % de ta VMA (85 à 90 % d'ordinaire) : "
+                        "il manque un effort soutenu de 10 à 20 min sur les 90 derniers jours, "
+                        "les allures sont sans doute un peu lentes.")}
 
 
 def _donnees(db: Session, user: Utilisateur) -> tuple[list[Activite], dict[date, float]]:
@@ -200,8 +232,19 @@ def zones_profil(user: Utilisateur, vc_ms: Optional[float], vma_kmh: Optional[fl
         "fc_max": user.fc_max, "fc_repos": user.fc_repos, "fc_seuil": user.fc_seuil,
         "methode": methode, "reference": reference,
         "vitesse_critique_ms": vc_ms, "allure_critique_sec_km": _allure(vc_ms) if vc_ms else None,
-        "vma_kmh": vma_kmh, "zones": zones(b, vc_ms, vma_kmh),
+        "vma_kmh": vma_kmh, "zones": zones(b, vc_ms, vma_kmh, user.fc_max),
+        "alerte_allures": alerte_allures(vc_ms, vma_kmh),
     }
+
+
+def _vma_du_jour(db: Session, user: Utilisateur, acts: list[Activite], auj: date) -> Optional[float]:
+    """VMA estimée par les analyses (tests, meilleurs efforts, FC), pour borner la Z5."""
+    try:
+        import analyses_service as an  # import local : le module d'analyses s'appuie sur celui-ci
+        mesures = an._mesures_par_type(db, user.id, auj - timedelta(days=365 + an.REF_RECUP_JOURS))
+        return ((an._vma(db, user, acts, mesures, auj).get("actuelle")) or {}).get("vma")
+    except Exception:
+        return None
 
 
 def zones_actuelles(db: Session, user: Utilisateur, vma_kmh: Optional[float] = None) -> dict:
@@ -209,6 +252,8 @@ def zones_actuelles(db: Session, user: Utilisateur, vma_kmh: Optional[float] = N
     acts, _ = _donnees(db, user)
     auj = date.today()
     seuil = fc_seuil_au(candidats_seuil(acts), auj, user.fc_max)
+    if vma_kmh is None:
+        vma_kmh = _vma_du_jour(db, user, acts, auj)
     return zones_profil(user, vitesse_critique_au(_meilleurs_efforts(acts), auj), vma_kmh, seuil)
 
 

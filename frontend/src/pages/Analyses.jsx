@@ -311,8 +311,14 @@ function ZonesEvolution({ e, actuelles }) {
           </div>
         )}
         <p className="text-[11px] text-label-3 mt-3">
-          Friel : Z2 85 %, Z3 90 %, Z4 95 %, Z5 100 % de la FC au seuil. Allures : 72, 80, 90 et 98 % de la vitesse critique.
+          {actuelles?.methode === "mixte"
+            ? "Z5 à partir du seuil, plafonnée par la FC max. Z2, Z3 et Z4 à 75, 84 et 92 % de la réserve entre FC de repos et seuil."
+            : "Friel : Z2 85 %, Z3 90 %, Z4 95 %, Z5 100 % de la FC au seuil."}
+          {" "}Allures : 72, 80, 90 et 98 % de la vitesse critique, Z5 jusqu’à l’allure VMA.
         </p>
+        {actuelles?.alerte_allures && (
+          <p className="text-[12px] text-ios-orange mt-2">{actuelles.alerte_allures.message}</p>
+        )}
       </Card>
       <div className="lg:col-span-2 min-w-0">
         <Graphe className="h-full" titre="Évolution des zones" couleur={ROUGE}

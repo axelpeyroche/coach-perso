@@ -1259,7 +1259,9 @@ def _zones_export(z: Optional[dict]) -> Optional[dict]:
     if not z or not z.get("zones"):
         return None
     return {
-        "methode": "Friel, % de la FC au seuil" if z["methode"] == "seuil" else "Karvonen, % de la FC de réserve",
+        "methode": {"mixte": "mixte : seuil = entrée de la Z5, zones basses en % de la réserve repos → seuil, Z5 plafonnée par la FC max et la VMA",
+                    "seuil": "Friel, % de la FC au seuil"}.get(z["methode"], "Karvonen, % de la FC de réserve"),
+        "alerte_allures": (z.get("alerte_allures") or {}).get("message"),
         "fc_seuil": z["fc_seuil"], "fc_max": z["fc_max"], "fc_repos": z["fc_repos"],
         "allure_critique": _mmss(z["allure_critique_sec_km"]), "vma_kmh": z["vma_kmh"],
         "zones": [{"zone": f"Z{x['zone']} {x['nom']}", "fc": _plage_fc(x), "allure": _plage_allure(x)}

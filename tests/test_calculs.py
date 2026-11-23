@@ -107,7 +107,15 @@ def test_pearson():
 # ── Zones ────────────────────────────────────────────────────────────────────
 
 def test_bornes_fc_depuis_le_seuil():
-    assert zs.bornes_fc(160, 190, 50) == ([136, 144, 152, 160], "seuil")     # Friel : 85, 90, 95, 100 % du seuil
+    assert zs.bornes_fc(160, 190, None) == ([136, 144, 152, 160], "seuil")   # Friel : 85, 90, 95, 100 % du seuil
+    assert zs.bornes_fc(160, 190, 120) == ([136, 144, 152, 160], "seuil")    # FC de repos douteuse : Friel seul
+
+
+def test_bornes_fc_mixtes():
+    # 75, 84, 92 % de la réserve repos → seuil ; le seuil reste l'entrée de la Z5
+    assert zs.bornes_fc(177, 195, 54) == ([146, 157, 167, 177], "mixte")
+    friel, karvonen = zs.bornes_fc(177, 195, None)[0], zs.bornes_fc(None, 195, 54)[0]
+    assert karvonen[0] < 146 < friel[0]                                      # entre les deux méthodes
 
 
 def test_bornes_fc_depuis_la_reserve():
@@ -122,8 +130,19 @@ def test_zones_fc_et_allure():
         (1, None, 143), (2, 144, 152), (3, 153, 161), (4, 162, 169), (5, 170, None)]
     assert (z[0]["allure_lente"], z[0]["allure_rapide"]) == (None, 347)    # 72 % de la vitesse critique
     assert (z[3]["allure_lente"], z[3]["allure_rapide"]) == (278, 255)     # 90 à 98 %
-    assert z[4]["allure_rapide"] is None and z[4]["allure_vma"] == 225     # 16 km/h
+    assert z[4]["allure_rapide"] == 225 and z[4]["allure_vma"] == 225      # Z5 bornée par la VMA (16 km/h)
+    assert zs.zones([144, 153, 162, 170], 4.0)[4]["allure_rapide"] is None  # VMA inconnue : Z5 ouverte
+    assert zs.zones([144, 153, 162, 170], 4.0, 14.2)[4]["allure_rapide"] is None   # VMA trop proche de l'entrée
+    assert zs.zones([144, 153, 162, 170], 4.0, 16.0, 190)[4]["fc_max"] == 190       # Z5 plafonnée par la FC max
+    assert zs.zones([144, 153, 162, 170], 4.0, 16.0, 168)[4]["fc_max"] is None
     assert zs.zones(None, 4.0) == []
+
+
+def test_alerte_allures():
+    assert zs.alerte_allures(4.0, 16.0) is None                              # 90 % de la VMA
+    a = zs.alerte_allures(3.55, 16.0)                                        # 80 %
+    assert a["ratio_pct"] == 80 and a["allure_critique_attendue"] == 265
+    assert zs.alerte_allures(None, 16.0) is None and zs.alerte_allures(4.0, None) is None
 
 
 @pytest.mark.parametrize("minutes, competition, attendu", [

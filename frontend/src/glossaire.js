@@ -34,7 +34,7 @@ export const GLOSSAIRE = {
   zones: {
     titre: "Zones d'entraînement",
     quoi: "Cinq plages de fréquence cardiaque et d'allure, recalculées automatiquement.",
-    calcul: "FC au seuil estimée depuis tes efforts soutenus (20 à 60 min) des 12 derniers mois ; zones à 85, 90, 95 et 100 % du seuil. Allures à 72, 80, 90 et 98 % de ton allure critique.",
+    calcul: "FC au seuil estimée depuis tes efforts soutenus (20 à 60 min) des 12 derniers mois ; le seuil marque l'entrée de la Z5, les zones basses sont placées à 75, 84 et 92 % de la réserve entre ta FC de repos et ton seuil, et la Z5 s'arrête à ta FC max. Allures à 72, 80, 90 et 98 % de ton allure critique, la Z5 allant jusqu'à ton allure VMA.",
     lire: "Z1 récupération, Z2 endurance (tu peux parler), Z3 tempo, Z4 seuil (tenable 30 à 60 min), Z5 VMA.",
   },
   marqueurs: {

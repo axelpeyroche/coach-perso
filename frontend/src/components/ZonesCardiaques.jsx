@@ -56,10 +56,12 @@ export default function ZonesCardiaques() {
           </ul>
           <Link to="/analyses#zones" className="flex items-center gap-2 px-4 py-3 bg-fond/60 active:opacity-70 transition">
             <span className="flex-1 min-w-0 text-[12px] text-label-2 chiffres">
-              {data.methode === "seuil"
+              {data.methode === "seuil" || data.methode === "mixte"
                 ? <>Seuil <b className="text-label">{data.fc_seuil}</b> · FC max <b className="text-label">{data.fc_max}</b> · repos {data.fc_repos ?? "—"}</>
                 : <>FC max <b className="text-label">{data.fc_max}</b> · repos {data.fc_repos}</>}
-              <span className="block text-label-3">Recalculées automatiquement à chaque séance</span>
+              {data.alerte_allures
+                ? <span className="block text-ios-orange">Allures sans doute trop lentes : il manque un effort soutenu récent</span>
+                : <span className="block text-label-3">Recalculées automatiquement à chaque séance</span>}
             </span>
             <Chevron />
           </Link>

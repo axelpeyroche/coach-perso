@@ -1241,7 +1241,7 @@ def fusionner_details(a: Activite, nouveaux: dict, ecraser: bool = False) -> Non
 
 
 def bornes_utilisateur(user: Utilisateur) -> Optional[list[int]]:
-    """4 bornes des zones de FC : Friel (85-90-95-100 % de la FC au seuil), à défaut Karvonen."""
+    """4 bornes des zones de FC : modèle mixte (réserve repos → seuil), à défaut Friel puis Karvonen."""
     from zones_service import bornes_fc
     return bornes_fc(getattr(user, "fc_seuil", None), user.fc_max, user.fc_repos)[0]
 
