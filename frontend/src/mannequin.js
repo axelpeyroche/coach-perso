@@ -155,7 +155,12 @@ function squelette(p) {
     if (p["orteils_" + c]) O = v3(p["orteils_" + c]);
     else {
       // Pied à plat s'il touche le sol, sinon détendu dans le prolongement
-      const h = unitaire(horizontal(n).length() > 0.3 ? horizontal(n) : null, horizontal(K.clone().sub(H)), X);
+      // Buste couché ou penché, genou plié : le pied suit le tibia (pointe à l'opposé de la hanche), pas le buste,
+      // sinon il se retournait vers la tête quand le bassin se lève
+      const plie = orth(K.clone().sub(H), unitaire(A.clone().sub(H)));
+      const selonTibia = u.y < 0.5 && plie.length() > 0.05 ? horizontal(unitaire(orth(plie, k))) : null;
+      const h = unitaire(selonTibia && selonTibia.length() > 0.3 ? selonTibia : null,
+        horizontal(n).length() > 0.3 ? horizontal(n) : null, horizontal(K.clone().sub(H)), X);
       // En l'air : le pied pend devant le tibia, pointe un peu baissée, jamais replié contre la jambe
       const devantTibia = unitaire(orth(unitaire(orth(K.clone().sub(H), unitaire(A.clone().sub(H))), n), k), orth(h, k));
       O = A.y < 0.15 ? new Vector3(A.x + h.x * 0.14, 0.02, A.z + h.z * 0.14)
