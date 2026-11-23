@@ -62,6 +62,8 @@ const sources = {}, charges = {};
 export function sourcesModele(s, nom = "homme") { sources[nom] = { ...fichiers(nom), ...s }; delete charges[nom]; }
 const image = (src) => new Promise((ok, ko) => { const i = new Image(); i.onload = () => ok(i); i.onerror = ko; i.src = src; });
 const DOIGTS = ["index", "middle", "ring", "pinky"];
+// Prise sur une barre : rayon de la barre, demi-épaisseur d'un doigt, position de la barre sous la base des doigts
+const PRISE = { rayon: 0.016, doigt: 0.009, avance: 0.004, creux: 0.012, sous: [-0.75, 0.65], ecart: 0.012 };
 const DELTA_PIED = 0.117;   // écart entre l'axe cheville → avant-pied du squelette et celui du modèle (rad)
 
 function preparer(buf, relief, zones) {
@@ -111,6 +113,60 @@ function preparer(buf, relief, zones) {
         return { nom: n(`thumb_0${i}`), p: a, axe: unit(new Vector3().crossVectors(b.clone().sub(a), new Vector3(-0.35, -0.85, dH.z * 0.4))) };
       }),
     };
+    // Prise sur une barre : la barre se loge au creux de la main, sous la base des doigts,
+    // et chaque phalange vient se coucher dessus (tangente au cylindre), l'une après l'autre
+    const rc = R.cotes[c], mcp = new Vector3();
+    for (const d of rc.doigts) mcp.addScaledVector(d[0].p, 0.25);
+    const G = mcp.clone().addScaledVector(dH, PRISE.avance).addScaledVector(dn, PRISE.rayon + PRISE.creux);
+    rc.barre = { G, doigts: rc.doigts.map((doigt) => {
+      const axe = doigt[0].axe, bouts = [...doigt.map((j) => j.p), A[doigt[2].nom.replace("_03_", "_04_leaf_")]];
+      const x = unit(orth(bouts[1].clone().sub(bouts[0]), axe)), y = new Vector3().crossVectors(axe, x);
+      const en2D = (v) => [v.dot(x), v.dot(y)];
+      const cb = en2D(G.clone().sub(bouts[0])), rho = PRISE.rayon + PRISE.doigt;
+      let p = [0, 0], phi = 0;
+      return [0, 1, 2].map((i) => {
+        const os = en2D(bouts[i + 1].clone().sub(bouts[i])), l = Math.hypot(os[0], os[1]), alpha = Math.atan2(os[1], os[0]);
+        const v = [cb[0] - p[0], cb[1] - p[1]], d = Math.hypot(v[0], v[1]);
+        const rj = Math.hypot(rho, l / 2);   // l'articulation suivante se pose à cette distance : la phalange touche la barre en son milieu
+        const psi = Math.atan2(v[1], v[0]) - Math.acos(borne((d * d + l * l - rj * rj) / (2 * d * l), -1, 1));
+        const ecart = psi - alpha - phi, t = borne(ecart - 2 * Math.PI * Math.round(ecart / (2 * Math.PI)), 0, 1.9);
+        phi += t;
+        p = [p[0] + l * Math.cos(alpha + phi), p[1] + l * Math.sin(alpha + phi)];
+        return t;
+      });
+    }) };
+    // Le pouce passe de l'autre côté de la barre et vient la toucher par en dessous, près de l'index :
+    // ses quatre angles sont cherchés une fois pour toutes, à la préparation du corps
+    const axeB = unit(new Vector3().crossVectors(dH, dn)), rp = PRISE.rayon + PRISE.doigt + 0.002;
+    const loin = (q) => { const v = q.clone().sub(G); return v.addScaledVector(axeB, -v.dot(axeB)).length(); };
+    const cote = Math.sign(rc.pouce[0].p.clone().sub(rc.doigts[0][0].p).dot(axeB)) || 1;
+    const but = G.clone().addScaledVector(unit(dn.clone().multiplyScalar(PRISE.sous[1]).addScaledVector(dH, PRISE.sous[0])), rp)
+      .addScaledVector(axeB, rc.doigts[0][0].p.clone().sub(G).dot(axeB) + cote * PRISE.ecart);
+    const bout = A[n("thumb_04_leaf")], [o1, o2, o3] = rc.pouce;
+    const cout = (a) => {
+      const m = pivot(o1.p, Z, a[0]).multiply(pivot(o1.p, o1.axe, a[1])), j2 = o2.p.clone().applyMatrix4(m);
+      m.multiply(pivot(o2.p, o2.axe, a[2]));
+      const j3 = o3.p.clone().applyMatrix4(m);
+      m.multiply(pivot(o3.p, o3.axe, a[3]));
+      const t = bout.clone().applyMatrix4(m);
+      let s = t.distanceToSquared(but) + 1 * (loin(j3) - rp) ** 2 + 2e-5 * (a[0] ** 2 + a[1] ** 2 + a[2] ** 2 + a[3] ** 2);
+      for (const q of [j2, j3, j2.clone().lerp(j3, 0.5), j3.clone().lerp(t, 0.5), t]) s += 4 * Math.max(0, rp - loin(q)) ** 2;
+      return s;
+    };
+    const bornes = [[-1.6, 1.6], [-1.1, 1.3], [-0.2, 1.1], [-0.1, 0.95]];
+    let mieux = [0, 0, 0, 0], cm = cout(mieux), graine = 7;
+    const alea = () => (graine = (graine * 16807) % 2147483647) / 2147483647;
+    for (let i = 0; i < 4000; i++) {
+      const a = bornes.map(([lo, hi]) => lo + (hi - lo) * alea()), ca = cout(a);
+      if (ca < cm) { mieux = a; cm = ca; }
+    }
+    for (let pas = 0.2; pas > 0.004; pas /= 2) for (let tour = 0; tour < 6; tour++) for (let i = 0; i < 4; i++) for (const sg of [-1, 1]) {
+      const a = [...mieux];
+      a[i] = borne(a[i] + sg * pas, bornes[i][0], bornes[i][1]);
+      const ca = cout(a);
+      if (ca < cm) { mieux = a; cm = ca; }
+    }
+    rc.barre.pouce = mieux;
   }
   return { e, A, R, pos, oeil, idZone, T, relief, nor: bloc("nor", Float32Array, 4), uv: bloc("uv", Float32Array, 4), ios: bloc("os", Uint8Array, 1),
            poids: bloc("poids", Uint8Array, 1), tri: bloc("tri", Uint16Array, 2), NO: Object.fromEntries(e.os.map((n, i) => [n, i])) };
@@ -192,7 +248,7 @@ export function creerCorps(muscles = [], silhouette = "homme", couleur = 0xf2542
     groupe.add(mesh);
   }
 
-  function appliquer(sq, serre) {
+  function appliquer(sq, serre, barre = {}) {
     const { A, R, NO, e } = M;
     const mettre = (nom, m) => os[NO[nom]].matrixWorld.copy(m);
     // Tronc : du bassin au thorax, la colonne se partage la courbure
@@ -207,12 +263,15 @@ export function creerCorps(muscles = [], silhouette = "homme", couleur = 0xf2542
     mettre("Head", delta(qT, A.Head, A.Head.clone().applyMatrix4(DN)));
 
     for (const c of ["d", "g"]) {
-      const k = sq.cotes[c], r = R.cotes[c], n = r.n, f = serre[c] ?? 0.35;
+      const k = sq.cotes[c], r = R.cotes[c], n = r.n, f = serre[c] ?? 0.35, tient = barre[c];
       mettre(n("clavicle"), DC);
       // --- Bras ---
       const P = (paumes[c] = paume(sq, c, paumes[c])), gr = borne(2 * f - 1);
       // Main serrée : la barre se loge sous la base des doigts, côté paume
-      const W = k.W.clone().addScaledVector(k.doigts, (0.055 - 0.088) * gr).addScaledVector(P, -(e.paume + 0.014) * gr);
+      const qM = orient(P, k.doigts).multiply(r.qH);
+      const W = tient
+        ? k.W.clone().addScaledVector(k.doigts, 0.055).sub(r.barre.G.clone().sub(A[n("hand")]).applyQuaternion(qM))   // le creux de la main sur la barre
+        : k.W.clone().addScaledVector(k.doigts, (0.055 - 0.088) * gr).addScaledVector(P, -(e.paume + 0.014) * gr);
       if (P.y < -0.7 && W.y < 0.13) W.y = Math.max(W.y, e.paume + 0.002);   // main à plat : la paume touche le sol
       const S = A[n("upperarm")].clone().applyMatrix4(DC);
       const vB = k.coude.clone().sub(S), vA = W.clone().sub(k.coude), uB = unit(vB), uA = unit(vA);
@@ -222,7 +281,6 @@ export function creerCorps(muscles = [], silhouette = "homme", couleur = 0xf2542
       mettre(n("upperarm"), delta(b0, pB, S, r.dB, sB));
       mettre(n("upperarm") + "_m", delta(b0.clone().slerp(b1, 0.5), pB, S, r.dB, sB));
       mettre(n("upperarm") + "_f", delta(b1, pB, S, r.dB, sB));
-      const qM = orient(P, k.doigts).multiply(r.qH);
       const a0 = orient(pointe, vA).multiply(r.qA), a1 = balance(r.dA.clone().applyQuaternion(qM), uA).multiply(qM);
       const sA = vA.length() / r.lA, pA = A[n("lowerarm")];
       mettre(n("lowerarm"), delta(a0, pA, k.coude, r.dA, sA));
@@ -231,13 +289,15 @@ export function creerCorps(muscles = [], silhouette = "homme", couleur = 0xf2542
       const DM = delta(qM, A[n("hand")], W);
       mettre(n("hand"), DM);
       // Doigts : trois charnières qui s'enroulent ; le pouce vient en opposition
-      for (const doigt of r.doigts) {
-        const m = DM.clone();
-        doigt.forEach((j, i) => { m.multiply(pivot(j.p, j.axe, [1.2, 1.55, 0.95][i] * f)); mettre(j.nom, m); });
+      r.doigts.forEach((doigt, nd) => {
+        const m = DM.clone(), plis = tient ? r.barre.doigts[nd] : [1.2 * f, 1.55 * f, 0.95 * f];
+        doigt.forEach((j, i) => { m.multiply(pivot(j.p, j.axe, plis[i])); mettre(j.nom, m); });
         mettre(doigt[2].nom.replace("_03_", "_04_leaf_"), m);
-      }
-      const m = DM.clone().multiply(pivot(r.pouce[0].p, Z, -0.85 * f));
-      r.pouce.forEach((j, i) => { m.multiply(pivot(j.p, j.axe, [0.15, 0.45, 0.7][i] * f)); mettre(j.nom, m); });
+      });
+      // Sur une barre, le pouce passe de l'autre côté et se referme vers l'index
+      const pp = tient ? r.barre.pouce : [-0.85 * f, 0.15 * f, 0.45 * f, 0.7 * f];
+      const m = DM.clone().multiply(pivot(r.pouce[0].p, Z, pp[0]));
+      r.pouce.forEach((j, i) => { m.multiply(pivot(j.p, j.axe, pp[i + 1])); mettre(j.nom, m); });
       mettre(n("thumb_04_leaf"), m);
 
       // --- Jambe ---
@@ -277,9 +337,9 @@ export function creerCorps(muscles = [], silhouette = "homme", couleur = 0xf2542
     mesh: groupe,
     lueur: (x) => { lueur.value = x; },
     // serre : fermeture de chaque main, de 0 (à plat) à 1 (poing serré sur une barre)
-    poser(sq, serre = {}) {
-      if (M) appliquer(sq, serre);
-      else attente = [sq, serre];
+    poser(sq, serre = {}, barre = {}) {
+      if (M) appliquer(sq, serre, barre);
+      else attente = [sq, serre, barre];
     },
     detruire() { detruit = true; for (const j of jetables) j.dispose(); },
   };

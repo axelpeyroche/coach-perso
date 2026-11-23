@@ -312,7 +312,7 @@ export function creerScene(conteneur, anim, { surPhase, surManip, surProgres, si
 
   function poser(sq) {
     // Mains : refermées sur une barre ou un haltère, à plat au sol, sinon à demi ouvertes
-    const serre = {};
+    const serre = {}, tient = {};
     for (const c of ["d", "g"]) {
       const k = sq.cotes[c], m = centreMain(k);
       let f = k.W.y < 0.13 ? 0 : 0.35;
@@ -320,14 +320,14 @@ export function creerScene(conteneur, anim, { surPhase, surManip, surProgres, si
       for (const [a, b] of barres) {
         const ab = b.clone().sub(a), t = Math.min(1, Math.max(0, m.clone().sub(a).dot(ab) / ab.lengthSq()));
         if (a.clone().addScaledVector(ab, t).distanceTo(m) < 0.06) {
-          f = 1;
+          f = 1; tient[c] = true;
           // Sur une barre : en appui la paume se pose dessus ; suspendu, prise en pronation (paume loin du visage)
           if (!k.paume) k.paume = Math.abs(k.doigts.y) < 0.6 ? Y.clone().negate() : sq.n.clone().addScaledVector(sq.u, -0.5);
         }
       }
       serre[c] = f;
     }
-    corps.poser(sq, serre);
+    corps.poser(sq, serre, tient);
     for (const h of halteres) {
       if (h.main === "gd") {
         const g = sq.cotes.g, d = sq.cotes.d;
