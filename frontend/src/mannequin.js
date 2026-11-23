@@ -20,6 +20,7 @@ const ANGLES = [[Math.PI / 2, 0.08], [0, 0.15], [Math.PI, 0.35], [0.62, 1.35]];
 const SYM = {
   m: ["mg", "md"], p: ["pg", "pd"], coude: ["coude_g", "coude_d"], genou: ["genou_g", "genou_d"],
   doigts: ["doigts_g", "doigts_d"], prise: ["prise_g", "prise_d"], orteils: ["orteils_g", "orteils_d"],
+  paume: ["paume_g", "paume_d"],
 };
 
 const v3 = (a) => new Vector3(a[0], a[1], a[2]);
@@ -48,14 +49,23 @@ function unitaire(...candidats) {
 }
 const horizontal = (v) => new Vector3(v.x, 0, v.z);
 
-function deplier(pose) {
+// Côté du monde (z) où se trouve la droite du corps : -1 sur le dos, tête vers +x
+function coteDroit(pose) {
+  if (!pose.bassin) return 1;
+  const u = unitaire(v3(pose.epaules ?? [0, 1.5, 0]).sub(v3(pose.bassin)), Y);
+  const n = unitaire(orth(v3(pose.devant ?? [1, 0, 0]), u), orth(X, u), orth(Z, u));
+  return new Vector3().crossVectors(n, u).z < -0.5 ? -1 : 1;
+}
+
+// Le raccourci va au membre qui se trouve de ce côté : bras et jambes ne se croisent pas
+function deplier(pose, cote = 1) {
   const r = {};
   for (const [k, v] of Object.entries(pose)) if (!SYM[k]) r[k] = v;
   for (const [k, [g, d]] of Object.entries(SYM)) {
     const v = pose[k];
     if (!v) continue;
-    if (!(d in r)) r[d] = v;
-    if (!(g in r)) r[g] = [v[0], v[1], -v[2]];
+    if (!(d in r)) r[d] = [v[0], v[1], cote * v[2]];
+    if (!(g in r)) r[g] = [v[0], v[1], -cote * v[2]];
   }
   return r;
 }
@@ -73,7 +83,10 @@ function melanger(a, b, k) {
 
 // Poses complètes (les suivantes héritent de la première) et frise des phases
 function preparer(anim) {
-  const brutes = Object.entries(anim.poses ?? {}).map(([nom, p]) => [nom, deplier(p)]);
+  const sources = Object.entries(anim.poses ?? {});
+  const tronc = (p) => ({ bassin: p.bassin, epaules: p.epaules, devant: p.devant });
+  const base = sources[0]?.[1] ?? {};
+  const brutes = sources.map(([nom, p]) => [nom, deplier(p, coteDroit({ ...tronc(base), ...p }))]);
   const premiere = brutes[0]?.[1] ?? {};
   const poses = Object.fromEntries(brutes.map(([nom, p]) => [nom, { ...premiere, ...p }]));
   const phases = (anim.phases ?? []).filter((ph) => poses[ph[0]]).map(([pose, duree, libelle]) => ({ pose, duree: Math.max(0.1, +duree || 1), libelle: libelle ?? "" }));
@@ -133,7 +146,9 @@ function squelette(p) {
     const prise = unitaire(orth(p["prise_" + c] ? v3(p["prise_" + c]) : n, doigts), orth(uC, doigts), orth(L, doigts));
     const H = B.clone().addScaledVector(L, HANCHES * s);
     const cibleP = p["p" + c] ? v3(p["p" + c]) : H.clone().addScaledVector(u, -0.88);
-    const jambe = ik(H, cibleP, CUISSE, TIBIA, p["genou_" + c] ? v3(p["genou_" + c]) : n);
+    // Sans consigne, le genou plie vers l'avant du corps, un peu vers le haut : sur le dos, bassin levé,
+    // l'avant du corps est presque dans l'axe de la jambe et le genou basculait d'un côté à l'autre
+    const jambe = ik(H, cibleP, CUISSE, TIBIA, p["genou_" + c] ? v3(p["genou_" + c]) : n.clone().addScaledVector(Y, 0.5));
     const A = jambe.fin, K = jambe.milieu;
     const k = unitaire(K.clone().sub(A));
     let O;
@@ -141,14 +156,16 @@ function squelette(p) {
     else {
       // Pied à plat s'il touche le sol, sinon détendu dans le prolongement
       const h = unitaire(horizontal(n).length() > 0.3 ? horizontal(n) : null, horizontal(K.clone().sub(H)), X);
+      // En l'air : le pied pend devant le tibia, pointe un peu baissée, jamais replié contre la jambe
+      const devantTibia = unitaire(orth(unitaire(orth(K.clone().sub(H), unitaire(A.clone().sub(H))), n), k), orth(h, k));
       O = A.y < 0.15 ? new Vector3(A.x + h.x * 0.14, 0.02, A.z + h.z * 0.14)
-        : A.clone().add(unitaire(h.clone().multiplyScalar(0.13).addScaledVector(k, -0.06)).multiplyScalar(0.15));
+        : A.clone().add(unitaire(devantTibia.multiplyScalar(0.9).addScaledVector(k, -0.42)).multiplyScalar(0.15));
     }
     O.y = Math.max(O.y, 0.015);
     const f = unitaire(O.clone().sub(A), X);
     const w = unitaire(orth(k, f), orth(Y, f));
     const talon = A.clone().addScaledVector(f, -0.033).addScaledVector(w, -0.063);
-    sq.cotes[c] = { S, coude: bras.milieu, W, doigts, prise, H, K, A, O, talon };
+    sq.cotes[c] = { S, coude: bras.milieu, W, doigts, prise, H, K, A, O, talon, paume: p["paume_" + c] ? v3(p["paume_" + c]) : null };
   }
   return sq;
 }
@@ -297,7 +314,11 @@ export function creerScene(conteneur, anim, { surPhase, surManip, surProgres, si
       if (halteres.some((h) => h.main === c || h.main === "gd")) f = 1;
       for (const [a, b] of barres) {
         const ab = b.clone().sub(a), t = Math.min(1, Math.max(0, m.clone().sub(a).dot(ab) / ab.lengthSq()));
-        if (a.clone().addScaledVector(ab, t).distanceTo(m) < 0.06) f = 1;
+        if (a.clone().addScaledVector(ab, t).distanceTo(m) < 0.06) {
+          f = 1;
+          // Sur une barre : en appui la paume se pose dessus ; suspendu, prise en pronation (paume loin du visage)
+          if (!k.paume) k.paume = Math.abs(k.doigts.y) < 0.6 ? Y.clone().negate() : sq.n.clone().addScaledVector(sq.u, -0.5);
+        }
       }
       serre[c] = f;
     }

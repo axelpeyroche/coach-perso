@@ -26,3 +26,19 @@ def test_le_buste_recule_derriere_la_barre_de_traction():
     # Le catalogue de base est déjà réglé, et une barre basse n'est pas concernée
     for k, a in an.BASE.items():
         assert an.derriere_la_barre(a)["poses"] == a["poses"], k
+
+
+def test_la_supination_retourne_les_paumes():
+    anim = {"poses": {"bas": {"epaules": [0, 1.7, 0], "bassin": [0, 1.2, 0]}, "haut": {"epaules": [0, 2, 0]}}}
+    r = an.en_supination("tractions supination", anim)["poses"]
+    assert r["bas"]["paume"] == [-1, 0, 0] and "paume" not in r["haut"]   # paumes vers soi, héritées ensuite
+    assert an.en_supination("tractions pronation", anim) == anim
+    # Une paume déjà précisée par le plan n'est pas remplacée, et la clé est acceptée
+    precise = {"poses": {"bas": {**anim["poses"]["bas"], "paume_d": [0, 0, 1]}}}
+    assert an.en_supination("tractions supination", precise) == precise
+    assert {"paume", "paume_g", "paume_d"} <= an.CLES_POSE
+
+
+def test_les_australiennes_se_font_sur_une_seule_barre():
+    barres = [d for d in an.BASE["australiennes"]["decor"] if d["type"] == "barre"]
+    assert len(barres) == 1 and barres[0]["a"][2] == -barres[0]["b"][2]   # barre droite, en travers

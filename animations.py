@@ -15,9 +15,11 @@ Le cycle part de la pose de la dernière phase ; répéter une pose = la tenir.
 Clés d'une pose : bassin, epaules (points du tronc), devant (direction de la
 poitrine), flexion (0 à 1, dos arrondi), tete (direction), mg/md (poignets), pg/pd
 (chevilles), coude_g/d et genou_g/d (côté vers lequel l'articulation plie),
-doigts_g/d, prise_g/d (largeur de la main = axe de l'haltère), orteils_g/d (pointe
-du pied). Raccourcis m, p, coude, genou, doigts, prise, orteils : valeur pour la
-droite, la gauche en miroir (z → -z). Les poses suivantes héritent de la première.
+doigts_g/d, prise_g/d (largeur de la main = axe de l'haltère), paume_g/d (direction
+vers laquelle la paume regarde ; sur une barre, sans cette clé : posée dessus en appui,
+en pronation en suspension — la donner pour une supination), orteils_g/d (pointe du
+pied). Raccourcis m, p, coude, genou, doigts, prise, paume, orteils : valeur pour le
+membre du côté +z, l'autre en miroir (z → -z). Les poses suivantes héritent de la première.
 muscles (facultatif) : zones mises en couleur sur le corps, parmi pectoraux, dos, epaules,
 biceps, triceps, avant-bras, abdos, fessiers, quadriceps, ischios, mollets ; sans cette
 clé, elles sont déduites du nom de l'exercice.
@@ -45,7 +47,7 @@ MUSCLES = ("pectoraux", "dos", "epaules", "biceps", "triceps", "avant-bras", "ab
            "ischios", "mollets")
 CLES_POSE = {"bassin", "epaules", "devant", "flexion", "tete", "mg", "md", "pg", "pd", "coude_g", "coude_d",
              "genou_g", "genou_d", "doigts_g", "doigts_d", "prise_g", "prise_d", "orteils_g", "orteils_d",
-             "m", "p", "coude", "genou", "doigts", "prise", "orteils"}
+             "paume_g", "paume_d", "m", "p", "coude", "genou", "doigts", "prise", "orteils", "paume"}
 DECOR = {"barre": {"a", "b", "poteaux"}, "boite": {"c", "t"}, "tapis": {"c", "t"}, "chaise": {"c", "dossier"},
          "haltere": {"main", "c", "axe"}}
 
@@ -261,18 +263,18 @@ AUSTRALIENNES = {
     "poses": {
         "bas": {"bassin": [-0.309, 0.373, 0], "epaules": [0.183, 0.542, 0], "devant": [-0.326, 0.946, 0],
                 "p": [-1.16, 0.08, 0.1], "orteils": [-1.206, 0.212, 0.1],
-                "m": [0.02, 1.045, 0.26], "doigts": [0, 1, 0], "prise": [1, 0, 0], "coude": [-0.5, -1, 0.4]},
+                "m": [0.02, 1.045, 0.26], "doigts": [0, 1, 0], "prise": [0, 0, 1], "coude": [-0.5, -1, 0.4]},
         "haut": {"bassin": [-0.432, 0.609, 0], "epaules": [-0.011, 0.915, 0], "devant": [-0.588, 0.809, 0],
                  "orteils": [-1.242, 0.193, 0.1]},
     },
-    "phases": [["haut", 1.0, "Tirage · poitrine vers les barres"], ["haut", 0.4, "Pause, omoplates serrées"],
+    "phases": [["haut", 1.0, "Tirage · poitrine vers la barre"], ["haut", 0.4, "Pause, omoplates serrées"],
                ["bas", 1.8, "Descente contrôlée · 2 s"], ["bas", 0.4, "Bras tendus, corps gainé"]],
     "consignes": [
         "Corps droit des talons aux épaules, fessiers serrés",
-        "Tire la poitrine vers les barres, coudes vers l'arrière",
+        "Tire la poitrine vers la barre, coudes vers l'arrière",
         "Pieds plus en avant = plus difficile",
     ],
-    "decor": [{"type": "barre", "a": [-0.35, 1.1, z], "b": [0.35, 1.1, z]} for z in (-0.26, 0.26)],
+    "decor": [{"type": "barre", "a": [0.02, 1.1, -0.6], "b": [0.02, 1.1, 0.6]}],
 }
 
 ROWING = {
@@ -691,7 +693,7 @@ def catalogue(db: Session, utilisateur_id: int) -> dict[str, dict]:
     """Catalogue de base + animations de l'utilisateur (prioritaires)."""
     res = dict(BASE)
     for a in db.query(Animation).filter(Animation.utilisateur_id == utilisateur_id).all():
-        res[a.cle] = derriere_la_barre(avec_muscles(a.cle, json.loads(a.donnees)))
+        res[a.cle] = en_supination(a.cle, derriere_la_barre(avec_muscles(a.cle, json.loads(a.donnees))))
     return res
 
 
@@ -780,6 +782,15 @@ def derriere_la_barre(anim: dict) -> dict:
                 pose["bassin"] = [round(b[0] - recul, 3), b[1], b[2]]
         poses[nom] = pose
     return {**anim, "poses": poses}
+
+
+def en_supination(k: str, anim: dict) -> dict:
+    """Prise en supination : les paumes regardent vers soi (à l'opposé de la poitrine)."""
+    nom, premiere = next(iter(anim["poses"].items()))
+    if "supination" not in k or any(c.startswith("paume") for p in anim["poses"].values() for c in p):
+        return anim
+    d = premiere.get("devant") or [1, 0, 0]
+    return {**anim, "poses": {**anim["poses"], nom: {**premiere, "paume": [-d[0], -d[1], -d[2]]}}}
 
 
 for _k in BASE:

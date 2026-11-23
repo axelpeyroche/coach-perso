@@ -21,10 +21,11 @@ function unit(...c) {
   for (const v of c) if (v.lengthSq() > 1e-8) return v.clone().normalize();
   return X.clone();
 }
-// Côté de la paume : face au sol si la main y est posée, sinon côté fléchisseur, vers le corps ou vers l'avant
+// Côté de la paume : celui demandé par la pose (ou par la barre tenue), sinon face au sol si la main y est posée, sinon côté fléchisseur, vers le corps ou vers l'avant
 export function paume(sq, c, prec) {
   const k = sq.cotes[c], s = c === "d" ? 1 : -1;
   const base = new Vector3().crossVectors(k.doigts, k.prise).normalize();
+  if (k.paume && Math.abs(base.dot(k.paume)) > 0.05) return base.dot(k.paume) >= 0 ? base : base.negate();
   if (prec) return base.dot(prec) >= 0 ? base : base.negate();
   const dA = unit(k.W.clone().sub(k.coude)), fl = orth(k.S.clone().sub(k.coude), dA);
   if (fl.lengthSq() > 1e-8) fl.normalize();
