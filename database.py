@@ -106,6 +106,9 @@ def creer_tables() -> None:
         "ALTER TABLE seances_prevues ADD COLUMN IF NOT EXISTS envoi_montre TEXT",
         # Assistant « Mon IA crée mon plan » : réponses de l'utilisateur (objectif, disponibilités, contraintes)
         "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS reglages_ia TEXT",
+        # VMA d'un test saisie à la main (distance réelle sur piste, que le GPS mesure mal)
+        "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS vma_test_kmh FLOAT",
+        "ALTER TABLE utilisateurs ADD COLUMN IF NOT EXISTS vma_test_le DATE",
         # Séance « Autre » rattachée à la main à une séance prévue : elle prend le sport du plan
         "UPDATE activites SET sport = p.sport FROM seances_prevues p "
         "WHERE p.activite_id = activites.id AND p.lien_manuel AND activites.sport = 'autre' AND p.sport <> 'autre'",
@@ -121,6 +124,13 @@ def creer_tables() -> None:
             except Exception:
                 if not DATABASE_URL.startswith("sqlite"):
                     logger.warning("Migration ignorée (échec) : %s", stmt)
+                elif " ADD COLUMN IF NOT EXISTS " in stmt:
+                    # SQLite (aperçu local) ignore « IF NOT EXISTS » : nouvel essai sans, sans effet si la colonne existe
+                    try:
+                        with conn.begin_nested():
+                            conn.execute(text(stmt.replace(" IF NOT EXISTS", "")))
+                    except Exception:
+                        pass
 
 
 def obtenir_session():

@@ -26,6 +26,8 @@ class ProfilFCSchema(BaseModel):
     fc_repos: Optional[int] = Field(None, gt=0, lt=150)
     poids_kg: Optional[float] = Field(None, gt=0, lt=300)
     date: Optional[str] = Field(None, max_length=10)  # jour de la pesée "YYYY-MM-DD" (défaut : aujourd'hui)
+    vma_test_kmh: Optional[float] = Field(None, ge=0, lt=27)   # 0 = retirer la valeur saisie
+    vma_test_le: Optional[str] = Field(None, max_length=10)    # jour du test (défaut : aujourd'hui)
 
 
 def _aujourdhui(user: Utilisateur) -> date:
@@ -79,6 +81,20 @@ def patch_profil_fc(payload: ProfilFCSchema, current_user: Utilisateur = Depends
     if payload.fc_repos is not None: current_user.fc_repos = payload.fc_repos
     if payload.poids_kg is not None:
         _enregistrer_poids(db, current_user, payload.poids_kg, payload.date)
+    if payload.vma_test_kmh is not None:
+        if payload.vma_test_kmh == 0:
+            current_user.vma_test_kmh = current_user.vma_test_le = None
+        elif payload.vma_test_kmh < 8:
+            raise HTTPException(400, "VMA attendue entre 8 et 27 km/h")
+        else:
+            auj = _aujourdhui(current_user)
+            try:
+                jour = date.fromisoformat(payload.vma_test_le) if payload.vma_test_le else auj
+            except ValueError:
+                raise HTTPException(400, "Format date invalide, attendu YYYY-MM-DD")
+            if jour > auj:
+                raise HTTPException(400, "La date du test ne peut pas être dans le futur")
+            current_user.vma_test_kmh, current_user.vma_test_le = round(payload.vma_test_kmh, 1), jour
     db.commit()
     return {"fc_max": current_user.fc_max, "fc_repos": current_user.fc_repos, "poids_kg": current_user.poids_kg}
 

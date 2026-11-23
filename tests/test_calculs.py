@@ -138,6 +138,16 @@ def test_zones_fc_et_allure():
     assert zs.zones(None, 4.0) == []
 
 
+def test_vma_reference():
+    from datetime import date
+    auj = date(2026, 11, 23)
+    v = {"dernier_test": {"date": "2026-07-01", "vma": 16.0, "saisie": True}, "actuelle": {"vma": 15.6}}
+    assert zs.vma_reference(v, auj) == {"vma": 16.0, "source": "test", "date": "2026-07-01", "saisie": True}
+    v["dernier_test"]["date"] = "2025-07-01"                                  # test de plus d'un an : estimation
+    assert zs.vma_reference(v, auj)["source"] == "estimation" and zs.vma_reference(v, auj)["vma"] == 15.6
+    assert zs.vma_reference({"dernier_test": None, "actuelle": None}, auj) is None
+
+
 def test_alerte_allures():
     assert zs.alerte_allures(4.0, 16.0) is None                              # 90 % de la VMA
     a = zs.alerte_allures(3.55, 16.0)                                        # 80 %

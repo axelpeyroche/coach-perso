@@ -3,13 +3,14 @@ import { useState, useEffect, useRef } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import api from "../api";
-import { exporterDonnees, exporterCarnet, supprimerCompte, getPush, abonnerPush, desabonnerPush, testerPush, garderSeulPush, changerHeurePush, changerRappelPoids, putReglageNotif, getInvitations, creerInvitation, revoquerInvitation } from "../api";
+import { getZones, exporterDonnees, exporterCarnet, supprimerCompte, getPush, abonnerPush, desabonnerPush, testerPush, garderSeulPush, changerHeurePush, changerRappelPoids, putReglageNotif, getInvitations, creerInvitation, revoquerInvitation } from "../api";
 import { getErrorMessage } from "../utils/errors";
 import ConfirmDialog from "../components/ConfirmDialog";
 import Page from "../components/Page";
 import Feuille from "../components/Feuille";
 import { MenuChoix, Selecteur } from "../components/Menu";
 import ModalPoids from "../components/ModalPoids";
+import ModalVma from "../components/ModalVma";
 import { imc } from "../components/Poids";
 import { nombre } from "../carnet";
 import { Chevron, Interrupteur, Segmente, SelecteurHeure } from "../components/ui";
@@ -790,6 +791,8 @@ export default function Profil({ theme, setTheme }) {
   const [editInfos, setEditInfos] = useState(false);
   const [editPwd, setEditPwd] = useState(false);
   const [editPoids, setEditPoids] = useState(false);
+  const [editVma, setEditVma] = useState(false);
+  const { data: zonesJour } = useQuery({ queryKey: ["zones"], queryFn: getZones, staleTime: 5 * 60 * 1000 });
   // Lien du rappel de pesée (/profil?poids=1) : ouvre directement la saisie
   const [params, setParams] = useSearchParams();
   useEffect(() => {
@@ -843,11 +846,12 @@ export default function Profil({ theme, setTheme }) {
         </Groupe>
 
         <Groupe titre="Physiologie"
-          pied="FC max : plus haute FC de séance des 12 derniers mois (pics isolés écartés). FC repos : moyenne des 7 dernières mesures de la montre. Calculées automatiquement pour les zones de FC ; touche le poids pour le modifier.">
+          pied="FC max : plus haute FC de séance des 12 derniers mois (pics isolés écartés). FC repos : moyenne des 7 dernières mesures de la montre. Calculées automatiquement pour les zones de FC ; touche le poids pour le modifier. VMA : celle de ton dernier test (moins d’un an), à défaut une estimation ; touche-la pour saisir le résultat exact d’un test.">
           <div className="flex divide-x-[0.5px] divide-separateur">
             <BioStat label="FC max" value={user?.fc_max} unit="bpm" couleur="#FF3B30" auto={user?.fc_max_auto} />
             <BioStat label="FC repos" value={user?.fc_repos} unit="bpm" couleur="#FF2D55" auto={user?.fc_repos_auto} />
             <BioStat label="Poids" value={user?.poids_kg} unit="kg" couleur="#AF52DE" onClick={() => setEditPoids(true)} />
+            <BioStat label="VMA (km/h)" value={zonesJour?.vma_kmh ? nombre(zonesJour.vma_kmh, 1) : null} couleur="#FF9500" onClick={() => setEditVma(true)} />
           </div>
         </Groupe>
 
@@ -897,6 +901,7 @@ export default function Profil({ theme, setTheme }) {
       </div>
 
       {editPoids && <ModalPoids initialValue={user?.poids_kg} onClose={() => setEditPoids(false)} />}
+      {editVma && <ModalVma zones={zonesJour} onClose={() => setEditVma(false)} />}
       {editInfos && <EditInfosModal user={user} onClose={() => setEditInfos(false)} onSaved={refreshUser} />}
       {editPwd && <EditPasswordModal onClose={() => setEditPwd(false)} />}
     </Page>

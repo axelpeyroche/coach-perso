@@ -15,7 +15,8 @@ Zones d'entraînement recalculées automatiquement à partir du carnet.
   Sans FC de repos : Friel (85 / 90 / 95 / 100 % du seuil). Sans seuil : Karvonen
   (60 / 70 / 80 / 90 % de la réserve repos → max).
 - Zones d'allure : pourcentages de la vitesse critique (meilleurs efforts des 90 derniers jours) ;
-  la Z5 s'arrête à l'allure VMA quand elle est connue. Une vitesse critique sous 82 % de la VMA
+  la Z5 s'arrête à l'allure VMA quand elle est connue. La VMA retenue est celle du dernier test
+  (moins d'un an ; la valeur saisie dans le Profil corrige la mesure GPS), à défaut l'estimation. Une vitesse critique sous 82 % de la VMA
   est signalée : il manque un effort soutenu récent, les allures sont sans doute trop lentes.
 """
 from __future__ import annotations
@@ -38,6 +39,7 @@ KARVONEN = (0.60, 0.70, 0.80, 0.90)
 MIXTE = (0.75, 0.84, 0.92, 1.00)           # % de la réserve entre la FC de repos et la FC au seuil
 RESERVE_SEUIL_MIN = 60                      # en dessous, FC de repos ou seuil douteux : Friel seul
 VC_SUR_VMA_MIN = 0.82                       # une vitesse critique vaut d'ordinaire 85 à 90 % de la VMA
+TEST_VMA_VALIDE_J = 365                     # au-delà, le test est trop vieux : retour à l'estimation
 MARGE_VMA = 1.03                            # la VMA ne borne la Z5 que si elle dépasse nettement son entrée
 ALLURE_PCT_VC = (0.72, 0.80, 0.90, 0.98)   # bornes des zones d'allure en % de la vitesse critique
 FENETRE_VC_J = 90
@@ -224,25 +226,40 @@ def physiologie(acts: list[Activite], fcr: dict[date, float], j: date) -> dict:
     return {"fc_max": fmax, "fc_repos": fc_repos_au(fcr, j), "fc_seuil": seuil and seuil["valeur"], "seuil": seuil}
 
 
-def zones_profil(user: Utilisateur, vc_ms: Optional[float], vma_kmh: Optional[float] = None,
+def vma_reference(vma: Optional[dict], auj: date) -> Optional[dict]:
+    """VMA à retenir pour les zones : le dernier test (moins d'un an), sinon l'estimation des analyses."""
+    t = (vma or {}).get("dernier_test")
+    if t and t.get("vma") and (auj - date.fromisoformat(t["date"])).days <= TEST_VMA_VALIDE_J:
+        return {"vma": t["vma"], "source": "test", "date": t["date"], "saisie": bool(t.get("saisie"))}
+    v = ((vma or {}).get("actuelle") or {}).get("vma")
+    return {"vma": v, "source": "estimation", "date": None, "saisie": False} if v else None
+
+
+def zones_profil(user: Utilisateur, vc_ms: Optional[float], vma=None,
                  reference: Optional[dict] = None) -> dict:
-    """Zones du jour à partir des valeurs du profil (tenues à jour par synchroniser_physiologie)."""
+    """Zones du jour à partir des valeurs du profil (tenues à jour par synchroniser_physiologie).
+
+    `vma` : une valeur en km/h ou le résultat de `vma_reference`."""
+    ref_vma = vma if isinstance(vma, dict) else ({"vma": vma, "source": None, "date": None, "saisie": False} if vma else {})
+    vma_kmh = ref_vma.get("vma")
     b, methode = bornes_fc(user.fc_seuil, user.fc_max, user.fc_repos)
     return {
         "fc_max": user.fc_max, "fc_repos": user.fc_repos, "fc_seuil": user.fc_seuil,
         "methode": methode, "reference": reference,
         "vitesse_critique_ms": vc_ms, "allure_critique_sec_km": _allure(vc_ms) if vc_ms else None,
-        "vma_kmh": vma_kmh, "zones": zones(b, vc_ms, vma_kmh, user.fc_max),
+        "vma_kmh": vma_kmh, "vma_source": ref_vma.get("source"), "vma_test_le": ref_vma.get("date"),
+        "vma_saisie": bool(ref_vma.get("saisie")),
+        "zones": zones(b, vc_ms, vma_kmh, user.fc_max),
         "alerte_allures": alerte_allures(vc_ms, vma_kmh),
     }
 
 
-def _vma_du_jour(db: Session, user: Utilisateur, acts: list[Activite], auj: date) -> Optional[float]:
-    """VMA estimée par les analyses (tests, meilleurs efforts, FC), pour borner la Z5."""
+def _vma_du_jour(db: Session, user: Utilisateur, acts: list[Activite], auj: date) -> Optional[dict]:
+    """VMA de référence (dernier test, à défaut estimation des analyses), pour borner la Z5."""
     try:
         import analyses_service as an  # import local : le module d'analyses s'appuie sur celui-ci
         mesures = an._mesures_par_type(db, user.id, auj - timedelta(days=365 + an.REF_RECUP_JOURS))
-        return ((an._vma(db, user, acts, mesures, auj).get("actuelle")) or {}).get("vma")
+        return vma_reference(an._vma(db, user, acts, mesures, auj), auj)
     except Exception:
         return None
 

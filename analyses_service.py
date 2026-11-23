@@ -514,6 +514,16 @@ def _vma(db: Session, user: Utilisateur, acts: list[Activite], mesures: dict[str
             tests.append({"date": j.isoformat(), "vma": round(v, 1), "titre": "Demi-Cooper (ancien programme)",
                           "activite_id": None, "source": "ancien"})
             jours_tests.append(j)
+    # Valeur saisie dans le Profil : elle corrige le test de cette date (le GPS mesure mal un tour de piste)
+    saisie, saisie_le = getattr(user, "vma_test_kmh", None), getattr(user, "vma_test_le", None)
+    if saisie and saisie_le and saisie_le <= auj:
+        proches = [t for t in tests if abs((date.fromisoformat(t["date"]) - saisie_le).days) <= 14]
+        if proches:
+            t = min(proches, key=lambda t: abs((date.fromisoformat(t["date"]) - saisie_le).days))
+            t["vma"], t["saisie"] = round(saisie, 1), True
+        else:
+            tests.append({"date": saisie_le.isoformat(), "vma": round(saisie, 1), "titre": "Test VMA (valeur saisie)",
+                          "activite_id": None, "source": "saisie", "saisie": True})
     tests.sort(key=lambda t: t["date"])
     ids_tests = {t["activite_id"] for t in tests}
 
@@ -1178,7 +1188,7 @@ def calculer_analyses(db: Session, user: Utilisateur, aujourd_hui: Optional[date
     cands_seuil = zs.candidats_seuil(acts)
     reference = zs.fc_seuil_au(cands_seuil, auj, user.fc_max)
     zones_jour = zs.zones_profil(user, (efforts.get("vc") or {}).get("vitesse_ms"),
-                                 (vma.get("actuelle") or {}).get("vma"), reference)
+                                 zs.vma_reference(vma, auj), reference)
     import corps_service as co
     marqueurs = co.marqueurs_par_jour(db, user.id, auj - timedelta(days=365 + REF_RECUP_JOURS))
     res = {
@@ -1264,6 +1274,8 @@ def _zones_export(z: Optional[dict]) -> Optional[dict]:
         "alerte_allures": (z.get("alerte_allures") or {}).get("message"),
         "fc_seuil": z["fc_seuil"], "fc_max": z["fc_max"], "fc_repos": z["fc_repos"],
         "allure_critique": _mmss(z["allure_critique_sec_km"]), "vma_kmh": z["vma_kmh"],
+        "vma_origine": (f"test du {z['vma_test_le']}" if z.get("vma_source") == "test" else "estimation, pas de test récent")
+                       if z.get("vma_kmh") else None,
         "zones": [{"zone": f"Z{x['zone']} {x['nom']}", "fc": _plage_fc(x), "allure": _plage_allure(x)}
                   for x in z["zones"]],
     }
