@@ -18,6 +18,9 @@ poitrine), flexion (0 à 1, dos arrondi), tete (direction), mg/md (poignets), pg
 doigts_g/d, prise_g/d (largeur de la main = axe de l'haltère), orteils_g/d (pointe
 du pied). Raccourcis m, p, coude, genou, doigts, prise, orteils : valeur pour la
 droite, la gauche en miroir (z → -z). Les poses suivantes héritent de la première.
+muscles (facultatif) : zones mises en couleur sur le corps, parmi pectoraux, dos, epaules,
+biceps, triceps, avant-bras, abdos, fessiers, quadriceps, ischios, mollets ; sans cette
+clé, elles sont déduites du nom de l'exercice.
 Décor : barre {a, b, poteaux?}, boite {c, t}, tapis {c, t}, chaise {c, dossier?},
 haltere {main: "g" | "d" | "gd"} ou {c, axe}.
 
@@ -37,6 +40,9 @@ from models import Animation
 from pictogrammes import PRECISIONS, cle, exercices, mots, trouver
 
 MAX_POSES, MAX_PHASES, MAX_DECOR, MAX_CONSIGNES = 8, 12, 12, 4
+# Muscles sollicités, mis en lumière sur le mannequin
+MUSCLES = ("pectoraux", "dos", "epaules", "biceps", "triceps", "avant-bras", "abdos", "fessiers", "quadriceps",
+           "ischios", "mollets")
 CLES_POSE = {"bassin", "epaules", "devant", "flexion", "tete", "mg", "md", "pg", "pd", "coude_g", "coude_d",
              "genou_g", "genou_d", "doigts_g", "doigts_d", "prise_g", "prise_d", "orteils_g", "orteils_d",
              "m", "p", "coude", "genou", "doigts", "prise", "orteils"}
@@ -58,7 +64,7 @@ def _tronc(bassin, inclinaison_deg=0.0):
 
 def _hanches(bassin):
     """Mains posées sur les hanches."""
-    return _r([bassin[0] - 0.02, bassin[1] + 0.03, 0.21])
+    return _r([bassin[0] - 0.01, bassin[1] + 0.14, 0.235])
 
 
 TAPIS = {"type": "tapis", "c": [0.75, 0.004, 0], "t": [1.9, 0.008, 0.65]}
@@ -77,7 +83,7 @@ def _pompes(mains, doigts, prise, coude=None, consignes=None):
     if coude:
         haut["coude"] = coude
     return {
-        "poses": {"haut": haut, "bas": {"bassin": [0.897, 0.18, 0], "epaules": [1.416, 0.22, 0], "devant": [0.077, -0.997, 0]}},
+        "poses": {"haut": haut, "bas": {"bassin": [0.897, 0.21, 0], "epaules": [1.416, 0.26, 0], "devant": [0.077, -0.997, 0]}},
         "phases": [["bas", 1.8, "Descente · 2 s"], ["bas", 0.3, "Pause en bas"],
                    ["haut", 1.0, "Poussée · 1 s"], ["haut", 0.5, "Bras tendus, corps gainé"]],
         "consignes": consignes,
@@ -210,12 +216,13 @@ KICKBACK = {
 
 # --- Tirage ---
 
-def _tractions(main_z, coude, haut_epaules=(-0.10, 2.08), tete=(-0.2, 1, 0), negatives=False, consignes=None):
+def _tractions(main_z, coude, haut_epaules=(-0.10, 2.2), tete=(-0.2, 1, 0), negatives=False, consignes=None):
     poses = {
-        "bas": {"epaules": [0, 1.735, 0], "bassin": [-0.03, 1.215, 0], "p": [-0.06, 0.34, 0.1],
+        "bas": {"epaules": [-0.07, 1.735, 0], "bassin": [-0.06, 1.215, 0], "p": [-0.08, 0.34, 0.1],
                 "m": [0, 2.245, main_z], "doigts": [0, 1, 0], "prise": [0, 0, 1], "coude": coude},
-        "haut": {"epaules": [haut_epaules[0], haut_epaules[1], 0],
-                 "bassin": [haut_epaules[0] - 0.05, haut_epaules[1] - 0.51, 0], "tete": list(tete), "p": [-0.15, 0.7, 0.1]},
+        # Le corps recule sous la barre : la tête monte derrière elle, sans la traverser
+        "haut": {"epaules": [haut_epaules[0] - 0.14, haut_epaules[1], 0],
+                 "bassin": [haut_epaules[0] - 0.05, haut_epaules[1] - 0.512, 0], "tete": list(tete), "p": [-0.12, 0.7, 0.1]},
     }
     decor = [BARRE_TRACTION]
     if negatives:
@@ -234,7 +241,7 @@ TRACTIONS_LARGE = _tractions(0.40, [-0.2, -0.5, 1], consignes=[
     "Tire les coudes vers les hanches, poitrine vers la barre",
     "Pas de balancier, jambes gainées",
 ])
-TRACTIONS_SERREE = _tractions(0.12, [0.7, -0.6, 0.25], haut_epaules=(-0.10, 2.10), tete=(-0.15, 1, 0), consignes=[
+TRACTIONS_SERREE = _tractions(0.12, [0.7, -0.6, 0.25], haut_epaules=(-0.10, 2.2), tete=(-0.15, 1, 0), consignes=[
     "Mains à largeur de poing, paumes vers soi",
     "Coudes devant, tire jusqu'au menton au-dessus de la barre",
     "Descente complète, bras tendus",
@@ -327,7 +334,7 @@ def _bulgare(leste):
             "Le genou avant reste au-dessus du pied, sans rentrer",
             "Buste légèrement penché, poids sur la jambe avant",
         ],
-        "decor": [{"type": "chaise", "c": [-0.75, 0, -0.08]}] + (DEUX_HALTERES if leste else []),
+        "decor": [{"type": "chaise", "c": [-0.87, 0, -0.08]}] + (DEUX_HALTERES if leste else []),
     }
 
 
@@ -637,6 +644,11 @@ def valider(anim) -> dict:
     if not isinstance(consignes, list) or len(consignes) > MAX_CONSIGNES:
         raise ValueError(f"{MAX_CONSIGNES} consignes max")
     res = {"poses": propres, "phases": ph, "consignes": [_texte(c, 120, "consigne") for c in consignes]}
+    muscles = anim.get("muscles") or []
+    if not isinstance(muscles, list) or any(m not in MUSCLES for m in muscles):
+        raise ValueError(f"muscles : liste parmi {', '.join(MUSCLES)}")
+    if muscles:
+        res["muscles"] = list(dict.fromkeys(muscles))
     decor = anim.get("decor") or []
     if not isinstance(decor, list) or len(decor) > MAX_DECOR:
         raise ValueError(f"{MAX_DECOR} éléments de décor max")
@@ -679,7 +691,7 @@ def catalogue(db: Session, utilisateur_id: int) -> dict[str, dict]:
     """Catalogue de base + animations de l'utilisateur (prioritaires)."""
     res = dict(BASE)
     for a in db.query(Animation).filter(Animation.utilisateur_id == utilisateur_id).all():
-        res[a.cle] = json.loads(a.donnees)
+        res[a.cle] = derriere_la_barre(avec_muscles(a.cle, json.loads(a.donnees)))
     return res
 
 
@@ -721,6 +733,57 @@ def a_verifier(db: Session, utilisateur_id: int, descriptions: list[str | None])
                 approchants.append({"nom": nom, "animation": trouve})
     return manquants, approchants
 
+
+# Muscles mis en couleur, déduits du nom quand l'animation ne les donne pas (première règle qui correspond)
+MUSCLES_PAR_NOM = [
+    (r"traction|australienne|rowing", ["dos", "biceps", "avant-bras"]),
+    (r"diamant|dips", ["triceps", "pectoraux", "epaules"]),
+    (r"pompe", ["pectoraux", "triceps", "epaules"]),
+    (r"triceps|kickback", ["triceps"]),
+    (r"marteau", ["biceps", "avant-bras"]),
+    (r"curl", ["biceps"]),
+    (r"developpe|militaire", ["epaules", "triceps"]),
+    (r"elevation", ["epaules"]),
+    (r"burpee", ["quadriceps", "pectoraux", "epaules"]),
+    (r"squat|fente|pistol", ["quadriceps", "fessiers"]),
+    (r"mollet|soleaire", ["mollets"]),
+    (r"abduction", ["fessiers"]),
+    (r"pont|hanche", ["fessiers", "ischios"]),
+    (r"climber", ["abdos", "epaules"]),
+    (r"planche|gainage|hollow|sit up|crunch|releve|abdo", ["abdos"]),
+]
+
+
+def avec_muscles(k: str, anim: dict) -> dict:
+    if anim.get("muscles"):
+        return anim
+    m = next((m for motif, m in MUSCLES_PAR_NOM if re.search(motif, k)), None)
+    return {**anim, "muscles": m} if m else anim
+
+
+def derriere_la_barre(anim: dict) -> dict:
+    """Recule le buste quand la tête monte à hauteur d'une barre de traction :
+    les animations réglées pour l'ancien mannequin, plus fin, la traversaient."""
+    barres = [d for d in anim.get("decor") or [] if d.get("type") == "barre"
+              and d["a"][0] == d["b"][0] and d["a"][1] == d["b"][1] and d["a"][1] > 1.9]
+    if not barres:
+        return anim
+    bx, by = barres[0]["a"][0], barres[0]["a"][1]
+    poses = {}
+    for nom, pose in anim["poses"].items():
+        e = pose.get("epaules")
+        recul = e[0] - (bx - 0.24) if e and e[1] + 0.05 < by < e[1] + 0.36 else 0
+        if recul > 0:
+            pose = {**pose, "epaules": [round(e[0] - recul, 3), e[1], e[2]]}
+            if pose.get("bassin"):
+                b = pose["bassin"]
+                pose["bassin"] = [round(b[0] - recul, 3), b[1], b[2]]
+        poses[nom] = pose
+    return {**anim, "poses": poses}
+
+
+for _k in BASE:
+    BASE[_k] = avec_muscles(_k, BASE[_k])
 
 # Les animations du catalogue doivent passer la même validation que celles du plan
 for _k, _a in BASE.items():

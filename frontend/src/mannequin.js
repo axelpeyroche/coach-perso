@@ -1,15 +1,16 @@
 // Mannequin 3D de démonstration des exercices (séance guidée → « Voir le mouvement »).
-// Un mannequin d'artiste sans genre, construit à partir de formes simples, prend
+// Un corps modelé (corps.js, homme ou femme selon le Profil) prend
 // les poses décrites en JSON (voir animations.py) : bassin, épaules, mains, pieds…
 // Les coudes et les genoux se placent seuls (cinématique inverse à deux os).
 // Repère : mètres, y vers le haut, sol en y = 0 ; debout face à +x, la droite est en +z.
 import {
-  ACESFilmicToneMapping, BoxGeometry, Color, CylinderGeometry, DirectionalLight, Fog, Group,
-  HemisphereLight, Matrix4, Mesh, MeshStandardMaterial, PCFSoftShadowMap, PerspectiveCamera,
-  PlaneGeometry, Scene, SphereGeometry, Vector3, WebGLRenderer,
+  ACESFilmicToneMapping, BoxGeometry, BufferGeometry, CanvasTexture, CircleGeometry, CylinderGeometry, DirectionalLight,
+  Group, HemisphereLight, Matrix4, Mesh, MeshStandardMaterial, PCFSoftShadowMap, PerspectiveCamera,
+  Points, PointsMaterial, SRGBColorSpace, Scene, Vector3, WebGLRenderer,
 } from "three";
+import { creerCorps } from "./corps.js";
 
-const TRONC = 0.52, BRAS = 0.3, AVANT_BRAS = 0.27, CUISSE = 0.45, TIBIA = 0.45, EPAULES = 0.19, HANCHES = 0.09;
+const TRONC = 0.52, BRAS = 0.3, AVANT_BRAS = 0.27, CUISSE = 0.45, TIBIA = 0.45, EPAULES = 0.212, HANCHES = 0.114;
 const X = new Vector3(1, 0, 0), Y = new Vector3(0, 1, 0), Z = new Vector3(0, 0, 1);
 const FOV = 32;
 const DEPART = { az: 0.62, el: 0.2 };
@@ -23,6 +24,21 @@ const SYM = {
 
 const v3 = (a) => new Vector3(a[0], a[1], a[2]);
 const ease = (x) => (1 - Math.cos(Math.PI * x)) / 2;
+// Départ et arrivée plus doux que le cosinus : le geste ne « claque » pas en bout de course
+const doux = (x) => x * x * x * (x * (6 * x - 15) + 10);
+
+// Dégradé circulaire (fond de studio, fondu du sol, pastille de trajectoire)
+function degrade(arrets, cx = 0.5, cy = 0.5) {
+  const c = document.createElement("canvas");
+  c.width = c.height = 256;
+  const g = c.getContext("2d"), d = g.createRadialGradient(256 * cx, 256 * cy, 0, 256 * cx, 256 * cy, 128);
+  arrets.forEach(([p, couleur]) => d.addColorStop(p, couleur));
+  g.fillStyle = d;
+  g.fillRect(0, 0, 256, 256);
+  const t = new CanvasTexture(c);
+  t.colorSpace = SRGBColorSpace;
+  return t;
+}
 // a privé de sa composante selon b (unitaire)
 const orth = (a, b) => a.clone().addScaledVector(b, -a.dot(b));
 // Premier vecteur non nul, normé
@@ -72,8 +88,11 @@ function poseA(prep, t) {
   for (let i = 0; i < phases.length; i++) {
     const ph = phases[i];
     if (reste < ph.duree || i === phases.length - 1) {
-      const avant = poses[phases[(i - 1 + phases.length) % phases.length].pose];
-      return { pose: melanger(avant, poses[ph.pose], ease(Math.min(1, reste / ph.duree))), libelle: ph.libelle };
+      const nomAvant = phases[(i - 1 + phases.length) % phases.length].pose;
+      const x = Math.min(1, reste / ph.duree);
+      // effort : 0 à l'arrêt, 1 au plus fort du déplacement
+      return { pose: melanger(poses[nomAvant], poses[ph.pose], doux(x)), libelle: ph.libelle,
+               effort: nomAvant === ph.pose ? 0 : Math.sin(Math.PI * x) };
     }
     reste -= ph.duree;
   }
@@ -143,15 +162,6 @@ function placerSeg(m, a, b) {
   m.matrix.makeBasis(p, d.clone().multiplyScalar(l), q);
   m.matrix.setPosition(a.clone().add(b).multiplyScalar(0.5));
 }
-function placerBoule(m, c, r) {
-  m.matrix.makeScale(r, r, r);
-  m.matrix.setPosition(c);
-}
-function placerOvo(m, c, u, n, a, b, cc) {
-  const w = new Vector3().crossVectors(u, n);
-  m.matrix.makeBasis(u.clone().multiplyScalar(a), n.clone().multiplyScalar(b), w.multiplyScalar(cc));
-  m.matrix.setPosition(c);
-}
 // Objet orienté selon un axe (son y local)
 function placerAxe(m, c, axe) {
   const d = unitaire(axe, Y);
@@ -160,7 +170,7 @@ function placerAxe(m, c, axe) {
   m.matrix.setPosition(c);
 }
 
-export function creerScene(conteneur, anim, { surPhase, surManip } = {}) {
+export function creerScene(conteneur, anim, { surPhase, surManip, surProgres, silhouette } = {}) {
   const jetables = [];
   const garder = (x) => (jetables.push(x), x);
   const rendu = new WebGLRenderer({ antialias: true });
@@ -173,28 +183,30 @@ export function creerScene(conteneur, anim, { surPhase, surManip } = {}) {
   const toile = rendu.domElement;
 
   const sc = new Scene();
-  sc.background = new Color(0x0d0d0f);
-  sc.fog = new Fog(0x0d0d0f, 5, 11);
+  // Studio : fond en halo, sol qui se fond dans le noir, lumière principale + contre-jour violet
+  sc.background = garder(degrade([[0, "#30303a"], [0.6, "#15151a"], [1, "#09090b"]], 0.5, 0.45));
   const cam = new PerspectiveCamera(FOV, 1, 0.05, 30);
-  sc.add(new HemisphereLight(0xffffff, 0x303038, 2));
-  const soleil = new DirectionalLight(0xffffff, 4.6);
+  sc.add(new HemisphereLight(0xffffff, 0x26262e, 1.25));
+  const soleil = new DirectionalLight(0xfff4e8, 3.4);
   soleil.castShadow = true;
   soleil.shadow.mapSize.set(1024, 1024);
   Object.assign(soleil.shadow.camera, { left: -2, right: 2, top: 2, bottom: -2, near: 0.5, far: 12 });
   sc.add(soleil, soleil.target);
-  const appoint = new DirectionalLight(0xc9d6ff, 1.1);
-  appoint.position.set(-2, 2, -2);
-  sc.add(appoint);
-  const sol = new Mesh(garder(new PlaneGeometry(20, 20)), garder(new MeshStandardMaterial({ color: 0x18181b, roughness: 1 })));
+  soleil.shadow.radius = 5;
+  soleil.shadow.bias = -0.0004;
+  const appoint = new DirectionalLight(0xc9d6ff, 0.7);
+  const contre = new DirectionalLight(0xe6e9ff, 1.3);
+  sc.add(appoint, appoint.target, contre, contre.target);
+  const sol = new Mesh(garder(new CircleGeometry(3.6, 72)), garder(new MeshStandardMaterial({
+    color: 0x202025, roughness: 0.95, transparent: true, depthWrite: false,
+    alphaMap: garder(degrade([[0, "#ffffff"], [0.35, "#bbbbbb"], [0.7, "#000000"]])),
+  })));
   sol.rotation.x = -Math.PI / 2;
   sol.receiveShadow = true;
   sc.add(sol);
 
-  const peau = garder(new MeshStandardMaterial({ color: 0xd8c3a0, roughness: 0.55 }));
-  const artic = garder(new MeshStandardMaterial({ color: 0xb79d76, roughness: 0.5 }));
   const metal = garder(new MeshStandardMaterial({ color: 0x9a9aa2, metalness: 0.8, roughness: 0.35 }));
   const fonte = garder(new MeshStandardMaterial({ color: 0x2c2c31, metalness: 0.5, roughness: 0.45 }));
-  const sph = garder(new SphereGeometry(1, 32, 20));
   const cyl = garder(new CylinderGeometry(1, 1, 1, 20));
   const cube = garder(new BoxGeometry(1, 1, 1));
   function piece(geo, mat, parent = sc) {
@@ -205,10 +217,6 @@ export function creerScene(conteneur, anim, { surPhase, surManip } = {}) {
     parent.add(m);
     return m;
   }
-  const seg = (r1, r2) => piece(garder(new CylinderGeometry(r2, r1, 1, 24)), peau);
-  const boule = () => piece(sph, artic);
-  const ovo = () => piece(sph, peau);
-
   // --- Décor ---
   const halteres = [];
   function haltere() {
@@ -241,12 +249,13 @@ export function creerScene(conteneur, anim, { surPhase, surManip } = {}) {
   const caisse = garder(new MeshStandardMaterial({ color: 0x4d4d55, roughness: 0.85 }));
   const mousse = garder(new MeshStandardMaterial({ color: 0x3a2f4a, roughness: 0.9 }));
   const acier = garder(new MeshStandardMaterial({ color: 0x55555c, metalness: 0.6, roughness: 0.5 }));
-  const pointsDecor = [];
+  const pointsDecor = [], barres = [];
   for (const d of anim.decor ?? []) {
     if (d.type === "barre" && d.a && d.b) {
       barre(d.a, d.b, 0.016, metal);
       if (d.poteaux !== false) for (const e of [d.a, d.b]) barre([e[0], 0, e[2]], e, 0.022, acier);
       pointsDecor.push(v3(d.a), v3(d.b));
+      barres.push([v3(d.a), v3(d.b)]);
     } else if ((d.type === "boite" || d.type === "tapis") && d.c && d.t) {
       boite(d.c, d.t, d.type === "tapis" ? mousse : caisse);
     } else if (d.type === "chaise" && d.c) {
@@ -273,37 +282,26 @@ export function creerScene(conteneur, anim, { surPhase, surManip } = {}) {
     }
   }
 
-  // --- Mannequin ---
-  const P = { tete: ovo(), cou: seg(0.045, 0.05), buste: ovo(), bassin: ovo(), taille: seg(0.125, 0.115), ventre: piece(sph, peau) };
-  const cotes = Object.fromEntries(["d", "g"].map((c) => [c, {
-    epaule: boule(), bras: seg(0.052, 0.043), coude: boule(), avb: seg(0.041, 0.031), poignet: boule(), main: ovo(),
-    hanche: boule(), cuisse: seg(0.078, 0.056), genou: boule(), tibia: seg(0.052, 0.036), cheville: boule(), pied: seg(0.036, 0.028),
-  }]));
+  // --- Mannequin : une peau continue (corps.js) qui suit le squelette ---
+  const corps = garder({ ...creerCorps(anim.muscles ?? [], silhouette) });
+  corps.dispose = corps.detruire;
+  sc.add(corps.mesh);
   const centreMain = (k) => k.W.clone().addScaledVector(k.doigts, 0.055);
 
   function poser(sq) {
-    const { B, E, M, uP, uC, nP, nC, t, nT } = sq;
-    placerOvo(P.bassin, B.clone().addScaledVector(uP, 0.05), uP, nP, 0.13, 0.1, 0.17);
-    placerOvo(P.buste, E.clone().addScaledVector(uC, -0.17).addScaledVector(nC, 0.025), uC, nC, 0.21, 0.12, 0.2);
-    placerSeg(P.taille, B.clone().addScaledVector(uP, 0.08), M.clone().addScaledVector(uC, 0.06));
-    placerBoule(P.ventre, M, 0.118);
-    placerSeg(P.cou, E.clone().addScaledVector(uC, 0.02), E.clone().addScaledVector(t, 0.14));
-    placerOvo(P.tete, E.clone().addScaledVector(t, 0.25).addScaledVector(nT, 0.015), t, nT, 0.12, 0.095, 0.09);
+    // Mains : refermées sur une barre ou un haltère, à plat au sol, sinon à demi ouvertes
+    const serre = {};
     for (const c of ["d", "g"]) {
-      const k = sq.cotes[c], m = cotes[c];
-      placerBoule(m.epaule, k.S, 0.062);
-      placerSeg(m.bras, k.S, k.coude);
-      placerBoule(m.coude, k.coude, 0.046);
-      placerSeg(m.avb, k.coude, k.W);
-      placerBoule(m.poignet, k.W, 0.032);
-      placerOvo(m.main, centreMain(k), k.doigts, new Vector3().crossVectors(k.doigts, k.prise), 0.085, 0.024, 0.045);
-      placerBoule(m.hanche, k.H, 0.072);
-      placerSeg(m.cuisse, k.H, k.K);
-      placerBoule(m.genou, k.K, 0.057);
-      placerSeg(m.tibia, k.K, k.A);
-      placerBoule(m.cheville, k.A, 0.036);
-      placerSeg(m.pied, k.talon, k.O);
+      const k = sq.cotes[c], m = centreMain(k);
+      let f = k.W.y < 0.13 ? 0 : 0.35;
+      if (halteres.some((h) => h.main === c || h.main === "gd")) f = 1;
+      for (const [a, b] of barres) {
+        const ab = b.clone().sub(a), t = Math.min(1, Math.max(0, m.clone().sub(a).dot(ab) / ab.lengthSq()));
+        if (a.clone().addScaledVector(ab, t).distanceTo(m) < 0.06) f = 1;
+      }
+      serre[c] = f;
     }
+    corps.poser(sq, serre);
     for (const h of halteres) {
       if (h.main === "gd") {
         const g = sq.cotes.g, d = sq.cotes.d;
@@ -329,6 +327,29 @@ export function creerScene(conteneur, anim, { surPhase, surManip } = {}) {
   const centre = mini.clone().add(maxi).multiplyScalar(0.5);
   soleil.position.copy(centre).add(new Vector3(1.8, 4, 2.6));
   soleil.target.position.copy(centre);
+  appoint.position.copy(centre).add(new Vector3(2.5, 1.2, -2.5));
+  appoint.target.position.copy(centre);
+  contre.position.copy(centre).add(new Vector3(-2.6, 2.2, -2.4));
+  contre.target.position.copy(centre);
+  sol.position.set(centre.x, 0, centre.z);
+
+  // Trajectoire : pointillé du point qui voyage le plus (épaules, bassin, main ou pied)
+  {
+    const N = 56, suivis = { E: [], B: [], main: [], pied: [] };
+    for (let i = 0; i < N; i++) {
+      const sq = squelette(poseA(prep, (i / N) * prep.total).pose);
+      suivis.E.push(sq.E); suivis.B.push(sq.B); suivis.main.push(centreMain(sq.cotes.d)); suivis.pied.push(sq.cotes.d.A);
+    }
+    const etendue = (pts) => pts.reduce((a, p) => a.max(p), pts[0].clone()).sub(pts.reduce((a, p) => a.min(p), pts[0].clone())).length();
+    const meilleur = Object.values(suivis).sort((a, b) => etendue(b) - etendue(a))[0];
+    if (etendue(meilleur) > 0.1) {
+      const trace = new Points(garder(new BufferGeometry().setFromPoints(meilleur)), garder(new PointsMaterial({
+        color: 0xd9a6f0, size: 0.028, transparent: true, opacity: 0.55, depthWrite: false,
+        map: garder(degrade([[0, "#ffffff"], [0.45, "#ffffff"], [0.6, "#000000"]])), alphaTest: 0.2,
+      })));
+      sc.add(trace);
+    }
+  }
   const camAnim = anim.camera ?? {};
   const depart = { az: camAnim.az ?? DEPART.az, el: camAnim.el ?? DEPART.el, c: camAnim.cible ? v3(camAnim.cible) : centre };
 
@@ -452,7 +473,7 @@ export function creerScene(conteneur, anim, { surPhase, surManip } = {}) {
   ecoute("dblclick", recentrer);
 
   // --- Boucle ---
-  let enPause = false, vitesse = 1, t = 0, dernier = performance.now(), libelle = null, raf = 0;
+  let enPause = false, vitesse = 1, t = 0, dernier = performance.now(), libelle = null, raf = 0, lueur = 0;
   function image(now) {
     const dt = Math.min(0.05, (now - dernier) / 1000);
     dernier = now;
@@ -466,8 +487,12 @@ export function creerScene(conteneur, anim, { surPhase, surManip } = {}) {
       cible.copy(c0).lerp(c1, k);
       if (transition.t >= 1) transition = null;
     }
-    const { pose, libelle: l } = poseA(prep, t);
+    const { pose, libelle: l, effort } = poseA(prep, t);
     if (l !== libelle) { libelle = l; surPhase?.(l); }
+    surProgres?.((((t % prep.total) + prep.total) % prep.total) / prep.total);
+    // Les muscles sollicités brillent davantage pendant l'effort
+    lueur += (effort - lueur) * Math.min(1, dt * 7);
+    corps.lueur(0.12 + 0.5 * lueur);
     poser(squelette(pose));
     placerCam();
     rendu.render(sc, cam);

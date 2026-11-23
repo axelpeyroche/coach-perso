@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useAuth } from "../AuthContext";
 
 // Lecteur plein écran du mouvement : le mannequin 3D (mannequin.js, chargé à la
 // demande) répète l'exercice en boucle. Un doigt / clic glissé tourne autour,
@@ -24,8 +25,11 @@ const ANGLE = "M12 4a8 8 0 1 1-7.4 5M4 4v5h5";
 const CENTRE = "M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4M12 10a2 2 0 1 0 0 4 2 2 0 0 0 0-4z";
 
 export default function LecteurMouvement({ nom, animation, onClose }) {
+  const { user } = useAuth();
+  const silhouette = user?.sexe === "F" ? "femme" : "homme";
   const boite = useRef(null);
   const scene = useRef(null);
+  const jauge = useRef(null);
   const [phase, setPhase] = useState("");
   const [pause, setPause] = useState(false);
   const [lent, setLent] = useState(false);
@@ -37,13 +41,16 @@ export default function LecteurMouvement({ nom, animation, onClose }) {
     import("../mannequin.js").then(({ creerScene }) => {
       if (fini || !boite.current) return;
       scene.current = creerScene(boite.current, animation, {
+        silhouette,
         surPhase: setPhase,
+        // Avancement de la répétition : écrit directement dans le DOM, sans rendu React à chaque image
+        surProgres: (k) => { if (jauge.current) jauge.current.style.transform = `scaleX(${k})`; },
         // Les consignes s'effacent pendant la manipulation, puis reviennent
         surManip: () => { setManip(true); clearTimeout(minuteur); minuteur = setTimeout(() => setManip(false), 1200); },
       });
     }).catch(() => setErreur(true));
     return () => { fini = true; clearTimeout(minuteur); scene.current?.detruire(); scene.current = null; };
-  }, [animation]);
+  }, [animation, silhouette]);
 
   // Échap ferme le lecteur (sans ouvrir le menu de la séance dessous)
   useEffect(() => {
@@ -80,6 +87,9 @@ export default function LecteurMouvement({ nom, animation, onClose }) {
               {animation.consignes.map((c, i) => <li key={i}>• {c}</li>)}
             </ul>
           )}
+          <div className="mt-3 h-[3px] rounded-full bg-white/[0.12] overflow-hidden" aria-hidden>
+            <div ref={jauge} className="h-full origin-left rounded-full" style={{ background: ROSE, transform: "scaleX(0)" }} />
+          </div>
           <div className="flex justify-center gap-3.5 mt-3">
             <Rond onClick={() => setPause(scene.current?.pause() ?? false)} aria-label={pause ? "Reprendre" : "Pause"}>
               <Icone d={pause ? LECTURE : PAUSE} plein />
