@@ -504,7 +504,8 @@
   .feuille .champ { background: rgb(var(--surface)); }
   .dark .feuille .champ { background: rgb(44 44 46); }
   .poignee {
-    @apply md:hidden mx-auto mt-2 mb-1 h-[5px] w-9 rounded-full bg-label-3;
+    /* Pas de marge haute : elle « s’effondrait » hors de la barre collante et la poignée remontait au défilement */
+    @apply md:hidden mx-auto mb-1 h-[5px] w-9 rounded-full bg-label-3;
   }
   /* Alerte centrée (dialogue de confirmation) */
   .alerte {

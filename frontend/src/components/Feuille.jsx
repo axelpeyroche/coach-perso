@@ -97,7 +97,7 @@ export default function Feuille({ titre, onClose, action, children, large = fals
   return createPortal(
     <div ref={voile} className={`voile ${ferme ? "ferme" : ""}`} onClick={fermer}>
       <Tag ref={feuille} className={`feuille scrollbar-hide ${large ? "feuille-large" : ""} ${classe} ${ferme ? "ferme" : ""}`} onClick={(e) => e.stopPropagation()} {...props}>
-        <div className="feuille-barre sticky top-0 z-10 bg-inherit">
+        <div className="feuille-barre sticky top-0 z-10 bg-inherit pt-2 md:pt-0">
           <div className="poignee" />
           <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-4 h-[52px] md:h-14">
             <button type="button" onClick={fermer} aria-label="Annuler" className="btn-verre justify-self-start">
