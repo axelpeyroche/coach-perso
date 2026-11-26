@@ -898,9 +898,11 @@ function BilanSports({ seances, activites, courante }) {
 export default function Plan() {
   const [params, setParams] = useSearchParams();
   const [guidee] = useState(() => !!params.get("guidee"));
+  // Lien depuis le Résumé : ?seance=ID ouvre directement le détail de cette séance
+  const [aDetailler, setADetailler] = useState(() => Number(params.get("seance")) || null);
   useEffect(() => {
-    if (!params.get("guidee")) return;
-    const p = new URLSearchParams(params); p.delete("guidee");
+    if (!params.get("guidee") && !params.get("seance")) return;
+    const p = new URLSearchParams(params); p.delete("guidee"); p.delete("seance");
     setParams(p, { replace: true });
   }, []);   // eslint-disable-line react-hooks/exhaustive-deps
   const [lundi, setLundi] = useState(() => debutDe(new Date()));
@@ -910,6 +912,9 @@ export default function Plan() {
   const depuis = iso(lundi);
   const jusqu = iso(ajouter(lundi, 6));
   const courante = depuis === iso(debutDe(new Date()));
+  // Une fois la semaine changée, la séance demandée ne se rouvre plus d’elle-même
+  const premiereSemaine = useRef(depuis);
+  useEffect(() => { if (depuis !== premiereSemaine.current) setADetailler(null); }, [depuis]);
 
   const { data: plan, isLoading } = useQuery({ queryKey: ["plan", depuis, jusqu], queryFn: () => getPlan(depuis, jusqu) });
   const { data: acts } = useQuery({
@@ -977,13 +982,13 @@ export default function Plan() {
       ) : (
         <div className="space-y-5">
           {seances.length > 0 && groupe(`À faire · ${aFaire.length}`,
-            aFaire.length ? aFaire.map((s) => <CarteSeance key={s.id} s={s} onOuvrirActivite={setModalActivite} ouverte={guidee && courante && s.id === aOuvrir} />)
+            aFaire.length ? aFaire.map((s) => <CarteSeance key={s.id} s={s} onOuvrirActivite={setModalActivite} ouverte={s.id === aDetailler || (guidee && courante && s.id === aOuvrir)} />)
               : <p className="ligne text-[15px] text-label-2">Tout est fait 🎉</p>)}
           {faites.length > 0 && groupe(`Faites · ${faites.length}`, faites.map((f) => (f.prevue
-            ? <CarteSeance key={f.cle} s={f.prevue} onOuvrirActivite={setModalActivite} />
+            ? <CarteSeance key={f.cle} s={f.prevue} onOuvrirActivite={setModalActivite} ouverte={f.prevue.id === aDetailler} />
             : <LigneFaite key={f.cle} a={f.activite} onClick={() => setModalActivite(f.activite)} />)))}
           {sautees.length > 0 && groupe(`Sautées · ${sautees.length}`,
-            sautees.map((s) => <CarteSeance key={s.id} s={s} onOuvrirActivite={setModalActivite} />))}
+            sautees.map((s) => <CarteSeance key={s.id} s={s} onOuvrirActivite={setModalActivite} ouverte={s.id === aDetailler} />))}
         </div>
       )}
 
@@ -1027,7 +1032,7 @@ export function ProchainesSeances() {
           prochaines.map((s) => {
             const info = sportInfo(s.sport);
             return (
-              <Link key={s.id} to="/plan" className="ligne" style={{ "--inset": "4.25rem" }}>
+              <Link key={s.id} to={`/plan?seance=${s.id}`} className="ligne" style={{ "--inset": "4.25rem" }}>
                 <span className="w-10 h-10 shrink-0 rounded-full flex items-center justify-center text-[19px]"
                   style={{ backgroundColor: `${info.couleur}26` }}>{s.emoji ?? info.emoji}</span>
                 <span className="flex-1 min-w-0">
